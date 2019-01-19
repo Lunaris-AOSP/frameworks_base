@@ -7763,6 +7763,22 @@ public final class Settings {
         public static final String BLOCK_WALLPAPER_DIMMING = "block_wallpaper_dimming";
 
         /**
+         * What to show at the bottom of the Ambient display
+         * 0: Nothing.
+         * 1: Battery Percentage.
+         * 2: Battery Temperature.
+         * 3: Battery Percentage & Temperature Together.
+         * @hide
+         */
+        public static final String AMBIENT_SHOW_SETTINGS = "ambient_show_settings";
+
+        /**
+         * Ambient settings show icons
+         * @hide
+         */
+        public static final String AMBIENT_SHOW_SETTINGS_ICONS = "ambient_show_settings_icons";
+
+        /**
          * Keys we no longer back up under the current schema, but want to continue to
          * process when restoring historical backup datasets.
          *
