@@ -222,4 +222,7 @@
 
     <!-- Clock Weather -->
     <string name="clock_ide_weather_data_unavailable">null</string>
+
+    <!-- Sleep Mode -->
+    <string name="quick_settings_sleep_mode_label">Sleep Mode</string>
 </resources>
