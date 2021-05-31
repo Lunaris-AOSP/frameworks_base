@@ -284,4 +284,7 @@
 
     <!-- Screenshot -->
     <string name="quick_settings_screenshot_label">Screenshot</string>
+
+    <!-- Sleep Mode -->
+    <string name="quick_settings_sleep_mode_label">Sleep Mode</string>
 </resources>
