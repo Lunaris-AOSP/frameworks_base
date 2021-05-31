@@ -37,6 +37,7 @@ import com.android.systemui.qs.tiles.ProfilesTile
 import com.android.systemui.qs.tiles.ReadingModeTile
 import com.android.systemui.qs.tiles.RefreshRateTile
 import com.android.systemui.qs.tiles.ScreenshotTile
+import com.android.systemui.qs.tiles.SleepModeTile
 import com.android.systemui.qs.tiles.SmartPixelsTile
 import com.android.systemui.qs.tiles.SoundTile
 import com.android.systemui.qs.tiles.SyncTile
@@ -159,6 +160,12 @@ interface LineageModule {
     @IntoMap
     @StringKey(ScreenshotTile.TILE_SPEC)
     fun bindScreenshotTile(screenshotTile: ScreenshotTile): QSTileImpl<*>
+
+    /** Inject SleepModeTile into tileMap in QSModule */
+    @Binds  
+    @IntoMap
+    @StringKey(SleepModeTile.TILE_SPEC)
+    fun bindSleepModeTile(sleepModeTile: SleepModeTile): QSTileImpl<*>
 
     /** Inject SmartPixelsTile into tileMap in QSModule */
     @Binds
@@ -477,6 +484,21 @@ interface LineageModule {
                     QSTileUIConfig.Resource(
                         iconRes = com.android.internal.R.drawable.ic_screenshot,
                         labelRes = com.android.internal.R.string.global_action_screenshot
+                    ),
+                instanceId = uiEventLogger.getNewInstanceId(),
+                category = TileCategory.UTILITIES,
+            )
+
+        @Provides
+        @IntoMap
+        @StringKey(SleepModeTile.TILE_SPEC)
+        fun provideSleepModeTileConfig(uiEventLogger: QsEventLogger): QSTileConfig =
+            QSTileConfig(
+                tileSpec = TileSpec.create(SleepModeTile.TILE_SPEC),
+                uiConfig =
+                    QSTileUIConfig.Resource(
+                        iconRes = R.drawable.ic_sleep,
+                        labelRes = R.string.quick_settings_sleep_mode_label
                     ),
                 instanceId = uiEventLogger.getNewInstanceId(),
                 category = TileCategory.UTILITIES,
