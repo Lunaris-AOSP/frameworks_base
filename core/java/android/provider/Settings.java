@@ -13542,6 +13542,24 @@ public final class Settings {
          * @hide
          */
         public static final String DISPLAY_ENGINE_MODE = "display_engine_mode";
+        
+        /**
+         * Display color balance for the red channel, from 0 to 255.
+         * @hide
+         */
+        public static final String DISPLAY_COLOR_BALANCE_RED = "display_color_balance_red";
+
+        /**
+         * Display color balance for the green channel, from 0 to 255.
+         * @hide
+         */
+        public static final String DISPLAY_COLOR_BALANCE_GREEN = "display_color_balance_green";
+
+        /**
+         * Display color balance for the blue channel, from 0 to 255.
+         * @hide
+         */
+        public static final String DISPLAY_COLOR_BALANCE_BLUE = "display_color_balance_blue";
 
         /**
          * Control whether display white balance is currently enabled.
