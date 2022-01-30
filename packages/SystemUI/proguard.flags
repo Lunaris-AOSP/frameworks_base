@@ -6,3 +6,7 @@
 
 -keep,allowoptimization,allowaccessmodification class com.android.systemui.dagger.DaggerReferenceGlobalRootComponent** { !synthetic *; }
 -keep class com.google.** { *; }
+
+-keep class com.android.systemui.statusbar.phone.ExpandableIndicator {
+    *;
+}
