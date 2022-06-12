@@ -61,6 +61,8 @@ import android.graphics.Shader;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.os.Trace;
+import android.os.UserHandle;
+import android.provider.Settings;
 import android.util.AttributeSet;
 import android.util.IndentingPrintWriter;
 import android.util.Log;
@@ -1040,7 +1042,14 @@ public class NotificationStackScrollLayout
 
         final int innerWidth = viewWidth - mMinimumPaddings * 2;
         final int qsTileWidth = (innerWidth - mQsTilePadding * 3) / 4;
+        boolean smallNotification = Settings.System.getIntForUser(mContext.getContentResolver(),
+                Settings.System.SMALL_LANDSCAPE_NOTIFICATION, 0, UserHandle.USER_CURRENT) == 1;
+        if (smallNotification) {
+        mSidePaddings = mMinimumPaddings + qsTileWidth + mQsTilePadding;
+        }
+        else {
         mSidePaddings = mMinimumPaddings;
+        }
     }
 
     void updateCornerRadius() {

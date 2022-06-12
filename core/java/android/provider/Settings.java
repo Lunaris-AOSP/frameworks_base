@@ -7567,6 +7567,12 @@ public final class Settings {
         public static final String MEDIA_WAVEFORM_SEEKBAR = "media_waveform_seekbar";
 
         /**
+         * Whether to enable small size landcape notifications or not
+         * @hide
+         */
+        public static final String SMALL_LANDSCAPE_NOTIFICATION = "small_landscape_notification";
+
+        /**
          * Whether to show rotation suggestion
          * @hide
          */
