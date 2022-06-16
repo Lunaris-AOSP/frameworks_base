@@ -42,6 +42,7 @@ import com.android.systemui.qs.tiles.SoundTile
 import com.android.systemui.qs.tiles.SyncTile
 import com.android.systemui.qs.tiles.UsbTetherTile
 import com.android.systemui.qs.tiles.VolumeQSTile
+import com.android.systemui.qs.tiles.VPNTetheringTile
 import com.android.systemui.qs.tiles.VolumeTile
 import com.android.systemui.qs.tiles.VpnTile
 import com.android.systemui.qs.tiles.WeatherTile
@@ -188,6 +189,12 @@ interface LineageModule {
     @IntoMap
     @StringKey(VolumeQSTile.TILE_SPEC)
     fun bindVolumeQSTile(volumeQSTile: VolumeQSTile): QSTileImpl<*>
+    
+    /** Inject VPNTetheringTile into tileMap in QSModule */
+    @Binds
+    @IntoMap
+    @StringKey(VPNTetheringTile.TILE_SPEC)
+    fun bindVPNTetheringTile(vpnTetheringTile: VPNTetheringTile): QSTileImpl<*>
 
     /** Inject VolumeTile into tileMap in QSModule */
     @Binds
@@ -594,5 +601,20 @@ interface LineageModule {
                 instanceId = uiEventLogger.getNewInstanceId(),
                 category = TileCategory.UTILITIES
             )
+       
+        @Provides
+        @IntoMap
+        @StringKey(VPNTetheringTile.TILE_SPEC)
+        fun provideVPNTetheringTileConfig(uiEventLogger: QsEventLogger): QSTileConfig {
+            return QSTileConfig(
+                tileSpec = TileSpec.create(VPNTetheringTile.TILE_SPEC),
+                uiConfig = QSTileUIConfig.Resource(
+                    iconRes = R.drawable.ic_qs_vpn_tethering,
+                    labelRes = R.string.vpn_tethering_label
+                ),
+                instanceId = uiEventLogger.getNewInstanceId(),
+                category = TileCategory.CONNECTIVITY
+            )
+        }
     }
 }
