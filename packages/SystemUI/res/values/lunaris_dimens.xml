@@ -97,4 +97,8 @@
 
     <!-- Extra bottom offset for the Dynamic Bar keyguard chip -->
     <dimen name="ax_dynamic_bar_keyguard_chip_extra_bottom_margin">0dp</dimen>
+    
+    <!-- Lyric -->
+    <dimen name="lyric_icon_margin_end">4dp</dimen>
+    <dimen name="lyric_padding_end">4dp</dimen>
 </resources>
