@@ -66,4 +66,9 @@
         <item name="android:fontFamily">google-sans-flex</item>
         <item name="android:lineHeight">@dimen/weather_dream_overlay_complication_line_height</item>
     </style>
+
+    <style name="TextApperance.StatusBar.Lyric" parent="@*android:style/TextAppearance.StatusBar">
+        <item name="android:textSize">14sp</item>
+        <item name="android:fontFamily">@*android:string/config_bodyFontFamily</item>
+    </style>
 </resources>
