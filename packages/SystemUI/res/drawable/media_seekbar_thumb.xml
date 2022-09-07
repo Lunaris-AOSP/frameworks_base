@@ -17,19 +17,18 @@
 <animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
                  xmlns:aapt="http://schemas.android.com/aapt">
     <aapt:attr name="android:drawable">
-        <vector android:height="16dp"
-                android:width="4dp"
-                android:viewportHeight="16"
-                android:viewportWidth="4">
+        <vector android:height="10dp"
+                android:width="20dp"
+                android:viewportHeight="10"
+                android:viewportWidth="20">
             <group android:name="_R_G">
-                <group android:name="_R_G_L_0_G"
-                       android:translateX="2"
-                       android:translateY="8">
+                <group android:name="_R_G_L_0_G">
                     <path android:name="_R_G_L_0_G_D_0_P_0"
                           android:fillColor="#ffffff"
-                          android:fillAlpha="1"
+                          android:strokeLineJoin="miter"
+                          android:strokeLineCap="square"
                           android:fillType="nonZero"
-                          android:pathData=" M2 -6 C2,-6 2,6 2,6 C2,7.1 1.1,8 0,8 C0,8 0,8 0,8 C-1.1,8 -2,7.1 -2,6 C-2,6 -2,-6 -2,-6 C-2,-7.1 -1.1,-8 0,-8 C0,-8 0,-8 0,-8 C1.1,-8 2,-7.1 2,-6c "/>
+                          android:pathData="M5.44,0.77L14.52,0.77A4.28 4.28 0 0 1 18.81,5.05L18.81,5.05A4.28 4.28 0 0 1 14.52,9.33L5.44,9.33A4.28 4.28 0 0 1 1.16,5.05L1.16,5.05A4.28 4.28 0 0 1 5.44,0.77z"/>
                 </group>
             </group>
             <group android:name="time_group"/>
