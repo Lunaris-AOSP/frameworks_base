@@ -521,5 +521,8 @@ public class SecureSettingsValidators {
                 new InclusiveIntegerRangeValidator(0, 1));
         VALIDATORS.put(Secure.IDENTITY_CHECK_NOTIFICATION_VIEW_DETAILS_CLICKED,
                 new InclusiveIntegerRangeValidator(0, 1));
+        VALIDATORS.put(Secure.DOZE_DOUBLE_TAP_GESTURE_VIBRATE, BOOLEAN_VALIDATOR);
+        VALIDATORS.put(Secure.DOZE_TAP_GESTURE_VIBRATE, BOOLEAN_VALIDATOR);
+        VALIDATORS.put(Secure.DOZE_PICK_UP_GESTURE_VIBRATE, BOOLEAN_VALIDATOR);
     }
 }
