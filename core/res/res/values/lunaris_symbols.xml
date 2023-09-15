@@ -112,4 +112,7 @@
 
     <!-- Vibrator service -->
     <java-symbol type="array" name="config_textureTickVibePattern" />
+
+    <!-- Smart 5G -->
+    <java-symbol type="bool" name="config_supportSmart5G" />
 </resources>
