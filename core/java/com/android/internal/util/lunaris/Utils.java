@@ -22,6 +22,7 @@ import android.app.ActivityThread;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.app.role.RoleManager;
 import android.bluetooth.BluetoothAdapter;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -64,6 +65,7 @@ import com.android.internal.R;
 
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.util.ArrayUtils;
+import com.android.internal.util.CollectionUtils;
 
 import android.util.Log;
 
@@ -209,6 +211,20 @@ public class Utils {
             Log.e(TAG, "Error retrieving overlay ID", e);
         }
         return null;
+    }
+
+    public static String getDefaultLauncher(Context context) {
+        final RoleManager roleManager = context.getSystemService(RoleManager.class);
+        final String packageName = CollectionUtils.firstOrNull(
+                roleManager.getRoleHolders(RoleManager.ROLE_HOME));
+        return packageName != null ? packageName : "";
+    }
+
+    public static void forceStopDefaultLauncher(Context context) {
+        final ActivityManager activityManager = context.getSystemService(ActivityManager.class);
+        try {
+            activityManager.forceStopPackageAsUser(getDefaultLauncher(context), UserHandle.USER_CURRENT);
+        } catch (Exception ignored) {}
     }
 
     public static class SleepModeController {
