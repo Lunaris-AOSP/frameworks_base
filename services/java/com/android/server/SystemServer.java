@@ -351,6 +351,8 @@ import java.util.TreeSet;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 
+import com.android.server.DerpFestSystemExService;
+
 /**
  * Entry point to {@code system_server}.
  */
@@ -1756,6 +1758,10 @@ public final class SystemServer implements Dumpable {
 
             t.traceBegin("WindowManagerServiceOnInitReady");
             wm.onInitReady();
+            t.traceEnd();
+
+            t.traceBegin("StartDerpFestSystemExService");
+            mSystemServiceManager.startService(DerpFestSystemExService.class);
             t.traceEnd();
 
             // Start receiving calls from SensorManager services. Start in a separate thread
