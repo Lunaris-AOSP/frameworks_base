@@ -2860,7 +2860,6 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
 
         @Override
         public void onLayoutDirectionChanged(int layoutDirection) {
-            mDialogView.setLayoutDirection(layoutDirection);
         }
 
         @Override
