@@ -763,9 +763,15 @@ public class Notification implements Parcelable
      */
     @TestApi
     public static final int FLAG_USER_INITIATED_JOB = 0x00008000;
-    
+
+    /**
+     * @hide
+     */
     public static final int FLAG_ALWAYS_SHOW_TICKER = 0x01000000;
 
+    /**
+     * @hide
+     */
     public static final int FLAG_ONLY_UPDATE_TICKER = 0x02000000;
 
     /**
