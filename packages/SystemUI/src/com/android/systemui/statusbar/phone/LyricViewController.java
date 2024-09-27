@@ -134,10 +134,12 @@ public abstract class LyricViewController implements
             if (!isCurrentNotification || !mStarted ||
                     notification.extras.getBoolean(EXTRA_TICKER_ICON_SWITCH, false)) {
                 int iconId = notification.extras.getInt(EXTRA_TICKER_ICON, -1);
+                String slot = sbn.getPackageName() + "/0x" + Integer.toHexString(sbn.getId());
+                StatusBarIconView statusBarIconView = new StatusBarIconView(mContext, slot, sbn);
                 Drawable icon = iconId == -1 ? notification.getSmallIcon().loadDrawable(mContext) :
-                        StatusBarIconView.getIcon(mContext, sbn.getPackageContext(mContext),
+                        statusBarIconView.getIcon(mContext, sbn.getPackageContext(mContext),
                                 new StatusBarIcon(sbn.getPackageName(), sbn.getUser(),
-                                    iconId, notification.iconLevel, 0, null));
+                                    iconId, notification.iconLevel, 0, null, StatusBarIcon.Type.MaybeMonochromeAppIcon));
                 mIconSwitcher.setImageDrawable(icon);
                 updateIconTint();
             }
