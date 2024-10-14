@@ -6347,4 +6347,9 @@
 
   <!-- Action for opening trusted location settings page -->
   <java-symbol type="string" name="trusted_location_settings_action" />
+
+  <!-- Custom clocks -->
+  <java-symbol type="dimen" format="float" name="presentation_clock_text_size" />
+  <java-symbol type="dimen" format="float" name="large_clock_text_size" />
+  <java-symbol type="dimen" format="float" name="small_clock_text_size" />
 </resources>
