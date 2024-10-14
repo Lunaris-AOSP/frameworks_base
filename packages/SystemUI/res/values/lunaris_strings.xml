@@ -175,4 +175,7 @@
 
     <!-- Internet -->
     <string name="status_bar_settings_network_speed">Internet speed</string>
+
+    <!-- System Theme Re-evaluation Toast -->
+    <string name="reevaluating_system_theme">Re-evaluating system theme.. Please wait for a few seconds</string>
 </resources>
