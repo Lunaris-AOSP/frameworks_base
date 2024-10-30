@@ -54,7 +54,7 @@ public interface ExternalInterfaceBinder {
     default <T> void executeRemoteCallWithTaskPermission(RemoteCallable<T> controllerInstance,
             String log, Consumer<T> callback, boolean blocking) {
         if (controllerInstance == null) return;
-
+        
         final RemoteCallable<T> controller = controllerInstance;
         if (!com.android.internal.util.lunaris.PixelPropsUtils.shouldBypassManageActivityTaskPermission(
                 controllerInstance.getContext())) {

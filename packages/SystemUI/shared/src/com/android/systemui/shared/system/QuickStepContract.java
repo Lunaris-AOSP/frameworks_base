@@ -423,6 +423,10 @@ public class QuickStepContract {
      * @param context A display associated context.
      */
     public static float getWindowCornerRadius(Context context) {
+        String callingPackage = context.getPackageManager().getNameForUid(android.os.Binder.getCallingUid());
+        if ("com.google.android.apps.nexuslauncher".equals(callingPackage)) {
+            return 0f;
+        }
         return ScreenDecorationsUtils.getWindowCornerRadius(context);
     }
 

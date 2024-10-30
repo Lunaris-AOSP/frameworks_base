@@ -814,6 +814,9 @@ class AppLockManagerService(
     }
 
     private fun enforceCallingPermission(msg: String) {
+        if (com.android.internal.util.lunaris.PixelPropsUtils.isSystemLauncher(Binder.getCallingUid())) {
+            return;
+        }
         context.enforceCallingPermission(Manifest.permission.MANAGE_APP_LOCK, msg)
     }
 
