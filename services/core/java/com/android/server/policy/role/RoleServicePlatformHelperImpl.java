@@ -274,7 +274,7 @@ public class RoleServicePlatformHelperImpl implements RoleServicePlatformHelper 
             homePackageName = null;
         }
         if (homePackageName != null) {
-            roles.put(RoleManager.ROLE_HOME, Collections.singleton(homePackageName));
+            roles.put(RoleManager.ROLE_HOME, Collections.singleton(maybeOverrideDefaultHome(homePackageName)));
         }
 
         // Emergency
@@ -285,6 +285,10 @@ public class RoleServicePlatformHelperImpl implements RoleServicePlatformHelper 
         }
 
         return roles;
+    }
+    
+    private String maybeOverrideDefaultHome(String packageName) {
+        return packageName;
     }
 
     private boolean isSettingsApplication(@NonNull String packageName, @UserIdInt int userId) {

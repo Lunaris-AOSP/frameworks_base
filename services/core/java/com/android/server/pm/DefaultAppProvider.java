@@ -113,9 +113,16 @@ public class DefaultAppProvider {
      * @return the package name of the default home, or {@code null} if none
      */
     @Nullable
-    public String getDefaultHome(@NonNull int userId) {
-        return getRoleHolder(RoleManager.ROLE_HOME,
-                mUserManagerInternalSupplier.get().getProfileParentId(userId));
+    public String getDefaultHome(int userId) {
+        String currentHome = getRoleHolder(
+                RoleManager.ROLE_HOME,
+                mUserManagerInternalSupplier.get().getProfileParentId(userId)
+        );
+        return maybeOverrideDefaultHome(currentHome);
+    }
+    
+    private String maybeOverrideDefaultHome(String packageName) {
+        return packageName;
     }
 
     /**
@@ -135,7 +142,7 @@ public class DefaultAppProvider {
         }
         final long identity = Binder.clearCallingIdentity();
         try {
-            roleManager.addRoleHolderAsUser(RoleManager.ROLE_HOME, packageName, 0,
+            roleManager.addRoleHolderAsUser(RoleManager.ROLE_HOME, maybeOverrideDefaultHome(packageName), 0,
                     UserHandle.of(userId), executor, callback);
         } finally {
             Binder.restoreCallingIdentity(identity);
