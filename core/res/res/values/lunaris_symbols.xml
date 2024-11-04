@@ -88,4 +88,7 @@
     <java-symbol type="string" name="config_cpu_temp_path" />
     <java-symbol type="integer" name="config_sysCPUTempMultiplier" />
     <java-symbol type="integer" name="config_sysBatteryTempMultiplier" />
+
+    <!-- USB -->
+    <java-symbol type="string" name="config_usbFunctionActivity" />
 </resources>
