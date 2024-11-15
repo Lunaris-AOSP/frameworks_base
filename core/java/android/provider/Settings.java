@@ -14870,6 +14870,12 @@ public final class Settings {
         public static final String DOZE_PICK_UP_GESTURE_VIBRATE = "doze_pick_up_gesture_vibrate";
 
         /**
+         * Boolean value whether activate keyguard affordance shortcuts on short press
+         * @hide
+         */
+        public static final String KEYGUARD_AFFORDANCE_SINGLE_TAP = "keyguard_affordance_single_tap";
+
+        /**
          * These entries are considered common between the personal and the managed profile,
          * since the managed profile doesn't get to change them.
          */

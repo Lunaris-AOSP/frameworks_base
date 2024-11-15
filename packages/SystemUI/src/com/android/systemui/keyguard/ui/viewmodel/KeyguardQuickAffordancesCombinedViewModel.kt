@@ -17,6 +17,9 @@
 
 package com.android.systemui.keyguard.ui.viewmodel
 
+import android.content.Context
+import android.provider.Settings
+
 import androidx.annotation.VisibleForTesting
 import com.android.app.tracing.FlowTracing.traceEmissionCount
 import com.android.app.tracing.coroutines.flow.flowName
@@ -51,6 +54,7 @@ class KeyguardQuickAffordancesCombinedViewModel
 constructor(
     @Application private val applicationScope: CoroutineScope,
     private val quickAffordanceInteractor: KeyguardQuickAffordanceInteractor,
+    private var context: Context,
     private val keyguardInteractor: KeyguardInteractor,
     shadeInteractor: ShadeInteractor,
     aodToLockscreenTransitionViewModel: AodToLockscreenTransitionViewModel,
@@ -277,6 +281,7 @@ constructor(
                             forceInactive = previewMode.isInPreviewMode,
                             slotId = slotId,
                             useLongPress = useLongPress,
+                            singleTap = useSingleTap(),
                         )
                     }
                     .distinctUntilChanged()
@@ -292,6 +297,7 @@ constructor(
         forceInactive: Boolean,
         slotId: String,
         useLongPress: Boolean,
+        singleTap: Boolean,
     ): KeyguardQuickAffordanceViewModel {
         return when (this) {
             is KeyguardQuickAffordanceModel.Visible ->
@@ -313,9 +319,19 @@ constructor(
                     useLongPress = useLongPress,
                     isDimmed = isDimmed,
                     slotId = slotId,
+                    singleTap = useSingleTap(),
                 )
             is KeyguardQuickAffordanceModel.Hidden ->
                 KeyguardQuickAffordanceViewModel(slotId = slotId)
+        }
+    }
+
+    fun useSingleTap(): Boolean {
+	if (Settings.Secure.getString(
+                context.contentResolver, Settings.Secure.KEYGUARD_AFFORDANCE_SINGLE_TAP) == "1") {
+            return true
+        } else {
+            return false
         }
     }
 
