@@ -252,6 +252,8 @@ public class Utils {
         private static final int SLEEP_NOTIFICATION_ID = 727;
         public static final String SLEEP_MODE_TURN_OFF = "android.intent.action.SLEEP_MODE_TURN_OFF";
 
+        private Handler mHandler = new Handler(Looper.getMainLooper());
+
         public SleepModeController(Context context) {
             mContext = context;
             mUiContext = ActivityThread.currentActivityThread().getSystemUiContext();
@@ -266,7 +268,7 @@ public class Utils {
             mSleepModeEnabled = Settings.Secure.getIntForUser(mContext.getContentResolver(),
                     Settings.Secure.SLEEP_MODE_ENABLED, 0, UserHandle.USER_CURRENT) == 1;
 
-            SettingsObserver observer = new SettingsObserver(new Handler(Looper.getMainLooper()));
+            SettingsObserver observer = new SettingsObserver();
             observer.observe();
             observer.update();
         }
@@ -480,14 +482,17 @@ public class Utils {
             // Enable Sensors
             final boolean disableSensors = Settings.Secure.getIntForUser(mContext.getContentResolver(),
                     Settings.Secure.SLEEP_MODE_SENSORS_TOGGLE, 1, UserHandle.USER_CURRENT) == 1;
+
             if (disableSensors) {
                 setSensorEnabled(true);
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException e) {}
-                if (!isSensorEnabled()) {
-                    setSensorEnabled(true);
-                }
+                mHandler.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!isSensorEnabled()) {
+                            setSensorEnabled(true);
+                        }
+                    }
+                }, 1000);
             }
 
             // Set Ringer mode (0: Off, 1: Vibrate, 2:DND: 3:Silent)
@@ -524,8 +529,7 @@ public class Utils {
         }
 
         private void showToast(String msg, int duration) {
-            Handler handler = new Handler(Looper.getMainLooper());
-            handler.post(new Runnable() {
+            mHandler.post(new Runnable() {
                 @Override
                 public void run() {
                     try {
@@ -553,8 +557,8 @@ public class Utils {
         }
 
         class SettingsObserver extends ContentObserver {
-            SettingsObserver(Handler handler) {
-                super(handler);
+            SettingsObserver() {
+                super(null);
             }
 
             void observe() {
