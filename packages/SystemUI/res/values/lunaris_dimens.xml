@@ -84,9 +84,6 @@
     <dimen name="status_bar_clock_chip_tb_padding">0dp</dimen>
     <dimen name="status_bar_clock_chip_lr_padding">8dp</dimen>
 
-    <!-- Weather -->  
-    <dimen name="weather_image_max_size">24dp</dimen>
-
     <!-- Lockscreen Clock/AOD -->  
     <dimen name="custom_aod_image_size">180dp</dimen>
     <dimen name="custom_clock_frame_margin_top">0dp</dimen>
