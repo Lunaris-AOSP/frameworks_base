@@ -229,6 +229,7 @@ interface LineageModule {
         const val POWERSHARE_TILE_SPEC = "powershare"
         const val PROFILES_TILE_SPEC = "profiles"
         const val READING_MODE_TILE_SPEC = "reading_mode"
+        const val REFRESH_RATE_TILE_SPEC = "refresh_rate"
         const val SYNC_TILE_SPEC = "sync"
         const val USB_TETHER_TILE_SPEC = "usb_tether"
         const val VOLUME_TILE_SPEC = "volume"
