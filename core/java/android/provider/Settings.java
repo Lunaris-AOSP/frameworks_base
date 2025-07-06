@@ -13556,6 +13556,36 @@ public final class Settings {
         public static final String DISPLAY_COLOR_BALANCE_GREEN = "display_color_balance_green";
 
         /**
+         * Display color temperature in Kelvin, from 3000 to 9000, defaults to 6500.
+         * @hide
+         */
+        public static final String DISPLAY_COLOR_TEMPERATURE = "display_color_temperature";
+
+        /**
+         * Display color saturation in int, from 0 to 200, defaults to 100.
+         * @hide
+         */
+        public static final String DISPLAY_COLOR_SATURATION = "display_color_saturation";
+
+        /**
+         * Display hue adjustment in degrees, from -180 to 180, defaults to 0.
+         * @hide
+         */
+        public static final String DISPLAY_COLOR_HUE = "display_color_hue";
+
+        /**
+         * Display picture contrast adjustment in int, from 50 to 200, defaults to 100.
+         * @hide
+         */
+        public static final String DISPLAY_COLOR_CONTRAST = "display_color_contrast";
+
+        /**
+         * Display picture brightness adjustment in int, from 50 to 200, defaults to 100.
+         * @hide
+         */
+        public static final String DISPLAY_COLOR_BRIGHTNESS = "display_color_brightness";
+
+        /**
          * Display color balance for the blue channel, from 0 to 255.
          * @hide
          */
