@@ -71,6 +71,26 @@ public class DisplayTransformManager {
      * Color transform level used to adjust the color balance of the display.
      */
     public static final int LEVEL_COLOR_MATRIX_COLOR_BALANCE = 400;
+    /**
+     * Color transform level used to adjust the color temperature of the display.
+     */
+    public static final int LEVEL_COLOR_MATRIX_COLOR_TEMPERATURE = 450;
+    /**
+     * Color transform level used to adjust the user-set color saturation of the display.
+     */
+    public static final int LEVEL_COLOR_MATRIX_USER_SATURATION = 500;
+    /**
+     * Color transform level used for user-set display hue adjustment.
+     */
+    public static final int LEVEL_COLOR_MATRIX_PICTURE_HUE = 550;
+    /**
+     * Color transform level used for user-set display contrast adjustment.
+     */
+    public static final int LEVEL_COLOR_MATRIX_PICTURE_CONTRAST = 560;
+    /**
+     * Color transform level used for user-set display picture brightness adjustment.
+     */
+    public static final int LEVEL_COLOR_MATRIX_PICTURE_BRIGHTNESS = 570;
 
     private static final int SURFACE_FLINGER_TRANSACTION_COLOR_MATRIX = 1015;
     private static final int SURFACE_FLINGER_TRANSACTION_DALTONIZER = 1014;

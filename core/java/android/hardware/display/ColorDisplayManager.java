@@ -445,6 +445,116 @@ public final class ColorDisplayManager {
     }
 
     /**
+     * Set the global color temperature.
+     *
+     * @param value in kelvin 3000-9000 (inclusive), default 6500
+     * @return whether the change was successful
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.CONTROL_DISPLAY_COLOR_TRANSFORMS)
+    public boolean setColorTemperature(int value) {
+        return mManager.setColorTemperature(value);
+    }
+
+    /**
+     * Get the current global color temperature.
+     *
+     * @return color temperature in kelvin, 3000-9000 (inclusive), default 6500
+     * @hide
+     */
+    public int getColorTemperature() {
+        return mManager.getColorTemperature();
+    }
+
+    /**
+     * Set the global color saturation.
+     *
+     * @param value integer between 0 and 200, default 200
+     * @return whether the change was successful
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.CONTROL_DISPLAY_COLOR_TRANSFORMS)
+    public boolean setUserSaturationLevel(int value) {
+        return mManager.setUserSaturationLevel(value);
+    }
+
+    /**
+     * Get the current global color saturation.
+     *
+     * @return saturation value between 0 and 200, default 100
+     * @hide
+     */
+    public int getUserSaturationLevel() {
+        return mManager.getUserSaturationLevel();
+    }
+
+    /**
+     * Set the global hue adjustment in degrees.
+     *
+     * @param value integer between -180 and 180, default 0
+     * @return whether the change was successful
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.CONTROL_DISPLAY_COLOR_TRANSFORMS)
+    public boolean setColorHue(int value) {
+        return mManager.setColorHue(value);
+    }
+
+    /**
+     * Get the current global hue adjustment in degrees.
+     *
+     * @return hue value between -180 and 180, default 0
+     * @hide
+     */
+    public int getColorHue() {
+        return mManager.getColorHue();
+    }
+
+    /**
+     * Set the global picture contrast adjustment.
+     *
+     * @param value integer between 50 and 200, default 100
+     * @return whether the change was successful
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.CONTROL_DISPLAY_COLOR_TRANSFORMS)
+    public boolean setColorContrast(int value) {
+        return mManager.setColorContrast(value);
+    }
+
+    /**
+     * Get the current global picture contrast adjustment.
+     *
+     * @return contrast value between 50 and 200, default 100
+     * @hide
+     */
+    public int getColorContrast() {
+        return mManager.getColorContrast();
+    }
+
+    /**
+     * Set the global picture brightness adjustment (post-process gain).
+     *
+     * @param value integer between 50 and 200, default 100
+     * @return whether the change was successful
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.CONTROL_DISPLAY_COLOR_TRANSFORMS)
+    public boolean setColorBrightness(int value) {
+        return mManager.setColorBrightness(value);
+    }
+
+    /**
+     * Get the current global picture brightness adjustment (post-process gain).
+     *
+     * @return brightness value between 50 and 200, default 100
+     * @hide
+     */
+    public int getColorBrightness() {
+        return mManager.getColorBrightness();
+    }
+
+    /**
      * Enables or disables display white balance.
      *
      * @hide
@@ -783,6 +893,86 @@ public final class ColorDisplayManager {
         int getColorBalanceChannel(int channel) {
             try {
                 return mCdm.getColorBalanceChannel(channel);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        boolean setColorTemperature(int value) {
+            try {
+                return mCdm.setColorTemperature(value);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        int getColorTemperature() {
+            try {
+                return mCdm.getColorTemperature();
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        boolean setUserSaturationLevel(int value) {
+            try {
+                return mCdm.setUserSaturationLevel(value);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        int getUserSaturationLevel() {
+            try {
+                return mCdm.getUserSaturationLevel();
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        boolean setColorHue(int value) {
+            try {
+                return mCdm.setColorHue(value);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        int getColorHue() {
+            try {
+                return mCdm.getColorHue();
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        boolean setColorContrast(int value) {
+            try {
+                return mCdm.setColorContrast(value);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        int getColorContrast() {
+            try {
+                return mCdm.getColorContrast();
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        boolean setColorBrightness(int value) {
+            try {
+                return mCdm.setColorBrightness(value);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        int getColorBrightness() {
+            try {
+                return mCdm.getColorBrightness();
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
