@@ -172,4 +172,7 @@
     <string name="quick_settings_volume_label">Volume</string>
     <string name="qs_volume_dialog_title">Volume Control</string>
     <string name="qs_volume_dialog_mute">Mute</string>
+
+    <!-- Internet -->
+    <string name="status_bar_settings_network_speed">Internet speed</string>
 </resources>
