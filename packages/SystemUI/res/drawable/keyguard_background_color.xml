@@ -2,5 +2,5 @@
 <selector
     xmlns:androidprv="http://schemas.android.com/apk/prv/res/android"
     xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:alpha="0.65" android:color="?androidprv:attr/colorSurface" />
+    <item android:alpha="0.55" android:color="?androidprv:attr/colorSurface" />
 </selector>
