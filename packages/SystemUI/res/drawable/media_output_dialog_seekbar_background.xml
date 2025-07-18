@@ -26,14 +26,6 @@
                 android:height="@dimen/media_output_dialog_item_height"/>
         </shape>
     </item>
-    <item android:id="@+id/contrast_dot" android:right="8dp" android:gravity="center_vertical|end">
-        <shape android:shape="oval">
-            <solid android:color="@color/media_dialog_seekbar_progress" />
-            <size
-                android:width="4dp"
-                android:height="4dp" />
-        </shape>
-    </item>
     <item android:id="@android:id/progress">
         <clip>
             <shape>

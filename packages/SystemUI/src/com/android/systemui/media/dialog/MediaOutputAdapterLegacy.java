@@ -340,11 +340,6 @@ public class MediaOutputAdapterLegacy extends MediaOutputAdapterBase {
         private void updateSeekBarProgressColor() {
             mSeekBar.setProgressTintList(ColorStateList.valueOf(
                     mController.getColorSchemeLegacy().getColorSeekbarProgress()));
-            final Drawable contrastDotDrawable =
-                    ((LayerDrawable) mSeekBar.getProgressDrawable()).findDrawableByLayerId(
-                            R.id.contrast_dot);
-            contrastDotDrawable.setTintList(ColorStateList.valueOf(
-                    mController.getColorSchemeLegacy().getColorItemContent()));
         }
 
         void updateSeekbarProgressBackground() {
