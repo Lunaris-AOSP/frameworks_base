@@ -222,8 +222,9 @@ public class EdgeEffect {
     private float mDisplacement = 0.5f;
     private float mTargetDisplacement = 0.5f;
 
+    private boolean callerHasVibratePermission;
+    private int vibrateIntensity;
     private Context mContext;
-    private long mLastVibrationTime = 0;
 
     /**
      * Current edge effect type, consumers should always query
@@ -241,6 +242,7 @@ public class EdgeEffect {
     public EdgeEffect(Context context) {
         this(context, null);
         mContext = context;
+        updateCallerAndVibIntensity();
     }
 
     /**
@@ -262,6 +264,14 @@ public class EdgeEffect {
         mPaint.setColor((themeColor & 0xffffff) | 0x33000000);
         mPaint.setStyle(Paint.Style.FILL);
         mPaint.setBlendMode(DEFAULT_BLEND_MODE);
+        updateCallerAndVibIntensity();
+    }
+
+    private void updateCallerAndVibIntensity() {
+        callerHasVibratePermission = mContext.checkCallingOrSelfPermission(
+                    android.Manifest.permission.VIBRATE) == PackageManager.PERMISSION_GRANTED;
+        vibrateIntensity = Settings.System.getInt(mContext.getContentResolver(),
+                Settings.System.EDGE_SCROLLING_HAPTICS_INTENSITY, 1);
     }
 
     @EdgeEffectType
@@ -506,7 +516,9 @@ public class EdgeEffect {
             mState = STATE_RECEDE;
             mVelocity = velocity * ON_ABSORB_VELOCITY_ADJUSTMENT;
             mStartTime = AnimationUtils.currentAnimationTimeMillis();
-            triggerVibration();
+            if (callerHasVibratePermission) {
+                VibrationUtils.triggerVibration(mContext, vibrateIntensity);
+            }
         } else if (edgeEffectBehavior == TYPE_GLOW) {
             mState = STATE_ABSORB;
             mVelocity = 0;
@@ -531,19 +543,11 @@ public class EdgeEffect {
                     mGlowAlphaStart,
                     Math.min(velocity * VELOCITY_GLOW_FACTOR * .00001f, MAX_ALPHA));
             mTargetDisplacement = 0.5f;
-            triggerVibration();
+            if (callerHasVibratePermission) {
+                VibrationUtils.triggerVibration(mContext, vibrateIntensity);
+            }
         } else {
             finish();
-        }
-    }
-    
-    private void triggerVibration() {
-        boolean callerHasVibratePermission = mContext.checkCallingOrSelfPermission(
-                    android.Manifest.permission.VIBRATE) == PackageManager.PERMISSION_GRANTED;
-        long currentTime = AnimationUtils.currentAnimationTimeMillis();
-        if (callerHasVibratePermission && (currentTime - mLastVibrationTime >= 80)) {
-            VibrationUtils.triggerVibration(mContext, 1);
-            mLastVibrationTime = currentTime;
         }
     }
 
