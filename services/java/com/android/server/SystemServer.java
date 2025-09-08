@@ -176,6 +176,7 @@ import com.android.server.criticalevents.CriticalEventLog;
 import com.android.server.devicepolicy.DevicePolicyManagerService;
 import com.android.server.devicestate.DeviceStateManagerService;
 import com.android.server.display.AutoAODService;
+import com.android.server.display.brightness.HbmService;
 import com.android.server.display.DisplayManagerService;
 import com.android.server.display.FreeformService;
 import com.android.server.display.color.ColorDisplayService;
@@ -2909,6 +2910,12 @@ public final class SystemServer implements Dumpable {
             t.traceBegin("StartCustomDeviceConfigService");
             mSystemServiceManager.startService(CustomDeviceConfigService.class);
             t.traceEnd();
+
+            boolean hbmSupported = SystemProperties.getBoolean("persist.sys.hbmservice_support", false);
+            String hbmFile = SystemProperties.get("persist.sys.hbmservice_file");
+            if (hbmSupported && hbmFile != null && !hbmFile.isEmpty()) {
+                mSystemServiceManager.startService(HbmService.class);
+            }
         }
 
         t.traceBegin("StartMediaProjectionManager");
