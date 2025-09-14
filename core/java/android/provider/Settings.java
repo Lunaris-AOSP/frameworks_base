@@ -7098,6 +7098,13 @@ public final class Settings {
                 "statusbar_battery_bar_blend_color_reverse";
 
         /**
+         * Whether to show remaining charging time on the lockscreen while charging
+         * @hide
+         */
+        @Readable
+        public static final String LOCKSCREEN_CHARGING_TIME = "lockscreen_charging_time";
+
+        /**
          * Enable/disable Bluetooth Battery bar
          * @hide
          */
