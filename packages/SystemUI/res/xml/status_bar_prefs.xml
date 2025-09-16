@@ -123,6 +123,12 @@
         android:key="roaming"
         android:title="@string/status_bar_roaming" />
 
+    <com.android.systemui.tuner.TunerSwitch
+        android:icon="@drawable/ic_statusbar_fourg"
+        android:key="system:show_fourg_icon"
+        android:title="@string/fourg_icon_title"
+        sysui:defValue="false" />
+
     <!-- other weird signal stuff -->
 
     <com.android.systemui.tuner.StatusBarSwitch
