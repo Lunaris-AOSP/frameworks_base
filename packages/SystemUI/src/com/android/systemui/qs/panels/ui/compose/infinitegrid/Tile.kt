@@ -169,9 +169,9 @@ private val TileViewModel.traceName
  * @param coroutineScope The [CoroutineScope] to launch coroutines for animations.
  * @param tileHapticsViewModelFactoryProvider A provider for creating a [TileHapticsViewModel]
  *   instance, used for haptic feedback.
- * @param interactionSource An optional [MutableInteractionSource] to track user interactions with
- *   the tile, used by the parent composable to animate a bounce effect. Tiles may or may not use
- *   this interaction source to control whether they should bounce or not.
+ * @param interactionSourceFromParent An optional [MutableInteractionSource] to track user
+ *   interactions with the tile, used by the parent composable to animate a bounce effect. Tiles may
+ *   or may not use this interaction source to control whether they should bounce or not.
  * @param modifier An optional [Modifier] to be applied to the root composable of the tile.
  * @param isVisible Whether the tile is currently visible. Defaults to true.
  * @param requestToggleTextFeedback A lambda function that is invoked when a toggleable icon only
@@ -188,8 +188,8 @@ fun ContentScope.Tile(
     coroutineScope: CoroutineScope,
     bounceableInfo: BounceableInfo?,
     tileHapticsViewModelFactoryProvider: TileHapticsViewModelFactoryProvider,
-    interactionSource: MutableInteractionSource?,
     modifier: Modifier = Modifier,
+    interactionSourceFromParent: MutableInteractionSource? = null,
     isVisible: () -> Boolean = { true },
     requestToggleTextFeedback: (TileSpec) -> Unit = {},
     detailsViewModel: DetailsViewModel?,
@@ -262,6 +262,8 @@ fun ContentScope.Tile(
 
         val animatedColor by animateColorAsState(colors.background, label = "QSTileBackgroundColor")
         val isDualTarget = uiState.handlesSecondaryClick
+        val interactionSource =
+            interactionSourceFromParent ?: remember { MutableInteractionSource() }
 
         val surfaceRevealModifier: Modifier
         val contentRevealModifier: Modifier
@@ -303,6 +305,7 @@ fun ContentScope.Tile(
                             currentBounceableInfo!!.nextTile,
                             orientation = Orientation.Horizontal,
                             bounceEnd = currentBounceableInfo!!.bounceEnd,
+                            interactionSource = interactionSource,
                         )
                     },
         ) { expandable ->
@@ -353,13 +356,8 @@ fun ContentScope.Tile(
                         }
 
                         coroutineScope.launch {
-                            // Bounce the tile's container if it is toggleable and is not a large
-                            // dual target tile. These don't toggle on main click. Otherwise bounce
-                            // the content of the tile.
-                            if (bounceContainer) {
-                                // Only bounce the container ourselves if a BounceableInfo was given
-                                currentBounceableInfo?.bounceable?.animateContainerBounce()
-                            } else {
+                            // Bounce the content of the tile if we're not animating the container.
+                            if (!bounceContainer) {
                                 contentBounceable.animateContentBounce(iconOnly)
                             }
                         }
