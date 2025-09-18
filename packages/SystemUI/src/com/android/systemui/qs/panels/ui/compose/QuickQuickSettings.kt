@@ -87,7 +87,7 @@ fun ContentScope.QuickQuickSettings(
                     detailsViewModel = null,
                     isVisible = listening,
                     bounceableInfo = null,
-                    interactionSource = interactionSource,
+                    interactionSourceFromParent = interactionSource,
                 )
             }
         } else {
@@ -129,7 +129,6 @@ fun ContentScope.QuickQuickSettings(
                         // There should be no QuickQuickSettings when the details view is enabled.
                         detailsViewModel = null,
                         isVisible = listening,
-                        interactionSource = null,
                     )
                 }
             }
