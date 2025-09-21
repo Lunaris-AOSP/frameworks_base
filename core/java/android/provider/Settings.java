@@ -7570,6 +7570,12 @@ public final class Settings {
         public static final String NOTIFICATION_SOUND_VIB_SCREEN_ON = "notification_sound_vib_screen_on";
 
         /**
+         * Tint statusbar icons with system accent color
+         * @hide
+         */
+        public static final String TINT_STATUSBAR_ICONS_WITH_ACCENT = "tint_statusbar_icons_with_accent";
+
+        /**
          * Heads up timeout configuration
          * @hide
          */
