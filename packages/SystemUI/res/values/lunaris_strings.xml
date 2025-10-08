@@ -203,4 +203,6 @@
 
     <!-- System Theme Re-evaluation Toast -->
     <string name="reevaluating_system_theme">Re-evaluating system theme.. Please wait for a few seconds</string>
+
+    <string name="default_user_name">Lunaris AOSP</string>
 </resources>
