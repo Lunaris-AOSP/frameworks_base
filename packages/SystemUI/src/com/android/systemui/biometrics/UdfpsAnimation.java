@@ -58,6 +58,7 @@ public class UdfpsAnimation extends ImageView {
     private boolean mShowing = false;
     private Context mContext;
     private int mAnimationSize;
+    private int mAnimationOffset;
     private AnimationDrawable recognizingAnim;
 
     private final WindowManager.LayoutParams mAnimParams = new WindowManager.LayoutParams();
@@ -76,6 +77,10 @@ public class UdfpsAnimation extends ImageView {
 
     private boolean mAnimationAdded = false;
 
+    // Default values from dimens
+    private final int mDefaultAnimationSize;
+    private final int mDefaultAnimationOffset;
+
     private final KeyguardStateController.Callback keyguardStateCallback = new KeyguardStateController.Callback() {
         @Override
         public void onKeyguardFadingAwayChanged() {
@@ -93,6 +98,7 @@ public class UdfpsAnimation extends ImageView {
             final String action = intent.getAction();
             if (Intent.ACTION_USER_SWITCHED.equals(action)) {
                 updateAnimationStyle();
+                updateAnimationDimensions();
             }
         }
     };
@@ -115,10 +121,10 @@ public class UdfpsAnimation extends ImageView {
         mMaxBurnInOffsetY = (int) (context.getResources()
             .getDimensionPixelSize(R.dimen.udfps_burn_in_offset_y) * scaleFactor);
 
-        mAnimationSize = mContext.getResources().getDimensionPixelSize(R.dimen.udfps_animation_size);
+        mDefaultAnimationSize = mContext.getResources().getDimensionPixelSize(R.dimen.udfps_animation_size);
+        mDefaultAnimationOffset = mContext.getResources().getDimensionPixelSize(R.dimen.udfps_animation_offset);
 
-        mAnimParams.height = mAnimationSize;
-        mAnimParams.width = mAnimationSize;
+        updateAnimationDimensions();
 
         mAnimParams.format = PixelFormat.TRANSLUCENT;
         mAnimParams.type = WindowManager.LayoutParams.TYPE_VOLUME_OVERLAY; // it must be behind Udfps icon
@@ -132,12 +138,45 @@ public class UdfpsAnimation extends ImageView {
         setScaleType(ImageView.ScaleType.CENTER_INSIDE);
     }
 
+    private void updateAnimationDimensions() {
+        int sizeScale = Settings.System.getIntForUser(mContext.getContentResolver(),
+                Settings.System.UDFPS_ANIM_SIZE, 50, UserHandle.USER_CURRENT);
+        
+        int offsetScale = Settings.System.getIntForUser(mContext.getContentResolver(),
+                Settings.System.UDFPS_ANIM_OFFSET, 0, UserHandle.USER_CURRENT);
+
+        mAnimationSize = (int) (mDefaultAnimationSize * (0.5f + (sizeScale / 100.0f)));
+        
+        float density = mContext.getResources().getDisplayMetrics().density;
+        mAnimationOffset = mDefaultAnimationOffset + (int) (offsetScale * density);
+
+        mAnimParams.height = mAnimationSize;
+        mAnimParams.width = mAnimationSize;
+
+        if (DEBUG) {
+            Log.d(LOG_TAG, "updateAnimationDimensions: sizeScale=" + sizeScale + 
+                           ", offsetScale=" + offsetScale +
+                           ", mAnimationSize=" + mAnimationSize + 
+                           ", mAnimationOffset=" + mAnimationOffset);
+        }
+
+        if (mShowing) {
+            updatePosition();
+            try {
+                mWindowManager.updateViewLayout(this, mAnimParams);
+            } catch (RuntimeException e) {
+                Log.e(LOG_TAG, "Error updating view layout", e);
+            }
+        }
+    }
+
     private void addAnimation() {
         if (!mAnimationAdded) {
             IntentFilter filter = new IntentFilter(ACTION_USER_SWITCHED);
             mContext.registerReceiverAsUser(mIntentReceiver, UserHandle.ALL, filter, null, null);
 
             updateAnimationStyle();
+            updateAnimationDimensions();
 
             mKeyguardStateController.addCallback(keyguardStateCallback);
             mAnimationAdded = true;
@@ -213,9 +252,9 @@ public class UdfpsAnimation extends ImageView {
         float scaleFactor = getDisplayFactor();
         float udfpsRadius = isFullResolution ? mAuthController.getUdfpsRadius() : mProps.getLocation().sensorRadius;
         float udfpsLocationY = isFullResolution && udfpsLocation != null ? udfpsLocation.y : mProps.getLocation().sensorLocationY;
-        int animationOffset = (int) (mContext.getResources().getDimensionPixelSize(R.dimen.udfps_animation_offset) * scaleFactor);
+        
         mAnimParams.y = (int) (udfpsLocationY * scaleFactor) - (int) (udfpsRadius * scaleFactor)
-                        - (mAnimationSize / 2) + animationOffset;
+                        - (mAnimationSize / 2) + mAnimationOffset;
         if (DEBUG) {
             Log.d(LOG_TAG, "updatePosition: displaySize=" + displaySize + 
                            ", isFullResolution=" + isFullResolution + 
@@ -223,7 +262,7 @@ public class UdfpsAnimation extends ImageView {
                            ", udfpsRadius=" + udfpsRadius + 
                            ", scaleFactor=" + scaleFactor + 
                            ", udfpsLocationY=" + udfpsLocationY + 
-                           ", animationOffset=" + animationOffset + 
+                           ", mAnimationOffset=" + mAnimationOffset + 
                            ", mAnimParams.y=" + mAnimParams.y);
         }
     }
@@ -274,5 +313,9 @@ public class UdfpsAnimation extends ImageView {
         } else {
             removeAnimation();
         }
+    }
+
+    public void onSettingsChanged() {
+        updateAnimationDimensions();
     }
 }

@@ -7092,6 +7092,18 @@ public final class Settings {
         public static final String UDFPS_ANIM_STYLE = "udfps_anim_style";
 
         /**
+         * UDFPS animation size (scale 0-100, where 50 = 100% default size)
+         * @hide
+         */
+        public static final String UDFPS_ANIM_SIZE = "udfps_anim_size";
+
+        /**
+         * UDFPS animation vertical offset (-50 to +50 dp from default position)
+         * @hide
+         */
+        public static final String UDFPS_ANIM_OFFSET = "udfps_anim_offset";
+
+        /**
          * Keys we no longer back up under the current schema, but want to continue to
          * process when restoring historical backup datasets.
          *
