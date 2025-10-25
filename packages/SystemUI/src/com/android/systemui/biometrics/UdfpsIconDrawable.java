@@ -68,11 +68,13 @@ public abstract class UdfpsIconDrawable extends Drawable {
 
     @NonNull private final Context mContext;
     private Drawable mUdfpsDrawable;
+    private Drawable mPendingCleanupDrawable;
     private Resources udfpsRes;
     private String[] mUdfpsIcons;
     private String mLastLoadedCustomPath = null;
     private int mCurrentIconType = ICON_TYPE_PREBUILT;
     private boolean mIsVisible = true;
+    private boolean mIsDestroyed = false;
 
     private TunerService.Tunable mTunable;
 
@@ -101,17 +103,23 @@ public abstract class UdfpsIconDrawable extends Drawable {
         );
 
         mTunable = (key, newValue) -> {
+            if (mIsDestroyed) return;
+            
             if (UDFPS_ICON_TYPE.equals(key)) {
                 int iconType = newValue == null ? ICON_TYPE_PREBUILT : Integer.parseInt(newValue);
                 mCurrentIconType = iconType;
 
                 if (mCurrentIconType == ICON_TYPE_PREBUILT) {
-                    runOnMainThread(() -> Settings.System.putStringForUser(
-                            mContext.getContentResolver(),
-                            Settings.System.UDFPS_CUSTOM_FP_ICON_PATH,
-                            null,
-                            UserHandle.USER_CURRENT
-                    ));
+                    runOnMainThread(() -> {
+                        if (!mIsDestroyed) {
+                            Settings.System.putStringForUser(
+                                    mContext.getContentResolver(),
+                                    Settings.System.UDFPS_CUSTOM_FP_ICON_PATH,
+                                    null,
+                                    UserHandle.USER_CURRENT
+                            );
+                        }
+                    });
                     mLastLoadedCustomPath = null;
                 }
 
@@ -139,6 +147,8 @@ public abstract class UdfpsIconDrawable extends Drawable {
     }
 
     private void runOnMainThread(Runnable runnable) {
+        if (mIsDestroyed) return;
+        
         if (Thread.currentThread() == Looper.getMainLooper().getThread()) {
             runnable.run();
         } else {
@@ -147,7 +157,9 @@ public abstract class UdfpsIconDrawable extends Drawable {
     }
 
     private void updateIcon() {
-        cleanupCurrentDrawable();
+        if (mIsDestroyed) return;
+        
+        Drawable oldDrawable = mUdfpsDrawable;
         
         if (mCurrentIconType == ICON_TYPE_CUSTOM) {
             loadCustomIcon();
@@ -155,7 +167,14 @@ public abstract class UdfpsIconDrawable extends Drawable {
             loadPrebuiltIcon();
         }
         
-        runOnMainThread(this::invalidateSelf);
+        runOnMainThread(() -> {
+            if (!mIsDestroyed) {
+                invalidateSelf();
+                if (oldDrawable != null) {
+                    mMainHandler.postDelayed(() -> cleanupDrawable(oldDrawable), 100);
+                }
+            }
+        });
     }
 
     private void loadPrebuiltIcon() {
@@ -172,15 +191,21 @@ public abstract class UdfpsIconDrawable extends Drawable {
     }
 
     public void onVisibilityChanged(boolean visible) {
+        if (mIsDestroyed) return;
+        
         mIsVisible = visible;
         if (mUdfpsDrawable instanceof AnimatedImageDrawable) {
             AnimatedImageDrawable anim = (AnimatedImageDrawable) mUdfpsDrawable;
-            if (visible && !anim.isRunning()) {
-                anim.start();
-                if (DEBUG) Log.d(TAG, "Animation started - visibility changed");
-            } else if (!visible && anim.isRunning()) {
-                anim.stop();
-                if (DEBUG) Log.d(TAG, "Animation stopped - visibility changed");
+            try {
+                if (visible && !anim.isRunning()) {
+                    anim.start();
+                    if (DEBUG) Log.d(TAG, "Animation started - visibility changed");
+                } else if (!visible && anim.isRunning()) {
+                    anim.stop();
+                    if (DEBUG) Log.d(TAG, "Animation stopped - visibility changed");
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error handling animation visibility", e);
             }
         }
     }
@@ -196,7 +221,7 @@ public abstract class UdfpsIconDrawable extends Drawable {
             return;
         }
 
-        if (path.equals(mLastLoadedCustomPath)) {
+        if (path.equals(mLastLoadedCustomPath) && mUdfpsDrawable != null) {
             if (DEBUG) Log.d(TAG, "Custom icon already loaded for path: " + path);
             return;
         }
@@ -308,6 +333,7 @@ public abstract class UdfpsIconDrawable extends Drawable {
     }
 
     private void loadStaticCustomIcon(String path) {
+        Bitmap bitmap = null;
         try {
             BitmapFactory.Options options = new BitmapFactory.Options();
             options.inJustDecodeBounds = true;
@@ -322,69 +348,118 @@ public abstract class UdfpsIconDrawable extends Drawable {
             options.inSampleSize = calculateInSampleSize(options, MAX_DIMENSION);
             options.inJustDecodeBounds = false;
             options.inPreferredConfig = Bitmap.Config.ARGB_8888;
+            options.inMutable = false;
             
-            Bitmap bitmap = BitmapFactory.decodeFile(path, options);
-            if (bitmap == null || bitmap.getWidth() <= 0 || bitmap.getHeight() <= 0) {
+            bitmap = BitmapFactory.decodeFile(path, options);
+            if (bitmap == null || bitmap.isRecycled() || 
+                bitmap.getWidth() <= 0 || bitmap.getHeight() <= 0) {
                 Log.w(TAG, "Failed to decode custom icon bitmap");
+                if (bitmap != null && !bitmap.isRecycled()) {
+                    bitmap.recycle();
+                }
                 mUdfpsDrawable = null;
                 return;
             }
             
-            mUdfpsDrawable = new BitmapDrawable(mContext.getResources(), bitmap);
+            Bitmap immutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false);
+            if (immutableBitmap == null) {
+                Log.w(TAG, "Failed to create immutable copy of bitmap");
+                if (!bitmap.isRecycled()) {
+                    bitmap.recycle();
+                }
+                mUdfpsDrawable = null;
+                return;
+            }
+            
+            if (!bitmap.isRecycled()) {
+                bitmap.recycle();
+            }
+            
+            mUdfpsDrawable = new BitmapDrawable(mContext.getResources(), immutableBitmap);
             if (DEBUG) Log.d(TAG, "Static custom icon loaded successfully: " + path);
             
         } catch (OutOfMemoryError e) {
             Log.e(TAG, "OutOfMemoryError loading static custom icon: " + e.getMessage());
+            if (bitmap != null && !bitmap.isRecycled()) {
+                try {
+                    bitmap.recycle();
+                } catch (Exception ex) {
+                }
+            }
             mUdfpsDrawable = null;
         } catch (Exception e) {
             Log.e(TAG, "Failed to load static custom icon: " + e.getMessage());
+            if (bitmap != null && !bitmap.isRecycled()) {
+                try {
+                    bitmap.recycle();
+                } catch (Exception ex) {
+                }
+            }
             mUdfpsDrawable = null;
         }
     }
 
-    private void cleanupCurrentDrawable() {
-        if (mUdfpsDrawable != null) {
-            if (mUdfpsDrawable instanceof AnimatedImageDrawable) {
-                try {
-                    AnimatedImageDrawable animDrawable = (AnimatedImageDrawable) mUdfpsDrawable;
-                    if (animDrawable.isRunning()) {
-                        animDrawable.stop();
-                    }
-                } catch (Exception e) {
-                    if (DEBUG) Log.e(TAG, "Error stopping animation during cleanup", e);
+    private void cleanupDrawable(Drawable drawable) {
+        if (drawable == null || drawable == mUdfpsDrawable) {
+            return;
+        }
+        
+        try {
+            if (drawable instanceof AnimatedImageDrawable) {
+                AnimatedImageDrawable animDrawable = (AnimatedImageDrawable) drawable;
+                if (animDrawable.isRunning()) {
+                    animDrawable.stop();
                 }
             }
             
-            if (mUdfpsDrawable instanceof BitmapDrawable) {
-                Bitmap bitmap = ((BitmapDrawable) mUdfpsDrawable).getBitmap();
+            drawable.setCallback(null);
+            
+            if (drawable instanceof BitmapDrawable) {
+                BitmapDrawable bitmapDrawable = (BitmapDrawable) drawable;
+                Bitmap bitmap = bitmapDrawable.getBitmap();
                 if (bitmap != null && !bitmap.isRecycled()) {
-                    bitmap.recycle();
+                    if (DEBUG) Log.d(TAG, "Bitmap cleanup delegated to GC");
                 }
             }
-            
-            mUdfpsDrawable.setCallback(null);
-            mUdfpsDrawable = null;
+        } catch (Exception e) {
+            if (DEBUG) Log.e(TAG, "Error during drawable cleanup", e);
         }
     }
 
     public void destroy() {
+        mIsDestroyed = true;
+        
         try {
             Dependency.get(TunerService.class).removeTunable(mTunable);
         } catch (Exception e) {
             Log.e(TAG, "Error removing tunable: " + e.getMessage());
         }
-        cleanupCurrentDrawable();
+        
+        mMainHandler.removeCallbacksAndMessages(null);
+        
+        if (mUdfpsDrawable != null) {
+            cleanupDrawable(mUdfpsDrawable);
+            mUdfpsDrawable = null;
+        }
     }
 
     @Override
     public void setAlpha(int alpha) {
-        if (mUdfpsDrawable != null) {
+        if (mUdfpsDrawable != null && !mIsDestroyed) {
             mUdfpsDrawable.setAlpha(alpha);
+            invalidateSelf();
         }
-        invalidateSelf();
     }
 
     Drawable getUdfpsDrawable() {
+        if (mUdfpsDrawable instanceof BitmapDrawable) {
+            Bitmap bitmap = ((BitmapDrawable) mUdfpsDrawable).getBitmap();
+            if (bitmap == null || bitmap.isRecycled()) {
+                if (DEBUG) Log.w(TAG, "Drawable has recycled bitmap, returning null");
+                mUdfpsDrawable = null;
+                return null;
+            }
+        }
         return mUdfpsDrawable;
     }
 
@@ -398,26 +473,25 @@ public abstract class UdfpsIconDrawable extends Drawable {
 
     @Override
     public void setBounds(int left, int top, int right, int bottom) {
-        if (mUdfpsDrawable != null) {
+        super.setBounds(left, top, right, bottom);
+        if (mUdfpsDrawable != null && !mIsDestroyed) {
             mUdfpsDrawable.setBounds(left, top, right, bottom);
         }
-        invalidateSelf();
     }
 
     @Override
     public void setBounds(Rect bounds) {
-        if (mUdfpsDrawable != null) {
+        super.setBounds(bounds);
+        if (mUdfpsDrawable != null && !mIsDestroyed) {
             mUdfpsDrawable.setBounds(bounds);
         }
-        invalidateSelf();
     }
 
     @Override
     protected void onBoundsChange(Rect bounds) {
-        if (mUdfpsDrawable != null) {
+        if (mUdfpsDrawable != null && !mIsDestroyed) {
             mUdfpsDrawable.setBounds(bounds);
         }
-        invalidateSelf();
     }
 
     @Override

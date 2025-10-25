@@ -18,19 +18,38 @@ package com.android.systemui.biometrics
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.PixelFormat
+import android.graphics.drawable.BitmapDrawable
+import android.util.Log
 
 /**
  * Draws udfps fingerprint if sensor isn't illuminating.
  */
 class UdfpsFpIconDrawable(context: Context) : UdfpsIconDrawable(context) {
+    
+    companion object {
+        private const val TAG = "UdfpsFpIconDrawable"
+    }
+    
     override fun draw(canvas: Canvas) {
-        val udfpsDrawable = getUdfpsDrawable()
-        udfpsDrawable?.apply {
-            setBounds(bounds)
-            draw(canvas)
+        try {
+            val udfpsDrawable = getUdfpsDrawable()
+            udfpsDrawable?.apply {
+                if (this is BitmapDrawable) {
+                    val bitmap = this.bitmap
+                    if (bitmap == null || bitmap.isRecycled) {
+                        Log.w(TAG, "Skipping draw - bitmap is null or recycled")
+                        return
+                    }
+                }
+                
+                setBounds(bounds)
+                draw(canvas)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error drawing UDFPS icon: ${e.message}", e)
         }
     }
-
+    
     override fun getOpacity(): Int {
         return PixelFormat.TRANSLUCENT
     }
