@@ -68,7 +68,6 @@ public abstract class UdfpsIconDrawable extends Drawable {
 
     @NonNull private final Context mContext;
     private Drawable mUdfpsDrawable;
-    private Drawable mPendingCleanupDrawable;
     private Resources udfpsRes;
     private String[] mUdfpsIcons;
     private String mLastLoadedCustomPath = null;
@@ -144,6 +143,8 @@ public abstract class UdfpsIconDrawable extends Drawable {
                 UDFPS_ICON,
                 UDFPS_CUSTOM_ICON_PATH
         );
+        
+        updateIcon();
     }
 
     private void runOnMainThread(Runnable runnable) {
@@ -170,7 +171,7 @@ public abstract class UdfpsIconDrawable extends Drawable {
         runOnMainThread(() -> {
             if (!mIsDestroyed) {
                 invalidateSelf();
-                if (oldDrawable != null) {
+                if (oldDrawable != null && oldDrawable != mUdfpsDrawable) {
                     mMainHandler.postDelayed(() -> cleanupDrawable(oldDrawable), 100);
                 }
             }
@@ -226,27 +227,35 @@ public abstract class UdfpsIconDrawable extends Drawable {
             return;
         }
 
-        mLastLoadedCustomPath = path;
+        if (DEBUG) Log.d(TAG, "Loading custom icon from: " + path);
         
         File imageFile = new File(path);
         if (!isValidImageFile(imageFile)) {
             Log.w(TAG, "Custom icon file validation failed: " + path);
             mUdfpsDrawable = null;
-            mLastLoadedCustomPath = null;
             return;
         }
+
+        mLastLoadedCustomPath = path;
 
         String extension = getFileExtension(path);
         boolean isAnimated = extension.matches("\\.(gif|webp)$");
 
         if (isAnimated) {
             if (loadAnimatedCustomIcon(imageFile, path)) {
+                if (DEBUG) Log.d(TAG, "Successfully loaded animated custom icon");
                 return;
             }
             if (DEBUG) Log.d(TAG, "Falling back to static image loading for: " + path);
         }
         
         loadStaticCustomIcon(path);
+        if (mUdfpsDrawable != null) {
+            if (DEBUG) Log.d(TAG, "Successfully loaded static custom icon");
+        } else {
+            Log.w(TAG, "Failed to load custom icon from: " + path);
+            mLastLoadedCustomPath = null;
+        }
     }
 
     private boolean isValidImageFile(File imageFile) {
@@ -260,8 +269,14 @@ public abstract class UdfpsIconDrawable extends Drawable {
             return false;
         }
         
-        if (imageFile.length() > MAX_IMAGE_SIZE) {
-            Log.w(TAG, "Custom icon file too large: " + imageFile.length() + " bytes");
+        long fileSize = imageFile.length();
+        if (fileSize > MAX_IMAGE_SIZE) {
+            Log.w(TAG, "Custom icon file too large: " + fileSize + " bytes");
+            return false;
+        }
+        
+        if (fileSize == 0) {
+            Log.w(TAG, "Custom icon file is empty");
             return false;
         }
         
