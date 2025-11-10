@@ -7362,6 +7362,16 @@ public final class Settings {
         public static final String LS_MEDIA_ART_AOD_DIM_LEVEL = "ls_media_art_aod_dim_level";
 
         /**
+         * @hide
+         */
+        public static final String LOCK_GLYMPS_CHANGE_ON = "lock_glymps_change_on";
+
+        /**
+         * @hide
+         */
+        public static final String LOCK_GLYMPS_TIMER_INTERVAL = "lock_glymps_timer_interval";
+
+        /**
          * Whether edge light is enabled
          * @hide
          */
