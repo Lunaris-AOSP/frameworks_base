@@ -159,6 +159,6 @@ private object TileDetailsDefaults {
     val TitleRowTop = 14.dp
     val TitleRowEnd = 8.dp
     val TitleRowBottom = 2.dp
-    val DetailsMaxHeight = 600.dp
-    val DetailsMinHeight = 300.dp
+    val DetailsMaxHeight = 680.dp
+    val DetailsMinHeight = 120.dp
 }
