@@ -22,7 +22,7 @@
             <size android:width="40dp" android:height="40dp" />
             <solid android:color="@color/settingslib_materialColorSurfaceContainerHighest" />
             <corners
-                android:radius="100dp" />
+                android:radius="14dp" />
         </shape>
     </item>
 

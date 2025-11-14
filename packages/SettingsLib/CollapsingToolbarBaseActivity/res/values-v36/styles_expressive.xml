@@ -38,10 +38,12 @@
     <style name="SettingsLibCollapsingToolbarTitle.Collapsed" parent="@style/TextAppearance.SettingsLib.TitleLarge.Emphasized">
         <!--set dp because we don't want size adjust when font size change-->
         <item name="android:textSize">22dp</item>
+        <item name="android:textColor">@color/luna_text_color_primary</item>
     </style>
 
     <style name="SettingsLibCollapsingToolbarTitle.Expanded" parent="@style/TextAppearance.SettingsLib.DisplaySmall.Emphasized">
-        <item name="android:textSize">36dp</item>
+        <item name="android:textSize">38dp</item>
+        <item name="android:textColor">@color/luna_text_color_primary</item>
     </style>
 
     <style name="Widget.SettingsLib.Material3Expressive.FloatingToolbar" parent="Base.Widget.Material3.FloatingToolbar">
