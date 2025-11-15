@@ -321,7 +321,12 @@ fun ContentScope.Tile(
                         if (useLongClickToSettings) {
                             tile.settingsClick(expandable)
                         } else {
-                            tile.mainClick(expandable)
+                            val hasDetails =
+                                QsDetailedView.isEnabled &&
+                                    detailsViewModel?.onTileClicked(tile.spec) == true
+                            if (!hasDetails) {
+                                tile.mainClick(expandable)
+                            }
                         }
                     }
                     .takeIf { !useLongClickToSettings || uiState.handlesLongClick }
@@ -337,16 +342,16 @@ fun ContentScope.Tile(
                 onClick@{
                         if (!isClickable) return@onClick
 
-                        val hasDetails =
-                            QsDetailedView.isEnabled &&
-                                detailsViewModel?.onTileClicked(tile.spec) == true
-                        if (hasDetails) return@onClick
-
-                        // For those tile's who doesn't have a detailed view, process with
-                        // their `onClick` behavior.
                         if (iconOnly && isDualTarget) {
                             tile.toggleClick()
                         } else {
+                            val hasDetails =
+                                QsDetailedView.isEnabled &&
+                                    detailsViewModel?.onTileClicked(tile.spec) == true
+                            if (hasDetails) return@onClick
+
+                            // For those tile's who doesn't have a detailed view, process with
+                            // their `onClick` behavior.
                             tile.mainClick(expandable)
                         }
 
