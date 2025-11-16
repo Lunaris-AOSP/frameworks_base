@@ -19,61 +19,86 @@ import android.graphics.drawable.Drawable
 import android.media.MediaMetadata
 import android.media.session.PlaybackState
 import com.android.systemui.util.WeakListenerManager
-import java.util.concurrent.atomic.AtomicBoolean
 
 class MediaSessionManager private constructor() {
 
     interface MediaDataListener {
         fun onPlaybackStateChanged(state: Int) {}
         fun onAlbumArtChanged(drawable: Drawable) {}
+        fun onAppIconChanged(drawable: Drawable) {}
         fun onMediaColorsChanged(color: Int) {}
         fun onMetadataChanged(track: String, artist: String) {}
     }
 
     private val listenerManager = WeakListenerManager<MediaDataListener>()
 
-    private val _isMediaPlaying = AtomicBoolean(false)
-    var isMediaPlaying: Boolean
-        get() = _isMediaPlaying.get()
-        private set(value) = _isMediaPlaying.set(value)
+    @Volatile
+    private var currentPlaybackState: Int = PlaybackState.STATE_NONE
 
     @Volatile
-    private var _trackTitle: String = "Unknown"
+    private var currentAlbumArt: Drawable? = null
 
     @Volatile
-    private var _artist: String = "Unknown"
+    private var currentAppIcon: Drawable? = null
 
-    val trackTitle: String
-        get() = _trackTitle
+    @Volatile
+    private var currentMediaColor: Int? = null
 
-    val artist: String
-        get() = _artist
+    @Volatile
+    var trackTitle: String = "Unknown"
 
-    fun addListener(listener: MediaDataListener) = listenerManager.addListener(listener)
+    @Volatile
+    var artist: String = "Unknown"
+
+    val isMediaPlaying: Boolean
+        get() = currentPlaybackState == PlaybackState.STATE_PLAYING
+
+    fun addListener(listener: MediaDataListener) {
+        listenerManager.addListener(listener)
+
+        listenerManager.notifyOnBackground {
+            if (it === listener) {
+                it.onPlaybackStateChanged(currentPlaybackState)
+                it.onMetadataChanged(trackTitle, artist)
+                currentAlbumArt?.let { art -> it.onAlbumArtChanged(art) }
+                currentAppIcon?.let { icon -> it.onAppIconChanged(icon) }
+                currentMediaColor?.let { color -> it.onMediaColorsChanged(color) }
+            }
+        }
+    }
+
     fun removeListener(listener: MediaDataListener) = listenerManager.removeListener(listener)
 
     fun onPlaybackStateChanged(state: Int) {
-        val isPlaying = state == PlaybackState.STATE_PLAYING
-        if (_isMediaPlaying.getAndSet(isPlaying) != isPlaying) {
-            listenerManager.notify { it.onPlaybackStateChanged(state) }
+        if (currentPlaybackState != state) {
+            currentPlaybackState = state
+            listenerManager.notifyOnBackground { it.onPlaybackStateChanged(state) }
         }
     }
 
     fun onAlbumArtChanged(drawable: Drawable) {
-        listenerManager.notify { it.onAlbumArtChanged(drawable) }
+        currentAlbumArt = drawable
+        listenerManager.notifyOnBackground { it.onAlbumArtChanged(drawable) }
+    }
+
+    fun onAppIconChanged(drawable: Drawable) {
+        currentAppIcon = drawable
+        listenerManager.notifyOnBackground { it.onAppIconChanged(drawable) }
     }
 
     fun onMediaColorsChanged(color: Int) {
-        listenerManager.notify { it.onMediaColorsChanged(color) }
+        currentMediaColor = color
+        listenerManager.notifyOnBackground { it.onMediaColorsChanged(color) }
     }
 
     fun onMetadataChanged(metadata: MediaMetadata) {
         val newTitle = metadata.getString(MediaMetadata.METADATA_KEY_TITLE) ?: "Unknown"
         val newArtist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST) ?: "Unknown"
-        if (_trackTitle != newTitle || _artist != newArtist) {
-            _trackTitle = newTitle
-            _artist = newArtist
-            listenerManager.notify { it.onMetadataChanged(_trackTitle, _artist) }
+
+        if (trackTitle != newTitle || artist != newArtist) {
+            trackTitle = newTitle
+            artist = newArtist
+            listenerManager.notifyOnBackground { it.onMetadataChanged(trackTitle, artist) }
         }
     }
 
