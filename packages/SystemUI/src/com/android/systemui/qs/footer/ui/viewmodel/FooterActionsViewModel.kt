@@ -51,7 +51,6 @@ import com.android.systemui.qs.panels.ui.viewmodel.TextFeedbackViewModel
 import com.android.systemui.res.R
 import com.android.systemui.shade.ShadeDisplayAware
 import com.android.systemui.statusbar.policy.KeyguardStateController
-import com.android.systemui.user.domain.interactor.HeadlessSystemUserMode
 import com.android.systemui.user.domain.interactor.SelectedUserInteractor
 import com.android.systemui.util.icuMessageFormat
 import javax.inject.Inject
@@ -136,7 +135,6 @@ class FooterActionsViewModel(
         private val activityStarter: ActivityStarter,
         private val textFeedbackInteractor: TextFeedbackInteractor,
         private val selectedUserInteractor: SelectedUserInteractor,
-        private val hsum: HeadlessSystemUserMode,
         @Named(PM_LITE_ENABLED) private val showPowerButton: Boolean,
         private val keyguardStateController: KeyguardStateController
     ) {
@@ -167,7 +165,6 @@ class FooterActionsViewModel(
                 activityStarter,
                 showPowerButton,
                 selectedUserInteractor,
-                hsum,
                 keyguardStateController,
             )
         }
@@ -195,7 +192,6 @@ class FooterActionsViewModel(
                 activityStarter,
                 showPowerButton,
                 selectedUserInteractor,
-                hsum,
                 keyguardStateController,
             )
         }
@@ -211,7 +207,6 @@ fun createFooterActionsViewModel(
     activityStarter: ActivityStarter,
     showPowerButton: Boolean,
     selectedUserInteractor: SelectedUserInteractor,
-    hsum: HeadlessSystemUserMode,
     keyguardStateController: KeyguardStateController
 ): FooterActionsViewModel {
 
@@ -328,10 +323,10 @@ fun createFooterActionsViewModel(
         userSwitcherViewModel(qsThemedContext, footerActionsInteractor, ::onUserSwitcherClicked)
 
     val settings =
-        selectedUserInteractor.selectedUser
-            .map { selectedUserId ->
+        selectedUserInteractor.isCurrentUserHeadlessSystemUser
+            .map { isHeadlessSystemUser ->
                 SettingsActionViewModel(qsThemedContext, ::onSettingsButtonClicked, ::onSettingsButtonLongClicked).takeUnless {
-                    hsuQsChanges() && hsum.isHeadlessSystemUser(selectedUserId)
+                    hsuQsChanges() && isHeadlessSystemUser
                 }
             }
             .distinctUntilChanged()

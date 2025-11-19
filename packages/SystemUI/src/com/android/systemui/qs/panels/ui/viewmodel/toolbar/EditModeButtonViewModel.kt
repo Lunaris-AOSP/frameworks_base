@@ -27,7 +27,6 @@ import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.qs.flags.QSEditModeTooltip
 import com.android.systemui.qs.panels.domain.interactor.QSPreferencesInteractor
 import com.android.systemui.qs.panels.ui.viewmodel.EditModeViewModel
-import com.android.systemui.user.domain.interactor.HeadlessSystemUserMode
 import com.android.systemui.user.domain.interactor.SelectedUserInteractor
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
@@ -41,7 +40,6 @@ constructor(
     private val editModeViewModel: EditModeViewModel,
     private val falsingInteractor: FalsingInteractor,
     private val activityStarter: ActivityStarter,
-    private val hsum: HeadlessSystemUserMode,
     private val qsPreferencesInteractor: QSPreferencesInteractor,
     selectedUserInteractor: SelectedUserInteractor,
     @Assisted private val ignoreTestHarness: Boolean,
@@ -61,8 +59,8 @@ constructor(
             traceName = "isEditButtonVisible",
             initialValue = false,
             source =
-                selectedUserInteractor.selectedUser.map { selectedUserId ->
-                    !hsuQsChanges() || !hsum.isHeadlessSystemUser(selectedUserId)
+                selectedUserInteractor.isCurrentUserHeadlessSystemUser.map { isHeadlessSystemUser ->
+                    !hsuQsChanges() || !isHeadlessSystemUser
                 },
         )
 
