@@ -7372,6 +7372,11 @@ public final class Settings {
         public static final String LOCK_GLYMPS_TIMER_INTERVAL = "lock_glymps_timer_interval";
 
         /**
+         * @hide
+         */
+        public static final String LOCK_GLYMPS_WALLPAPER_TARGET = "lock_glymps_wallpaper_target";
+
+        /**
          * Whether edge light is enabled
          * @hide
          */
