@@ -75,6 +75,9 @@ constructor(
     private final val UDFPS_ICON: String =
             "system:" + Settings.System.UDFPS_ICON
 
+    private final val UDFPS_ICON_AOD: String =
+            "system:" + Settings.System.UDFPS_ICON_AOD
+
     private val fingerprintDrawable: UdfpsIconDrawable = UdfpsFpIconDrawable(context)
 
     private val packageInstalled = com.android.internal.util.lunaris.Utils.isPackageInstalled(
@@ -92,12 +95,12 @@ constructor(
         addIconImageView()
         addTouchHandlingView()
 
-        tunerService.addTunable(this, UDFPS_ICON)
+        tunerService.addTunable(this, UDFPS_ICON, UDFPS_ICON_AOD)
     }
 
     override fun onTuningChanged(key: String?, value: String?) {
         when (key) {
-            UDFPS_ICON -> {
+            UDFPS_ICON, UDFPS_ICON_AOD -> {
                 iconView.setImageDrawable(null)
                 animatedIconDrawable = AnimatedStateListDrawable()
                 setupIconStates()
@@ -147,6 +150,10 @@ constructor(
             mContext.contentResolver, Settings.System.UDFPS_ICON, 0, UserHandle.USER_CURRENT
         ) != 0)
 
+        val customAodUdfpsIcon = Settings.System.getIntForUser(
+            mContext.contentResolver, Settings.System.UDFPS_ICON_AOD, 0, UserHandle.USER_CURRENT
+        ) != 0
+
         // Lockscreen States
         // LOCK
         animatedIconDrawable.addState(
@@ -192,15 +199,26 @@ constructor(
             context.getDrawable(R.drawable.ic_unlocked_aod)!!,
             R.id.unlocked_aod,
         )
-        // FINGERPRINT
+        // FINGERPRINT - AOD
         LottieCompositionFactory.fromRawRes(mContext, R.raw.udfps_aod_fp).addListener { result ->
             aodstockFpDrawable.setComposition(result)
         }
-        animatedIconDrawable.addState(
-            getIconState(IconType.FINGERPRINT, true),
-            aodstockFpDrawable,
-            R.id.udfps_aod_fp,
-        )
+        
+        // Use custom icon for AOD if switch is enabled AND custom icon is available
+        if (customAodUdfpsIcon && customUdfpsIcon) {
+            fingerprintDrawable.setBounds(0, 0, bgView.width, bgView.height)
+            animatedIconDrawable.addState(
+                getIconState(IconType.FINGERPRINT, true),
+                fingerprintDrawable,
+                R.id.udfps_aod_fp,
+            )
+        } else {
+            animatedIconDrawable.addState(
+                getIconState(IconType.FINGERPRINT, true),
+                aodstockFpDrawable,
+                R.id.udfps_aod_fp,
+            )
+        }
 
         // WILDCARD: should always be the last state added since any states will match with this
         // and therefore won't get matched with subsequent states.

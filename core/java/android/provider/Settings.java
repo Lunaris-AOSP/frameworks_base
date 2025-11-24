@@ -7203,6 +7203,11 @@ public final class Settings {
         public static final String UDFPS_CUSTOM_FP_ICON_PATH = "udfps_custom_fp_icon_path";
 
         /**
+         * @hide
+         */
+        public static final String UDFPS_ICON_AOD = "udfps_icon_aod";
+
+        /**
          * Whether to vibrate on succesful fingerprint authentication
          * @hide
          */
