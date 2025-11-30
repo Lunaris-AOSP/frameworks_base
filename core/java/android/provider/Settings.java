@@ -6973,6 +6973,11 @@ public final class Settings {
         public static final String NOWPLAYING_SHOW_ON_LOCKSCREEN = "nowplaying_show_on_lockscreen";
 
         /**
+         * @hide
+         */
+        public static final String SINGLE_QS_TONE_ENABLED = "single_qs_tone_enabled";
+
+        /**
          * Whether to show the battery bar
          * @hide
          */
