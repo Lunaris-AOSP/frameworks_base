@@ -553,7 +553,7 @@ void CanvasContext::prepareTree(TreeInfo& info, int64_t* uiFrameInfo, int64_t sy
 
     bool postedFrameCallback = false;
     if (info.out.hasAnimations || info.out.skippedFrameReason) {
-        if (CC_UNLIKELY(!Properties::enableRTAnimations)) {
+        if (CC_UNLIKELY(!Properties::enableRTAnimations || !mEnableRTAnimations)) {
             info.out.requiresUiRedraw = true;
         }
         if (!info.out.requiresUiRedraw) {
