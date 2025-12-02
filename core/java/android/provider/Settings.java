@@ -14388,6 +14388,12 @@ public final class Settings {
         public static final String LOW_BATTERY_DIALOGS_ENABLED = "low_battery_dialogs_enabled";
 
         /**
+         * Whether to show the emergency call button on the lockscreen.
+         * @hide
+         */
+        public static final String LOCKSCREEN_SHOW_EMERGENCY_BUTTON = "lockscreen_show_emergency_button";
+
+        /**
          * Keys we no longer back up under the current schema, but want to continue to
          * process when restoring historical backup datasets.
          *

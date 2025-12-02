@@ -25,8 +25,13 @@ import static com.android.systemui.statusbar.policy.DevicePostureController.DEVI
 import android.annotation.Nullable;
 import android.content.Context;
 import android.content.res.Configuration;
+import android.database.ContentObserver;
 import android.graphics.Rect;
+import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.SystemClock;
+import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
@@ -90,6 +95,7 @@ public class KeyguardPatternView extends KeyguardInputView
     private boolean mAlreadyUsingSplitBouncer = false;
     private boolean mIsSmallLockScreenLandscapeEnabled = false;
     @DevicePostureInt private int mLastDevicePosture = DEVICE_POSTURE_UNKNOWN;
+    private SettingsObserver mSettingsObserver;
 
     public KeyguardPatternView(Context context) {
         this(context, null);
@@ -242,12 +248,54 @@ public class KeyguardPatternView extends KeyguardInputView
         }
 
         mEcaView = findViewById(R.id.keyguard_selector_fade_container);
+        updateEmergencyButtonVisibility();
     }
 
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         mSecurityMessageDisplay = findViewById(R.id.bouncer_message_area);
+        
+        if (mSettingsObserver == null) {
+            mSettingsObserver = new SettingsObserver(new Handler(Looper.getMainLooper()));
+            mSettingsObserver.observe();
+        }
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        if (mSettingsObserver != null) {
+            mContext.getContentResolver().unregisterContentObserver(mSettingsObserver);
+            mSettingsObserver = null;
+        }
+    }
+
+    private void updateEmergencyButtonVisibility() {
+        if (mEcaView != null) {
+            boolean showButton = Settings.Secure.getInt(
+                    mContext.getContentResolver(),
+                    Settings.Secure.LOCKSCREEN_SHOW_EMERGENCY_BUTTON,
+                    0) == 1;
+            mEcaView.setVisibility(showButton ? View.VISIBLE : View.GONE);
+        }
+    }
+
+    private class SettingsObserver extends ContentObserver {
+        SettingsObserver(Handler handler) {
+            super(handler);
+        }
+
+        void observe() {
+            mContext.getContentResolver().registerContentObserver(
+                    Settings.Secure.getUriFor(Settings.Secure.LOCKSCREEN_SHOW_EMERGENCY_BUTTON),
+                    false, this);
+        }
+
+        @Override
+        public void onChange(boolean selfChange, Uri uri) {
+            updateEmergencyButtonVisibility();
+        }
     }
 
     @Override

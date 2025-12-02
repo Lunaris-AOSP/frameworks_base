@@ -17,6 +17,11 @@
 package com.android.keyguard;
 
 import android.content.Context;
+import android.database.ContentObserver;
+import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.Settings;
 import android.util.AttributeSet;
 import android.view.HapticFeedbackConstants;
 import android.view.KeyEvent;
@@ -37,6 +42,7 @@ public abstract class KeyguardAbsKeyInputView extends KeyguardInputView {
     // any passwords with length less than or equal to this length.
     protected static final int MINIMUM_PASSWORD_LENGTH_BEFORE_REPORT = 3;
     private KeyDownListener mKeyDownListener;
+    private SettingsObserver mSettingsObserver;
 
     public KeyguardAbsKeyInputView(Context context) {
         this(context, null);
@@ -54,6 +60,53 @@ public abstract class KeyguardAbsKeyInputView extends KeyguardInputView {
     protected void onFinishInflate() {
         super.onFinishInflate();
         mEcaView = findViewById(R.id.keyguard_selector_fade_container);
+        
+        updateEmergencyButtonVisibility();
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        if (mSettingsObserver == null) {
+            mSettingsObserver = new SettingsObserver(new Handler(Looper.getMainLooper()));
+            mSettingsObserver.observe();
+        }
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        if (mSettingsObserver != null) {
+            mContext.getContentResolver().unregisterContentObserver(mSettingsObserver);
+            mSettingsObserver = null;
+        }
+    }
+
+    private void updateEmergencyButtonVisibility() {
+        if (mEcaView != null) {
+            boolean showButton = Settings.Secure.getInt(
+                    mContext.getContentResolver(),
+                    Settings.Secure.LOCKSCREEN_SHOW_EMERGENCY_BUTTON,
+                    0) == 1;
+            mEcaView.setVisibility(showButton ? View.VISIBLE : View.GONE);
+        }
+    }
+
+    private class SettingsObserver extends ContentObserver {
+        SettingsObserver(Handler handler) {
+            super(handler);
+        }
+
+        void observe() {
+            mContext.getContentResolver().registerContentObserver(
+                    Settings.Secure.getUriFor(Settings.Secure.LOCKSCREEN_SHOW_EMERGENCY_BUTTON),
+                    false, this);
+        }
+
+        @Override
+        public void onChange(boolean selfChange, Uri uri) {
+            updateEmergencyButtonVisibility();
+        }
     }
 
     /*
