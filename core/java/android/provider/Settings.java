@@ -14292,6 +14292,11 @@ public final class Settings {
         public static final String BACK_GESTURE_ARROW = "back_gesture_arrow";
 
         /**
+         * @hide
+         */
+        public static final String SHOW_BACK_GESTURE_BACKGROUND = "show_back_gesture_background";
+
+        /**
          * Whether or not to vibrate when back gesture is used
          * @hide
          */

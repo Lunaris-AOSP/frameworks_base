@@ -108,7 +108,7 @@ constructor(
         ): BackPanelController
     }
 
-    @VisibleForTesting internal var params: EdgePanelParams = EdgePanelParams(resources)
+    @VisibleForTesting internal var params: EdgePanelParams = EdgePanelParams(resources, context)
     @VisibleForTesting internal var currentState: GestureState = GestureState.GONE
     private var previousState: GestureState = GestureState.GONE
     
@@ -272,6 +272,7 @@ constructor(
 
     override fun onViewAttached() {
         updateConfiguration()
+        mView.edgePanelParams = params
         updateArrowDirection(configurationController.isLayoutRtl)
         updateArrowState(GestureState.GONE, force = true)
         updateRestingArrowDimens()

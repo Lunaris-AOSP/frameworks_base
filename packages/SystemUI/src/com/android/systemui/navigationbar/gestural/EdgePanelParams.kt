@@ -1,13 +1,18 @@
 package com.android.systemui.navigationbar.gestural
 
+import android.content.Context
 import android.content.res.Resources
+import android.provider.Settings
 import android.util.TypedValue
 import androidx.core.animation.Interpolator
 import androidx.core.animation.PathInterpolator
 import androidx.dynamicanimation.animation.SpringForce
 import com.android.systemui.res.R
 
-data class EdgePanelParams(private var resources: Resources) {
+data class EdgePanelParams(
+    private var resources: Resources,
+    private val context: Context
+) {
 
     data class ArrowDimens(
         val length: Float? = 0f,
@@ -94,6 +99,9 @@ data class EdgePanelParams(private var resources: Resources) {
     var swipeProgressThreshold: Float = 0f
         private set
 
+    var arrowSizeScale: Float = 1.0f
+        private set
+
     lateinit var entryWidthInterpolator: Interpolator
         private set
 
@@ -122,7 +130,21 @@ data class EdgePanelParams(private var resources: Resources) {
         private set
 
     init {
+        val showBackground = Settings.Secure.getInt(
+            context.contentResolver,
+            Settings.Secure.SHOW_BACK_GESTURE_BACKGROUND,
+            0
+        ) == 1
+        arrowSizeScale = if (showBackground) 0.8f else 1.0f
         update(resources)
+    }
+
+    fun setArrowSizeScale(showBackground: Boolean) {
+        val newScale = if (showBackground) 0.8f else 1.0f
+        if (arrowSizeScale != newScale) {
+            arrowSizeScale = newScale
+            update(resources)
+        }
     }
 
     private fun getDimen(id: Int): Float {
@@ -198,8 +220,8 @@ data class EdgePanelParams(private var resources: Resources) {
                 scaleSpring = createSpring(120f, 0.8f),
                 arrowDimens =
                     ArrowDimens(
-                        length = getDimen(R.dimen.navigation_edge_entry_arrow_length),
-                        height = getDimen(R.dimen.navigation_edge_entry_arrow_height),
+                        length = getDimen(R.dimen.navigation_edge_entry_arrow_length) * arrowSizeScale,
+                        height = getDimen(R.dimen.navigation_edge_entry_arrow_height) * arrowSizeScale,
                         alpha = 0f,
                         lengthSpring = createSpring(600f, 0.4f),
                         heightSpring = createSpring(600f, 0.4f),
@@ -229,8 +251,8 @@ data class EdgePanelParams(private var resources: Resources) {
                 scalePivotX = getDimen(R.dimen.navigation_edge_active_background_width),
                 arrowDimens =
                     ArrowDimens(
-                        length = getDimen(R.dimen.navigation_edge_active_arrow_length),
-                        height = getDimen(R.dimen.navigation_edge_active_arrow_height),
+                        length = getDimen(R.dimen.navigation_edge_active_arrow_length) * arrowSizeScale,
+                        height = getDimen(R.dimen.navigation_edge_active_arrow_height) * arrowSizeScale,
                         alpha = 1f,
                         lengthSpring = activeCommittedArrowLengthSpring,
                         heightSpring = activeCommittedArrowHeightSpring,
@@ -260,8 +282,8 @@ data class EdgePanelParams(private var resources: Resources) {
                 horizontalTranslationSpring = createSpring(6000f, 1f),
                 arrowDimens =
                     ArrowDimens(
-                        length = getDimen(R.dimen.navigation_edge_pre_threshold_arrow_length),
-                        height = getDimen(R.dimen.navigation_edge_pre_threshold_arrow_height),
+                        length = getDimen(R.dimen.navigation_edge_pre_threshold_arrow_length) * arrowSizeScale,
+                        height = getDimen(R.dimen.navigation_edge_pre_threshold_arrow_height) * arrowSizeScale,
                         alpha = 1f,
                         lengthSpring = createSpring(100f, 0.6f),
                         heightSpring = createSpring(100f, 0.6f),
@@ -347,8 +369,8 @@ data class EdgePanelParams(private var resources: Resources) {
                 scaleSpring = null,
                 arrowDimens =
                     ArrowDimens(
-                        length = getDimen(R.dimen.navigation_edge_stretched_arrow_length),
-                        height = getDimen(R.dimen.navigation_edge_stretched_arrow_height),
+                        length = getDimen(R.dimen.navigation_edge_stretched_arrow_length) * arrowSizeScale,
+                        height = getDimen(R.dimen.navigation_edge_stretched_arrow_height) * arrowSizeScale,
                         alpha = 1f,
                         alphaSpring = null,
                         heightSpring = null,
