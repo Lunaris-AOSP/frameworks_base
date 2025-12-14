@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import com.android.compose.theme.LocalAndroidColorScheme
 import com.android.systemui.common.ringer.RingerSliderDimens
 import com.android.systemui.common.ringer.RingerSliderTheme
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.CustomColorScheme
 
 class QSTileRingerTheme(
 ) : RingerSliderTheme {
@@ -30,7 +31,7 @@ class QSTileRingerTheme(
         @Composable get() = MaterialTheme.colorScheme.primary
     
     override val neutralBg: Color
-        @Composable get() = LocalAndroidColorScheme.current.surfaceEffect1
+        @Composable get() = CustomColorScheme.current.qsTileColor
 
     override val activeIcon: Color
         @Composable get() = MaterialTheme.colorScheme.onPrimary

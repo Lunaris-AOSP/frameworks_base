@@ -125,6 +125,7 @@ import com.android.systemui.haptics.slider.SeekableSliderTrackerConfig
 import com.android.systemui.haptics.slider.SliderHapticFeedbackConfig
 import com.android.systemui.haptics.slider.compose.ui.SliderHapticsViewModel
 import com.android.systemui.lifecycle.rememberViewModel
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.CustomColorScheme
 import com.android.systemui.qs.ui.compose.borderOnFocus
 import com.android.systemui.res.R
 import com.android.systemui.utils.PolicyRestriction
@@ -521,7 +522,7 @@ private fun drawAutoBrightnessButton(
         targetValue = if (autoMode) {
             MaterialTheme.colorScheme.primary
         } else {
-            LocalAndroidColorScheme.current.surfaceEffect1
+            CustomColorScheme.current.qsTileColor
         }
     )
     val iconTint by animateColorAsState(
@@ -722,7 +723,7 @@ object BrightnessSliderMotionTestKeys {
 private fun colors(): SliderColors {
     return SliderDefaults.colors()
         .copy(
-            inactiveTrackColor = LocalAndroidColorScheme.current.surfaceEffect1,
+            inactiveTrackColor = CustomColorScheme.current.qsTileColor,
             activeTickColor = MaterialTheme.colorScheme.onPrimary,
             inactiveTickColor = MaterialTheme.colorScheme.onSurface,
         )
