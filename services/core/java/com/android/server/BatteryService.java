@@ -29,6 +29,7 @@ import android.annotation.Nullable;
 import android.annotation.SuppressLint;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
+import android.app.AlertDialog;
 import android.app.AppOpsManager;
 import android.app.BroadcastOptions;
 import android.content.ContentResolver;
@@ -76,6 +77,7 @@ import android.util.EventLog;
 import android.util.Slog;
 import android.util.TimeUtils;
 import android.util.proto.ProtoOutputStream;
+import android.view.WindowManager;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.IBatteryStats;
@@ -168,6 +170,9 @@ public final class BatteryService extends SystemService {
     private HealthInfo mHealthInfo;
     private final HealthInfo mLastHealthInfo = new HealthInfo();
     private boolean mBatteryLevelCritical;
+
+    private AlertDialog mLowBatteryShutdownDialog = null;
+    private boolean mShutdownDialogShown = false;
 
     /**
      * {@link HealthInfo#batteryStatus} value when {@link Intent#ACTION_BATTERY_CHANGED}
@@ -679,15 +684,66 @@ public final class BatteryService extends SystemService {
         // shut down gracefully if our battery is critically low and we are not powered.
         // wait until the system has booted before attempting to display the shutdown dialog.
         if (shouldShutdownLocked()) {
-            Intent intent = new Intent(Intent.ACTION_REQUEST_SHUTDOWN);
-            intent.putExtra(Intent.EXTRA_KEY_CONFIRM, false);
-            intent.putExtra(Intent.EXTRA_REASON,
-                    PowerManager.SHUTDOWN_LOW_BATTERY);
-            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            mHandler.post(() -> startShutdownActivity(intent));
+            if (!mShutdownDialogShown) {
+                mHandler.post(() -> showLowBatteryShutdownDialog());
+                mShutdownDialogShown = true;
+                
+                mHandler.postDelayed(() -> {
+                    Intent intent = new Intent(Intent.ACTION_REQUEST_SHUTDOWN);
+                    intent.putExtra(Intent.EXTRA_KEY_CONFIRM, false);
+                    intent.putExtra(Intent.EXTRA_REASON, PowerManager.SHUTDOWN_LOW_BATTERY);
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startShutdownActivity(intent);
+                }, 10000);
+            }
+        } else {
+            mShutdownDialogShown = false;
+            if (mLowBatteryShutdownDialog != null && mLowBatteryShutdownDialog.isShowing()) {
+                mLowBatteryShutdownDialog.dismiss();
+                mLowBatteryShutdownDialog = null;
+            }
         }
     }
 
+    private void showLowBatteryShutdownDialog() {
+        if (!mActivityManagerInternal.isSystemReady()) {
+            return;
+        }
+        
+        if (mLowBatteryShutdownDialog != null && mLowBatteryShutdownDialog.isShowing()) {
+            mLowBatteryShutdownDialog.dismiss();
+        }
+        
+        AlertDialog.Builder builder = new AlertDialog.Builder(mContext);
+        builder.setTitle("Critical Battery Warning");
+        builder.setMessage("Battery level is critically low (" + mHealthInfo.batteryLevel + "%).\n\n"
+                + "Device will shut down in 10 seconds to prevent data loss.\n\n"
+                + "Please connect your charger immediately!");
+        builder.setIcon(android.R.drawable.ic_dialog_alert);
+        builder.setCancelable(false);
+        
+        builder.setPositiveButton("I'll Connect Charger", (dialog, which) -> {
+            dialog.dismiss();
+        });
+        
+        builder.setNegativeButton("Shutdown Now", (dialog, which) -> {
+            dialog.dismiss();
+            Intent intent = new Intent(Intent.ACTION_REQUEST_SHUTDOWN);
+            intent.putExtra(Intent.EXTRA_KEY_CONFIRM, false);
+            intent.putExtra(Intent.EXTRA_REASON, PowerManager.SHUTDOWN_LOW_BATTERY);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startShutdownActivity(intent);
+        });
+        
+        mLowBatteryShutdownDialog = builder.create();
+        
+        if (mLowBatteryShutdownDialog.getWindow() != null) {
+            mLowBatteryShutdownDialog.getWindow().setType(
+                    WindowManager.LayoutParams.TYPE_SYSTEM_ALERT);
+        }
+        
+        mLowBatteryShutdownDialog.show();
+    }
 
     private void shutdownIfOverTempLocked() {
         // shut down gracefully if temperature is too high (> 68.0C by default)
@@ -915,6 +971,7 @@ public final class BatteryService extends SystemService {
                     && mPlugType == BATTERY_PLUGGED_NONE) {
                 // We want to make sure we log discharge cycle outliers
                 // if the battery is about to die.
+                mHandler.post(() -> showCriticalBatteryWarningDialog());
                 dischargeDuration = SystemClock.elapsedRealtime() - mDischargeStartTime;
                 logOutlier = true;
             }
@@ -1709,6 +1766,35 @@ public final class BatteryService extends SystemService {
         if (pw != null && forceUpdate) {
             pw.println(mSequence);
         }
+    }
+
+    private void showCriticalBatteryWarningDialog() {
+        if (!mActivityManagerInternal.isSystemReady()) {
+            return;
+        }
+        
+        AlertDialog.Builder builder = new AlertDialog.Builder(mContext);
+        builder.setTitle("⚠️ Critical Battery Level");
+        builder.setMessage("Battery: " + mHealthInfo.batteryLevel + "%\n\n"
+                + "Your device battery is critically low.\n"
+                + "Please connect to a charger immediately to prevent automatic shutdown.");
+        builder.setIcon(com.android.internal.R.drawable.stat_sys_battery_charge);
+        builder.setCancelable(true);
+        
+        builder.setPositiveButton("OK", (dialog, which) -> dialog.dismiss());
+        
+        builder.setNeutralButton("Battery Saver", (dialog, which) -> {
+            dialog.dismiss();
+            Intent intent = new Intent(android.provider.Settings.ACTION_BATTERY_SAVER_SETTINGS);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            mContext.startActivity(intent);
+        });
+        
+        AlertDialog dialog = builder.create();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setType(WindowManager.LayoutParams.TYPE_SYSTEM_ALERT);
+        }
+        dialog.show();
     }
 
     private void dumpInternal(FileDescriptor fd, PrintWriter pw, String[] args) {
