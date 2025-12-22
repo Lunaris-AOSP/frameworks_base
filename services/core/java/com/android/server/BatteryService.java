@@ -174,6 +174,8 @@ public final class BatteryService extends SystemService {
     private AlertDialog mLowBatteryShutdownDialog = null;
     private boolean mShutdownDialogShown = false;
 
+    private boolean mLowBatteryDialogsEnabled = true;
+
     /**
      * {@link HealthInfo#batteryStatus} value when {@link Intent#ACTION_BATTERY_CHANGED}
      * broadcast was sent last.
@@ -551,7 +553,20 @@ public final class BatteryService extends SystemService {
                 resolver.registerContentObserver(Settings.Global.getUriFor(
                         Settings.Global.LOW_POWER_MODE_TRIGGER_LEVEL),
                         false, obs, UserHandle.USER_ALL);
+                ContentObserver lowBatteryDialogsObs = new ContentObserver(mHandler) {
+                    @Override
+                    public void onChange(boolean selfChange) {
+                        synchronized (mLock) {
+                            updateLowBatteryDialogsSettingLocked();
+                        }
+                    }
+                };
+                resolver.registerContentObserver(Settings.Secure.getUriFor(
+                        Settings.Secure.LOW_BATTERY_DIALOGS_ENABLED),
+                        false, lowBatteryDialogsObs, UserHandle.USER_ALL);
+                
                 updateBatteryWarningLevelLocked();
+                updateLowBatteryDialogsSettingLocked();
             }
         } else if (phase == PHASE_BOOT_COMPLETED) {
             mLineageBatteryLights = new LineageBatteryLights(mContext,
@@ -613,6 +628,16 @@ public final class BatteryService extends SystemService {
         mLowBatteryCloseWarningLevel = mLowBatteryWarningLevel + mContext.getResources().getInteger(
                 com.android.internal.R.integer.config_lowBatteryCloseWarningBump);
         processValuesLocked(true);
+    }
+
+    private void updateLowBatteryDialogsSettingLocked() {
+        final ContentResolver resolver = mContext.getContentResolver();
+        mLowBatteryDialogsEnabled = Settings.Secure.getInt(resolver,
+                Settings.Secure.LOW_BATTERY_DIALOGS_ENABLED, 1) != 0;
+        
+        if (DEBUG) {
+            Slog.d(TAG, "Low battery dialogs enabled: " + mLowBatteryDialogsEnabled);
+        }
     }
 
     private boolean isPoweredLocked(int plugTypeSet) {
@@ -685,7 +710,9 @@ public final class BatteryService extends SystemService {
         // wait until the system has booted before attempting to display the shutdown dialog.
         if (shouldShutdownLocked()) {
             if (!mShutdownDialogShown) {
-                mHandler.post(() -> showLowBatteryShutdownDialog());
+                if (mLowBatteryDialogsEnabled) {
+                    mHandler.post(() -> showLowBatteryShutdownDialog());
+                }
                 mShutdownDialogShown = true;
                 
                 mHandler.postDelayed(() -> {
@@ -694,7 +721,7 @@ public final class BatteryService extends SystemService {
                     intent.putExtra(Intent.EXTRA_REASON, PowerManager.SHUTDOWN_LOW_BATTERY);
                     intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     startShutdownActivity(intent);
-                }, 10000);
+                }, 15000);
             }
         } else {
             mShutdownDialogShown = false;
@@ -710,6 +737,10 @@ public final class BatteryService extends SystemService {
             return;
         }
         
+        if (!mLowBatteryDialogsEnabled) {
+            return;
+        }
+        
         if (mLowBatteryShutdownDialog != null && mLowBatteryShutdownDialog.isShowing()) {
             mLowBatteryShutdownDialog.dismiss();
         }
@@ -717,7 +748,7 @@ public final class BatteryService extends SystemService {
         AlertDialog.Builder builder = new AlertDialog.Builder(mContext);
         builder.setTitle("Critical Battery Warning");
         builder.setMessage("Battery level is critically low (" + mHealthInfo.batteryLevel + "%).\n\n"
-                + "Device will shut down in 10 seconds to prevent data loss.\n\n"
+                + "Device will shut down in 15 seconds to prevent data loss.\n\n"
                 + "Please connect your charger immediately!");
         builder.setIcon(android.R.drawable.ic_dialog_alert);
         builder.setCancelable(false);
@@ -1770,6 +1801,10 @@ public final class BatteryService extends SystemService {
 
     private void showCriticalBatteryWarningDialog() {
         if (!mActivityManagerInternal.isSystemReady()) {
+            return;
+        }
+        
+        if (!mLowBatteryDialogsEnabled) {
             return;
         }
         

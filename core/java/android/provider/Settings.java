@@ -14246,6 +14246,12 @@ public final class Settings {
         public static final String VPN_ENFORCE_DNS_STORE = "vpn_enforce_dns_store";
 
         /**
+         * Whether to show low battery warning and shutdown dialogs.
+         * @hide
+         */
+        public static final String LOW_BATTERY_DIALOGS_ENABLED = "low_battery_dialogs_enabled";
+
+        /**
          * Keys we no longer back up under the current schema, but want to continue to
          * process when restoring historical backup datasets.
          *
