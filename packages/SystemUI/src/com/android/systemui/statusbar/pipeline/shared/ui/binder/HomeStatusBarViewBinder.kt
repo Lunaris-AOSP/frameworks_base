@@ -37,6 +37,7 @@ import com.android.app.animation.Interpolators
 import com.android.systemui.lunaris.batterybar.BatteryBarController
 import com.android.systemui.lunaris.logo.LogoImage
 import com.android.systemui.display.dagger.SystemUIDisplaySubcomponent.PerDisplaySingleton
+import com.android.systemui.statusbar.phone.LyricControllerModern
 import com.android.systemui.lifecycle.repeatWhenAttached
 import com.android.systemui.res.R
 import com.android.systemui.scene.shared.flag.SceneContainerFlag
@@ -147,6 +148,9 @@ constructor(
 
         val batteryBar: BatteryBarController = view.requireViewById(R.id.battery_bar)
         val leftLogo: LogoImage = view.requireViewById(R.id.statusbar_logo)
+        val lyricContainer = view.findViewById<View>(R.id.lyric_container)
+        val leftSideView = view.findViewById<View>(R.id.status_bar_start_side_except_heads_up)
+        val centeredAreaView = view.findViewById<View>(R.id.centered_area)
 
         // CollapsedStatusBarFragment doesn't need this
         if (StatusBarRootModernization.isEnabled) {
@@ -159,6 +163,7 @@ constructor(
             batteryBar.hideInitially()
             leftLogo.hideInitially()
             notificationIconsArea.hideInitially()
+            lyricContainer?.hideInitially()
         }
 
         view.repeatWhenAttached {
@@ -296,16 +301,6 @@ constructor(
                         UserHandle.USER_ALL,
                     )
                     contentObserver.onChange(false, uri)
-                }
-
-                // Ensure cleanup when lifecycle ends
-                val job = coroutineContext[Job]
-                job?.invokeOnCompletion {
-                    runCatching {
-                        context.contentResolver.unregisterContentObserver(contentObserver)
-                        TaskStackChangeListeners.getInstance()
-                            .unregisterTaskStackListener(taskStackListener)
-                    }
                 }
 
                 val iconViewStore =
@@ -582,11 +577,61 @@ constructor(
                         }
                     }
 
+                    // Initialize lyric controller if available
+                    var lyricController: LyricControllerModern? = null
+                    if (lyricContainer != null) {
+                        lyricController = LyricControllerModern(
+                            context = view.context,
+                            lyricContainer = lyricContainer,
+                            leftSideView = leftSideView,
+                            centeredAreaView = centeredAreaView
+                        ).also { controller ->
+                            controller.attach()
+                        }
+                    }
+
+                    // Ensure cleanup when lifecycle ends
+                    val job = coroutineContext[Job]
+                    job?.invokeOnCompletion {
+                        runCatching<Unit> {
+                            context.contentResolver.unregisterContentObserver(contentObserver)
+                            TaskStackChangeListeners.getInstance()
+                                .unregisterTaskStackListener(taskStackListener)
+                            lyricController?.detach()
+                        }
+                    }
+
                     launch {
                         viewModel.isNotificationIconContainerVisible.collect {
                             notificationIconsArea.adjustVisibility(it)
                             batteryBar.adjustVisibility(it)
                             leftLogo.adjustVisibility(it)
+                        }
+                    }
+
+                    launch {
+                        combine(
+                            viewModel.isNotificationIconContainerVisible,
+                            viewModel.hideStartSideContentForHeadsUp,
+                            combine(
+                                viewModel.primaryOngoingActivityChip,
+                                viewModel.ongoingActivityChipsLegacy,
+                            ) { primaryChip, chipsLegacy ->
+                                when {
+                                    primaryChip is OngoingActivityChipModel.Active -> true
+                                    chipsLegacy.primary is OngoingActivityChipModel.Active -> true
+                                    chipsLegacy.secondary is OngoingActivityChipModel.Active -> true
+                                    else -> false
+                                }
+                            },
+                        ) { isNotificationIconsVisible, hideForHun, hasOngoingActivity ->
+                            Triple(isNotificationIconsVisible, hideForHun, hasOngoingActivity)
+                        }.collect { (isNotificationIconsVisible, hideForHun, hasOngoingActivity) ->
+                            lyricController?.updateVisibility(
+                                isNotificationIconsVisible = isNotificationIconsVisible.visibility == View.VISIBLE,
+                                hideForHun = hideForHun,
+                                hasOngoingActivity = hasOngoingActivity
+                            )
                         }
                     }
 
