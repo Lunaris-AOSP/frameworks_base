@@ -259,7 +259,6 @@ fun LargeTileContent(
                 Modifier.size(CommonTileDefaults.ToggleTargetSize).thenIf(isDualTarget) {
                     Modifier.borderOnFocus(color = focusBorderColor, iconShape.topEnd)
                         .clip(iconShape)
-                        .verticalSquish(squishiness)
                         .drawBehind {
                             val brush = colors.iconBackgroundGradient
                             if (brush != null) {
@@ -268,6 +267,7 @@ fun LargeTileContent(
                                 drawRect(color = animatedBackgroundColor)
                             }
                         }
+                        .verticalSquish(squishiness)
                         .combinedClickable(
                             onClick = toggleClick!!,
                             onLongClick = onLongClick,
