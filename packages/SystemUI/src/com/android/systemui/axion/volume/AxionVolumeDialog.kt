@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 package com.android.systemui.axion.volume
 
 import android.content.Context
@@ -129,11 +131,13 @@ class AxionVolumeDialog @Inject constructor(
                     }
                 }
                 
-                MaterialTheme(
-                    colorScheme = if (isSystemInDarkTheme())
+                MaterialExpressiveTheme(
+                    colorScheme = if (isSystemInDarkTheme()) {
                         dynamicDarkColorScheme(LocalContext.current)
-                    else
+                    } else {
                         dynamicLightColorScheme(LocalContext.current)
+                    },
+                    MotionScheme.expressive()
                 ) {
                     Box(
                         modifier = Modifier
