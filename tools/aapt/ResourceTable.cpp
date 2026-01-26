@@ -1503,8 +1503,8 @@ status_t compileResourceFile(Bundle* bundle,
                             if (locale.size() > 0) {
                                 SourcePos(in->getPrintableSource(), block.getLineNumber()).warning(
                                         "string-array '%s' marked untranslatable but exists"
-                                        " in locale '%s'\n", String8(name).string(),
-                                        locale.string());
+                                        " in locale '%s'\n", String8(name).c_str(),
+                                        locale.c_str());
                                 // hasErrors = localHasErrors = true;
                             }
                         }
