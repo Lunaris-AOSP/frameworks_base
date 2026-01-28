@@ -78,4 +78,9 @@
     <dimen name="network_speed_unit_text_size">6dp</dimen>
     <dimen name="network_speed_view_padding_end">2dp</dimen>
     <dimen name="network_speed_view_width">22dp</dimen>
+
+    <!-- Sb Chip -->
+    <dimen name="chip_corner_radius">28dp</dimen>
+    <dimen name="status_bar_clock_chip_tb_padding">0dp</dimen>
+    <dimen name="status_bar_clock_chip_lr_padding">8dp</dimen>
 </resources>
