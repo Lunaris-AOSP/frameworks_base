@@ -155,6 +155,7 @@ public class Smart5gService extends SystemService {
         public void onSubscriptionsChanged() {
             dlog("onSubscriptionsChanged");
             final int[] subs = mSubManager.getActiveSubscriptionIdList();
+            if (subs == null) return;
             if (!Arrays.equals(subs, mActiveSubIds)) {
                 dlog("active subs changed, was: " + Arrays.toString(mActiveSubIds)
                         + ", now: " + Arrays.toString(subs));
