@@ -392,6 +392,14 @@ void RenderThread::requestVsync() {
 
 bool RenderThread::threadLoop() {
     setpriority(PRIO_PROCESS, 0, PRIORITY_DISPLAY);
+
+    // Signal that the RenderThread has finished setting the priority.
+    {
+        std::lock_guard<std::mutex> lock(mPriorityInitializedMutex);
+        mPriorityInitialized = true;
+        mPriorityInitializedCondition.notify_all();
+    }
+
     Looper::setForThread(mLooper);
     if (gOnStartHook) {
         gOnStartHook("RenderThread");
@@ -440,6 +448,13 @@ void RenderThread::pushBackFrameCallback(IFrameCallback* callback) {
         mPendingRegistrationFrameCallbacks.insert(callback);
     }
 }
+
+#ifdef __ANDROID__
+void RenderThread::waitForRenderThreadPriorityInitialized() {
+    std::unique_lock<std::mutex> lock(mPriorityInitializedMutex);
+    mPriorityInitializedCondition.wait(lock, [this] { return mPriorityInitialized; });
+}
+#endif
 
 sk_sp<Bitmap> RenderThread::allocateHardwareBitmap(SkBitmap& skBitmap) {
     auto renderType = Properties::getRenderPipelineType();
