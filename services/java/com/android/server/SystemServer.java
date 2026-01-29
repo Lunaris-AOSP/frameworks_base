@@ -288,6 +288,7 @@ import com.android.server.storage.DeviceStorageMonitorService;
 import com.android.server.supervision.SupervisionService;
 import com.android.server.systemcaptions.SystemCaptionsManagerService;
 import com.android.server.telecom.TelecomLoaderService;
+import com.android.server.telephony.Smart5gService;
 import com.android.server.testharness.TestHarnessModeService;
 import com.android.server.textclassifier.TextClassificationManagerService;
 import com.android.server.textservices.TextServicesManagerService;
@@ -2898,6 +2899,10 @@ public final class SystemServer implements Dumpable {
             // VbmetaHashService
             t.traceBegin("VbmetaHashService");
             mSystemServiceManager.startService(VbmetaHashService.class);
+            t.traceEnd();
+
+            t.traceBegin("StartSmart5gService");
+            mSystemServiceManager.startService(Smart5gService.class);
             t.traceEnd();
 
             if (context.getResources().getBoolean(R.bool.config_dozeAlwaysOnDisplayAvailable)) {
