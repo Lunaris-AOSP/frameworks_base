@@ -21,6 +21,7 @@ package com.android.systemui.media.remedia.ui.compose
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -558,7 +559,8 @@ private fun ContentScope.CardForegroundContent(
                             layout(placeable.measuredWidth, placeable.measuredHeight) {
                                 placeable.place(0, 0)
                             }
-                        },
+                        }
+                        .animateContentSize(),
             ) {
                 AnimatedVisibility(
                     visible = viewModel.deviceSuggestionChip != null,
@@ -624,7 +626,7 @@ private fun ContentScope.CardForegroundContent(
                     title = viewModel.title,
                     subtitle = viewModel.subtitle,
                     color = Color.White,
-                    modifier = Modifier.weight(1f).padding(end = 8.dp),
+                    modifier = Modifier.weight(1f).padding(end = 8.dp).animateContentSize(),
                 )
 
                 if (viewModel.actionButtonLayout == MediaCardActionButtonLayout.WithPlayPause) {
@@ -678,7 +680,7 @@ private fun ContentScope.CardForegroundContent(
                     title = viewModel.title,
                     subtitle = viewModel.subtitle,
                     color = Color.White,
-                    modifier = Modifier.weight(1f).padding(end = 8.dp),
+                    modifier = Modifier.weight(1f).padding(end = 8.dp).animateContentSize(),
                 )
 
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
@@ -1246,6 +1248,7 @@ private fun DeviceChip(
                             )
                         }
                         .indication(clickInteractionSource, ripple())
+                        .animateContentSize()
                         .padding(horizontal = 8.dp, vertical = 4.dp),
             ) {
                 if (viewModel.isConnecting) {
