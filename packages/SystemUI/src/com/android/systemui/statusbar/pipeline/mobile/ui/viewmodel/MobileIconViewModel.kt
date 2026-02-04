@@ -127,8 +127,7 @@ class MobileIconViewModel(
 
     override val roaming: Flow<Boolean> = vmProvider.flatMapLatest { it.roaming }
 
-    override val isRoamingVisible: Flow<Boolean> =
-        vmProvider.flatMapLatest { it.isRoamingVisible }
+    override val isRoamingVisible: Flow<Boolean> = vmProvider.flatMapLatest { it.isRoamingVisible }
 
     override val networkTypeIcon: Flow<Icon.Resource?> =
         vmProvider.flatMapLatest { it.networkTypeIcon }
