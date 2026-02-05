@@ -25,7 +25,7 @@
         <item name="scrimVisibleHeightTrigger">@dimen/settingslib_scrim_visible_height_trigger</item>
         <item name="contentScrim">@color/legacy_settingslib_materialColorSurfaceContainer</item>
         <item name="statusBarScrim">@null</item>
-        <item name="scrimAnimationDuration">50</item>
+        <item name="scrimAnimationDuration">70</item>
         <item name="collapsedTitleTextColor">@color/settingslib_materialColorOnSurface</item>
         <item name="expandedTitleTextColor">@color/settingslib_materialColorOnSurface</item>
         <item name="titleCollapseMode">scale</item>
