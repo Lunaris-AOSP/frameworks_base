@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.android.systemui.qs.panels.ui.compose.infinitegrid
 
 import android.content.Context
@@ -26,16 +25,29 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
 class CustomColorScheme(private val context: Context) {
-
     val qsTileColor: Color 
         get() {
             val blurEnabledByDefault = SystemProperties.getBoolean("ro.custom.blur.enable", false) 
-            val blurEnabled = Settings.Global.getInt(context.getContentResolver(),
-                Settings.Global.DISABLE_WINDOW_BLURS, if (blurEnabledByDefault) 0 else 1) != 1
-            val colorRes = if (blurEnabled) 
-                com.android.internal.R.color.surface_effect_1 
-            else 
+            val blurEnabled = Settings.Global.getInt(
+                context.contentResolver,
+                Settings.Global.DISABLE_WINDOW_BLURS, 
+                if (blurEnabledByDefault) 0 else 1
+            ) != 1
+            
+            val useAlternateColor = Settings.System.getInt(
+                context.contentResolver,
+                Settings.System.QS_TILE_ALTERNATE_COLOR,
+                0
+            ) == 1
+            
+            val colorRes = if (blurEnabled) {
+                if (useAlternateColor) 
+                    com.android.internal.R.color.surface_effect_2
+                else 
+                    com.android.internal.R.color.surface_effect_1
+            } else {
                 com.android.internal.R.color.surface_effect_2
+            }
             val tileColor = context.resources.getColor(colorRes, context.theme)
             return Color(tileColor)
         }

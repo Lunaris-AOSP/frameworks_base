@@ -6985,6 +6985,11 @@ public final class Settings {
         public static final String SINGLE_QS_TONE_ENABLED = "single_qs_tone_enabled";
 
         /**
+         * @hide
+         */
+        public static final String QS_TILE_ALTERNATE_COLOR = "qs_tile_alternate_color";
+
+        /**
          * Whether to show the battery bar
          * @hide
          */
