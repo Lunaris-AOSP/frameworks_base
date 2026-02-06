@@ -90,6 +90,10 @@ object ShadeColors {
 
     @JvmStatic
     private fun notificationScrimFallback(context: Context): Int {
-        return context.getColor(R.color.notification_scrim_fallback)
+        return ColorUtils.blendARGB(
+            context.getColor(R.color.nt_notification_behind_1), 
+            context.getColor(R.color.nt_notification_behind_2), 
+            0.2f
+        )
     }
 }
