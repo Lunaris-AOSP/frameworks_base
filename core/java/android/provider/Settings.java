@@ -6987,6 +6987,11 @@ public final class Settings {
         /**
          * @hide
          */
+        public static final String DUAL_TARGET_TILE_STYLE = "dual_target_tile_style";
+
+        /**
+         * @hide
+         */
         public static final String CHARGING_ANIMATION_ENABLED = "charging_animation_enabled";
 
         /**

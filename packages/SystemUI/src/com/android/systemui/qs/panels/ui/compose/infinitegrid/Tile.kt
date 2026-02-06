@@ -648,25 +648,53 @@ private object TileDefaults {
     /** An active tile with dual target only show the active color on the icon */
     @Composable
     @ReadOnlyComposable
-    fun activeDualTargetTileColors(): TileColors =
-        TileColors(
-            background = CustomColorScheme.current.qsTileColor,
-            iconBackground = MaterialTheme.colorScheme.primary,
-            label = MaterialTheme.colorScheme.onSurface,
-            secondaryLabel = MaterialTheme.colorScheme.onSurface,
-            icon = MaterialTheme.colorScheme.onPrimary,
-        )
+    fun activeDualTargetTileColors(): TileColors {
+        val context = LocalContext.current
+        val isSingleToneStyle = DualTargetTileStyleProvider.isSingleToneStyle(context)
+        
+        return if (isSingleToneStyle) {
+            TileColors(
+                background = MaterialTheme.colorScheme.primary,
+                iconBackground = Color.Transparent,
+                label = MaterialTheme.colorScheme.onPrimary,
+                secondaryLabel = MaterialTheme.colorScheme.onPrimary,
+                icon = MaterialTheme.colorScheme.onPrimary,
+            )
+        } else {
+            TileColors(
+                background = CustomColorScheme.current.qsTileColor,
+                iconBackground = MaterialTheme.colorScheme.primary,
+                label = MaterialTheme.colorScheme.onSurface,
+                secondaryLabel = MaterialTheme.colorScheme.onSurface,
+                icon = MaterialTheme.colorScheme.onPrimary,
+            )
+        }
+    }
 
     @Composable
     @ReadOnlyComposable
-    fun inactiveDualTargetTileColors(): TileColors =
-        TileColors(
-            background = CustomColorScheme.current.qsTileColor,
-            iconBackground = LocalAndroidColorScheme.current.surfaceEffect2,
-            label = MaterialTheme.colorScheme.onSurface,
-            secondaryLabel = MaterialTheme.colorScheme.onSurface,
-            icon = MaterialTheme.colorScheme.onSurface,
-        )
+    fun inactiveDualTargetTileColors(): TileColors {
+        val context = LocalContext.current
+        val isSingleToneStyle = DualTargetTileStyleProvider.isSingleToneStyle(context)
+        
+        return if (isSingleToneStyle) {
+            TileColors(
+                background = CustomColorScheme.current.qsTileColor,
+                iconBackground = Color.Transparent,
+                label = MaterialTheme.colorScheme.onSurface,
+                secondaryLabel = MaterialTheme.colorScheme.onSurface,
+                icon = MaterialTheme.colorScheme.onSurface,
+            )
+        } else {
+            TileColors(
+                background = CustomColorScheme.current.qsTileColor,
+                iconBackground = LocalAndroidColorScheme.current.surfaceEffect2,
+                label = MaterialTheme.colorScheme.onSurface,
+                secondaryLabel = MaterialTheme.colorScheme.onSurface,
+                icon = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
 
     @Composable
     @ReadOnlyComposable
@@ -777,4 +805,39 @@ private object TileDefaults {
 private fun resources(): Resources {
     LocalConfiguration.current
     return LocalResources.current
+}
+
+/**
+ * Enum representing different dual target tile styles.
+ * 
+ * off: Original style where only the icon area shows color
+ * on: Full tile colored between icon and text
+ */
+enum class DualTargetTileStyle {
+    DUAL,
+    SINGLE
+}
+
+object DualTargetTileStyleProvider {
+    
+    fun getStyle(context: android.content.Context): DualTargetTileStyle {
+        val value = Settings.System.getInt(
+            context.contentResolver,
+            Settings.System.DUAL_TARGET_TILE_STYLE,
+            0
+        )
+        
+        return when (value) {
+            1 -> DualTargetTileStyle.SINGLE
+            else -> DualTargetTileStyle.DUAL
+        }
+    }
+    
+    fun isSingleToneStyle(context: android.content.Context): Boolean {
+        return getStyle(context) == DualTargetTileStyle.SINGLE
+    }
+    
+    fun isDualToneStyle(context: android.content.Context): Boolean {
+        return getStyle(context) == DualTargetTileStyle.DUAL
+    }
 }
