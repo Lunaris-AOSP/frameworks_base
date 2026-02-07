@@ -47,17 +47,17 @@ fun QSTileRingerSlider(
 
     val shapeMode = rememberTileShapeMode()
 
-    // Our scheme: 0 = default, 1 = circle-ish, 2 = rounded square, 3 = full circle (round for this tile)
+    // Our scheme: 0 = default, 1 = circle-ish, 2 = rounded square, 3 = square, 4 = full circle (round for this tile)
     val containerCornerRadius = when (shapeMode) {
-        1 -> CommonTileDefaults.InactiveCornerRadius
+        1, 4 -> CommonTileDefaults.InactiveCornerRadius
         2 -> CommonTileDefaults.ActiveTileCornerRadius
-        3 -> CommonTileDefaults.InactiveCornerRadius
+        3 -> CommonTileDefaults.ActiveTileCornerRadius
         else -> CommonTileDefaults.ActiveTileCornerRadius
     }
 
     val thumbCornerRadius = when (shapeMode) {
         1 -> CommonTileDefaults.InactiveCornerRadius
-        3 -> CommonTileDefaults.InactiveCornerRadius
+        4 -> CommonTileDefaults.InactiveCornerRadius
         else -> 16.dp
     }
 
