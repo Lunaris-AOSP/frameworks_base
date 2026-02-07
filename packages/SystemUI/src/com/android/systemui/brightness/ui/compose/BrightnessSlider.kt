@@ -159,7 +159,7 @@ fun BrightnessSlider(
 
     val shapeMode = rememberSliderShapeMode()
     val trackCornerDp: Dp = when (shapeMode) {
-        1 -> 24.dp  /* Circle */
+        1 -> 28.dp  /* Circle */
         2 -> 12.dp  /* Rounded Square */
         3 -> 0.dp /* Square */
         else -> Dimensions.SliderTrackRoundedCorner
@@ -311,12 +311,7 @@ fun BrightnessSlider(
                     },
             interactionSource = interactionSource,
             thumb = {
-                SliderDefaults.Thumb(
-                    interactionSource = interactionSource,
-                    enabled = enabled,
-                    thumbSize = DpSize(ThumbWidth, ThumbHeight),
-                    colors = colors,
-                )
+                Box(modifier = Modifier.size(0.dp))
             },
             track = { sliderState ->
                 var showIconActive by remember { mutableStateOf(true) }
@@ -346,8 +341,7 @@ fun BrightnessSlider(
                     }
                 }
 
-                SliderDefaults.Track(
-                    sliderState = sliderState,
+                Box(
                     modifier =
                         Modifier.motionTestValues {
                                 (iconActiveAlphaAnimatable.isRunning ||
@@ -360,19 +354,33 @@ fun BrightnessSlider(
                                     BrightnessSliderMotionTestKeys.InactiveIconAlpha
                             }
                             .height(TrackHeight)
+                            .fillMaxWidth()
                             .drawWithContent {
-                                drawContent()
+                                val trackHeight = size.height
+                                val trackWidth = size.width
+                                val activeTrackEnd = trackWidth * sliderState.coercedValueAsFraction
+                                
+                                val cornerRadius = CornerRadius(trackCornerDp.toPx())
+                                
+                                drawRoundRect(
+                                    color = colors.inactiveTrackColor,
+                                    topLeft = Offset(0f, 0f),
+                                    size = Size(trackWidth, trackHeight),
+                                    cornerRadius = cornerRadius
+                                )
+                                
+                                if (activeTrackEnd > 0f) {
+                                    drawRoundRect(
+                                        color = colors.activeTrackColor,
+                                        topLeft = Offset(0f, 0f),
+                                        size = Size(activeTrackEnd, trackHeight),
+                                        cornerRadius = cornerRadius
+                                    )
+                                }
 
-                                val yOffset = size.height / 2 - IconSize.toSize().height / 2
-                                val activeTrackStart = 0f
-                                val activeTrackEnd =
-                                    size.width * sliderState.coercedValueAsFraction -
-                                        ThumbTrackGapSize.toPx()
-                                val inactiveTrackStart = activeTrackEnd + ThumbTrackGapSize.toPx() * 2
-                                val inactiveTrackEnd = size.width
-
-                                val activeTrackWidth = activeTrackEnd - activeTrackStart
-                                val inactiveTrackWidth = inactiveTrackEnd - inactiveTrackStart
+                                val yOffset = trackHeight / 2 - IconSize.toSize().height / 2
+                                val activeTrackWidth = activeTrackEnd
+                                val inactiveTrackWidth = trackWidth - activeTrackEnd
 
                                 if (
                                     IconSize.toSize().width <
@@ -380,7 +388,7 @@ fun BrightnessSlider(
                                 ) {
                                     showIconActive = false
                                     trackIcon(
-                                        Offset(inactiveTrackEnd, yOffset),
+                                        Offset(trackWidth, yOffset),
                                         inactiveIconColor,
                                         iconInactiveAlphaAnimatable.value,
                                     )
@@ -394,12 +402,7 @@ fun BrightnessSlider(
                                         iconActiveAlphaAnimatable.value,
                                     )
                                 }
-                            },
-                    trackCornerSize = trackCornerDp,
-                    trackInsideCornerSize = 2.dp,
-                    drawStopIndicator = null,
-                    thumbTrackGapSize = ThumbTrackGapSize,
-                    colors = colors,
+                            }
                 )
             },
         )
@@ -545,7 +548,7 @@ private fun drawAutoBrightnessButton(
 
     Box(
         modifier = Modifier
-            .size(45.dp)
+            .size(TrackHeight)
             .clip(autoIconShape)
             .background(backgroundColor)
             .clickable(
@@ -563,7 +566,8 @@ private fun drawAutoBrightnessButton(
         Icon(
             painter = painterResource(painterRes),
             contentDescription = stringResource(R.string.accessibility_adaptive_brightness),
-            tint = iconTint
+            tint = iconTint,
+            modifier = Modifier.size(IconSize.width, IconSize.height)
         )
     }
 }
@@ -593,7 +597,7 @@ fun BrightnessSliderContainer(
 
     val shapeMode = rememberSliderShapeMode()
     val trackCornerDp: Dp = when (shapeMode) {
-        1 -> 24.dp  /* Circle */
+        1 -> 28.dp  /* Circle */
         2 -> 12.dp  /* Rounded Square */
         3 -> 0.dp /* Square */
         else -> Dimensions.SliderTrackRoundedCorner
@@ -679,8 +683,8 @@ private object Dimensions {
     val SliderBackgroundRoundedCorner = 24.dp
     val SliderTrackRoundedCorner = 12.dp
     val IconSize = DpSize(28.dp, 28.dp)
-    val IconPadding = 6.dp
-    val ThumbTrackGapSize = 6.dp
+    val IconPadding = 10.dp
+    val ThumbTrackGapSize = 0.dp
 
     val ThumbHeight : Dp
         @Composable
