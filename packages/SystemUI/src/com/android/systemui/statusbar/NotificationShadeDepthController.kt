@@ -268,7 +268,7 @@ constructor(
             MathUtils.constrain(
                 shadeAnimation.radius,
                 blurUtils.minBlurRadius,
-                blurUtils.maxBlurRadius,
+                maxBlurRadiusPx,
             )
         val expansionRadius =
             blurUtils.blurRadiusOfRatio(

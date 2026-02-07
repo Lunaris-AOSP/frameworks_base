@@ -60,7 +60,7 @@ constructor(
 ) : Dumpable {
     val minBlurRadius = resources.getDimensionPixelSize(R.dimen.min_window_blur_radius).toFloat()
     val maxBlurRadius: Float 
-        get() = secureSettings.getFloatForUser("system_blur_radius", 34f, UserHandle.USER_CURRENT)
+        get() = secureSettings.getFloatForUser("system_blur_radius", 70f, UserHandle.USER_CURRENT)
 
     val maxBlurRadiusFlow: Flow<Float> = secureSettings
         .observerFlow("system_blur_radius")
