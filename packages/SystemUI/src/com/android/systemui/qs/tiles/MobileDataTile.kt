@@ -17,14 +17,23 @@
 package com.android.systemui.qs.tiles
 
 import android.content.Intent
+import android.database.ContentObserver
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.os.UserHandle
+import android.provider.Settings
 import android.service.quicksettings.Tile
+import android.telephony.SubscriptionManager
+import android.text.Html
+import android.text.TextUtils
+import android.text.format.Formatter
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.coroutineScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.android.internal.logging.MetricsLogger
 import com.android.settingslib.graph.SignalDrawable
+import com.android.settingslib.net.DataUsageController
 import com.android.systemui.animation.Expandable
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.dagger.qualifiers.Main
@@ -43,6 +52,7 @@ import com.android.systemui.qs.tiles.impl.cell.domain.interactor.MobileDataTileD
 import com.android.systemui.qs.tiles.impl.cell.domain.interactor.MobileDataTileUserActionInteractor
 import com.android.systemui.qs.tiles.impl.cell.domain.model.MobileDataTileModel
 import com.android.systemui.qs.tiles.impl.cell.ui.mapper.MobileDataTileMapper
+import com.android.systemui.res.R
 import javax.inject.Inject
 import kotlinx.coroutines.launch
 
@@ -79,11 +89,60 @@ constructor(
     private lateinit var tileState: QSTileState
     private val config = qsTileConfigProvider.getConfig(TILE_SPEC)
 
+    private val dataController: DataUsageController by lazy {
+        DataUsageController(mContext)
+    }
+    private var showDataUsage: Boolean = false
+    private val settingsObserver: SettingsObserver = SettingsObserver(mainHandler)
+
     init {
         lifecycle.coroutineScope.launch {
             lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 dataInteractor.tileData().collect { refreshState(it) }
             }
+        }
+        updateDataUsageSetting()
+    }
+
+    override fun handleSetListening(listening: Boolean) {
+        super.handleSetListening(listening)
+        if (listening) {
+            settingsObserver.observe()
+        } else {
+            settingsObserver.unobserve()
+        }
+    }
+
+    private fun updateDataUsageSetting() {
+        showDataUsage = Settings.System.getIntForUser(
+            mContext.contentResolver,
+            Settings.System.QS_SHOW_DATA_USAGE_TILE,
+            1,
+            UserHandle.USER_CURRENT
+        ) == 1
+    }
+
+    private fun getFormattedDataUsage(): String {
+        return try {
+            val dataSubId = SubscriptionManager.getDefaultDataSubscriptionId()
+            
+            if (SubscriptionManager.isValidSubscriptionId(dataSubId)) {
+                dataController.setSubscriptionId(dataSubId)
+            }
+            
+            val info = dataController.dailyDataUsageInfo
+            if (info != null && info.usageLevel >= 0) {
+                val formattedSize = Formatter.formatFileSize(
+                    mContext,
+                    info.usageLevel,
+                    Formatter.FLAG_IEC_UNITS
+                )
+                "$formattedSize ${mContext.getString(R.string.usage_data)}"
+            } else {
+                ""
+            }
+        } catch (e: Exception) {
+            ""
         }
     }
 
@@ -119,7 +178,26 @@ constructor(
                         DrawableIcon(signalDrawableInstance)
                     }
             label = tileState.label
-            secondaryLabel = tileState.secondaryLabel
+            
+            val dataUsage = if (showDataUsage && this.state == Tile.STATE_ACTIVE) {
+                getFormattedDataUsage()
+            } else {
+                ""
+            }
+            
+            val originalSecondaryLabel = tileState.secondaryLabel
+            secondaryLabel = when {
+                !TextUtils.isEmpty(dataUsage) && !TextUtils.isEmpty(originalSecondaryLabel) -> {
+                    Html.fromHtml("$originalSecondaryLabel · $dataUsage", 0)
+                }
+                !TextUtils.isEmpty(dataUsage) -> {
+                    dataUsage
+                }
+                else -> {
+                    originalSecondaryLabel
+                }
+            }
+            
             contentDescription = tileState.contentDescription
             expandedAccessibilityClassName = tileState.expandedAccessibilityClassName
             handlesSecondaryClick =
@@ -131,6 +209,26 @@ constructor(
 
     override fun isAvailable(): Boolean {
         return dataInteractor.isAvailable()
+    }
+
+    private inner class SettingsObserver(handler: Handler) : ContentObserver(handler) {
+        fun observe() {
+            mContext.contentResolver.registerContentObserver(
+                Settings.System.getUriFor(Settings.System.QS_SHOW_DATA_USAGE_TILE),
+                false,
+                this,
+                UserHandle.USER_ALL
+            )
+        }
+
+        fun unobserve() {
+            mContext.contentResolver.unregisterContentObserver(this)
+        }
+
+        override fun onChange(selfChange: Boolean, uri: Uri?) {
+            updateDataUsageSetting()
+            refreshState()
+        }
     }
 
     companion object {
