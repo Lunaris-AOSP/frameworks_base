@@ -135,6 +135,12 @@
         sysui:defValue="false" />
 
     <com.android.systemui.tuner.TunerSwitch
+        android:icon="@drawable/ic_signal"
+        android:key="system:disable_stacked_mobile_icons"
+        android:title="@string/disable_stacked_mobile_icons_title"
+        sysui:defValue="false" />
+
+    <com.android.systemui.tuner.TunerSwitch
         android:icon="@drawable/ic_statusbar_hd_calling"
         android:key="status_bar_show_hd_calling"
         android:title="@string/status_bar_hd_calling"

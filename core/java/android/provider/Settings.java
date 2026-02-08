@@ -7173,6 +7173,11 @@ public final class Settings {
         /**
          * @hide
          */
+        public static final String DISABLE_STACKED_MOBILE_ICONS = "disable_stacked_mobile_icons";
+
+        /**
+         * @hide
+         */
         public static final String WIFI_STANDARD_ICON = "wifi_standard_icon";
 
         /**
