@@ -20,6 +20,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.media.AudioManager;
 import android.os.Looper;
+import android.provider.Settings;
 
 import com.android.internal.jank.InteractionJankMonitor;
 import com.android.systemui.CoreStartable;
@@ -80,6 +81,8 @@ import dagger.multibindings.IntoSet;
 )
 public interface VolumeModule {
 
+
+
     /**
      * Binds [VolumePanelDialogReceiver]
      */
@@ -134,37 +137,42 @@ public interface VolumeModule {
             MSDLPlayer msdlPlayer,
             SystemClock systemClock,
             VolumeDialogInteractor interactor) {
-        final boolean useAxionVolumeDialog = true;
-        if (useAxionVolumeDialog) {
-            return axionVolumeDialogPlugin.get();
-        } else if (Flags.volumeRedesign()) {
-            return volumeDialogProvider.get();
-        } else {
-            VolumeDialogImpl impl = new VolumeDialogImpl(
-                    context,
-                    volumeDialogController,
-                    accessibilityManagerWrapper,
-                    deviceProvisionedController,
-                    configurationController,
-                    mediaOutputDialogManager,
-                    interactionJankMonitor,
-                    volumePanelNavigationInteractor,
-                    volumeNavigator,
-                    true, /* should listen for jank */
-                    csdFactory,
-                    devicePostureController,
-                    Looper.getMainLooper(),
-                    volumePanelFlag,
-                    dumpManager,
-                    secureSettings,
-                    vibratorHelper,
-                    msdlPlayer,
-                    systemClock,
-                    interactor);
-            impl.setStreamImportant(AudioManager.STREAM_SYSTEM, false);
-            impl.setAutomute(true);
-            impl.setSilentMode(false);
-            return impl;
+        final int volumeDialogType = Settings.System.getInt(
+                context.getContentResolver(),
+                "volume_dialog_type",
+                1);
+        switch (volumeDialogType) {
+            case 0:
+                return axionVolumeDialogPlugin.get();
+            case 1:
+                return volumeDialogProvider.get();
+            case 2:
+            default:
+                VolumeDialogImpl impl = new VolumeDialogImpl(
+                        context,
+                        volumeDialogController,
+                        accessibilityManagerWrapper,
+                        deviceProvisionedController,
+                        configurationController,
+                        mediaOutputDialogManager,
+                        interactionJankMonitor,
+                        volumePanelNavigationInteractor,
+                        volumeNavigator,
+                        true, /* should listen for jank */
+                        csdFactory,
+                        devicePostureController,
+                        Looper.getMainLooper(),
+                        volumePanelFlag,
+                        dumpManager,
+                        secureSettings,
+                        vibratorHelper,
+                        msdlPlayer,
+                        systemClock,
+                        interactor);
+                impl.setStreamImportant(AudioManager.STREAM_SYSTEM, false);
+                impl.setAutomute(true);
+                impl.setSilentMode(false);
+                return impl;
         }
     }
 }
