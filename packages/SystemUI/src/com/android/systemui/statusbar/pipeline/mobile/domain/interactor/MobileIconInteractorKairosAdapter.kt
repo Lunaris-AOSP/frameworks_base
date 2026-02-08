@@ -156,6 +156,12 @@ fun BuildScope.MobileIconInteractorKairosAdapter(
                         "MobileIconInteractorKairosAdapter(subId=$subscriptionId).shouldShowFourgIcon"
                     }
                 ),
+            disableStackedMobileIcons =
+                disableStackedMobileIcons.toStateFlow(
+                    nameTag {
+                        "MobileIconInteractorKairosAdapter(subId=$subscriptionId).disableStackedMobileIcons"
+                    }
+                ),
         )
     }
 private class MobileIconInteractorKairosAdapter(
@@ -181,4 +187,5 @@ private class MobileIconInteractorKairosAdapter(
     override val isAllowedDuringAirplaneMode: StateFlow<Boolean>,
     override val carrierNetworkChangeActive: StateFlow<Boolean>,
     override val shouldShowFourgIcon: StateFlow<Boolean>,
+    override val disableStackedMobileIcons: StateFlow<Boolean>,
 ) : MobileIconInteractor

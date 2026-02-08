@@ -7150,6 +7150,11 @@ public final class Settings {
         /**
          * @hide
          */
+        public static final String DISABLE_STACKED_MOBILE_ICONS = "disable_stacked_mobile_icons";
+
+        /**
+         * @hide
+         */
         public static final String STATUSBAR_EXTRA_PADDING_START = "statusbar_extra_padding_start";
 
         /**

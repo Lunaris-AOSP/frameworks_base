@@ -134,6 +134,12 @@
         android:title="@string/fourg_icon_title"
         sysui:defValue="false" />
 
+    <com.android.systemui.tuner.TunerSwitch
+        android:icon="@drawable/ic_signal"
+        android:key="system:disable_stacked_mobile_icons"
+        android:title="@string/disable_stacked_mobile_icons_title"
+        sysui:defValue="false" />
+
     <!-- other weird signal stuff -->
 
     <com.android.systemui.tuner.StatusBarSwitch

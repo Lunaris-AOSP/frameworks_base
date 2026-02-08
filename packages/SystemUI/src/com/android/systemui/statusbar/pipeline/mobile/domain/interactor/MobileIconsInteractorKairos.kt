@@ -298,7 +298,8 @@ constructor(
     }
 
     override val isStackable: State<Boolean> =
-        if (NewStatusBarIcons.isEnabled && StatusBarRootModernization.isEnabled) {
+    if (NewStatusBarIcons.isEnabled && StatusBarRootModernization.isEnabled) {
+        combine(
             icons.flatMap { iconsBySubId: Map<Int, MobileIconInteractorKairos> ->
                 iconsBySubId.values
                     .map { it.signalLevelIcon }
@@ -311,10 +312,16 @@ constructor(
                             it.size == 2 && it[0].numberOfLevels == it[1].numberOfLevels
                         }
                     }
+            },
+            icons.flatMap { iconsBySubId ->
+                iconsBySubId.values.firstOrNull()?.disableStackedMobileIcons ?: stateOf(false)
             }
-        } else {
-            stateOf(false)
+        ) { shouldStack, disableStacking ->
+            shouldStack && !disableStacking
         }
+    } else {
+        stateOf(false)
+    }
 
     override val activeDataIconInteractor: State<MobileIconInteractorKairos?> =
         combine(mobileConnectionsRepo.activeMobileDataSubscriptionId, icons) { activeSubId, icons ->
