@@ -16,6 +16,9 @@
 
 package com.android.internal.util.lunaris;
 
+import android.app.ActivityManager;
+import android.app.IActivityManager;
+import android.content.Context;
 import android.content.Context;
 import android.content.Intent;
 import android.content.om.OverlayManager;
@@ -25,6 +28,8 @@ import android.content.om.OverlayInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
+import android.os.AsyncTask;
 import android.os.PowerManager;
 import android.os.RemoteException;
 import android.os.ServiceManager;
@@ -41,6 +46,39 @@ import java.util.List;
 public class Utils {
 
     private static final String TAG = "Utils";
+
+    public static void restartApp(String appName, Context context) {
+        new RestartAppTask(appName, context).execute();
+    }
+
+    private static class RestartAppTask extends AsyncTask<Void, Void, Void> {
+        private Context mContext;
+        private String mApp;
+
+        public RestartAppTask(String appName, Context context) {
+            super();
+            mContext = context;
+            mApp = appName;
+        }
+
+        @Override
+        protected Void doInBackground(Void... params) {
+            try {
+                ActivityManager am =
+                        (ActivityManager) mContext.getSystemService(Context.ACTIVITY_SERVICE);
+                IActivityManager ams = ActivityManager.getService();
+                for (ActivityManager.RunningAppProcessInfo app: am.getRunningAppProcesses()) {
+                    if (mApp.equals(app.processName)) {
+                        ams.killApplicationProcess(app.processName, app.uid);
+                        break;
+                    }
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            return null;
+        }
+    }
 
     public static boolean isPackageInstalled(Context context, String packageName, boolean ignoreState) {
         if (packageName != null) {
