@@ -46,7 +46,7 @@ class CustomColorScheme(private val context: Context) {
                 else 
                     com.android.internal.R.color.surface_effect_1
             } else {
-                com.android.internal.R.color.surface_effect_2
+                com.android.internal.R.color.materialColorSurfaceBright
             }
             val tileColor = context.resources.getColor(colorRes, context.theme)
             return Color(tileColor)
