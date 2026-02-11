@@ -1389,7 +1389,7 @@
     <dimen name="qs_center_guideline_padding">7.7491dp</dimen>
     <dimen name="qs_media_action_spacing">3.0996dp</dimen>
     <dimen name="qs_media_action_margin">12dp</dimen>
-    <dimen name="qs_media_action_play_pause_width">72dp</dimen>
+    <dimen name="qs_media_action_play_pause_width">60dp</dimen>
     <dimen name="qs_seamless_height">18.5978dp</dimen>
     <dimen name="qs_seamless_icon_size">9.2989dp</dimen>
     <dimen name="qs_media_button_stroke_width">1dp</dimen>
