@@ -38,6 +38,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.combine
 
 typealias BlurAppliedListener = Consumer<Int>
 
@@ -106,58 +107,70 @@ constructor(
             .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
     override val isTranslucentSupported: StateFlow<Boolean> =
-        conflatedCallbackFlow {
-            val sendUpdate = {
-                trySendWithFailureLogging(
-                    isTranslucentEnabled(),
-                    TAG,
-                    "unable to send notificationRowTransparency state change",
-                )
-            }
-            val observer =
-                object : ContentObserver(null) {
-                    override fun onChange(selfChange: Boolean) = sendUpdate()
+        combine(
+            conflatedCallbackFlow {
+                val sendUpdate = {
+                    trySendWithFailureLogging(
+                        isTranslucentEnabledInSettings(),
+                        TAG,
+                        "unable to send notificationRowTransparency state change",
+                    )
                 }
-            val resolver = context.contentResolver
-            resolver.registerContentObserver(
-                Settings.Secure.getUriFor(Settings.Secure.NOTIFICATION_ROW_TRANSPARENCY),
-                true,
-                observer,
-            )
-            sendUpdate()
-            awaitClose { resolver.unregisterContentObserver(observer) }
+                val observer =
+                    object : ContentObserver(null) {
+                        override fun onChange(selfChange: Boolean) = sendUpdate()
+                    }
+                val resolver = context.contentResolver
+                resolver.registerContentObserver(
+                    Settings.Secure.getUriFor(Settings.Secure.NOTIFICATION_ROW_TRANSPARENCY),
+                    true,
+                    observer,
+                )
+                sendUpdate()
+                awaitClose { resolver.unregisterContentObserver(observer) }
+            },
+            isBlurSupported
+        ) { settingEnabled, blurSupported ->
+            settingEnabled && blurSupported && isSystemBlurEnabled()
         }
-        .stateIn(scope, SharingStarted.WhileSubscribed(), isTranslucentEnabled())
+        .stateIn(scope, SharingStarted.WhileSubscribed(), 
+            isTranslucentEnabledInSettings() && isSystemBlurEnabled())
 
     override val isLockscreenTranslucentSupported: StateFlow<Boolean> =
-        conflatedCallbackFlow {
-            val sendUpdate = {
-                trySendWithFailureLogging(
-                    isLockscreenTranslucentEnabled(),
-                    TAG,
-                    "unable to send notificationRowTransparency lockscreen state change",
-                )
-            }
-            val observer =
-                object : ContentObserver(null) {
-                    override fun onChange(selfChange: Boolean) = sendUpdate()
+        combine(
+            conflatedCallbackFlow {
+                val sendUpdate = {
+                    trySendWithFailureLogging(
+                        isLockscreenTranslucentEnabledInSettings(),
+                        TAG,
+                        "unable to send notificationRowTransparency lockscreen state change",
+                    )
                 }
-            val resolver = context.contentResolver
-            resolver.registerContentObserver(
-                Settings.Secure.getUriFor(
-                    Settings.Secure.NOTIFICATION_ROW_TRANSPARENCY_LOCKSCREEN,
-                ),
-                true,
-                observer,
-            )
-            sendUpdate()
-            awaitClose { resolver.unregisterContentObserver(observer) }
+                val observer =
+                    object : ContentObserver(null) {
+                        override fun onChange(selfChange: Boolean) = sendUpdate()
+                    }
+                val resolver = context.contentResolver
+                resolver.registerContentObserver(
+                    Settings.Secure.getUriFor(
+                        Settings.Secure.NOTIFICATION_ROW_TRANSPARENCY_LOCKSCREEN,
+                    ),
+                    true,
+                    observer,
+                )
+                sendUpdate()
+                awaitClose { resolver.unregisterContentObserver(observer) }
+            },
+            isBlurSupported
+        ) { settingEnabled, blurSupported ->
+            settingEnabled && blurSupported && isSystemBlurEnabled()
         }
-        .stateIn(scope, SharingStarted.WhileSubscribed(), isLockscreenTranslucentEnabled())
+        .stateIn(scope, SharingStarted.WhileSubscribed(), 
+            isLockscreenTranslucentEnabledInSettings() && isSystemBlurEnabled())
 
     override var blurAppliedListener: BlurAppliedListener? = null
 
-    private fun isTranslucentEnabled(): Boolean =
+    private fun isTranslucentEnabledInSettings(): Boolean =
         Settings.Secure.getIntForUser(
             context.contentResolver,
             Settings.Secure.NOTIFICATION_ROW_TRANSPARENCY,
@@ -165,11 +178,21 @@ constructor(
             UserHandle.USER_CURRENT,
         ) == 1
 
-    private fun isLockscreenTranslucentEnabled(): Boolean =
+    private fun isLockscreenTranslucentEnabledInSettings(): Boolean =
         Settings.Secure.getIntForUser(
             context.contentResolver,
             Settings.Secure.NOTIFICATION_ROW_TRANSPARENCY_LOCKSCREEN,
             1, UserHandle.USER_CURRENT) == 1
+
+    private fun isSystemBlurEnabled(): Boolean {
+        val blurEnabledByDefault = SystemProperties.getBoolean("ro.custom.blur.enable", false)
+        val blurEnabled = Settings.Global.getInt(
+            context.contentResolver,
+            Settings.Global.DISABLE_WINDOW_BLURS, 
+            if (blurEnabledByDefault) 0 else 1
+        ) != 1
+        return blurEnabled
+    }
 
     private fun isBlurAllowed(): Boolean {
         return ActivityManager.isHighEndGfx() && !isDisableBlurSysPropSet()
