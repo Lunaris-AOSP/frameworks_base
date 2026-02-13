@@ -34,6 +34,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -83,6 +84,7 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -99,6 +101,8 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.app.tracing.coroutines.launchTraced as launch
+import com.android.compose.PlatformSlider
+import com.android.compose.PlatformSliderDefaults
 import com.android.compose.modifiers.padding
 import com.android.compose.modifiers.sliderPercentage
 import com.android.compose.modifiers.thenIf
@@ -156,6 +160,8 @@ fun BrightnessSlider(
     val cr = context.contentResolver
 
     var hapticsEnabled by remember { mutableStateOf(readEnableHaptics(cr)) }
+    var useAxStyle by remember { mutableStateOf(readUseAxStyle(cr)) }
+    var showAutoBrightness by remember { mutableStateOf(readShowAutoBrightness(cr)) }
 
     val shapeMode = rememberSliderShapeMode()
     val trackCornerDp: Dp = when (shapeMode) {
@@ -173,6 +179,7 @@ fun BrightnessSlider(
     val enabled = !isRestricted
     val contentDescription = stringResource(R.string.accessibility_brightness)
     val interactionSource = remember { MutableInteractionSource() }
+    
     val hapticsViewModel: SliderHapticsViewModel? =
         if (hapticsEnabled) {
             rememberViewModel(traceName = "SliderHapticsViewModel") {
@@ -189,6 +196,128 @@ fun BrightnessSlider(
         } else {
             null
         }
+
+    val hasAutoBrightness = context.resources.getBoolean(
+        com.android.internal.R.bool.config_automatic_brightness_available
+    )
+
+    DisposableEffect(Unit) {
+        val observer = object : ContentObserver(null) {
+            override fun onChange(selfChange: Boolean) {
+                context.mainExecutor.execute {
+                    hapticsEnabled = readEnableHaptics(cr)
+                    useAxStyle = readUseAxStyle(cr)
+                    showAutoBrightness = readShowAutoBrightness(cr)
+                }
+            }
+        }
+
+        cr.registerContentObserver(
+            Settings.System.getUriFor(Settings.System.QS_BRIGHTNESS_SLIDER_HAPTIC),
+            false, observer, UserHandle.USER_ALL
+        )
+
+        cr.registerContentObserver(
+            Settings.System.getUriFor(Settings.System.QS_BRIGHTNESS_SLIDER_STYLE),
+            false, observer, UserHandle.USER_ALL
+        )
+
+        cr.registerContentObserver(
+            LineageSettings.Secure.getUriFor(LineageSettings.Secure.QS_SHOW_AUTO_BRIGHTNESS),
+            false, observer, UserHandle.USER_ALL
+        )
+
+        onDispose {
+            cr.unregisterContentObserver(observer)
+        }
+    }
+
+    if (useAxStyle) {
+        val iconRes by
+            remember(gammaValue, valueRange) {
+                derivedStateOf {
+                    val percentage =
+                        (value - valueRange.first) * 100f / (valueRange.last - valueRange.first)
+                    iconResProvider(percentage)
+                }
+            }
+        val axIconRes = if (autoMode) R.drawable.ic_qs_brightness_auto_on else iconRes
+        val axIconSize = 56.dp
+        val iconTapScope = rememberCoroutineScope()
+        val sliderColors = PlatformSliderDefaults.defaultPlatformSliderColors().copy(
+            trackColor = CustomColorScheme.current.qsTileColor,
+        )
+
+        Box(modifier = modifier) {
+            PlatformSlider(
+                value = animatedValue,
+                onValueChange = {
+                    if (enabled && !overriddenByAppState) {
+                        hapticsViewModel?.onValueChange(it)
+                        value = it.toInt()
+                        onDrag(value)
+                    }
+                },
+                onValueChangeFinished = {
+                    if (enabled && !overriddenByAppState) {
+                        hapticsViewModel?.onValueChangeEnded()
+                        onStop(value)
+                    }
+                },
+                valueRange = floatValueRange,
+                enabled = enabled,
+                interactionSource = interactionSource,
+                colors = sliderColors,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(axIconSize)
+                    .sysuiResTag("slider")
+                    .semantics(mergeDescendants = true) {
+                        this.text = AnnotatedString(contentDescription)
+                    }
+                    .sliderPercentage {
+                        (value - valueRange.first).toFloat() / (valueRange.last - valueRange.first)
+                    }
+                    .thenIf(isRestricted) {
+                        Modifier.clickable {
+                            if (restriction is PolicyRestriction.Restricted) {
+                                onRestrictedClick(restriction)
+                            }
+                        }
+                    },
+                icon = { _ ->
+                    Icon(
+                        painter = painterResource(axIconRes),
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                    )
+                },
+            )
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .size(axIconSize)
+                    .clip(CircleShape)
+                    .pointerInput(Unit) {
+                        detectTapGestures {
+                            iconTapScope.launch { onIconClick() }
+                        }
+                    }
+            )
+        }
+
+        val currentShowToast by rememberUpdatedState(showToast)
+        LaunchedEffect(interactionSource, overriddenByAppState) {
+            interactionSource.interactions.collect { interaction ->
+                if (interaction is DragInteraction.Start && overriddenByAppState) {
+                    currentShowToast()
+                }
+            }
+        }
+        return
+    }
+
     val colors = colors()
 
     // The value state is recreated every time gammaValue changes, so we recreate this derivedState
@@ -233,36 +362,6 @@ fun BrightnessSlider(
                     }
                 }
             }
-        }
-    }
-
-    val hasAutoBrightness = context.resources.getBoolean(
-        com.android.internal.R.bool.config_automatic_brightness_available
-    )
-    var showAutoBrightness by remember { mutableStateOf(readShowAutoBrightness(cr)) }
-
-    DisposableEffect(Unit) {
-        val observer = object : ContentObserver(null) {
-            override fun onChange(selfChange: Boolean) {
-                context.mainExecutor.execute {
-                    showAutoBrightness = readShowAutoBrightness(cr)
-                    hapticsEnabled = readEnableHaptics(cr)
-                }
-            }
-        }
-
-        cr.registerContentObserver(
-            LineageSettings.Secure.getUriFor(LineageSettings.Secure.QS_SHOW_AUTO_BRIGHTNESS),
-            false, observer, UserHandle.USER_ALL
-        )
-
-        cr.registerContentObserver(
-            Settings.System.getUriFor(Settings.System.QS_BRIGHTNESS_SLIDER_HAPTIC),
-            false, observer, UserHandle.USER_ALL
-        )
-
-        onDispose {
-            cr.unregisterContentObserver(observer)
         }
     }
 
@@ -494,6 +593,16 @@ private fun readEnableHaptics(cr: ContentResolver): Boolean =
         Settings.System.getIntForUser(
             cr, Settings.System.QS_BRIGHTNESS_SLIDER_HAPTIC,
             1, UserHandle.USER_CURRENT
+        ) != 0
+    } catch (_: Throwable) {
+        false
+    }
+
+private fun readUseAxStyle(cr: ContentResolver): Boolean =
+    try {
+        Settings.System.getIntForUser(
+            cr, Settings.System.QS_BRIGHTNESS_SLIDER_STYLE,
+            0, UserHandle.USER_CURRENT
         ) != 0
     } catch (_: Throwable) {
         false
