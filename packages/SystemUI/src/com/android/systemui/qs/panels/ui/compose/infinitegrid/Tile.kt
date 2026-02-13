@@ -205,14 +205,16 @@ fun ContentScope.Tile(
                 tile.state.collect { value = it.toIconProvider() }
             }
 
-        val colors = TileDefaults.getColorForState(uiState, iconOnly)
+        val useMinimalStyle = rememberAxTileStyle()
+
+        val colors = TileDefaults.getColorForState(uiState, iconOnly, forceMonochrome = useMinimalStyle)
         val hapticsViewModel: TileHapticsViewModel? =
             if (rememberTileHaptic()) {
                 rememberViewModel(traceName = "TileHapticsViewModel") {
                     tileHapticsViewModelFactoryProvider.getHapticsViewModelFactory()?.create(tile)
                 }
             } else {
-               null
+                null
             }
 
         if (tile.spec.spec == "sound" && !iconOnly) {
@@ -220,11 +222,18 @@ fun ContentScope.Tile(
             return@trace
         }
 
-        val shapeMode = rememberTileShapeMode()
-        val wantCircle = shapeMode == 4 && iconOnly
+        val shapeMode = if (useMinimalStyle) 0 else rememberTileShapeMode()
+        val wantCircle = !useMinimalStyle && shapeMode == 4 && iconOnly
         val tileShape =
-            if (wantCircle) CircleShape
-            else TileDefaults.animateTileShapeAsState(uiState.state, shapeMode).value
+            if (wantCircle) {
+                CircleShape
+            } else if (useMinimalStyle) {
+                val useMinimalInvert = rememberAxMinimalInvert()
+                AxTileDefaults.animateTileShapeAsState(uiState.state, useMinimalInvert).value
+            } else {
+                TileDefaults.animateTileShapeAsState(uiState.state, shapeMode).value
+            }
+
         val animatedColor by animateColorAsState(colors.background, label = "QSTileBackgroundColor")
         val isDualTarget = uiState.handlesSecondaryClick
 
@@ -254,8 +263,8 @@ fun ContentScope.Tile(
             modifier =
                 modifier
                     .then(surfaceRevealModifier)
-                    .thenIf(!wantCircle) { 
-                        modifier.borderOnFocus(color = focusBorderColor, outerShape.topEnd) 
+                    .thenIf(!wantCircle) {
+                        Modifier.borderOnFocus(color = focusBorderColor, outerShape.topEnd)
                     }
                     .fillMaxWidth()
                     .height(CommonTileDefaults.TileHeight)
@@ -331,6 +340,7 @@ fun ContentScope.Tile(
                             requestToggleTextFeedback(tile.spec)
                         }
                     }
+
             if (wantCircle) {
                 val interaction = remember { MutableInteractionSource() }
 
@@ -384,7 +394,6 @@ fun ContentScope.Tile(
                                 },
                         )
                     } else {
-                        val iconShape by TileDefaults.animateIconShapeAsState(uiState.state, shapeMode)
                         val secondaryClick: (() -> Unit)? =
                             {
                                     hapticsViewModel?.setTileInteractionState(
@@ -393,22 +402,43 @@ fun ContentScope.Tile(
                                     tile.toggleClick()
                                 }
                                 .takeIf { isDualTarget }
-                        LargeTileContent(
-                            label = uiState.label,
-                            secondaryLabel = uiState.secondaryLabel,
-                            iconProvider = iconProvider,
-                            sideDrawable = uiState.sideDrawable,
-                            colors = colors,
-                            iconShape = iconShape,
-                            toggleClick = secondaryClick,
-                            onLongClick = longClick,
-                            accessibilityUiState = uiState.accessibilityUiState,
-                            squishiness = squishiness,
-                            isVisible = isVisible,
-                            textScale = { contentBounceable.textBounceScale },
-                            modifier =
-                                Modifier.largeTilePadding(isDualTarget = uiState.handlesLongClick),
-                        )
+                        if (useMinimalStyle) {
+                            val useMinimalInvert = rememberAxMinimalInvert()
+                            val iconShape by AxTileDefaults.animateIconShapeAsState(uiState.state, useMinimalInvert)
+                            AxLargeTileContent(
+                                label = uiState.label,
+                                secondaryLabel = uiState.secondaryLabel,
+                                iconProvider = iconProvider,
+                                sideDrawable = uiState.sideDrawable,
+                                colors = colors,
+                                iconShape = iconShape,
+                                tileState = uiState.state,
+                                toggleClick = secondaryClick,
+                                onLongClick = longClick,
+                                accessibilityUiState = uiState.accessibilityUiState,
+                                squishiness = squishiness,
+                                isVisible = isVisible,
+                                textScale = { contentBounceable.textBounceScale },
+                            )
+                        } else {
+                            val iconShape by TileDefaults.animateIconShapeAsState(uiState.state, shapeMode)
+                            LargeTileContent(
+                                label = uiState.label,
+                                secondaryLabel = uiState.secondaryLabel,
+                                iconProvider = iconProvider,
+                                sideDrawable = uiState.sideDrawable,
+                                colors = colors,
+                                iconShape = iconShape,
+                                toggleClick = secondaryClick,
+                                onLongClick = longClick,
+                                accessibilityUiState = uiState.accessibilityUiState,
+                                squishiness = squishiness,
+                                isVisible = isVisible,
+                                textScale = { contentBounceable.textBounceScale },
+                                modifier =
+                                    Modifier.largeTilePadding(isDualTarget = uiState.handlesLongClick),
+                            )
+                        }
                     }
                 }
             }
@@ -551,6 +581,46 @@ data class TileColors(
 )
 
 @Composable
+fun rememberAxTileStyle(): Boolean {
+    val context = LocalContext.current
+    val contentResolver = context.contentResolver
+
+    fun readAxStyle(): Boolean {
+        return try {
+            Settings.System.getIntForUser(
+                contentResolver, Settings.System.QS_TILE_STYLE_MINIMAL, 0,
+                UserHandle.USER_CURRENT
+            ) != 0
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    var axStyle by remember { mutableStateOf(readAxStyle()) }
+
+    DisposableEffect(contentResolver) {
+        val observer = object : ContentObserver(null) {
+            override fun onChange(selfChange: Boolean) {
+                context.mainExecutor.execute {
+                    axStyle = readAxStyle()
+                }
+            }
+        }
+
+        contentResolver.registerContentObserver(
+            Settings.System.getUriFor(Settings.System.QS_TILE_STYLE_MINIMAL),
+            false, observer, UserHandle.USER_ALL
+        )
+
+        onDispose {
+            contentResolver.unregisterContentObserver(observer)
+        }
+    }
+
+    return axStyle
+}
+
+@Composable
 fun rememberTileShapeMode(): Int {
     val context = LocalContext.current
     val contentResolver = context.contentResolver
@@ -588,6 +658,46 @@ fun rememberTileShapeMode(): Int {
     }
 
     return shapeMode
+}
+
+@Composable
+fun rememberAxMinimalInvert(): Boolean {
+    val context = LocalContext.current
+    val contentResolver = context.contentResolver
+
+    fun readMinimalInvert(): Boolean {
+        return try {
+            Settings.System.getIntForUser(
+                contentResolver, Settings.System.QS_TILE_STYLE_MINIMAL_INVERT, 0,
+                UserHandle.USER_CURRENT
+            ) != 0
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    var minimalInvert by remember { mutableStateOf(readMinimalInvert()) }
+
+    DisposableEffect(contentResolver) {
+        val observer = object : ContentObserver(null) {
+            override fun onChange(selfChange: Boolean) {
+                context.mainExecutor.execute {
+                    minimalInvert = readMinimalInvert()
+                }
+            }
+        }
+
+        contentResolver.registerContentObserver(
+            Settings.System.getUriFor(Settings.System.QS_TILE_STYLE_MINIMAL_INVERT),
+            false, observer, UserHandle.USER_ALL
+        )
+
+        onDispose {
+            contentResolver.unregisterContentObserver(observer)
+        }
+    }
+
+    return minimalInvert
 }
 
 @Composable
@@ -651,7 +761,7 @@ private object TileDefaults {
     fun activeDualTargetTileColors(): TileColors {
         val context = LocalContext.current
         val isSingleToneStyle = DualTargetTileStyleProvider.isSingleToneStyle(context)
-        
+
         return if (isSingleToneStyle) {
             TileColors(
                 background = MaterialTheme.colorScheme.primary,
@@ -676,7 +786,7 @@ private object TileDefaults {
     fun inactiveDualTargetTileColors(): TileColors {
         val context = LocalContext.current
         val isSingleToneStyle = DualTargetTileStyleProvider.isSingleToneStyle(context)
-        
+
         return if (isSingleToneStyle) {
             TileColors(
                 background = CustomColorScheme.current.qsTileColor,
@@ -723,11 +833,38 @@ private object TileDefaults {
 
     @Composable
     @ReadOnlyComposable
-    fun getColorForState(uiState: TileUiState, iconOnly: Boolean): TileColors {
+    fun activeDualTargetMonochromeTileColors(): TileColors =
+        TileColors(
+            background = MaterialTheme.colorScheme.primary,
+            iconBackground = Color.Transparent,
+            label = MaterialTheme.colorScheme.onPrimary,
+            secondaryLabel = MaterialTheme.colorScheme.onPrimary,
+            icon = MaterialTheme.colorScheme.onPrimary,
+        )
+
+    @Composable
+    @ReadOnlyComposable
+    fun inactiveDualTargetMonochromeTileColors(): TileColors =
+        TileColors(
+            background = CustomColorScheme.current.qsTileColor,
+            iconBackground = Color.Transparent,
+            label = MaterialTheme.colorScheme.onSurface,
+            secondaryLabel = MaterialTheme.colorScheme.onSurface,
+            icon = MaterialTheme.colorScheme.onSurface,
+        )
+
+    @Composable
+    @ReadOnlyComposable
+    fun getColorForState(
+        uiState: TileUiState,
+        iconOnly: Boolean,
+        forceMonochrome: Boolean = false,
+    ): TileColors {
         return when (uiState.state) {
             STATE_ACTIVE -> {
                 if (uiState.handlesSecondaryClick && !iconOnly) {
-                    activeDualTargetTileColors()
+                    if (forceMonochrome) activeDualTargetMonochromeTileColors()
+                    else activeDualTargetTileColors()
                 } else {
                     activeTileColors()
                 }
@@ -735,11 +872,14 @@ private object TileDefaults {
 
             STATE_INACTIVE -> {
                 if (uiState.handlesSecondaryClick && !iconOnly) {
-                    inactiveDualTargetTileColors()
+                    if (forceMonochrome) inactiveDualTargetMonochromeTileColors()
+                    else inactiveDualTargetTileColors()
                 } else {
                     inactiveTileColors()
                 }
             }
+
+            STATE_UNAVAILABLE -> unavailableTileColors()
 
             else -> unavailableTileColors()
         }
@@ -772,25 +912,23 @@ private object TileDefaults {
         label: String,
         shapeMode: Int,
     ): State<RoundedCornerShape> {
-        val animatedCornerRadius by
-            animateDpAsState(
-                targetValue = when (shapeMode) {
-                        1 -> InactiveCornerRadius // Circle-ish
-                        2 -> activeCornerRadius // Rounded Square
-                        3 -> 0.dp // Square
-                        4 -> InactiveCornerRadius // Circle
-                        else -> if (state == STATE_ACTIVE) activeCornerRadius else InactiveCornerRadius
-                    },
-                label = label,
-            )
+        val animatedCornerRadius by animateDpAsState(
+            targetValue = when (shapeMode) {
+                1 -> InactiveCornerRadius // Circle-ish
+                2 -> activeCornerRadius  // Rounded Square
+                3 -> 0.dp               // Square
+                4 -> InactiveCornerRadius // Circle
+                else -> if (state == STATE_ACTIVE) activeCornerRadius else InactiveCornerRadius
+            },
+            label = label,
+        )
 
         return remember {
-            val corner =
-                object : CornerSize {
-                    override fun toPx(shapeSize: Size, density: Density): Float {
-                        return with(density) { animatedCornerRadius.toPx() }
-                    }
+            val corner = object : CornerSize {
+                override fun toPx(shapeSize: Size, density: Density): Float {
+                    return with(density) { animatedCornerRadius.toPx() }
                 }
+            }
             mutableStateOf(RoundedCornerShape(corner))
         }
     }
@@ -819,25 +957,23 @@ enum class DualTargetTileStyle {
 }
 
 object DualTargetTileStyleProvider {
-    
+
     fun getStyle(context: android.content.Context): DualTargetTileStyle {
         val value = Settings.System.getInt(
             context.contentResolver,
             Settings.System.DUAL_TARGET_TILE_STYLE,
             0
         )
-        
+
         return when (value) {
             1 -> DualTargetTileStyle.SINGLE
             else -> DualTargetTileStyle.DUAL
         }
     }
-    
-    fun isSingleToneStyle(context: android.content.Context): Boolean {
-        return getStyle(context) == DualTargetTileStyle.SINGLE
-    }
-    
-    fun isDualToneStyle(context: android.content.Context): Boolean {
-        return getStyle(context) == DualTargetTileStyle.DUAL
-    }
+
+    fun isSingleToneStyle(context: android.content.Context): Boolean =
+        getStyle(context) == DualTargetTileStyle.SINGLE
+
+    fun isDualToneStyle(context: android.content.Context): Boolean =
+        getStyle(context) == DualTargetTileStyle.DUAL
 }
