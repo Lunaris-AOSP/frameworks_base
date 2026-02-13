@@ -7387,6 +7387,21 @@ public final class Settings {
         public static final String QS_TILE_SHAPE = "qs_tile_shape";
 
         /**
+         * @hide
+         */
+        public static final String QS_TILE_STYLE_MINIMAL = "qs_tile_style_minimal";
+
+        /**
+         * @hide
+         */
+        public static final String QS_USE_MODIFIED_TILE_SPACING = "qs_use_modified_tile_spacing";
+
+        /**
+         * @hide
+         */
+        public static final String QS_TILE_STYLE_MINIMAL_INVERT = "qs_tile_style_minimal_invert";
+
+        /**
          * Customize Brightness slider shape.
          * @hide
          */
