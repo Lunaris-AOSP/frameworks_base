@@ -16,6 +16,8 @@
 
 package com.android.systemui.qs.panels.ui.compose.infinitegrid
 
+import android.provider.Settings
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -28,6 +30,7 @@ import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.dimensionResource
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastMap
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.compose.animation.scene.ContentScope
@@ -83,11 +86,14 @@ constructor(
             rememberViewModel(traceName = "InfiniteGridLayout.TileGrid", key = context) {
                 textFeedbackContentViewModelFactory.create(context)
             }
+        
+        val useModifiedSpacing = remember {
+            Settings.System.getInt(context.contentResolver, Settings.System.QS_USE_MODIFIED_TILE_SPACING, 0) == 1
+        }
 
         val columns = viewModel.columnsWithMediaViewModel.columns
         val largeTilesSpan = viewModel.columnsWithMediaViewModel.largeSpan
         val largeTiles by viewModel.iconTilesViewModel.largeTilesState
-        // Tiles or largeTiles may be updated while this is composed, so listen to any changes
         val sizedTiles =
             remember(tiles, largeTiles, largeTilesSpan) {
                 tiles.map {
@@ -124,13 +130,24 @@ constructor(
             val bounceables =
                 remember(sizedTiles) { List(sizedTiles.size) { BounceableTileViewModel() } }
             val spans by remember(sizedTiles) { derivedStateOf { sizedTiles.fastMap { it.width } } }
+            
             VerticalSpannedGrid(
                 columns = columns,
-                columnSpacing = dimensionResource(R.dimen.qs_tile_margin_horizontal),
-                rowSpacing = dimensionResource(R.dimen.qs_tile_margin_vertical),
+                columnSpacing = if (useModifiedSpacing) {
+                    CommonTileDefaults.TileColumnSpacing
+                } else {
+                    dimensionResource(R.dimen.qs_tile_margin_horizontal)
+                },
+                rowSpacing = if (useModifiedSpacing) {
+                    CommonTileDefaults.TileRowSpacing
+                } else {
+                    dimensionResource(R.dimen.qs_tile_margin_vertical)
+                },
                 spans = spans,
                 keys = { sizedTiles[it].tile.spec },
-                modifier = modifier,
+                modifier = modifier.then(
+                    if (useModifiedSpacing) Modifier.padding(horizontal = 10.dp) else Modifier
+                ),
             ) { spanIndex, column, isFirstInColumn, isLastInColumn ->
                 val it = sizedTiles[spanIndex]
 
