@@ -7450,6 +7450,11 @@ public final class Settings {
         public static final String QS_BRIGHTNESS_SLIDER_SHAPE = "qs_brightness_slider_shape";
 
         /**
+         * @hide
+         */
+        public static final String QS_BRIGHTNESS_SLIDER_STYLE = "qs_brightness_slider_style";
+
+        /**
          * Haptic feedback on QS tiles
          * @hide
          */
