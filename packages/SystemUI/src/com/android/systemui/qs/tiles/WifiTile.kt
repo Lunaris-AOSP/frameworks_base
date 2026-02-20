@@ -169,23 +169,21 @@ constructor(
                 (tileState.icon as? Icon.Loaded)?.resId?.let { resId ->
                     maybeLoadResourceIcon(resId)
                 } ?: SignalIcon(SignalDrawable.getState(0, 4, false))
-            label = tileState.label
-            
-            secondaryLabel = if (this.state == Tile.STATE_ACTIVE) {
-                if (showDataUsage) {
-                    val dataUsage = getFormattedWifiDataUsage()
-                    if (!TextUtils.isEmpty(dataUsage)) {
-                        dataUsage
-                    } else {
-                        tileState.secondaryLabel
-                    }
+
+            if (this.state == Tile.STATE_ACTIVE && showDataUsage) {
+                val dataUsage = getFormattedWifiDataUsage()
+                if (!TextUtils.isEmpty(dataUsage)) {
+                    label = tileState.secondaryLabel
+                    secondaryLabel = dataUsage
                 } else {
-                    tileState.secondaryLabel
+                    label = tileState.label
+                    secondaryLabel = tileState.secondaryLabel
                 }
             } else {
-                null
+                label = tileState.label
+                secondaryLabel = if (this.state == Tile.STATE_ACTIVE) tileState.secondaryLabel else null
             }
-            
+
             contentDescription = tileState.contentDescription
             expandedAccessibilityClassName = tileState.expandedAccessibilityClassName
             handlesSecondaryClick = false
