@@ -93,7 +93,7 @@ constructor(
         }
 
     val maxBlurRadius: Float 
-        get() = secureSettings.getFloat("system_blur_radius", 70f)
+        get() = secureSettings.getFloat("system_blur_radius", 34f)
 
     override val notificationBlurRadius: Flow<Float> =
         if (Flags.bouncerUiRevamp()) {
