@@ -18,4 +18,7 @@
 <resources>
     <!-- Largest size an avatar might need to be drawn in the power menu user picker -->
     <dimen name="global_actions_avatar_size">24dp</dimen>
+
+    <!-- Weather -->  
+    <dimen name="weather_image_max_size">24dp</dimen>
 </resources>
