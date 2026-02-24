@@ -19,6 +19,8 @@ package com.android.systemui.util
 import android.os.Handler
 import android.os.Looper
 import android.service.notification.StatusBarNotification
+import android.view.View
+import android.view.ViewTreeObserver
 import com.android.systemui.statusbar.StatusBarState.KEYGUARD
 import com.android.systemui.statusbar.StatusBarState.SHADE_LOCKED
 import java.util.concurrent.atomic.AtomicBoolean
@@ -40,6 +42,9 @@ class ScrimUtils private constructor() {
         fun onUserChanged() {}
         fun setPulsing(pulsing: Boolean) {}
         fun onNotificationPosted(sbn: StatusBarNotification) {}
+        fun onNotificationRemoved(sbn: StatusBarNotification) {}
+        fun onKeyguardLayoutChanged() {}
+        fun onKeyguardAlphaChanged(alpha: Float) {}
     }
 
     private val listeners = WeakListenerManager<ScrimEventListener>()
@@ -60,6 +65,8 @@ class ScrimUtils private constructor() {
     private var keyguardRetryRunnable: Runnable? = null
 
     companion object {
+        private const val LAYOUT_STABLE_DELAY = 350L
+
         @Volatile private var instance: ScrimUtils? = null
 
         @JvmStatic
@@ -157,6 +164,60 @@ class ScrimUtils private constructor() {
 
     fun onNotificationPosted(sbn: StatusBarNotification) {
         listeners.notifyOnMain { it.onNotificationPosted(sbn) }
+    }
+
+    fun onNotificationRemoved(sbn: StatusBarNotification) {
+        listeners.notifyOnMain { it.onNotificationRemoved(sbn) }
+    }
+
+    private var keyguardRootView: View? = null
+    private var layoutChangePending = false
+    private var layoutStableRunnable: Runnable? = null
+    private val preDrawActions = mutableListOf<Runnable>()
+
+    private val keyguardPreDrawListener = ViewTreeObserver.OnPreDrawListener {
+        val root = keyguardRootView ?: return@OnPreDrawListener true
+
+        for (action in preDrawActions) {
+            action.run()
+        }
+
+        if (mKeyguardShowing == true && root.isDirty) {
+            if (!layoutChangePending) {
+                layoutChangePending = true
+                listeners.notifyOnMain { it.onKeyguardLayoutChanged() }
+            }
+            layoutStableRunnable?.let { mainHandler.removeCallbacks(it) }
+            layoutStableRunnable = Runnable { layoutChangePending = false }
+            mainHandler.postDelayed(layoutStableRunnable!!, LAYOUT_STABLE_DELAY)
+        }
+        true
+    }
+
+    fun addKeyguardPreDrawAction(action: Runnable) {
+        if (!preDrawActions.contains(action)) preDrawActions.add(action)
+    }
+
+    fun removeKeyguardPreDrawAction(action: Runnable) {
+        preDrawActions.remove(action)
+    }
+
+    fun attachKeyguardView(view: View) {
+        detachKeyguardView()
+        keyguardRootView = view
+        view.viewTreeObserver.addOnPreDrawListener(keyguardPreDrawListener)
+    }
+
+    fun detachKeyguardView() {
+        keyguardRootView?.viewTreeObserver?.removeOnPreDrawListener(keyguardPreDrawListener)
+        keyguardRootView = null
+        layoutStableRunnable?.let { mainHandler.removeCallbacks(it) }
+        layoutStableRunnable = null
+        layoutChangePending = false
+    }
+
+    fun setKeyguardAlpha(alpha: Float) {
+        listeners.notifyOnMain { it.onKeyguardAlphaChanged(alpha) }
     }
 
     fun isDozing(): Boolean = mIsDozing == true
