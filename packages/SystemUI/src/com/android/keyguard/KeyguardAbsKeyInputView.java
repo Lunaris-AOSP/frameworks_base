@@ -87,7 +87,7 @@ public abstract class KeyguardAbsKeyInputView extends KeyguardInputView {
             boolean showButton = Settings.Secure.getInt(
                     mContext.getContentResolver(),
                     Settings.Secure.LOCKSCREEN_SHOW_EMERGENCY_BUTTON,
-                    0) == 1;
+                    1) == 1;
             mEcaView.setVisibility(showButton ? View.VISIBLE : View.GONE);
         }
     }
