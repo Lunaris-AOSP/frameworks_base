@@ -50,7 +50,10 @@ fun RingerSliderWidget(
 ) {
     val mode by interactor.ringerMode.collectAsState(initial = interactor.getCurrentMode())
     val isDndEnabled by interactor.dndMode.collectAsState(initial = interactor.isDndEnabled())
-    
+
+    val activeBrush = theme.activeBgBrush
+    val dndBrush = theme.dndBgBrush
+
     val targetPosition = when (mode) {
         AudioManager.RINGER_MODE_NORMAL -> 0f
         AudioManager.RINGER_MODE_VIBRATE -> 1f
@@ -189,13 +192,18 @@ fun RingerSliderWidget(
                     .offset(x = thumbOffset)
                     .size(dimens.thumbSize)
                     .padding(dimens.thumbPadding)
-                    .background(
+                    .then(
                         when {
-                            isDozing -> Color.Transparent
-                            isDndEnabled -> theme.dndBg
-                            else -> theme.activeBg
-                        },
-                        thumbShape
+                            isDozing -> Modifier.background(Color.Transparent, thumbShape)
+                            isDndEnabled -> if (dndBrush != null)
+                                Modifier.background(dndBrush, thumbShape)
+                            else
+                                Modifier.background(theme.dndBg, thumbShape)
+                            else -> if (activeBrush != null)
+                                Modifier.background(activeBrush, thumbShape)
+                            else
+                                Modifier.background(theme.activeBg, thumbShape)
+                        }
                     )
                     .then(
                         when {

@@ -502,7 +502,7 @@ fun TileContainer(
                     interactionSource = interactionSource,
                 )
                 .tileTestTag(iconOnly)
-                .thenIf(!isDualTarget || iconOnly) {
+                .thenIf(!isDualTarget || iconOnly || (colors.iconBackgroundGradient != null && colors.background == MaterialTheme.colorScheme.primary)) {
                     Modifier
                         .drawBehind {
                             val brush = colors.iconBackgroundGradient
@@ -805,7 +805,31 @@ fun rememberQsGradient(): Boolean {
 }
 
 @Composable
-private fun rememberGradientColorMode(): Int {
+fun rememberQsTileBackgroundBrush(): Brush? {
+    val enabled = rememberQsGradient()
+    val mode = rememberGradientColorMode()
+    val (start, end) = rememberGradientCustomColors()
+
+    if (!enabled) return null
+
+    val colors = if (mode == 1) {
+        listOf(start, end)
+    } else {
+        listOf(
+            MaterialTheme.colorScheme.primary,
+            MaterialTheme.colorScheme.secondary
+        )
+    }
+
+    return Brush.linearGradient(
+        colors = colors,
+        start = Offset(0f, 0f),
+        end = Offset.Infinite
+    )
+}
+
+@Composable
+internal fun rememberGradientColorMode(): Int { 
     val contentResolver = LocalContext.current.contentResolver
 
     fun readMode(): Int = try {
@@ -840,7 +864,7 @@ private fun rememberGradientColorMode(): Int {
 }
 
 @Composable
-private fun rememberGradientCustomColors(): Pair<Color, Color> {
+internal fun rememberGradientCustomColors(): Pair<Color, Color> {
     val contentResolver = LocalContext.current.contentResolver
 
     fun readStart(): Int = try {
@@ -897,8 +921,7 @@ private object TileDefaults {
     /** An active tile uses the active color as background */
     @Composable
     fun activeTileColors(): TileColors {
-        val gradientEnabled = rememberQsGradient()
-        val gradient = qsTileBackgroundBrush(gradientEnabled)
+        val gradient = rememberQsTileBackgroundBrush()
 
         return TileColors(
             background = MaterialTheme.colorScheme.primary,
@@ -915,8 +938,7 @@ private object TileDefaults {
     fun activeDualTargetTileColors(): TileColors {
         val context = LocalContext.current
         val isSingleToneStyle = DualTargetTileStyleProvider.isSingleToneStyle(context)
-        val gradientEnabled = rememberQsGradient()
-        val gradient = qsTileBackgroundBrush(gradientEnabled)
+        val gradient = rememberQsTileBackgroundBrush()
 
         return if (isSingleToneStyle) {
             TileColors(
@@ -990,15 +1012,17 @@ private object TileDefaults {
     }
 
     @Composable
-    @ReadOnlyComposable
-    fun activeDualTargetMonochromeTileColors(): TileColors =
-        TileColors(
+    fun activeDualTargetMonochromeTileColors(): TileColors {
+        val gradient = rememberQsTileBackgroundBrush()
+        return TileColors(
             background = MaterialTheme.colorScheme.primary,
             iconBackground = Color.Transparent,
             label = MaterialTheme.colorScheme.onPrimary,
             secondaryLabel = MaterialTheme.colorScheme.onPrimary,
             icon = MaterialTheme.colorScheme.onPrimary,
+            iconBackgroundGradient = gradient,
         )
+    }
 
     @Composable
     @ReadOnlyComposable
@@ -1088,28 +1112,6 @@ private object TileDefaults {
             }
             mutableStateOf(RoundedCornerShape(corner))
         }
-    }
-
-    @Composable
-    fun qsTileBackgroundBrush(enabled: Boolean): Brush? {
-        if (!enabled) return null
-
-        val mode = rememberGradientColorMode()
-        val colors = if (mode == 1) {
-            val (start, end) = rememberGradientCustomColors()
-            listOf(start, end)
-        } else {
-            listOf(
-                MaterialTheme.colorScheme.primary,
-                MaterialTheme.colorScheme.secondary
-            )
-        }
-
-        return Brush.linearGradient(
-            colors = colors,
-            start = Offset(0f, 0f),
-            end = Offset.Infinite
-        )
     }
 }
 

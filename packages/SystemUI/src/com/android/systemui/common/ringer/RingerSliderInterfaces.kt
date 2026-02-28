@@ -16,6 +16,7 @@
 package com.android.systemui.common.ringer
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 
@@ -39,6 +40,12 @@ interface RingerSliderTheme {
     val dndIcon: Color
 
     val dozeStroke: Dp
+
+    val activeBgBrush: Brush?
+        @Composable get() = null
+
+    val dndBgBrush: Brush?
+        @Composable get() = null
 }
 
 interface RingerSliderDimens {
