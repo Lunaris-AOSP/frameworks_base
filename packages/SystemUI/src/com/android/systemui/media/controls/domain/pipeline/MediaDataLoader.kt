@@ -94,7 +94,7 @@ constructor(
             context.resources.getDimensionPixelSize(
                 com.android.internal.R.dimen.config_mediaMetadataBitmapMaxSize
             ),
-            500
+            460
         )
     private val artworkHeight: Int =
         context.resources.getDimensionPixelSize(R.dimen.qs_media_session_height_expanded)
