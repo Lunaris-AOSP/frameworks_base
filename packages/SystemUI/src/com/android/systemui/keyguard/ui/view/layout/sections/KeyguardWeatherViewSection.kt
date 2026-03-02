@@ -23,7 +23,9 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
 import com.android.systemui.customization.clocks.R as custR
 import com.android.systemui.keyguard.shared.model.KeyguardSection
+import com.android.systemui.plugins.keyguard.ui.clocks.ClockViewIds
 import com.android.systemui.res.R
+import com.android.systemui.shared.R as sharedR
 import com.android.systemui.weather.WeatherImageView
 import com.android.systemui.weather.WeatherTextView
 import javax.inject.Inject
@@ -165,7 +167,10 @@ class KeyguardWeatherViewSection @Inject constructor(
                     R.id.clock_ls,
                     R.id.keyguard_info_widgets,
                     R.id.keyguard_widgets,
-                    R.id.lockscreen_clock_view // Include fallback clock
+                    R.id.lockscreen_clock_view,
+                    ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL,
+                    sharedR.id.bc_smartspace_view,
+                    sharedR.id.date_smartspace_view,
                 )
             )
             
