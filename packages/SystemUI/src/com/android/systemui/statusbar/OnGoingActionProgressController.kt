@@ -48,6 +48,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 
 class OnGoingActionProgressController(
     private val context: Context,
@@ -82,6 +83,18 @@ class OnGoingActionProgressController(
     private var currentIcon: Drawable? = null
 
     private var currentTrackTitle: String? = null
+    private var currentArtistName: String? = null
+    private var currentAppLabel: String? = null
+    private var currentAlbumArt: Bitmap? = null
+
+    private val trackChangeCounter = AtomicLong(0L)
+    private var currentTrackChangeId: Long = 0L
+
+    private var lastObservedTitle: String? = null
+
+    private var lastActiveQueueItemId: Long = Long.MIN_VALUE
+    private var lastPlaybackPosition: Long  = 0L
+    private var lastPlaybackState: Int = -1
 
     private var isMenuVisible = false
     private var isSystemChipVisible = false
@@ -103,6 +116,7 @@ class OnGoingActionProgressController(
     private var staleCheckerJob: Job? = null
     private var compactCollapseJob: Job? = null
     private var menuCollapseJob: Job? = null
+    private var albumArtRetryJob: Job? = null
 
     private val _state = MutableStateFlow(ProgressState())
     val state: StateFlow<ProgressState> = _state.asStateFlow()
@@ -112,11 +126,9 @@ class OnGoingActionProgressController(
             override fun onChange(selfChange: Boolean, uri: Uri?) {
                 super.onChange(selfChange, uri)
                 if (uri == null) return
-                val enabledUri = Settings.System.getUriFor(ONGOING_ACTION_CHIP_ENABLED)
-                val mediaUri = Settings.System.getUriFor(ONGOING_MEDIA_PROGRESS)
-                val compactUri = Settings.System.getUriFor(ONGOING_COMPACT_MODE_ENABLED)
-
-                if (uri == enabledUri || uri == mediaUri || uri == compactUri) {
+                if (uri == Settings.System.getUriFor(ONGOING_ACTION_CHIP_ENABLED) ||
+                    uri == Settings.System.getUriFor(ONGOING_MEDIA_PROGRESS) ||
+                    uri == Settings.System.getUriFor(ONGOING_COMPACT_MODE_ENABLED)) {
                     updateSettings()
                 }
             }
@@ -152,7 +164,45 @@ class OnGoingActionProgressController(
         override fun onMediaMetadataChanged() {
             needsFullUiUpdate = true
             pauseStale = false
-            updateTrackTitle()
+
+            val metadata = mediaSessionHelper.mediaMetadata.value
+
+            val newTitle = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
+            val isTitleChange = newTitle != lastObservedTitle
+            if (isTitleChange) {
+                lastObservedTitle = newTitle
+                onTrackChanged()
+            }
+
+            currentTrackTitle = newTitle?.takeIf { it.isNotBlank() }
+            currentArtistName = (metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
+                ?: metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST))
+                ?.takeIf { it.isNotBlank() }
+
+            val freshArt =
+                metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+                    ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART)
+                    ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
+
+            if (freshArt != null) {
+                currentAlbumArt = freshArt
+                albumArtRetryJob?.cancel()
+            } else if (isTitleChange) {
+                scheduleAlbumArtRetry(currentTrackChangeId)
+            }
+
+            val appIcon = mediaSessionHelper.getMediaAppIcon()
+            if (appIcon != null) currentIcon = appIcon
+
+            val pkg = mediaSessionHelper.getMediaControllerPlaybackState()
+                ?.extras?.getString("package") ?: trackedPackageName
+            if (!pkg.isNullOrEmpty()) {
+                currentAppLabel = try {
+                    val pm = context.packageManager
+                    pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+                } catch (_: Exception) { pkg.substringAfterLast('.') }
+            }
+
             requestUiUpdate()
         }
 
@@ -160,6 +210,32 @@ class OnGoingActionProgressController(
             needsFullUiUpdate = true
             pauseStale = false
             pausedStaleJob?.cancel()
+
+            val ps = mediaSessionHelper.playbackState.value
+            val currentQueueItemId = ps?.activeQueueItemId ?: Long.MIN_VALUE
+            val currentPosition    = ps?.position ?: 0L
+            val currentState       = ps?.state ?: -1
+
+            val queueItemChanged = currentQueueItemId != Long.MIN_VALUE &&
+                lastActiveQueueItemId != Long.MIN_VALUE &&
+                currentQueueItemId != lastActiveQueueItemId
+
+            val positionReset = lastPlaybackState == android.media.session.PlaybackState.STATE_PLAYING &&
+                currentState == android.media.session.PlaybackState.STATE_PLAYING &&
+                lastPlaybackPosition > POSITION_RESET_THRESHOLD_MS &&
+                currentPosition < POSITION_RESET_THRESHOLD_MS
+
+            lastActiveQueueItemId = currentQueueItemId
+            lastPlaybackPosition  = currentPosition
+            lastPlaybackState     = currentState
+
+            if (queueItemChanged || positionReset) {
+                currentAlbumArt = null
+                onTrackChanged()
+                scheduleAlbumArtRetry(currentTrackChangeId)
+                requestUiUpdate()
+            }
+
             if (showMediaProgress &&
                     mediaSessionHelper.isMediaSessionActive() &&
                     !mediaSessionHelper.isMediaPlaying()) {
@@ -169,8 +245,37 @@ class OnGoingActionProgressController(
                     requestUiUpdate()
                 }
             }
-            updateTrackTitle()
+
             requestUiUpdate()
+        }
+    }
+
+
+    private fun onTrackChanged() {
+        currentTrackChangeId = trackChangeCounter.incrementAndGet()
+        needsFullUiUpdate = true
+        currentAlbumArt = null
+    }
+
+    private fun scheduleAlbumArtRetry(capturedTrackId: Long) {
+        albumArtRetryJob?.cancel()
+        albumArtRetryJob = mainScope.launch {
+            repeat(ALBUM_ART_RETRY_COUNT) {
+                delay(ALBUM_ART_RETRY_INTERVAL_MS)
+                if (currentTrackChangeId != capturedTrackId) return@launch
+
+                val metadata = mediaSessionHelper.mediaMetadata.value
+                val art =
+                    metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+                        ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART)
+                        ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
+
+                if (art != null) {
+                    currentAlbumArt = art
+                    requestUiUpdate()
+                    return@launch
+                }
+            }
         }
     }
 
@@ -195,11 +300,24 @@ class OnGoingActionProgressController(
         }
     }
 
-    private fun updateTrackTitle() {
-        val metadata: MediaMetadata? = mediaSessionHelper.getCurrentMediaMetadata()
-        currentTrackTitle = metadata
-            ?.getString(MediaMetadata.METADATA_KEY_TITLE)
-            ?.takeIf { it.isNotBlank() }
+    private fun updateTrackMetadata() {
+        val metadata = mediaSessionHelper.getCurrentMediaMetadata()
+        currentTrackTitle = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf { it.isNotBlank() }
+        currentArtistName = (metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
+            ?: metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST))?.takeIf { it.isNotBlank() }
+
+        currentAlbumArt = mediaSessionHelper.getMediaBitmap()
+
+        val appIcon = mediaSessionHelper.getMediaAppIcon()
+        if (appIcon != null) currentIcon = appIcon
+        val pkg = mediaSessionHelper.getMediaControllerPlaybackState()?.extras?.getString("package")
+            ?: trackedPackageName
+        if (!pkg.isNullOrEmpty()) {
+            currentAppLabel = try {
+                val pm = context.packageManager
+                pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+            } catch (_: Exception) { pkg.substringAfterLast('.') }
+        }
     }
 
     private fun publish(state: ProgressState) {
@@ -222,13 +340,10 @@ class OnGoingActionProgressController(
 
     private fun requestUiUpdate() {
         val now = System.currentTimeMillis()
-
         uiUpdateJob?.cancel()
         uiUpdateJob = mainScope.launch {
             val elapsed = now - lastUpdateTime
-            if (elapsed <= DEBOUNCE_DELAY_MS) {
-                delay(DEBOUNCE_DELAY_MS)
-            }
+            if (elapsed <= DEBOUNCE_DELAY_MS) delay(DEBOUNCE_DELAY_MS)
             lastUpdateTime = System.currentTimeMillis()
             updateViews()
         }
@@ -256,23 +371,25 @@ class OnGoingActionProgressController(
                     progress = 0,
                     maxProgress = 0,
                     iconBitmap = null,
+                    albumArtBitmap = null,
                     packageName = null,
                     isCompactMode = false,
                     showMediaControls = false,
                     isMediaPlaying = false,
                     trackTitle = null,
+                    artistName = null,
+                    appLabel = null,
+                    trackChangeId = currentTrackChangeId,
                 )
             )
             return
         }
 
         val isCompact = isCompactModeEnabled && !isExpanded
+        val density = context.resources.displayMetrics.density
 
-        val iconSizePx = if (isCompact) {
-            (14f * context.resources.displayMetrics.density).toInt() * 2
-        } else {
-            (16f * context.resources.displayMetrics.density).toInt() * 2
-        }
+        val iconSizePx = if (isCompact) (14f * density).toInt() * 2
+                         else (16f * density).toInt() * 2
 
         val currentIconBitmap = try {
             currentIcon?.let { drawable ->
@@ -282,14 +399,17 @@ class OnGoingActionProgressController(
                     config = Bitmap.Config.ARGB_8888
                 ).asImageBitmap()
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to convert icon to bitmap", e)
-            null
+        } catch (e: Exception) { Log.e(TAG, "Failed to convert icon to bitmap", e); null }
+
+        val albumArtSnapshot: Bitmap? = if (!isCompact && hasMediaSession) currentAlbumArt else null
+        val albumArtBitmap: ImageBitmap? = albumArtSnapshot?.let {
+            try {
+                val size = (56f * density).toInt()
+                Bitmap.createScaledBitmap(it, size, size, true).asImageBitmap()
+            } catch (e: Exception) { null }
         }
 
         val isMediaPlaying = showMediaProgress && mediaSessionHelper.isMediaPlaying()
-
-        val trackTitle = if (!isCompact && hasMediaSession) currentTrackTitle else null
 
         publish(
             ProgressState(
@@ -297,11 +417,15 @@ class OnGoingActionProgressController(
                 progress = currentProgress,
                 maxProgress = currentProgressMax,
                 iconBitmap = currentIconBitmap,
+                albumArtBitmap = albumArtBitmap,
                 packageName = trackedPackageName,
                 isCompactMode = isCompact,
                 showMediaControls = isMenuVisible,
                 isMediaPlaying = isMediaPlaying,
-                trackTitle = trackTitle,
+                trackTitle = if (!isCompact && hasMediaSession) currentTrackTitle else null,
+                artistName = if (!isCompact && hasMediaSession) currentArtistName else null,
+                appLabel   = if (!isCompact && hasMediaSession) currentAppLabel   else null,
+                trackChangeId = currentTrackChangeId,
             )
         )
     }
@@ -376,42 +500,15 @@ class OnGoingActionProgressController(
         val totalDuration = mediaSessionHelper.getTotalDuration()
         val playbackState = mediaSessionHelper.getMediaControllerPlaybackState()
         val pos = playbackState?.position ?: 0L
-
-        currentProgress = pos.toInt()
+        currentProgress    = pos.toInt()
         currentProgressMax = totalDuration.toInt().takeIf { it > 0 } ?: 100
-
         updateProgressState()
     }
 
     private fun updateMediaProgressFull() {
         if (mediaSessionHelper.isMediaPlaying()) ensureMediaLoopRunning() else stopMediaLoop()
-        updateTrackTitle()
-
-        val mediaAppIcon = mediaSessionHelper.getMediaAppIcon()
-        if (mediaAppIcon != null) {
-            currentIcon = mediaAppIcon
-            updateMediaProgressOnly()
-            return
-        }
-
-        val playbackState = mediaSessionHelper.getMediaControllerPlaybackState()
-        val pkg = playbackState?.extras?.getString("package")
-
-        if (pkg.isNullOrEmpty()) {
-            setDefaultMediaIcon()
-            updateMediaProgressOnly()
-            return
-        }
-
-        loadIcon(pkg) { drawable ->
-            if (drawable != null) {
-                currentIcon = drawable
-            } else {
-                setDefaultMediaIcon()
-            }
-            updateProgressState()
-        }
-
+        updateTrackMetadata()
+        if (currentIcon == null) setDefaultMediaIcon()
         updateMediaProgressOnly()
     }
 
@@ -421,7 +518,6 @@ class OnGoingActionProgressController(
         val totalDuration = mediaSessionHelper.getTotalDuration()
         val playbackState = mediaSessionHelper.getMediaControllerPlaybackState()
         val pos = playbackState?.position ?: 0L
-
         currentProgress = pos.toInt()
         currentProgressMax = totalDuration.toInt().takeIf { it > 0 } ?: 100
 
@@ -438,10 +534,11 @@ class OnGoingActionProgressController(
         }
 
         loadIcon(pkg) { drawable ->
-            if (drawable != null) {
-                currentIcon = drawable
+            currentIcon = if (drawable != null) {
+                drawable
             } else {
                 setDefaultMediaIconCompact()
+                null
             }
             updateProgressState()
         }
@@ -451,9 +548,7 @@ class OnGoingActionProgressController(
         currentIcon = context.resources.getDrawable(R.drawable.ic_default_music_icon, context.theme)
     }
 
-    private fun setDefaultMediaIconCompact() {
-        currentIcon = context.resources.getDrawable(R.drawable.ic_default_music_icon, context.theme)
-    }
+    private fun setDefaultMediaIconCompact() = setDefaultMediaIcon()
 
     private fun updateNotificationProgress() {
         if (!isEnabled || !isTrackingProgress) {
@@ -492,14 +587,12 @@ class OnGoingActionProgressController(
             onLoaded(it)
             return
         }
-
         if (inFlightIconLoads.containsKey(packageName)) return
 
         val job = mainScope.launch {
             val drawable = withContext(bgDispatcher) {
                 fetchPackageIcon(packageName)
             }
-
             val sizePx = (24f * context.resources.displayMetrics.density).toInt()
             drawable.setBounds(0, 0, sizePx, sizePx)
 
@@ -553,7 +646,6 @@ class OnGoingActionProgressController(
 
         val timedOut = System.currentTimeMillis() - lastProgressUpdateTime > PROGRESS_TIMEOUT_MS
         val finished = currentProgressMax > 0 && currentProgress >= currentProgressMax
-
         if (timedOut && finished) {
             clearProgressTracking()
         }
@@ -562,12 +654,10 @@ class OnGoingActionProgressController(
     private fun updateProgressIfNeeded(sbn: StatusBarNotification) {
         if (!isTrackingProgress) return
         if (sbn.key != trackedNotificationKey) return
-
         if (!hasProgress(sbn.notification)) {
             clearProgressTracking()
             return
         }
-
         lastProgressUpdateTime = System.currentTimeMillis()
         extractProgress(sbn.notification)
         requestUiUpdate()
@@ -592,19 +682,13 @@ class OnGoingActionProgressController(
 
     fun onInteraction() {
         if (isCompactModeEnabled && !isExpanded) {
-            vibrator.vibrate(HAPTIC_EXPAND)
-            expandCompactView()
-            return
+            vibrator.vibrate(HAPTIC_EXPAND); expandCompactView(); return
         }
-
+        vibrator.vibrate(HAPTIC_POPUP)
         if (isMediaSessionActiveForChip()) {
-            vibrator.vibrate(HAPTIC_POPUP)
             isMenuVisible = !isMenuVisible
             if (isMenuVisible) collapseMediaControlsWithDelay()
-        } else {
-            vibrator.vibrate(HAPTIC_POPUP)
-            openTrackedApp()
-        }
+        } else openTrackedApp()
         updateProgressState()
     }
 
@@ -615,8 +699,7 @@ class OnGoingActionProgressController(
 
     fun onDoubleTap() {
         if (isMediaSessionActiveForChip()) {
-            vibrator.vibrate(HAPTIC_PLAYPAUSE)
-            toggleMediaPlaybackState()
+            vibrator.vibrate(HAPTIC_PLAYPAUSE); toggleMediaPlaybackState()
         }
     }
 
@@ -633,6 +716,12 @@ class OnGoingActionProgressController(
             2 -> skipToNextTrack()
         }
         collapseMediaControlsWithDelay()
+    }
+
+    fun onSeek(fraction: Float) {
+        val duration = mediaSessionHelper.getTotalDuration()
+        if (duration <= 0) return
+        mediaSessionHelper.seekTo((fraction * duration).toLong().coerceIn(0L, duration))
     }
 
     fun collapseMediaControlsWithDelay() {
@@ -662,13 +751,11 @@ class OnGoingActionProgressController(
             Log.w(TAG, "No tracked package available")
             return
         }
-
         val launchIntent = context.packageManager.getLaunchIntentForPackage(pkg)
         if (launchIntent == null) {
             Log.w(TAG, "No launch intent for package: $pkg")
             return
         }
-
         launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(launchIntent)
     }
@@ -692,27 +779,18 @@ class OnGoingActionProgressController(
     override fun onNotificationPosted(
         sbn: StatusBarNotification?,
         rankingMap: NotificationListenerService.RankingMap?
-    ) {
-        if (sbn == null) return
-        mainScope.launch { handleNotificationPosted(sbn) }
-    }
+    ) { if (sbn == null) return; mainScope.launch { handleNotificationPosted(sbn) } }
 
     override fun onNotificationRemoved(
         sbn: StatusBarNotification?,
         rankingMap: NotificationListenerService.RankingMap?
-    ) {
-        if (sbn == null) return
-        mainScope.launch { handleNotificationRemoved(sbn) }
-    }
+    ) { if (sbn == null) return; mainScope.launch { handleNotificationRemoved(sbn) } }
 
     override fun onNotificationRemoved(
         sbn: StatusBarNotification?,
         rankingMap: NotificationListenerService.RankingMap?,
         reason: Int
-    ) {
-        if (sbn == null) return
-        mainScope.launch { handleNotificationRemoved(sbn) }
-    }
+    ) { if (sbn == null) return; mainScope.launch { handleNotificationRemoved(sbn) } }
 
     override fun onNotificationRankingUpdate(rankingMap: NotificationListenerService.RankingMap?) = Unit
     override fun onNotificationsInitialized() = Unit
@@ -720,15 +798,14 @@ class OnGoingActionProgressController(
     private fun handleNotificationPosted(sbn: StatusBarNotification) {
         if (!isEnabled) return
         val notification = sbn.notification ?: return
-
         val hasValidProgress = hasProgress(notification)
         val currentKey = trackedNotificationKey
-
         if (!hasValidProgress) {
-            if (currentKey != null && currentKey == sbn.key) clearProgressTracking()
+            if (currentKey != null && currentKey == sbn.key) {
+                clearProgressTracking()
+            }
             return
         }
-
         if (!isTrackingProgress) {
             trackProgress(sbn)
         } else if (sbn.key == currentKey) {
@@ -738,12 +815,10 @@ class OnGoingActionProgressController(
 
     private fun handleNotificationRemoved(sbn: StatusBarNotification) {
         if (!isTrackingProgress) return
-
         if (sbn.key == trackedNotificationKey) {
             clearProgressTracking()
             return
         }
-
         if (sbn.packageName == trackedPackageName) {
             val current = trackedNotificationKey?.let { findNotificationByKey(it) }
             if (current == null || !hasProgress(current.notification)) {
@@ -796,17 +871,15 @@ class OnGoingActionProgressController(
             UserHandle.USER_CURRENT
         ) == 1
 
-        if (wasEnabled != isEnabled || wasShowingMedia != showMediaProgress || wasCompactMode != isCompactModeEnabled) {
-            needsFullUiUpdate = true
-            isExpanded = false
+        if (wasEnabled != isEnabled || wasShowingMedia != showMediaProgress ||
+                wasCompactMode != isCompactModeEnabled) {
+            needsFullUiUpdate = true; isExpanded = false
         }
-
         requestUiUpdate()
     }
 
     fun destroy() {
         isViewAttached = false
-
         settingsObserver.unregister()
         keyguardStateController.removeCallback(this)
         headsUpManager.removeListener(this)
@@ -819,20 +892,21 @@ class OnGoingActionProgressController(
         compactCollapseJob?.cancel()
         menuCollapseJob?.cancel()
         pausedStaleJob?.cancel()
+        albumArtRetryJob?.cancel()
 
         iconCache.clear()
         inFlightIconLoads.values.forEach { it.cancel() }
         inFlightIconLoads.clear()
 
-        currentIcon = null
-        currentTrackTitle = null
+        currentIcon = null; currentTrackTitle = null; currentArtistName = null
+        currentAppLabel = null; currentAlbumArt = null
         mainScope.cancel()
     }
 
     companion object {
         private const val TAG = "OngoingActionProgressController"
 
-        private const val ONGOING_ACTION_CHIP_ENABLED = Settings.System.ONGOING_ACTION_CHIP
+        private const val ONGOING_ACTION_CHIP_ENABLED  = Settings.System.ONGOING_ACTION_CHIP
         private const val ONGOING_MEDIA_PROGRESS = Settings.System.ONGOING_MEDIA_PROGRESS
         private const val ONGOING_COMPACT_MODE_ENABLED = Settings.System.ONGOING_COMPACT_MODE
 
@@ -840,23 +914,20 @@ class OnGoingActionProgressController(
         private const val DEBOUNCE_DELAY_MS = 150L
         private const val STALE_PROGRESS_CHECK_INTERVAL_MS = 5000L
         private const val PROGRESS_TIMEOUT_MS = 30000L
-
         private const val COMPACT_COLLAPSE_TIMEOUT_MS = 10_000L
-
         private const val MENU_COLLAPSE_TIMEOUT_MS = 5_000L
-
         private const val PAUSED_STALE_GRACE_MS = 20_000L
 
-        private val HAPTIC_EXPAND =
-            VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK)
-        private val HAPTIC_POPUP =
-            VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK)
-        private val HAPTIC_PLAYPAUSE =
-            VibrationEffect.createPredefined(VibrationEffect.EFFECT_DOUBLE_CLICK)
-        private val HAPTIC_LONG =
-            VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK)
-        private val HAPTIC_CLICK =
-            VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK)
+        private const val ALBUM_ART_RETRY_COUNT = 5
+        private const val ALBUM_ART_RETRY_INTERVAL_MS = 300L
+
+        private const val POSITION_RESET_THRESHOLD_MS = 1_500L
+
+        private val HAPTIC_EXPAND = VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK)
+        private val HAPTIC_POPUP = VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK)
+        private val HAPTIC_PLAYPAUSE = VibrationEffect.createPredefined(VibrationEffect.EFFECT_DOUBLE_CLICK)
+        private val HAPTIC_LONG = VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK)
+        private val HAPTIC_CLICK = VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK)
     }
 }
 
@@ -866,9 +937,13 @@ data class ProgressState(
     val progress: Int = 0,
     val maxProgress: Int = 0,
     val iconBitmap: ImageBitmap? = null,
+    val albumArtBitmap: ImageBitmap? = null,
     val packageName: String? = null,
     val isCompactMode: Boolean = false,
     val showMediaControls: Boolean = false,
     val isMediaPlaying: Boolean = false,
     val trackTitle: String? = null,
+    val artistName: String? = null,
+    val appLabel: String? = null,
+    val trackChangeId: Long = 0L,
 )
