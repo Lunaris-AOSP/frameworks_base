@@ -1,7 +1,7 @@
 /*
  * SPDX-FileCopyrightText: VoltageOS
  * SPDX-FileCopyrightText: crDroid Android Project
- * SPDX-FileCopyrightText: Lunaris AOSP 
+ * SPDX-FileCopyrightText: Lunaris AOSP
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -31,15 +31,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,9 +50,9 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
@@ -88,7 +86,6 @@ fun OngoingActionProgress(
 ) {
     val state by controller.state.collectAsState()
 
-    val isDark = isSystemInDarkTheme()
     val accent = MaterialTheme.colorScheme.primary
     val chipShape = RoundedCornerShape(24.dp)
 
@@ -239,8 +236,12 @@ fun OngoingActionProgress(
                         )
 
                         MediaControlButton(
-                            iconRes = R.drawable.ic_media_control_pause,
-                            contentDescription = "Pause",
+                            iconRes = if (state.isMediaPlaying) {
+                                R.drawable.ic_media_control_pause
+                            } else {
+                                R.drawable.ic_media_control_play
+                            },
+                            contentDescription = if (state.isMediaPlaying) "Pause" else "Play",
                             onClick = { controller.onMediaAction(1) }
                         )
 
@@ -267,7 +268,7 @@ private fun MusicChip(
 
     Row(
         modifier = Modifier
-            .width(85.dp)
+            .widthIn(min = 55.dp, max = 85.dp)
             .padding(start = 4.dp)
             .clip(chipShape)
             .background(musicChipBg)
@@ -321,10 +322,7 @@ private fun Modifier.fadingEdge(brush: Brush) = this
     .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
     .drawWithContent {
         drawContent()
-        drawRect(
-            brush = brush,
-            blendMode = BlendMode.DstIn
-        )
+        drawRect(brush = brush, blendMode = BlendMode.DstIn)
     }
 
 private fun progressFraction(state: ProgressState): Float =
@@ -393,6 +391,7 @@ class OnGoingActionProgressComposeController(
                     packageName = s.packageName,
                     isCompactMode = s.isCompactMode,
                     showMediaControls = s.showMediaControls,
+                    isMediaPlaying = s.isMediaPlaying,
                     trackTitle = s.trackTitle,
                 )
             }
