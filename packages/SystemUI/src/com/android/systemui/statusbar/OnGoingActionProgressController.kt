@@ -353,6 +353,7 @@ class OnGoingActionProgressController(
         var isVisible = !isForceHidden && !headsUpPinned && !isSystemChipVisible
         val hasMediaSession = isMediaSessionActiveForChip()
         val hasNotificationProgress = isEnabled && isTrackingProgress
+        val isCompact = isCompactModeEnabled && !isExpanded
 
         isVisible = isVisible && (hasMediaSession || hasNotificationProgress)
 
@@ -365,7 +366,7 @@ class OnGoingActionProgressController(
                     iconBitmap = null,
                     albumArtBitmap = null,
                     packageName = null,
-                    isCompactMode = false,
+                    isCompactMode = isCompact,
                     showMediaControls = false,
                     isMediaPlaying = false,
                     trackTitle = null,
@@ -377,7 +378,6 @@ class OnGoingActionProgressController(
             return
         }
 
-        val isCompact = isCompactModeEnabled && !isExpanded
         val density = context.resources.displayMetrics.density
 
         val iconSizePx = if (isCompact) (14f * density).toInt() * 2
