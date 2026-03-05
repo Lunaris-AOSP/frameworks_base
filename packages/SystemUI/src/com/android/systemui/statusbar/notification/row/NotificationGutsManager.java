@@ -805,6 +805,10 @@ public class NotificationGutsManager implements NotifGutsViewManager, CoreStarta
         }
 
         final ExpandableNotificationRow row = (ExpandableNotificationRow) view;
+        if (affectedByWorkProfileLock(row)) {
+            return false;
+        }
+
         if (row.isNotificationRowLongClickable()) {
             view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
         }
@@ -873,6 +877,18 @@ public class NotificationGutsManager implements NotifGutsViewManager, CoreStarta
         };
         guts.post(mOpenRunnable);
         return true;
+    }
+
+    boolean affectedByWorkProfileLock(ExpandableNotificationRow row) {
+        StatusBarNotification sbn = NotificationBundleUi.isEnabled()
+                ? (row.getEntryAdapter() != null ? row.getEntryAdapter().getSbn() : null)
+                : (row.getEntryLegacy() != null ? row.getEntryLegacy().getSbn() : null);
+
+        if (sbn == null) return false;
+
+        int userId = sbn.getNormalizedUserId();
+        return mUserManager.isManagedProfile(userId)
+                && mLockscreenUserManager.isLockscreenPublicMode(userId);
     }
 
     /**
