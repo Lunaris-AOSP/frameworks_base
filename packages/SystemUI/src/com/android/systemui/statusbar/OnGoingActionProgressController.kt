@@ -76,6 +76,7 @@ class OnGoingActionProgressController(
     private var headsUpPinned = false
     private var isEnabled = false
     private var isCompactModeEnabled = false
+    private var useWaveformSeekBar = false
 
     private var currentProgress = 0
     private var currentProgressMax = 0
@@ -127,7 +128,8 @@ class OnGoingActionProgressController(
                 if (uri == null) return
                 if (uri == Settings.System.getUriFor(ONGOING_ACTION_CHIP_ENABLED) ||
                     uri == Settings.System.getUriFor(ONGOING_MEDIA_PROGRESS) ||
-                    uri == Settings.System.getUriFor(ONGOING_COMPACT_MODE_ENABLED)) {
+                    uri == Settings.System.getUriFor(ONGOING_COMPACT_MODE_ENABLED) ||
+                    uri == Settings.System.getUriFor(Settings.System.MEDIA_WAVEFORM_SEEKBAR)) {
                     updateSettings()
                 }
             }
@@ -147,6 +149,12 @@ class OnGoingActionProgressController(
                 )
                 contentResolver.registerContentObserver(
                     Settings.System.getUriFor(ONGOING_COMPACT_MODE_ENABLED),
+                    false,
+                    this,
+                    UserHandle.USER_ALL
+                )
+                contentResolver.registerContentObserver(
+                    Settings.System.getUriFor(Settings.System.MEDIA_WAVEFORM_SEEKBAR),
                     false,
                     this,
                     UserHandle.USER_ALL
@@ -248,7 +256,6 @@ class OnGoingActionProgressController(
             requestUiUpdate()
         }
     }
-
 
     private fun onTrackChanged() {
         currentTrackChangeId = trackChangeCounter.incrementAndGet()
@@ -373,6 +380,7 @@ class OnGoingActionProgressController(
                     artistName = null,
                     appLabel = null,
                     trackChangeId = currentTrackChangeId,
+                    useWaveformSeekBar = useWaveformSeekBar,
                 )
             )
             return
@@ -418,6 +426,7 @@ class OnGoingActionProgressController(
                 artistName = if (!isCompact && hasMediaSession) currentArtistName else null,
                 appLabel   = if (!isCompact && hasMediaSession) currentAppLabel   else null,
                 trackChangeId = currentTrackChangeId,
+                useWaveformSeekBar = useWaveformSeekBar,
             )
         )
     }
@@ -860,6 +869,7 @@ class OnGoingActionProgressController(
         val wasEnabled = isEnabled
         val wasShowingMedia = showMediaProgress
         val wasCompactMode = isCompactModeEnabled
+        val wasWaveform = useWaveformSeekBar
 
         isEnabled = Settings.System.getIntForUser(
             contentResolver,
@@ -882,9 +892,20 @@ class OnGoingActionProgressController(
             UserHandle.USER_CURRENT
         ) == 1
 
+        useWaveformSeekBar = Settings.System.getIntForUser(
+            contentResolver,
+            Settings.System.MEDIA_WAVEFORM_SEEKBAR,
+            0,
+            UserHandle.USER_CURRENT
+        ) == 1
+
         if (wasEnabled != isEnabled || wasShowingMedia != showMediaProgress ||
-                wasCompactMode != isCompactModeEnabled) {
-            needsFullUiUpdate = true; isExpanded = false
+                wasCompactMode != isCompactModeEnabled || wasWaveform != useWaveformSeekBar) {
+            needsFullUiUpdate = true
+            if (wasEnabled != isEnabled || wasShowingMedia != showMediaProgress ||
+                    wasCompactMode != isCompactModeEnabled) {
+                isExpanded = false
+            }
         }
         requestUiUpdate()
     }
@@ -956,4 +977,5 @@ data class ProgressState(
     val artistName: String? = null,
     val appLabel: String? = null,
     val trackChangeId: Long = 0L,
+    val useWaveformSeekBar: Boolean = false,
 )

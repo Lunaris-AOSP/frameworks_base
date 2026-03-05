@@ -8,7 +8,11 @@
 package com.android.systemui.statusbar
 
 import android.content.Context
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
 import android.util.Log
+import android.util.TypedValue
+import android.widget.SeekBar
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -46,7 +50,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,7 +63,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -79,6 +81,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import com.android.internal.graphics.ColorUtils
+import com.android.systemui.media.controls.ui.binder.SeekBarObserver
+import com.android.systemui.media.controls.ui.drawable.SquigglyProgress
 import com.android.systemui.media.controls.ui.view.WaveformSeekBar
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.VibratorHelper
@@ -377,12 +382,21 @@ private fun MiniMediaPlayer(
                                 fontSize = 9.sp, fontWeight = FontWeight.Medium))
                 }
 
-                WaveformSeekBarCompose(
-                    progressFraction = progressFraction(state),
-                    isPlaying = state.isMediaPlaying,
-                    onSeek = onSeek,
-                    modifier = Modifier.fillMaxWidth().height(28.dp)
-                )
+                if (state.useWaveformSeekBar) {
+                    WaveformSeekBarCompose(
+                        progressFraction = progressFraction(state),
+                        isPlaying = state.isMediaPlaying,
+                        onSeek = onSeek,
+                        modifier = Modifier.fillMaxWidth().height(28.dp)
+                    )
+                } else {
+                    SquigglySeekBarCompose(
+                        progressFraction = progressFraction(state),
+                        isPlaying = state.isMediaPlaying,
+                        onSeek = onSeek,
+                        modifier = Modifier.fillMaxWidth().height(28.dp)
+                    )
+                }
             }
 
             Row(
@@ -414,6 +428,89 @@ private fun MiniMediaPlayer(
 }
 
 @Composable
+private fun SquigglySeekBarCompose(
+    progressFraction: Float,
+    isPlaying: Boolean,
+    onSeek: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var isScrubbing by remember { mutableStateOf(false) }
+
+    AndroidView(
+        factory = { ctx ->
+            SeekBar(ctx).apply {
+                max = 10_000
+                splitTrack = false
+
+                val pillThumb = ctx.createQsPillThumb()
+                thumb = pillThumb
+                thumbOffset = pillThumb.intrinsicWidth / 2
+
+                val layer = (progressDrawable?.mutate() as? LayerDrawable)
+                if (layer != null) {
+                    layer.findDrawableByLayerId(android.R.id.background)
+                        ?.mutate()
+                        ?.setTint(ColorUtils.setAlphaComponent(android.graphics.Color.WHITE, 90))
+
+                    layer.findDrawableByLayerId(android.R.id.secondaryProgress)
+                        ?.mutate()
+                        ?.setTint(ColorUtils.setAlphaComponent(android.graphics.Color.WHITE, 60))
+
+                    val squiggle = SquigglyProgress().apply {
+                        waveLength = ctx.resources.getDimensionPixelSize(
+                            R.dimen.qs_media_seekbar_progress_wavelength).toFloat()
+                        lineAmplitude = ctx.resources.getDimensionPixelSize(
+                            R.dimen.qs_media_seekbar_progress_amplitude).toFloat()
+                        phaseSpeed = ctx.resources.getDimensionPixelSize(
+                            R.dimen.qs_media_seekbar_progress_phase).toFloat()
+                        strokeWidth = ctx.resources.getDimensionPixelSize(
+                            R.dimen.qs_media_seekbar_progress_stroke_width).toFloat()
+                        setTint(android.graphics.Color.WHITE)
+                        drawRemainingLine = false
+                        transitionEnabled = false
+                        animate = false
+                    }
+                    layer.setDrawableByLayerId(android.R.id.progress, squiggle)
+                    progressDrawable = layer
+                }
+
+                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(sb: SeekBar?, v: Int, fromUser: Boolean) {
+                        if (fromUser) onSeek(v / 10_000f)
+                    }
+                    override fun onStartTrackingTouch(sb: SeekBar?) { isScrubbing = true }
+                    override fun onStopTrackingTouch(sb: SeekBar?) { isScrubbing = false }
+                })
+            }
+        },
+        update = { bar ->
+            val target = (progressFraction * 10_000f).toInt().coerceIn(0, 10_000)
+            if (!isScrubbing) {
+                if (target <= SeekBarObserver.RESET_ANIMATION_THRESHOLD_MS &&
+                        bar.progress > SeekBarObserver.RESET_ANIMATION_THRESHOLD_MS) {
+                    bar.progress = target
+                } else if (bar.progress != target) {
+                    bar.progress = target
+                }
+            }
+
+            val alpha = if (isPlaying) 255 else (255 * 0.55f).toInt()
+            bar.thumb?.alpha = alpha
+
+            val squiggle = (bar.progressDrawable as? LayerDrawable)
+                ?.findDrawableByLayerId(android.R.id.progress) as? SquigglyProgress
+            squiggle?.apply {
+                setTint(android.graphics.Color.WHITE)
+                setAlpha(alpha)
+                animate = isPlaying && !isScrubbing
+            }
+            (bar.progressDrawable as? LayerDrawable)?.alpha = alpha
+        },
+        modifier = modifier
+    )
+}
+
+@Composable
 private fun WaveformSeekBarCompose(
     progressFraction: Float,
     isPlaying: Boolean,
@@ -431,8 +528,8 @@ private fun WaveformSeekBarCompose(
                 setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
                     override fun onProgressChanged(sb: android.widget.SeekBar?,
                         v: Int, fromUser: Boolean) { if (fromUser) onSeek(v / 10_000f) }
-                    override fun onStartTrackingTouch(sb: android.widget.SeekBar?) { isScrubbing = true  }
-                    override fun onStopTrackingTouch(sb: android.widget.SeekBar?)  { isScrubbing = false }
+                    override fun onStartTrackingTouch(sb: android.widget.SeekBar?) { isScrubbing = true }
+                    override fun onStopTrackingTouch(sb: android.widget.SeekBar?) { isScrubbing = false }
                 })
             }
         },
@@ -442,8 +539,8 @@ private fun WaveformSeekBarCompose(
                 if (bar.progress != target) bar.progress = target
             }
             when {
-                isPlaying && !bar.isPlaying  -> bar.startWaveAnimation()
-                !isPlaying && bar.isPlaying  -> bar.stopWaveAnimation()
+                isPlaying && !bar.isPlaying -> bar.startWaveAnimation()
+                !isPlaying && bar.isPlaying -> bar.stopWaveAnimation()
             }
         },
         modifier = modifier
@@ -507,6 +604,39 @@ private fun MusicChip(
     }
 }
 
+private fun Context.createQsPillThumb(): GradientDrawable {
+    val wPx =
+        TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP,
+            4f,
+            resources.displayMetrics
+        )
+        .toInt()
+        .coerceAtLeast(1)
+    val hPx =
+        TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP,
+                16f,
+                resources.displayMetrics
+            )
+            .toInt()
+            .coerceAtLeast(1)
+
+    val radiusPx =
+        TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP,
+            16f,
+            resources.displayMetrics
+        )
+
+    return GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        setSize(wPx, hPx)
+        cornerRadius = radiusPx
+        setColor(android.graphics.Color.WHITE)
+    }
+}
+
 private fun Modifier.fadingEdge(brush: Brush) = this
     .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
     .drawWithContent { drawContent(); drawRect(brush = brush, blendMode = BlendMode.DstIn) }
@@ -567,6 +697,7 @@ class OnGoingActionProgressComposeController(
                     artistName = s.artistName,
                     appLabel = s.appLabel,
                     trackChangeId = s.trackChangeId,
+                    useWaveformSeekBar = s.useWaveformSeekBar,
                 )
             }
         }
