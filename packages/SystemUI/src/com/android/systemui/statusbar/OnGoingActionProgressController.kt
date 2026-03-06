@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
 import androidx.palette.graphics.Palette
+import com.android.internal.graphics.ColorUtils
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.notification.headsup.HeadsUpManager
 import com.android.systemui.statusbar.notification.headsup.OnHeadsUpChangedListener
@@ -339,15 +340,7 @@ class OnGoingActionProgressController(
             try {
                 if (bitmap.isRecycled || bitmap.width <= 0 || bitmap.height <= 0) return@withContext null
 
-                val safeBitmap = if (bitmap.config == Bitmap.Config.HARDWARE) {
-                    bitmap.copy(Bitmap.Config.ARGB_8888, false)
-                } else bitmap
-
-                val palette = try {
-                    Palette.from(safeBitmap).generate()
-                } finally {
-                    if (safeBitmap !== bitmap) safeBitmap.recycle()
-                }
+                val palette = Palette.from(bitmap).generate()
 
                 val candidates = listOfNotNull(
                     palette.vibrantSwatch,
