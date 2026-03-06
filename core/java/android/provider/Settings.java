@@ -7859,6 +7859,11 @@ public final class Settings {
         /**
          * @hide
          */
+        public static final String ONGOING_CHIP_COLOR_MODE = "ongoing_chip_color_mode";
+
+        /**
+         * @hide
+         */
         public static final String ONGOING_COMPACT_MODE = "ongoing_compact_mode";
 
         /**
