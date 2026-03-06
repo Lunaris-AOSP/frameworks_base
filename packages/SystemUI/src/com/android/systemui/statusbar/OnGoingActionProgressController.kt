@@ -88,7 +88,6 @@ class OnGoingActionProgressController(
 
     private var currentTrackTitle: String? = null
     private var currentArtistName: String? = null
-    private var currentAppLabel: String? = null
     private var currentAlbumArt: Bitmap? = null
 
     private var currentChipBgColor: Int? = null
@@ -197,15 +196,6 @@ class OnGoingActionProgressController(
             val appIcon = mediaSessionHelper.getMediaAppIcon()
             if (appIcon != null) currentIcon = appIcon
 
-            val pkg = mediaSessionHelper.getMediaControllerPlaybackState()
-                ?.extras?.getString("package") ?: trackedPackageName
-            if (!pkg.isNullOrEmpty()) {
-                currentAppLabel = try {
-                    val pm = context.packageManager
-                    pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
-                } catch (_: Exception) { pkg.substringAfterLast('.') }
-            }
-
             requestUiUpdate()
         }
 
@@ -278,14 +268,6 @@ class OnGoingActionProgressController(
 
         val appIcon = mediaSessionHelper.getMediaAppIcon()
         if (appIcon != null) currentIcon = appIcon
-        val pkg = mediaSessionHelper.getMediaControllerPlaybackState()?.extras?.getString("package")
-            ?: trackedPackageName
-        if (!pkg.isNullOrEmpty()) {
-            currentAppLabel = try {
-                val pm = context.packageManager
-                pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
-            } catch (_: Exception) { pkg.substringAfterLast('.') }
-        }
     }
 
     private fun publish(state: ProgressState) {
@@ -443,7 +425,6 @@ class OnGoingActionProgressController(
                     isMediaPlaying = false,
                     trackTitle = null,
                     artistName = null,
-                    appLabel = null,
                     useWaveformSeekBar = useWaveformSeekBar,
                     chipBgColor = null,
                 )
@@ -477,7 +458,6 @@ class OnGoingActionProgressController(
         val isMediaPlaying = showMediaProgress && mediaSessionHelper.isMediaPlaying()
         val trackTitle = if (hasMediaSession) currentTrackTitle else null
         val artistName = if (hasMediaSession) currentArtistName else null
-        val appLabel = if (hasMediaSession) currentAppLabel else null
 
         if (hasMediaSession) {
             when (chipColorMode) {
@@ -511,7 +491,6 @@ class OnGoingActionProgressController(
                 isMediaPlaying = isMediaPlaying,
                 trackTitle = trackTitle,
                 artistName = artistName,
-                appLabel = appLabel,
                 useWaveformSeekBar = useWaveformSeekBar,
                 chipBgColor = resolvedChipBgColor,
             )
@@ -1043,7 +1022,7 @@ class OnGoingActionProgressController(
         inFlightIconLoads.clear()
 
         currentIcon = null; currentTrackTitle = null; currentArtistName = null
-        currentAppLabel = null; currentAlbumArt = null
+        currentAlbumArt = null
         mainScope.cancel()
     }
 
@@ -1089,7 +1068,6 @@ data class ProgressState(
     val isMediaPlaying: Boolean = false,
     val trackTitle: String? = null,
     val artistName: String? = null,
-    val appLabel: String? = null,
     val useWaveformSeekBar: Boolean = false,
     val chipBgColor: Int? = null,
 )
