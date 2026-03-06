@@ -707,7 +707,6 @@ class OnGoingActionProgressComposeController(
                     trackTitle = s.trackTitle,
                     artistName = s.artistName,
                     appLabel = s.appLabel,
-                    trackChangeId = s.trackChangeId,
                     useWaveformSeekBar = s.useWaveformSeekBar,
                     chipBgColor = s.chipBgColor,
                 )

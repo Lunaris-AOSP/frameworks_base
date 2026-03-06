@@ -1090,7 +1090,6 @@ data class ProgressState(
     val trackTitle: String? = null,
     val artistName: String? = null,
     val appLabel: String? = null,
-    val trackChangeId: Long = 0L,
     val useWaveformSeekBar: Boolean = false,
     val chipBgColor: Int? = null,
 )
