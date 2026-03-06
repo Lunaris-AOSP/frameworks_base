@@ -414,9 +414,13 @@ class OnGoingActionProgressController(
             }
         } else {
             val isMediaPlaying = showMediaProgress && mediaSessionHelper.isMediaPlaying()
-            if (isTrackingProgress && !isMediaPlaying && !hasMediaSession) {
+            if (isTrackingProgress && !isMediaPlaying) {
                 stopMediaLoop()
                 updateNotificationProgress()
+                if (hasMediaSession) {
+                    pauseStale = true
+                    needsFullUiUpdate = true
+                }
             } else if (hasMediaSession) {
                 if (needsFullUiUpdate) {
                     updateMediaProgressFull()
@@ -458,7 +462,7 @@ class OnGoingActionProgressController(
         val totalDuration = mediaSessionHelper.getTotalDuration()
         val playbackState = mediaSessionHelper.getMediaControllerPlaybackState()
         val pos = playbackState?.position ?: 0L
-        currentProgress    = pos.toInt()
+        currentProgress = pos.toInt()
         currentProgressMax = totalDuration.toInt().takeIf { it > 0 } ?: 100
         updateProgressState()
     }
@@ -492,11 +496,10 @@ class OnGoingActionProgressController(
         }
 
         loadIcon(pkg) { drawable ->
-            currentIcon = if (drawable != null) {
-                drawable
+            if (drawable != null) {
+                currentIcon = drawable
             } else {
                 setDefaultMediaIconCompact()
-                null
             }
             updateProgressState()
         }
@@ -506,7 +509,9 @@ class OnGoingActionProgressController(
         currentIcon = context.resources.getDrawable(R.drawable.ic_default_music_icon, context.theme)
     }
 
-    private fun setDefaultMediaIconCompact() = setDefaultMediaIcon()
+    private fun setDefaultMediaIconCompact() {
+        currentIcon = context.resources.getDrawable(R.drawable.ic_default_music_icon, context.theme)
+    }
 
     private fun updateNotificationProgress() {
         if (!isEnabled || !isTrackingProgress) {
@@ -663,11 +668,15 @@ class OnGoingActionProgressController(
             expandCompactView()
             collapseExpandViewWithDelay()
         }
-        vibrator.vibrate(HAPTIC_POPUP)
         if (isMediaSessionActiveForChip()) {
             isMenuVisible = !isMenuVisible
-            if (isMenuVisible) collapseMediaControlsWithDelay()
-        } else openTrackedApp()
+            if (isMenuVisible && currentAlbumArt == null) {
+                scheduleAlbumArtRetry()
+            }
+            collapseMediaControlsWithDelay()
+        } else {
+            openTrackedApp()
+        }
         updateProgressState()
     }
 
@@ -678,7 +687,8 @@ class OnGoingActionProgressController(
 
     fun onDoubleTap() {
         if (isMediaSessionActiveForChip()) {
-            vibrator.vibrate(HAPTIC_PLAYPAUSE); toggleMediaPlaybackState()
+            vibrator.vibrate(HAPTIC_DOUBLE)
+            toggleMediaPlaybackState()
         }
     }
 
@@ -781,9 +791,7 @@ class OnGoingActionProgressController(
         val hasValidProgress = hasProgress(notification)
         val currentKey = trackedNotificationKey
         if (!hasValidProgress) {
-            if (currentKey != null && currentKey == sbn.key) {
-                clearProgressTracking()
-            }
+            if (currentKey != null && currentKey == sbn.key) clearProgressTracking()
             return
         }
         if (!isTrackingProgress) {
@@ -914,11 +922,9 @@ class OnGoingActionProgressController(
 
         private const val POSITION_RESET_THRESHOLD_MS = 1_500L
 
-        private val HAPTIC_EXPAND = VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK)
-        private val HAPTIC_POPUP = VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK)
-        private val HAPTIC_PLAYPAUSE = VibrationEffect.createPredefined(VibrationEffect.EFFECT_DOUBLE_CLICK)
-        private val HAPTIC_LONG = VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK)
         private val HAPTIC_CLICK = VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK)
+        private val HAPTIC_DOUBLE = VibrationEffect.createPredefined(VibrationEffect.EFFECT_DOUBLE_CLICK)
+        private val HAPTIC_LONG = VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK)
     }
 }
 
