@@ -87,14 +87,7 @@ class OnGoingActionProgressController(
     private var currentAppLabel: String? = null
     private var currentAlbumArt: Bitmap? = null
 
-    private val trackChangeCounter = AtomicLong(0L)
-    private var currentTrackChangeId: Long = 0L
-
     private var lastObservedTitle: String? = null
-
-    private var lastActiveQueueItemId: Long = Long.MIN_VALUE
-    private var lastPlaybackPosition: Long  = 0L
-    private var lastPlaybackState: Int = -1
 
     private var isMenuVisible = false
     private var isSystemChipVisible = false
@@ -176,7 +169,7 @@ class OnGoingActionProgressController(
 
             val newTitle = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
             val isTitleChange = newTitle != lastObservedTitle
-            if (isTitleChange) {
+            if (isTitleChange || currentAlbumArt == null) {
                 lastObservedTitle = newTitle
                 onTrackChanged()
             }
@@ -185,18 +178,6 @@ class OnGoingActionProgressController(
             currentArtistName = (metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
                 ?: metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST))
                 ?.takeIf { it.isNotBlank() }
-
-            val freshArt =
-                metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
-                    ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART)
-                    ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
-
-            if (freshArt != null) {
-                currentAlbumArt = freshArt
-                albumArtRetryJob?.cancel()
-            } else if (isTitleChange) {
-                scheduleAlbumArtRetry(currentTrackChangeId)
-            }
 
             val appIcon = mediaSessionHelper.getMediaAppIcon()
             if (appIcon != null) currentIcon = appIcon
@@ -217,34 +198,7 @@ class OnGoingActionProgressController(
             needsFullUiUpdate = true
             pauseStale = false
             pausedStaleJob?.cancel()
-
-            val ps = mediaSessionHelper.playbackState.value
-            val currentQueueItemId = ps?.activeQueueItemId ?: Long.MIN_VALUE
-            val currentPosition    = ps?.position ?: 0L
-            val currentState       = ps?.state ?: -1
-
-            val queueItemChanged = currentQueueItemId != Long.MIN_VALUE &&
-                lastActiveQueueItemId != Long.MIN_VALUE &&
-                currentQueueItemId != lastActiveQueueItemId
-
-            val positionReset = lastPlaybackState == android.media.session.PlaybackState.STATE_PLAYING &&
-                currentState == android.media.session.PlaybackState.STATE_PLAYING &&
-                lastPlaybackPosition > POSITION_RESET_THRESHOLD_MS &&
-                currentPosition < POSITION_RESET_THRESHOLD_MS
-
-            lastActiveQueueItemId = currentQueueItemId
-            lastPlaybackPosition  = currentPosition
-            lastPlaybackState     = currentState
-
-            if (queueItemChanged || positionReset) {
-                currentAlbumArt = null
-                onTrackChanged()
-                scheduleAlbumArtRetry(currentTrackChangeId)
-                requestUiUpdate()
-            }
-
-            if (showMediaProgress &&
-                    mediaSessionHelper.isMediaSessionActive() &&
+            if (mediaSessionHelper.isMediaSessionActive() &&
                     !mediaSessionHelper.isMediaPlaying()) {
                 pausedStaleJob = mainScope.launch {
                     delay(PAUSED_STALE_GRACE_MS)
@@ -258,18 +212,15 @@ class OnGoingActionProgressController(
     }
 
     private fun onTrackChanged() {
-        currentTrackChangeId = trackChangeCounter.incrementAndGet()
         needsFullUiUpdate = true
         currentAlbumArt = null
+        scheduleAlbumArtRetry()
     }
 
-    private fun scheduleAlbumArtRetry(capturedTrackId: Long) {
+    private fun scheduleAlbumArtRetry() {
         albumArtRetryJob?.cancel()
         albumArtRetryJob = mainScope.launch {
             repeat(ALBUM_ART_RETRY_COUNT) {
-                delay(ALBUM_ART_RETRY_INTERVAL_MS)
-                if (currentTrackChangeId != capturedTrackId) return@launch
-
                 val metadata = mediaSessionHelper.mediaMetadata.value
                 val art =
                     metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
@@ -281,6 +232,7 @@ class OnGoingActionProgressController(
                     requestUiUpdate()
                     return@launch
                 }
+                delay(ALBUM_ART_RETRY_INTERVAL_MS)
             }
         }
     }
@@ -305,7 +257,7 @@ class OnGoingActionProgressController(
         currentArtistName = (metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
             ?: metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST))?.takeIf { it.isNotBlank() }
 
-        currentAlbumArt = mediaSessionHelper.getMediaBitmap()
+        scheduleAlbumArtRetry()
 
         val appIcon = mediaSessionHelper.getMediaAppIcon()
         if (appIcon != null) currentIcon = appIcon
@@ -379,7 +331,6 @@ class OnGoingActionProgressController(
                     trackTitle = null,
                     artistName = null,
                     appLabel = null,
-                    trackChangeId = currentTrackChangeId,
                     useWaveformSeekBar = useWaveformSeekBar,
                 )
             )
@@ -424,8 +375,7 @@ class OnGoingActionProgressController(
                 isMediaPlaying = isMediaPlaying,
                 trackTitle = if (!isCompact && hasMediaSession) currentTrackTitle else null,
                 artistName = if (!isCompact && hasMediaSession) currentArtistName else null,
-                appLabel   = if (!isCompact && hasMediaSession) currentAppLabel   else null,
-                trackChangeId = currentTrackChangeId,
+                appLabel   = if (!isCompact && hasMediaSession) currentAppLabel else null,
                 useWaveformSeekBar = useWaveformSeekBar,
             )
         )
