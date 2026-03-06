@@ -523,7 +523,7 @@ class OnGoingActionProgressController(
             }
         } else {
             val isMediaPlaying = showMediaProgress && mediaSessionHelper.isMediaPlaying()
-            if (isTrackingProgress && !isMediaPlaying) {
+            if (isTrackingProgress && !isMediaPlaying && !isMenuVisible) {
                 stopMediaLoop()
                 updateNotificationProgress()
                 if (hasMediaSession) {
