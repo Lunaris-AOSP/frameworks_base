@@ -69,6 +69,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
@@ -590,9 +591,14 @@ private fun MusicChip(
             Image(bmp, null, Modifier.size(15.dp).clip(RoundedCornerShape(4.dp)))
             Spacer(Modifier.width(4.dp))
         }
+        var chipAtMaxWidth by remember { mutableStateOf(false) }
+        val chipMaxWidthPx = with(androidx.compose.ui.platform.LocalDensity.current) { 85.dp.roundToPx() }
         Box(
-            Modifier.fadingEdge(
-                Brush.horizontalGradient(0.85f to Color.White, 1f to Color.Transparent))
+            if (chipAtMaxWidth)
+                Modifier.fadingEdge(
+                    Brush.horizontalGradient(0.85f to Color.White, 1f to Color.Transparent))
+            else
+                Modifier
         ) {
             Text(
                 text = state.trackTitle ?: "",
@@ -603,6 +609,7 @@ private fun MusicChip(
                 modifier = Modifier
                     .basicMarquee(initialDelayMillis = 15_000, repeatDelayMillis = 15_000)
                     .padding(start = 1.dp)
+                    .onSizeChanged { size -> chipAtMaxWidth = size.width >= chipMaxWidthPx }
             )
         }
     }
