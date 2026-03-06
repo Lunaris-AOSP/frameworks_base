@@ -278,6 +278,11 @@ class OnGoingActionProgressController(
     fun expandCompactView() {
         val wasExpanded = isExpanded
         isExpanded = true
+        if (wasExpanded != isExpanded) requestUiUpdate()
+    }
+
+    fun collapseExpandViewWithDelay() {
+        if (!isExpanded) return
         compactCollapseJob?.cancel()
         compactCollapseJob = mainScope.launch {
             delay(COMPACT_COLLAPSE_TIMEOUT_MS)
@@ -286,7 +291,6 @@ class OnGoingActionProgressController(
                 requestUiUpdate()
             }
         }
-        if (!wasExpanded) requestUiUpdate()
     }
 
     private fun requestUiUpdate() {
@@ -352,7 +356,7 @@ class OnGoingActionProgressController(
             }
         } catch (e: Exception) { Log.e(TAG, "Failed to convert icon to bitmap", e); null }
 
-        val albumArtSnapshot: Bitmap? = if (!isCompact && hasMediaSession) currentAlbumArt else null
+        val albumArtSnapshot: Bitmap? = if (hasMediaSession) currentAlbumArt else null
         val albumArtBitmap: ImageBitmap? = albumArtSnapshot?.let {
             try {
                 val size = (56f * density).toInt()
@@ -361,6 +365,9 @@ class OnGoingActionProgressController(
         }
 
         val isMediaPlaying = showMediaProgress && mediaSessionHelper.isMediaPlaying()
+        val trackTitle = if (hasMediaSession) currentTrackTitle else null
+        val artistName = if (hasMediaSession) currentArtistName else null
+        val appLabel = if (hasMediaSession) currentAppLabel else null
 
         publish(
             ProgressState(
@@ -373,9 +380,9 @@ class OnGoingActionProgressController(
                 isCompactMode = isCompact,
                 showMediaControls = isMenuVisible,
                 isMediaPlaying = isMediaPlaying,
-                trackTitle = if (!isCompact && hasMediaSession) currentTrackTitle else null,
-                artistName = if (!isCompact && hasMediaSession) currentArtistName else null,
-                appLabel   = if (!isCompact && hasMediaSession) currentAppLabel else null,
+                trackTitle = trackTitle,
+                artistName = artistName,
+                appLabel = appLabel,
                 useWaveformSeekBar = useWaveformSeekBar,
             )
         )
@@ -651,8 +658,10 @@ class OnGoingActionProgressController(
     }
 
     fun onInteraction() {
-        if (isCompactModeEnabled && !isExpanded) {
-            vibrator.vibrate(HAPTIC_EXPAND); expandCompactView(); return
+        vibrator.vibrate(HAPTIC_CLICK)
+        if (isCompactModeEnabled) {
+            expandCompactView()
+            collapseExpandViewWithDelay()
         }
         vibrator.vibrate(HAPTIC_POPUP)
         if (isMediaSessionActiveForChip()) {
@@ -685,6 +694,7 @@ class OnGoingActionProgressController(
             1 -> toggleMediaPlaybackState()
             2 -> skipToNextTrack()
         }
+        collapseExpandViewWithDelay()
         collapseMediaControlsWithDelay()
     }
 
