@@ -21,7 +21,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -30,6 +33,7 @@ import com.android.systemui.media.remedia.ui.viewmodel.MediaViewModel
 import com.android.systemui.scene.shared.flag.SceneContainerFlag
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
+import kotlinx.coroutines.delay
 
 /** Container view that holds all right hand side chips in the status bar. */
 @Composable
@@ -40,6 +44,21 @@ fun StatusBarPopupChipsContainer(
     onMediaControlPopupVisibilityChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var popupAnchorChip by remember { mutableStateOf<PopupChipModel.Shown?>(null) }
+    var popupVisible by remember { mutableStateOf(false) }
+
+    val shownChip = remember(chips) { chips.firstOrNull { it.isPopupShown } }
+    LaunchedEffect(shownChip) {
+        if (shownChip != null) {
+            popupAnchorChip = shownChip
+            popupVisible = true
+        } else if (popupAnchorChip != null) {
+            popupVisible = false
+            delay(220)
+            popupAnchorChip = null
+        }
+    }
+
     if (!SceneContainerFlag.isEnabled) {
         val isMediaControlPopupShown =
             remember(chips) {
@@ -59,13 +78,14 @@ fun StatusBarPopupChipsContainer(
         ) {
             chips.forEach { chip ->
                 StatusBarPopupChip(chip)
-                if (chip.isPopupShown) {
-                    StatusBarPopup(
-                        viewModel = chip,
-                        mediaViewModelFactory = mediaViewModelFactory,
-                        mediaHost = mediaHost,
-                    )
-                }
+            }
+            popupAnchorChip?.let { anchoredChip ->
+                StatusBarPopup(
+                    viewModel = anchoredChip,
+                    isVisible = popupVisible,
+                    mediaViewModelFactory = mediaViewModelFactory,
+                    mediaHost = mediaHost,
+                )
             }
         }
     }
