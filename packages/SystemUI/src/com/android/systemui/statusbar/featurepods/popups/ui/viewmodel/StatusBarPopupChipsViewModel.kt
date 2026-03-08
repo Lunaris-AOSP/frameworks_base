@@ -61,20 +61,21 @@ constructor(
     }
 
     val shownPopupChips: List<PopupChipModel.Shown> by derivedStateOf {
-        if (StatusBarPopupChips.isEnabled) {
-            val bundle = incomingPopupChipBundle
+        val bundle = incomingPopupChipBundle
+        val candidateChips =
+            if (StatusBarPopupChips.isEnabled) {
+                listOfNotNull(bundle.media, bundle.privacy, bundle.shareScreen)
+            } else {
+                // Keep media ticker available even when popup chips modernization is disabled.
+                listOfNotNull(bundle.media)
+            }
 
-            listOfNotNull(bundle.media, bundle.privacy, bundle.shareScreen)
-                .filterIsInstance<PopupChipModel.Shown>()
-                .map { chip ->
-                    chip.copy(
-                        isPopupShown = chip.chipId == currentShownPopupChipId,
-                        showPopup = { currentShownPopupChipId = chip.chipId },
-                        hidePopup = { currentShownPopupChipId = null },
-                    )
-                }
-        } else {
-            emptyList()
+        candidateChips.filterIsInstance<PopupChipModel.Shown>().map { chip ->
+            chip.copy(
+                isPopupShown = chip.chipId == currentShownPopupChipId,
+                showPopup = { currentShownPopupChipId = chip.chipId },
+                hidePopup = { currentShownPopupChipId = null },
+            )
         }
     }
 

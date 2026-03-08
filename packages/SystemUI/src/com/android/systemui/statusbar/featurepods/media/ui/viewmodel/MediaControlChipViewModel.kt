@@ -33,6 +33,7 @@ import com.android.systemui.statusbar.featurepods.popups.ui.viewmodel.StatusBarP
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.flow.map
+import java.util.Locale
 
 /**
  * [StatusBarPopupChipViewModel] for a media control chip in the status bar. This view model is
@@ -74,7 +75,7 @@ constructor(
         val defaultIcon =
             when (model) {
                 is MediaControlChipModel.Legacy -> {
-                    model.appIcon?.loadDrawable(applicationContext)?.let {
+                    (model.artworkIcon ?: model.appIcon)?.loadDrawable(applicationContext)?.let {
                         Icon.Loaded(drawable = it, contentDescription = contentDescription)
                     }
                         ?: Icon.Resource(
@@ -82,12 +83,12 @@ constructor(
                             contentDescription = contentDescription,
                         )
                 }
-                is MediaControlChipModel.Compose -> model.appIcon
+                is MediaControlChipModel.Compose -> model.artworkIcon ?: model.appIcon
             }
         return PopupChipModel.Shown(
             chipId = PopupChipId.MediaControl,
             icons = listOf(ChipIcon(icon = defaultIcon)),
-            chipText = model.songName.toString(),
+            chipText = normalizeSongTitle(model.songName.toString(), model.artistName?.toString()),
             hoverBehavior = createHoverBehavior(model),
         )
     }
@@ -115,5 +116,30 @@ constructor(
     @AssistedFactory
     interface Factory {
         fun create(): MediaControlChipViewModel
+    }
+
+    private fun normalizeSongTitle(title: String, artist: String?): String {
+        if (title.isBlank()) return title
+        val separatorRegex = Regex("\\s*[-–—|•]\\s*")
+        val parts = title.split(separatorRegex, limit = 2)
+        if (parts.size != 2) return title
+
+        val left = parts[0].trim()
+        val right = parts[1].trim()
+        if (left.isBlank() || right.isBlank()) return title
+
+        val artistKey = artist?.toComparableKey() ?: return title
+        val leftKey = left.toComparableKey()
+        val rightKey = right.toComparableKey()
+
+        return when {
+            leftKey.contains(artistKey) -> right
+            rightKey.contains(artistKey) -> left
+            else -> title
+        }
+    }
+
+    private fun String.toComparableKey(): String {
+        return lowercase(Locale.US).replace(Regex("[^a-z0-9]+"), " ").trim()
     }
 }

@@ -59,7 +59,6 @@ import com.android.systemui.shade.domain.interactor.ShadeInteractor
 import com.android.systemui.statusbar.CrossFadeHelper
 import com.android.systemui.statusbar.StatusBarState
 import com.android.systemui.statusbar.SysuiStatusBarStateController
-import com.android.systemui.statusbar.featurepods.popups.StatusBarPopupChips
 import com.android.systemui.statusbar.notification.stack.StackStateAnimator
 import com.android.systemui.statusbar.phone.KeyguardBypassController
 import com.android.systemui.statusbar.policy.ConfigurationController
@@ -382,7 +381,7 @@ constructor(
     /** Is the Media Control StatusBarPopup showing */
     var isMediaControlPopupShowing: Boolean = false
         set(value) {
-            if (field != value && StatusBarPopupChips.isEnabled) {
+            if (field != value) {
                 field = value
                 updateDesiredLocation(forceNoAnimation = true)
             }
@@ -1274,8 +1273,7 @@ constructor(
             (onCommunalNotDreaming && qsExpansion == 0.0f) || onCommunalDreamingAndShadeExpanding
         val location =
             when {
-                isMediaControlPopupShowing && StatusBarPopupChips.isEnabled ->
-                    LOCATION_STATUS_BAR_POPUP
+                isMediaControlPopupShowing -> LOCATION_STATUS_BAR_POPUP
                 dreamOverlayActive && dreamMediaComplicationActive -> LOCATION_DREAM_OVERLAY
                 onCommunal -> LOCATION_COMMUNAL_HUB
                 (qsExpansion > 0.0f || inSplitShade) && !onLockscreen -> LOCATION_QS

@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.dimensionResource
@@ -29,6 +30,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.android.systemui.media.controls.ui.view.MediaHost
 import com.android.systemui.media.remedia.shared.flag.MediaControlsInComposeFlag
 import com.android.systemui.media.remedia.ui.compose.Media
+import com.android.systemui.media.remedia.ui.compose.LocalDisableSquiggle
 import com.android.systemui.media.remedia.ui.compose.MediaPresentationStyle
 import com.android.systemui.media.remedia.ui.compose.MediaUiBehavior
 import com.android.systemui.media.remedia.ui.viewmodel.MediaCarouselVisibility
@@ -43,27 +45,29 @@ fun MediaControlPopup(
     modifier: Modifier = Modifier,
 ) {
     if (MediaControlsInComposeFlag.isEnabled) {
-        Media(
-            viewModelFactory = viewModelFactory,
-            presentationStyle = MediaPresentationStyle.Default,
-            behavior =
-                MediaUiBehavior(
-                    carouselVisibility = MediaCarouselVisibility.WhenAnyCardIsActive,
-                    isCarouselDismissible = false,
-                    isCarouselScrollingEnabled = false,
-                ),
-            onDismissed = {},
-            modifier =
-                modifier
-                    .width(400.dp)
-                    .height(200.dp)
-                    .clip(
-                        shape =
-                            RoundedCornerShape(
-                                dimensionResource(R.dimen.notification_corner_radius)
-                            )
+        CompositionLocalProvider(LocalDisableSquiggle provides true) {
+            Media(
+                viewModelFactory = viewModelFactory,
+                presentationStyle = MediaPresentationStyle.Default,
+                behavior =
+                    MediaUiBehavior(
+                        carouselVisibility = MediaCarouselVisibility.WhenAnyCardIsActive,
+                        isCarouselDismissible = false,
+                        isCarouselScrollingEnabled = false,
                     ),
-        )
+                onDismissed = {},
+                modifier =
+                    modifier
+                        .width(400.dp)
+                        .height(200.dp)
+                        .clip(
+                            shape =
+                                RoundedCornerShape(
+                                    dimensionResource(R.dimen.notification_corner_radius)
+                                )
+                        ),
+            )
+        }
     } else {
         AndroidView(
             modifier =

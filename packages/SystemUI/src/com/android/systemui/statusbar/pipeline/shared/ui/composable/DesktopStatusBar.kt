@@ -54,7 +54,6 @@ import com.android.systemui.shade.ui.composable.ChipHighlightModel
 import com.android.systemui.shade.ui.composable.ShadeHighlightChip
 import com.android.systemui.shade.ui.composable.VariableDayDate
 import com.android.systemui.statusbar.chips.ui.compose.OngoingActivityChips
-import com.android.systemui.statusbar.featurepods.popups.StatusBarPopupChips
 import com.android.systemui.statusbar.featurepods.popups.ui.compose.StatusBarPopupChipsContainer
 import com.android.systemui.statusbar.notification.icon.ui.viewbinder.NotificationIconContainerViewBinder
 import com.android.systemui.statusbar.phone.StatusBarLocation
@@ -134,16 +133,14 @@ fun DesktopStatusBar(
                 )
             }
 
-            if (StatusBarPopupChips.isEnabled) {
-                StatusBarPopupChipsContainer(
-                    chips = viewModel.popupChips,
-                    mediaViewModelFactory = mediaViewModelFactory,
-                    mediaHost = mediaHost,
-                    onMediaControlPopupVisibilityChanged = { popupShowing ->
-                        mediaHierarchyManager.isMediaControlPopupShowing = popupShowing
-                    },
-                )
-            }
+            StatusBarPopupChipsContainer(
+                chips = viewModel.popupChips,
+                mediaViewModelFactory = mediaViewModelFactory,
+                mediaHost = mediaHost,
+                onMediaControlPopupVisibilityChanged = { popupShowing ->
+                    mediaHierarchyManager.isMediaControlPopupShowing = popupShowing
+                },
+            )
 
             NotificationsChip(viewModel = viewModel)
 
