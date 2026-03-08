@@ -151,7 +151,7 @@ class AxionVolumeDialog @Inject constructor(
                             .padding(12.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        AxionVolumeDialogContent(viewModel)
+                        VolumeStyleDispatcher(viewModel)
                     }
                 }
             }
