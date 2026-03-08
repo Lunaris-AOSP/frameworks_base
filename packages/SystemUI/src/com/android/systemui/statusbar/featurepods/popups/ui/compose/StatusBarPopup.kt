@@ -16,14 +16,25 @@
 
 package com.android.systemui.statusbar.featurepods.popups.ui.compose
 
+import android.view.ViewTreeObserver
 import androidx.activity.OnBackPressedDispatcher
 import androidx.activity.OnBackPressedDispatcherOwner
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -44,6 +55,7 @@ import com.android.systemui.statusbar.featurepods.media.ui.compose.MediaControlP
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
 import com.android.systemui.statusbar.featurepods.sharescreen.ui.compose.ShareScreenPrivacyIndicatorPopup
+import kotlinx.coroutines.delay
 
 /**
  * Displays a popup in the status bar area. The offset is calculated to draw the popup below the
@@ -52,6 +64,7 @@ import com.android.systemui.statusbar.featurepods.sharescreen.ui.compose.ShareSc
 @Composable
 fun StatusBarPopup(
     viewModel: PopupChipModel.Shown,
+    isVisible: Boolean,
     mediaViewModelFactory: MediaViewModel.Factory,
     mediaHost: MediaHost,
 ) {
@@ -60,7 +73,7 @@ fun StatusBarPopup(
         alignment = Alignment.TopCenter,
         properties =
             PopupProperties(
-                focusable = false,
+                focusable = true,
                 dismissOnBackPress = true,
                 dismissOnClickOutside = true,
             ),
@@ -71,36 +84,76 @@ fun StatusBarPopup(
             ),
         onDismissRequest = { viewModel.hidePopup() },
     ) {
-        Box(modifier = Modifier.padding(8.dp).wrapContentSize()) {
-            when (viewModel.chipId) {
-                is PopupChipId.MediaControl -> {
-                    val viewRootImpl = LocalView.current.viewRootImpl
-                    val lifecycle = LocalLifecycleOwner.current.lifecycle
-                    val owner =
-                        object : OnBackPressedDispatcherOwner {
-                            override val onBackPressedDispatcher =
-                                OnBackPressedDispatcher().apply {
-                                    setOnBackInvokedDispatcher(viewRootImpl.onBackInvokedDispatcher)
-                                }
-
-                            override val lifecycle: Lifecycle = lifecycle
-                        }
-                    CompositionLocalProvider(LocalOnBackPressedDispatcherOwner provides owner) {
-                        MediaControlPopup(
-                            viewModelFactory = mediaViewModelFactory,
-                            mediaHost = mediaHost,
-                        )
-                    }
-                }
-
-                is PopupChipId.AvControlsIndicator -> {
-                    AvControlsChipPopup()
-                }
-                is PopupChipId.ShareScreenPrivacyIndicator -> {
-                    ShareScreenPrivacyIndicatorPopup()
+        val popupView = LocalView.current
+        DisposableEffect(popupView) {
+            val listener = ViewTreeObserver.OnWindowFocusChangeListener { hasFocus ->
+                if (!hasFocus) {
+                    viewModel.hidePopup()
                 }
             }
-            // Future popup types will be handled here.
+            popupView.viewTreeObserver.addOnWindowFocusChangeListener(listener)
+            onDispose {
+                popupView.viewTreeObserver.removeOnWindowFocusChangeListener(listener)
+            }
+        }
+
+        LaunchedEffect(isVisible, viewModel.chipId) {
+            if (isVisible && viewModel.chipId is PopupChipId.MediaControl) {
+                // Fallback so popup does not remain stuck after app launch transitions.
+                delay(6000)
+                viewModel.hidePopup()
+            }
+        }
+
+        AnimatedVisibility(
+            visible = isVisible,
+            enter =
+                fadeIn(animationSpec = tween(180)) +
+                    scaleIn(initialScale = 0.9f, animationSpec = tween(220)) +
+                    slideInVertically(
+                        initialOffsetY = { fullHeight -> -fullHeight / 6 },
+                        animationSpec = tween(220),
+                    ),
+            exit =
+                fadeOut(animationSpec = tween(160)) +
+                    scaleOut(targetScale = 0.92f, animationSpec = tween(180)) +
+                    slideOutVertically(
+                        targetOffsetY = { fullHeight -> -fullHeight / 8 },
+                        animationSpec = tween(180),
+                    ),
+        ) {
+            Box(modifier = Modifier.padding(8.dp).wrapContentSize()) {
+                when (viewModel.chipId) {
+                    is PopupChipId.MediaControl -> {
+                        val viewRootImpl = LocalView.current.viewRootImpl
+                        val lifecycle = LocalLifecycleOwner.current.lifecycle
+                        val owner =
+                            object : OnBackPressedDispatcherOwner {
+                                override val onBackPressedDispatcher =
+                                    OnBackPressedDispatcher().apply {
+                                        setOnBackInvokedDispatcher(
+                                            viewRootImpl.onBackInvokedDispatcher
+                                        )
+                                    }
+
+                                override val lifecycle: Lifecycle = lifecycle
+                            }
+                        CompositionLocalProvider(LocalOnBackPressedDispatcherOwner provides owner) {
+                            MediaControlPopup(
+                                viewModelFactory = mediaViewModelFactory,
+                                mediaHost = mediaHost,
+                            )
+                        }
+                    }
+
+                    is PopupChipId.AvControlsIndicator -> {
+                        AvControlsChipPopup()
+                    }
+                    is PopupChipId.ShareScreenPrivacyIndicator -> {
+                        ShareScreenPrivacyIndicatorPopup()
+                    }
+                }
+            }
         }
     }
 }
