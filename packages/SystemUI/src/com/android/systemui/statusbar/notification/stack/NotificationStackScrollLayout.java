@@ -58,7 +58,9 @@ import android.graphics.RectF;
 import android.graphics.RenderEffect;
 import android.graphics.RenderNode;
 import android.graphics.Shader;
+import android.hardware.power.Boost;
 import android.os.Bundle;
+import android.os.PowerManagerInternal;
 import android.os.SystemClock;
 import android.os.Trace;
 import android.os.UserHandle;
@@ -92,6 +94,7 @@ import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.policy.SystemBarUtils;
 import com.android.keyguard.BouncerPanelExpansionCalculator;
 import com.android.keyguard.KeyguardSliceView;
+import com.android.server.LocalServices;
 import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
 import com.android.systemui.ExpandHelper;
@@ -1960,6 +1963,13 @@ public class NotificationStackScrollLayout
             updateAlgorithmHeightAndPadding();
             requestChildrenUpdate();
             notifyAppearChangedListeners();
+        }
+    }
+
+    private void boostInteraction(int durationMs) {
+        PowerManagerInternal pmi = LocalServices.getService(PowerManagerInternal.class);
+        if (pmi != null) {
+            pmi.setPowerBoost(Boost.INTERACTION, durationMs);
         }
     }
 
@@ -4861,6 +4871,7 @@ public class NotificationStackScrollLayout
         mPanelTracking = true;
         mAmbientState.setPanelTracking(true);
         resetExposedMenuView(true /* animate */, true /* force */);
+        boostInteraction(700);
     }
 
     void onPanelTrackingStopped() {
