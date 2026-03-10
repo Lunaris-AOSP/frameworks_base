@@ -143,6 +143,11 @@ class MediaViewController @Inject constructor(
         updateSettings()
     }
 
+    /* Init Wallpaper Depth */
+    init {
+        INSTANCE = this
+    }
+
     private fun updateSettings() {
         featureEnabled = Settings.System.getIntForUser(
             context.contentResolver,
