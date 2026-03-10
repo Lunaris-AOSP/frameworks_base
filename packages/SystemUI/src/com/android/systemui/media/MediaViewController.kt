@@ -104,6 +104,8 @@ class MediaViewController @Inject constructor(
     private val grayscaleMatrix = ColorMatrix().apply { setSaturation(0f) }
 
     init {
+        INSTANCE = this
+
         context.contentResolver.registerContentObserver(
             Settings.System.getUriFor(Settings.System.LS_MEDIA_ART_ENABLED),
             false,
