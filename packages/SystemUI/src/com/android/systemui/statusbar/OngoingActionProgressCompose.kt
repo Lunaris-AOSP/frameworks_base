@@ -55,6 +55,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -105,6 +106,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -545,14 +547,16 @@ private fun MiniMediaPlayer(
                 Box(modifier = Modifier.weight(1f)) {
                     if (state.useWaveformSeekBar) {
                         WaveformSeekBarCompose(
-                            progressFraction = progressFraction(state),
+                            progressMs = progressMs,
+                            durationMs = durationMs,
                             isPlaying = state.isMediaPlaying,
                             onSeek = onSeek,
                             modifier = Modifier.fillMaxWidth().height(26.dp)
                         )
                     } else {
                         SquigglySeekBarCompose(
-                            progressFraction = progressFraction(state),
+                            progressMs = progressMs,
+                            durationMs = durationMs,
                             isPlaying = state.isMediaPlaying,
                             onSeek = onSeek,
                             modifier = Modifier.fillMaxWidth().height(26.dp)
@@ -626,12 +630,37 @@ private fun ControlButton(
 
 @Composable
 private fun SquigglySeekBarCompose(
-    progressFraction: Float,
+    progressMs: Long,
+    durationMs: Long,
     isPlaying: Boolean,
     onSeek: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var isScrubbing by remember { mutableStateOf(false) }
+
+    val onSeekRef = rememberUpdatedState(onSeek)
+
+    val serverFraction = if (durationMs > 0) (progressMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
+    var displayFraction by remember { mutableStateOf(serverFraction) }
+
+    LaunchedEffect(progressMs, durationMs, isPlaying) {
+        if (isScrubbing) return@LaunchedEffect
+
+        displayFraction = serverFraction
+
+        if (!isPlaying || durationMs <= 0) return@LaunchedEffect
+
+        val startWallMs = System.currentTimeMillis()
+        val startProgressMs = progressMs
+        while (true) {
+            delay(16L) // ~60 fps
+            if (isScrubbing) break
+            val elapsed = System.currentTimeMillis() - startWallMs
+            val interpolated = ((startProgressMs + elapsed).toFloat() / durationMs).coerceIn(0f, 1f)
+            displayFraction = interpolated
+            if (interpolated >= 1f) break
+        }
+    }
 
     AndroidView(
         factory = { ctx ->
@@ -675,7 +704,7 @@ private fun SquigglySeekBarCompose(
 
                 setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                     override fun onProgressChanged(sb: SeekBar?, v: Int, fromUser: Boolean) {
-                        if (fromUser) onSeek(v / 10_000f)
+                            if (fromUser) onSeek(v / 10_000f)
                     }
                     override fun onStartTrackingTouch(sb: SeekBar?) { isScrubbing = true }
                     override fun onStopTrackingTouch(sb: SeekBar?) { isScrubbing = false }
@@ -683,7 +712,7 @@ private fun SquigglySeekBarCompose(
             }
         },
         update = { bar ->
-            val target = (progressFraction * 10_000f).toInt().coerceIn(0, 10_000)
+            val target = (displayFraction * 10_000f).toInt().coerceIn(0, 10_000)
             if (!isScrubbing) {
                 if (target <= SeekBarObserver.RESET_ANIMATION_THRESHOLD_MS &&
                         bar.progress > SeekBarObserver.RESET_ANIMATION_THRESHOLD_MS) {
@@ -711,12 +740,37 @@ private fun SquigglySeekBarCompose(
 
 @Composable
 private fun WaveformSeekBarCompose(
-    progressFraction: Float,
+    progressMs: Long,
+    durationMs: Long,
     isPlaying: Boolean,
     onSeek: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var isScrubbing by remember { mutableStateOf(false) }
+
+    val onSeekRef = rememberUpdatedState(onSeek)
+
+    val serverFraction = if (durationMs > 0) (progressMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
+    var displayFraction by remember { mutableStateOf(serverFraction) }
+
+    LaunchedEffect(progressMs, durationMs, isPlaying) {
+        if (isScrubbing) return@LaunchedEffect
+
+        displayFraction = serverFraction
+
+        if (!isPlaying || durationMs <= 0) return@LaunchedEffect
+
+        val startWallMs = System.currentTimeMillis()
+        val startProgressMs = progressMs
+        while (true) {
+            delay(16L)
+            if (isScrubbing) break
+            val elapsed = System.currentTimeMillis() - startWallMs
+            val interpolated = ((startProgressMs + elapsed).toFloat() / durationMs).coerceIn(0f, 1f)
+            displayFraction = interpolated
+            if (interpolated >= 1f) break
+        }
+    }
 
     AndroidView(
         factory = { ctx ->
@@ -726,7 +780,7 @@ private fun WaveformSeekBarCompose(
                 setThumbColor(android.graphics.Color.WHITE)
                 setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
                     override fun onProgressChanged(sb: android.widget.SeekBar?,
-                        v: Int, fromUser: Boolean) { if (fromUser) onSeek(v / 10_000f) }
+                        v: Int, fromUser: Boolean) { if (fromUser) onSeekRef.value(v / 10_000f) }
                     override fun onStartTrackingTouch(sb: android.widget.SeekBar?) { isScrubbing = true }
                     override fun onStopTrackingTouch(sb: android.widget.SeekBar?) { isScrubbing = false }
                 })
@@ -734,7 +788,7 @@ private fun WaveformSeekBarCompose(
         },
         update = { bar ->
             if (!isScrubbing) {
-                val target = (progressFraction * 10_000f).toInt().coerceIn(0, 10_000)
+                val target = (displayFraction * 10_000f).toInt().coerceIn(0, 10_000)
                 if (bar.progress != target) bar.progress = target
             }
             when {
