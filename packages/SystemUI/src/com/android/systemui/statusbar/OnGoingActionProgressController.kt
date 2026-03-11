@@ -803,6 +803,7 @@ class OnGoingActionProgressController(
     }
 
     private fun updateSettings() {
+        val wasShowingMediaProgress = showMediaProgress
         val wasChipColorMode = chipColorMode
 
         isEnabled = Settings.System.getIntForUser(
@@ -842,6 +843,10 @@ class OnGoingActionProgressController(
 
         if (!isEnabled || !isCompactModeEnabled) {
             isExpanded = false
+        }
+
+        if (showMediaProgress && !wasShowingMediaProgress) {
+            mediaSessionHelper.refreshActiveSessions()
         }
 
         if (wasChipColorMode != chipColorMode) {
