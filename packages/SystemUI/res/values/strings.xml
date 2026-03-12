@@ -2196,6 +2196,10 @@
     <string name="accessibility_status_bar_satellite_good_connection">Satellite, good connection</string>
     <!-- Accessibility label for available satellite connection [CHAR LIMIT=NONE] -->
     <string name="accessibility_status_bar_satellite_available">Satellite, connection available</string>
+    <!-- Accessibility label for the VoLTE status bar icon [CHAR LIMIT=NONE] -->
+    <string name="accessibility_status_bar_volte">VoLTE</string>
+    <!-- Accessibility label for the VoWiFi status bar icon [CHAR LIMIT=NONE] -->
+    <string name="accessibility_status_bar_vowifi">Wi-Fi calling</string>
 
     <!-- Text displayed indicating that the user is connected to a satellite signal. -->
     <string name="satellite_connected_carrier_text">Satellite SOS</string>
