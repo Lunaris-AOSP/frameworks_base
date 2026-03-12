@@ -16,14 +16,23 @@
 
 package com.android.systemui.statusbar.systemstatusicons
 
-import android.content.Context
 import com.android.systemui.dagger.SysUISingleton
-import com.android.systemui.dagger.qualifiers.Application
 import dagger.Module
 import dagger.Provides
 import javax.inject.Qualifier
+import kotlinx.coroutines.flow.StateFlow
 
-@Qualifier @Retention(AnnotationRetention.BINARY) annotation class SystemStatusOrderedIconSlotNames
+/**
+ */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class SystemStatusOrderedIconSlotNames
+
+/**
+ */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class SystemStatusIconSlotNamesFlow
 
 @Module
 object SystemStatusIconsModule {
@@ -35,7 +44,16 @@ object SystemStatusIconsModule {
     @Provides
     @SysUISingleton
     @SystemStatusOrderedIconSlotNames
-    fun provideSystemStatusOrderedIconSlotNames(@Application context: Context): Array<String> {
-        return context.resources.getStringArray(com.android.internal.R.array.config_statusBarIcons)
-    }
+    fun provideSystemStatusOrderedIconSlotNames(
+        repository: StatusBarIconOrderRepository,
+    ): Array<String> = repository.getCurrentIconSlotNames()
+
+    /**
+     */
+    @Provides
+    @SysUISingleton
+    @SystemStatusIconSlotNamesFlow
+    fun provideSystemStatusIconSlotNamesFlow(
+        repository: StatusBarIconOrderRepository,
+    ): StateFlow<Array<String>> = repository.iconSlotNamesFlow
 }

@@ -14481,6 +14481,12 @@ public final class Settings {
         public static final String ENABLE_LOCKSCREEN_QUICK_SETTINGS = "enable_lockscreen_quick_settings";
 
         /**
+         * status_bar_icon_order_legacy
+         * @hide
+         */
+        public static final String STATUS_BAR_ICON_ORDER_LEGACY = "status_bar_icon_order_legacy";
+
+        /**
          * Pulse lockscreen music visualizer
          * @hide
          */

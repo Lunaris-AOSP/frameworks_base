@@ -61,6 +61,7 @@ import com.android.systemui.statusbar.phone.ui.StatusBarIconController;
 import com.android.systemui.statusbar.phone.ui.StatusBarIconControllerImpl;
 import com.android.systemui.statusbar.phone.ui.StatusBarIconList;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
+import com.android.systemui.statusbar.systemstatusicons.StatusBarIconOrderRepository;
 import com.android.wm.shell.shared.ShellTransitions;
 
 import dagger.Binds;
@@ -173,10 +174,13 @@ public interface CentralSurfacesDependenciesModule {
      */
     @Provides
     @SysUISingleton
-    static StatusBarIconList provideStatusBarIconList(Context context) {
-        return new StatusBarIconList(
-                context.getResources().getStringArray(
-                        com.android.internal.R.array.config_statusBarIcons));
+    static StatusBarIconList provideStatusBarIconList(
+            StatusBarIconOrderRepository repository) {
+        StatusBarIconList iconList =
+                new StatusBarIconList(repository.getCurrentIconSlotNames());
+        repository.addOnIconOrderChangedListener(
+                newSlotNames -> iconList.defineSlots(newSlotNames));
+        return iconList;
     }
 
     /**
