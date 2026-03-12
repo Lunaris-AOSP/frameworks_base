@@ -17,6 +17,7 @@
 package com.android.systemui.statusbar.pipeline.mobile.data.model
 
 import android.os.ParcelUuid
+import android.telephony.SubscriptionManager.INVALID_SIM_SLOT_INDEX
 import android.telephony.SubscriptionManager.ProfileClass
 
 /**
@@ -50,6 +51,9 @@ data class SubscriptionModel(
 
     /** Text representing the name for this connection */
     val carrierName: String,
+
+    /** Physical SIM slot index for this subscription, or [INVALID_SIM_SLOT_INDEX] if unknown. */
+    val simSlotIndex: Int = INVALID_SIM_SLOT_INDEX,
 
     /** Allow us to filter out PROVISIONING profiles. See [SubscriptionInfo.getProfileClass] */
     @ProfileClass val profileClass: Int
