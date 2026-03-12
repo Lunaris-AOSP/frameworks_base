@@ -18,6 +18,7 @@ package com.android.systemui.statusbar.phone.ui;
 
 import static com.android.systemui.statusbar.phone.ui.StatusBarIconController.TAG_PRIMARY;
 
+import android.annotation.MainThread;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 
@@ -32,14 +33,53 @@ import java.util.stream.Collectors;
 
 /** A class holding the list of all the system icons that could be shown in the status bar. */
 public class StatusBarIconList {
+
+    public interface OnSlotOrderChangedListener {
+        void onSlotOrderChanged();
+    }
+
     private final ArrayList<Slot> mSlots = new ArrayList<>();
     private final List<Slot> mViewOnlySlots = Collections.unmodifiableList(mSlots);
+
+    private final ArrayList<OnSlotOrderChangedListener> mSlotOrderListeners = new ArrayList<>();
 
     public StatusBarIconList(String[] slots) {
         final int N = slots.length;
         for (int i = 0; i < N; i++) {
             mSlots.add(new Slot(slots[i], null));
         }
+    }
+
+    @MainThread
+    public void defineSlots(String[] slots) {
+        final int oldSize = mSlots.size();
+        final java.util.HashMap<String, Slot> existingByName = new java.util.HashMap<>(oldSize);
+        for (int i = 0; i < oldSize; i++) {
+            Slot s = mSlots.get(i);
+            existingByName.put(s.getName(), s);
+        }
+
+        mSlots.clear();
+        for (String name : slots) {
+            Slot existing = existingByName.get(name);
+            mSlots.add(existing != null ? existing : new Slot(name, null));
+        }
+
+        for (OnSlotOrderChangedListener listener : mSlotOrderListeners) {
+            listener.onSlotOrderChanged();
+        }
+    }
+
+    @MainThread
+    public void addOnSlotOrderChangedListener(@NonNull OnSlotOrderChangedListener listener) {
+        if (!mSlotOrderListeners.contains(listener)) {
+            mSlotOrderListeners.add(listener);
+        }
+    }
+
+    @MainThread
+    public void removeOnSlotOrderChangedListener(@NonNull OnSlotOrderChangedListener listener) {
+        mSlotOrderListeners.remove(listener);
     }
 
     /** Returns the list of current slots. */
