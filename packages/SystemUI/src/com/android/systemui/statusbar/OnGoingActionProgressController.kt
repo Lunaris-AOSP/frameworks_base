@@ -75,6 +75,7 @@ class OnGoingActionProgressController(
     private var isForceHidden = false
     private var headsUpPinned = false
     private var isEnabled = false
+    private var isPanelExpanded = false
     private var isCompactModeEnabled = false
     private var useWaveformSeekBar = false
     private var chipColorMode = CHIP_COLOR_MODE_DEFAULT
@@ -339,7 +340,7 @@ class OnGoingActionProgressController(
     }
 
     private fun updateProgressState() {
-        var isVisible = !isForceHidden && !headsUpPinned && !isSystemChipVisible
+        var isVisible = !isForceHidden && !headsUpPinned && !isSystemChipVisible && !isPanelExpanded
         val hasMediaSession = isMediaSessionActiveForChip()
         val hasNotificationProgress = isEnabled && isTrackingProgress
         val isCompact = isCompactModeEnabled && !isExpanded
@@ -792,6 +793,13 @@ class OnGoingActionProgressController(
 
     override fun onKeyguardShowingChanged() {
         setForceHidden(keyguardStateController.isShowing)
+    }
+
+    fun setPanelExpanded(expanded: Boolean) {
+        if (isPanelExpanded == expanded) return
+        Log.d(TAG, "setPanelExpanded $expanded")
+        isPanelExpanded = expanded
+        updateProgressState()
     }
 
     fun setForceHidden(forceHidden: Boolean) {
