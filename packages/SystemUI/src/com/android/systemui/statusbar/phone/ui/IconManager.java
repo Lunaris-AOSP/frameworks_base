@@ -194,7 +194,7 @@ public class IconManager implements DemoModeCommandReceiver {
                     NetworkSpeedController.Companion.get().addHolder(index, slot, mGroup, holder, blocked);
             case TYPE_BINDABLE ->
                 // Safe cast, since only BindableIconHolders can set this tag on themselves
-                    addBindableIcon((BindableIconHolder) holder, index);
+                    addBindableIcon((BindableIconHolder) holder, index, blocked);
             default -> null;
         };
     }
@@ -216,9 +216,10 @@ public class IconManager implements DemoModeCommandReceiver {
      * ViewBinder to control its visual state.
      */
     protected StatusIconDisplayable addBindableIcon(BindableIconHolder holder,
-            int index) {
+            int index, boolean blocked) {
         mBindableIcons.put(holder.getSlot(), holder);
         ModernStatusBarView view = holder.getInitializer().createAndBind(mContext);
+        view.setIconBlocked(blocked);
         mGroup.addView(view, index, onCreateLayoutParams(Shape.WRAP_CONTENT));
         if (mIsInDemoMode) {
             mDemoStatusIcons.addBindableIcon(holder);
