@@ -60,6 +60,7 @@
         <item><xliff:g id="id">@string/status_bar_oem_satellite</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_vowifi</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_volte</xliff:g></item>
+        <item><xliff:g id="id">@string/status_bar_vonr</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_hotspot</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_stacked_mobile</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_mobile</xliff:g></item>
@@ -152,6 +153,7 @@
     <string translatable="false" name="status_bar_oem_satellite">satellite</string>
     <string translatable="false" name="status_bar_vowifi">vowifi</string>
     <string translatable="false" name="status_bar_volte">volte</string>
+    <string translatable="false" name="status_bar_vonr">vonr</string>
 
     <!-- Flag indicating whether the surface flinger has limited
          alpha compositing functionality in hardware.  If set, the window
