@@ -16,14 +16,19 @@
 
 package com.android.systemui.statusbar.pipeline.ims.data.repository
 
-import android.telephony.AccessNetworkConstants.TRANSPORT_TYPE_INVALID
-import android.telephony.AccessNetworkConstants.TRANSPORT_TYPE_WLAN
-import android.telephony.AccessNetworkConstants.TRANSPORT_TYPE_WWAN
+import android.content.Context
+import android.telephony.ServiceState
+import android.telephony.TelephonyCallback
+import android.telephony.TelephonyManager
 import android.telephony.ims.ImsException
 import android.telephony.ims.ImsMmTelManager
 import android.telephony.ims.ImsReasonInfo
-import android.telephony.ims.RegistrationManager.REGISTRATION_STATE_REGISTERED
+import android.telephony.ims.ImsRegistrationAttributes
 import android.telephony.ims.feature.MmTelFeature.MmTelCapabilities
+import android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_CROSS_SIM
+import android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_IWLAN
+import android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_LTE
+import android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_NR
 import android.util.Log
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
@@ -41,12 +46,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.retryWhen
-import kotlinx.coroutines.flow.scan
 import kotlinx.coroutines.flow.stateIn
 
 interface ImsRepository {
     val isVoLteAvailable: StateFlow<Boolean>
     val isVoWifiAvailable: StateFlow<Boolean>
+    val isVoNrAvailable: StateFlow<Boolean>
 }
 
 @SysUISingleton
@@ -55,8 +60,12 @@ class ImsRepositoryStore
 constructor(
     @Background private val bgDispatcher: CoroutineDispatcher,
     @Application private val scope: CoroutineScope,
+    @Application private val context: Context,
 ) {
     private val cache = mutableMapOf<Int, WeakReference<ImsRepository>>()
+    private val telephonyManager by lazy {
+        context.getSystemService(TelephonyManager::class.java)
+    }
 
     fun getRepoForSubId(subId: Int): ImsRepository =
         cache[subId]?.get()
@@ -64,18 +73,22 @@ constructor(
                     subId = subId,
                     scope = scope,
                     callbackExecutor = bgDispatcher.asExecutor(),
+                    telephonyManagerFactory = { id ->
+                        telephonyManager?.createForSubscriptionId(id)
+                    },
                 )
                 .also { cache[subId] = WeakReference(it) }
 }
 
 @Suppress("DEPRECATION")
 private class ImsRepositoryImpl(
-    subId: Int,
+    private val subId: Int,
     scope: CoroutineScope,
     callbackExecutor: Executor,
     imsManagerFactory: (Int) -> ImsMmTelManager = ImsMmTelManager::createForSubscriptionId,
+    telephonyManagerFactory: (Int) -> TelephonyManager? = { null },
 ) : ImsRepository {
-    private val imsState: StateFlow<ImsConnectionState> =
+    private val imsAvailability: StateFlow<ImsAvailabilityState> =
         callbackFlow {
                 val imsMmTelManager =
                     try {
@@ -84,11 +97,24 @@ private class ImsRepositoryImpl(
                         Log.w(TAG, "Unable to create ImsMmTelManager for subId=$subId", e)
                         throw e
                     }
+                val telephonyManager = telephonyManagerFactory(subId)
 
                 var capabilityRegistered = false
                 var registrationRegistered = false
                 var capabilityCallback: ImsMmTelManager.CapabilityCallback? = null
                 var registrationCallback: ImsMmTelManager.RegistrationCallback? = null
+                var telephonyRegistered = false
+                var telephonyCallback: TelephonyCallback? = null
+                var lastVoiceNetworkType: Int? = null
+
+                fun sendAvailabilityUpdate() {
+                    trySend(
+                        queryAvailability(
+                            imsMmTelManager = imsMmTelManager,
+                            lastVoiceNetworkType = lastVoiceNetworkType,
+                        )
+                    )
+                }
 
                 fun unregisterCallbacks() {
                     if (capabilityRegistered) {
@@ -120,36 +146,61 @@ private class ImsRepositoryImpl(
                                 )
                             }
                     }
+
+                    if (telephonyRegistered) {
+                        runCatching {
+                                telephonyManager?.unregisterTelephonyCallback(
+                                    checkNotNull(telephonyCallback)
+                                )
+                            }
+                            .onFailure {
+                                Log.w(
+                                    TAG,
+                                    "Unable to unregister TelephonyCallback for subId=$subId",
+                                    it,
+                                )
+                            }
+                    }
                 }
 
                 capabilityCallback =
                     object : ImsMmTelManager.CapabilityCallback() {
-                        override fun onCapabilitiesStatusChanged(
-                            capabilities: MmTelCapabilities
-                        ) {
-                            trySend(
-                                ImsCallbackEvent.OnVoiceCapabilityChanged(
-                                    capabilities.isCapable(MmTelCapabilities.CAPABILITY_TYPE_VOICE)
-                                )
-                            )
+                        override fun onCapabilitiesStatusChanged(capabilities: MmTelCapabilities) {
+                            sendAvailabilityUpdate()
                         }
                     }
 
                 registrationCallback =
                     object : ImsMmTelManager.RegistrationCallback() {
-                        override fun onRegistered(imsTransportType: Int) {
-                            trySend(ImsCallbackEvent.OnRegistrationStateChanged(true))
-                            trySend(ImsCallbackEvent.OnTransportTypeChanged(imsTransportType))
+                        override fun onRegistered(attributes: ImsRegistrationAttributes) {
+                            sendAvailabilityUpdate()
                         }
 
-                        override fun onRegistering(imsTransportType: Int) {
-                            trySend(ImsCallbackEvent.OnRegistrationStateChanged(false))
-                            trySend(ImsCallbackEvent.OnTransportTypeChanged(TRANSPORT_TYPE_INVALID))
+                        override fun onRegistering(attributes: ImsRegistrationAttributes) {
+                            trySend(ImsAvailabilityState())
                         }
 
-                        override fun onUnregistered(info: ImsReasonInfo) {
-                            trySend(ImsCallbackEvent.OnRegistrationStateChanged(false))
-                            trySend(ImsCallbackEvent.OnTransportTypeChanged(TRANSPORT_TYPE_INVALID))
+                        override fun onUnregistered(
+                            info: ImsReasonInfo,
+                            suggestedAction: Int,
+                            imsRadioTech: Int,
+                        ) {
+                            trySend(ImsAvailabilityState())
+                        }
+
+                        override fun onTechnologyChangeFailed(
+                            imsTransportType: Int,
+                            info: ImsReasonInfo,
+                        ) {
+                            sendAvailabilityUpdate()
+                        }
+                    }
+
+                telephonyCallback =
+                    object : TelephonyCallback(), TelephonyCallback.ServiceStateListener {
+                        override fun onServiceStateChanged(serviceState: ServiceState) {
+                            lastVoiceNetworkType = serviceState.voiceNetworkType
+                            sendAvailabilityUpdate()
                         }
                     }
 
@@ -175,31 +226,26 @@ private class ImsRepositoryImpl(
                 }
 
                 runCatching {
-                        imsMmTelManager.getRegistrationState(callbackExecutor) { registrationState ->
-                            trySend(
-                                ImsCallbackEvent.OnRegistrationStateChanged(
-                                    registrationState == REGISTRATION_STATE_REGISTERED
-                                )
+                        if (telephonyManager != null) {
+                            telephonyManager.registerTelephonyCallback(
+                                callbackExecutor,
+                                checkNotNull(telephonyCallback),
                             )
+                            telephonyRegistered = true
                         }
                     }
                     .onFailure {
-                        Log.w(TAG, "Unable to query IMS registration state for subId=$subId", it)
+                        Log.w(TAG, "Unable to register TelephonyCallback for subId=$subId", it)
                     }
 
-                runCatching {
-                        imsMmTelManager.getRegistrationTransportType(callbackExecutor) {
-                            transportType ->
-                            trySend(ImsCallbackEvent.OnTransportTypeChanged(transportType))
-                        }
+                runCatching { telephonyManager?.serviceState }
+                    .getOrNull()
+                    ?.let { serviceState ->
+                        lastVoiceNetworkType = serviceState.voiceNetworkType
                     }
-                    .onFailure {
-                        Log.w(
-                            TAG,
-                            "Unable to query IMS registration transport for subId=$subId",
-                            it,
-                        )
-                    }
+
+                // Seed the current availability so we do not have to wait for a later state change.
+                sendAvailabilityUpdate()
 
                 awaitClose { unregisterCallbacks() }
             }
@@ -213,54 +259,100 @@ private class ImsRepositoryImpl(
                 delay(CALLBACK_REGISTRATION_RETRY_DELAY_MS)
                 true
             }
-            .scan(ImsConnectionState()) { state, event -> state.applyEvent(event) }
-            .stateIn(scope, SharingStarted.WhileSubscribed(), ImsConnectionState())
+            .stateIn(scope, SharingStarted.WhileSubscribed(), ImsAvailabilityState())
 
     override val isVoLteAvailable: StateFlow<Boolean> =
-        imsState
-            .map { state ->
-                state.isRegistered &&
-                    state.voiceCapable &&
-                    state.transportType == TRANSPORT_TYPE_WWAN
+        imsAvailability
+            .map { availability ->
+                val prioritizedAvailability = availability.prioritizeImsIcons()
+                prioritizedAvailability.isVoLteAvailable
             }
             .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
     override val isVoWifiAvailable: StateFlow<Boolean> =
-        imsState
-            .map { state ->
-                state.isRegistered &&
-                    state.voiceCapable &&
-                    state.transportType == TRANSPORT_TYPE_WLAN
+        imsAvailability
+            .map { availability ->
+                val prioritizedAvailability = availability.prioritizeImsIcons()
+                prioritizedAvailability.isVoWifiAvailable
             }
             .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
-    private data class ImsConnectionState(
-        val isRegistered: Boolean = false,
-        val transportType: Int = TRANSPORT_TYPE_INVALID,
-        val voiceCapable: Boolean = false,
-    ) {
-        fun applyEvent(event: ImsCallbackEvent): ImsConnectionState {
-            return when (event) {
-                is ImsCallbackEvent.OnRegistrationStateChanged ->
-                    copy(isRegistered = event.isRegistered)
-                is ImsCallbackEvent.OnTransportTypeChanged ->
-                    copy(transportType = event.transportType)
-                is ImsCallbackEvent.OnVoiceCapabilityChanged ->
-                    copy(voiceCapable = event.isVoiceCapable)
+    override val isVoNrAvailable: StateFlow<Boolean> =
+        imsAvailability
+            .map { availability ->
+                val prioritizedAvailability = availability.prioritizeImsIcons()
+                prioritizedAvailability.isVoNrAvailable
             }
-        }
+            .stateIn(scope, SharingStarted.WhileSubscribed(), false)
+
+    private fun queryAvailability(
+        imsMmTelManager: ImsMmTelManager,
+        lastVoiceNetworkType: Int?,
+    ): ImsAvailabilityState {
+        val isVoNrFromVoiceNetwork =
+            lastVoiceNetworkType == TelephonyManager.NETWORK_TYPE_NR
+        return ImsAvailabilityState(
+            isVoLteAvailable =
+                queryVoiceAvailability(imsMmTelManager, REGISTRATION_TECH_LTE),
+            isVoWifiAvailable =
+                queryVoiceAvailability(imsMmTelManager, REGISTRATION_TECH_IWLAN) ||
+                    queryVoiceAvailability(imsMmTelManager, REGISTRATION_TECH_CROSS_SIM),
+            isVoNrAvailable =
+                queryVoiceAvailability(imsMmTelManager, REGISTRATION_TECH_NR) ||
+                    isVoNrFromVoiceNetwork,
+        )
     }
 
-    private sealed interface ImsCallbackEvent {
-        data class OnRegistrationStateChanged(val isRegistered: Boolean) : ImsCallbackEvent
+    private fun queryVoiceAvailability(
+        imsMmTelManager: ImsMmTelManager,
+        registrationTech: Int,
+    ): Boolean =
+        runCatching {
+                imsMmTelManager.isAvailable(
+                    MmTelCapabilities.CAPABILITY_TYPE_VOICE,
+                    registrationTech,
+                )
+            }
+            .getOrElse {
+                Log.w(
+                    TAG,
+                    "Unable to query IMS voice availability for subId=$subId " +
+                        "regTech=${registrationTechToString(registrationTech)}",
+                    it,
+                )
+                false
+            }
 
-        data class OnTransportTypeChanged(val transportType: Int) : ImsCallbackEvent
-
-        data class OnVoiceCapabilityChanged(val isVoiceCapable: Boolean) : ImsCallbackEvent
+    private data class ImsAvailabilityState(
+        val isVoLteAvailable: Boolean = false,
+        val isVoWifiAvailable: Boolean = false,
+        val isVoNrAvailable: Boolean = false,
+    ) {
+        fun prioritizeImsIcons(): ImsAvailabilityState {
+            return when {
+                isVoWifiAvailable ->
+                    copy(
+                        isVoLteAvailable = false,
+                        isVoNrAvailable = false,
+                    )
+                isVoNrAvailable ->
+                    copy(isVoLteAvailable = false)
+                else -> this
+            }
+        }
     }
 
     companion object {
         private const val TAG = "ImsRepository"
         private const val CALLBACK_REGISTRATION_RETRY_DELAY_MS = 2_000L
+
+        private fun registrationTechToString(registrationTech: Int): String =
+            when (registrationTech) {
+                REGISTRATION_TECH_LTE -> "LTE"
+                REGISTRATION_TECH_IWLAN -> "IWLAN"
+                REGISTRATION_TECH_CROSS_SIM -> "CROSS_SIM"
+                REGISTRATION_TECH_NR -> "NR"
+                else -> registrationTech.toString()
+            }
     }
 }

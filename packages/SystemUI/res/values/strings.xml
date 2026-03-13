@@ -2200,6 +2200,8 @@
     <string name="accessibility_status_bar_volte">VoLTE</string>
     <!-- Accessibility label for the VoWiFi status bar icon [CHAR LIMIT=NONE] -->
     <string name="accessibility_status_bar_vowifi">Wi-Fi calling</string>
+    <!-- Accessibility label for the VoNR status bar icon [CHAR LIMIT=NONE] -->
+    <string name="accessibility_status_bar_vonr">VoNR</string>
 
     <!-- Text displayed indicating that the user is connected to a satellite signal. -->
     <string name="satellite_connected_carrier_text">Satellite SOS</string>

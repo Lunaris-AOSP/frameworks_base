@@ -89,6 +89,29 @@ constructor(
         stateSelector = { it.isVoWifiAvailable },
     )
 
+@SysUISingleton
+class VoNrStatusBarIconViewModel
+@Inject
+constructor(
+    interactor: MobileIconsInteractor,
+    imsRepositoryStore: ImsRepositoryStore,
+    @Application scope: CoroutineScope,
+) :
+    BaseImsStatusBarIconViewModel(
+        interactor = interactor,
+        imsRepositoryStore = imsRepositoryStore,
+        scope = scope,
+        iconSet =
+            ImsIconSet(
+                single = R.drawable.ic_nk_vonr,
+                sim1 = R.drawable.ic_nk_vonr1,
+                sim2 = R.drawable.ic_nk_vonr2,
+                dual = R.drawable.ic_nk_vonr12,
+            ),
+        contentDescriptionRes = R.string.accessibility_status_bar_vonr,
+        stateSelector = { it.isVoNrAvailable },
+    )
+
 abstract class BaseImsStatusBarIconViewModel(
     interactor: MobileIconsInteractor,
     imsRepositoryStore: ImsRepositoryStore,

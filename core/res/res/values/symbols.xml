@@ -3406,6 +3406,7 @@
   <java-symbol type="string" name="status_bar_mobile" />
   <java-symbol type="string" name="status_bar_vowifi" />
   <java-symbol type="string" name="status_bar_volte" />
+  <java-symbol type="string" name="status_bar_vonr" />
   <java-symbol type="string" name="status_bar_stacked_mobile" />
   <java-symbol type="string" name="status_bar_ethernet" />
   <java-symbol type="string" name="status_bar_vpn" />
