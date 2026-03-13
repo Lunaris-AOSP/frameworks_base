@@ -37,6 +37,7 @@ open class ModernStatusBarView(context: Context, attrs: AttributeSet?) :
 
     private lateinit var slot: String
     internal lateinit var binding: ModernStatusBarViewBinding
+    private var iconBlocked: Boolean = false
 
     @StatusBarIconView.VisibleState
     private var iconVisibleState: Int = STATE_HIDDEN
@@ -85,6 +86,14 @@ open class ModernStatusBarView(context: Context, attrs: AttributeSet?) :
 
     override fun isIconVisible(): Boolean {
         return binding.getShouldIconBeVisible()
+    }
+
+    override fun isIconBlocked(): Boolean {
+        return iconBlocked
+    }
+
+    fun setIconBlocked(blocked: Boolean) {
+        iconBlocked = blocked
     }
 
     /** See [StatusBarIconView.getDrawingRect]. */
