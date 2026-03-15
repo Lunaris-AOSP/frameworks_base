@@ -52,6 +52,7 @@ import android.view.Window;
 import android.view.WindowInsetsController;
 import android.view.accessibility.AccessibilityEvent;
 
+import com.android.systemui.statusbar.notification.IosStyleNotificationHelper;
 import com.android.app.viewcapture.ViewCaptureFactory;
 import com.android.internal.view.FloatingActionMode;
 import com.android.internal.widget.floatingtoolbar.FloatingToolbar;
@@ -81,14 +82,20 @@ public class NotificationShadeWindowView extends WindowRootView {
 
     private boolean mAnimatingContentLaunch = false;
 
+    private IosStyleNotificationHelper mIosStyleNotificationHelper;
+
     public NotificationShadeWindowView(Context context, AttributeSet attrs) {
         super(context, attrs);
         setMotionEventSplittingEnabled(false);
+        mIosStyleNotificationHelper = new IosStyleNotificationHelper(context);
     }
 
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
+        if (mIosStyleNotificationHelper != null) {
+            mIosStyleNotificationHelper.updateEnabled();
+        }
         setWillNotDraw(!DEBUG);
         if (enableViewCaptureTracing()) {
             mViewCaptureCloseable = ViewCaptureFactory.getInstance(getContext())
@@ -136,6 +143,11 @@ public class NotificationShadeWindowView extends WindowRootView {
 
     @Override
     public boolean onTouchEvent(MotionEvent ev) {
+        // Try iOS-style notification handling first
+        if (mIosStyleNotificationHelper != null && mIosStyleNotificationHelper.onTouchEvent(ev)) {
+            return true;
+        }
+
         boolean handled = mInteractionEventHandler.handleTouchEvent(ev);
 
         if (!handled) {
@@ -186,6 +198,16 @@ public class NotificationShadeWindowView extends WindowRootView {
     public void setConfigurationForwarder(ConfigurationForwarder configurationForwarder) {
         ShadeWindowGoesAround.isUnexpectedlyInLegacyMode();
         mConfigurationForwarder = configurationForwarder;
+    }
+
+    public void setNotificationContainerForIosStyle(ViewGroup container) {
+       if (mIosStyleNotificationHelper != null) {
+           mIosStyleNotificationHelper.setNotificationContainer(container);
+       }
+    }
+
+    public IosStyleNotificationHelper getIosStyleNotificationHelper() {
+       return mIosStyleNotificationHelper;
     }
 
     @Override
