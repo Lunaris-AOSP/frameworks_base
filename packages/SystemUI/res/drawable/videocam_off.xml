@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector
     xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:androidprv="http://schemas.android.com/apk/prv/res/android"
     android:height="24.0dp"
-    android:tint="?android:textColorSecondary"
+    android:tint="@androidprv:color/materialColorOnSurfaceVariant"
     android:viewportHeight="24.0"
     android:viewportWidth="24.0"
     android:width="24.0dp">

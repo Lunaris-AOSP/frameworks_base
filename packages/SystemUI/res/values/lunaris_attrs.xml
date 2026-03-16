@@ -6,7 +6,7 @@
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
 
     <!-- Smartspace -->
-    <attr format="dimension" name="remoteViewsCardCornerRadius" />
+    <attr format="dimension" name="backgroundCornerRadius" />
     <attr format="dimension" name="smartspaceSubtitleTextSize" />
     <attr format="dimension" name="smartspaceTitleTextSize" />
     <declare-styleable
