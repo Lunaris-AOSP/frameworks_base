@@ -8,6 +8,7 @@ import android.content.Context;
 import android.database.ContentObserver;
 import android.os.Debug;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.Parcelable;
 import android.provider.Settings;
 import android.text.TextUtils;
@@ -54,6 +55,7 @@ public class BcSmartspaceView extends FrameLayout implements BcSmartspaceDataPlu
     public static final boolean DEBUG = Log.isLoggable("BcSmartspaceView", 3);
     public CardAdapter mAdapter;
     public final ContentObserver mAodObserver;
+    public final ContentObserver mBackgroundToggleObserver;
     public Handler mBgHandler;
     public int mCardPosition;
     public BcSmartspaceConfigPlugin mConfigProvider;
@@ -61,11 +63,12 @@ public class BcSmartspaceView extends FrameLayout implements BcSmartspaceDataPlu
     public boolean mHasPerformedLongPress;
     public boolean mHasPostedLongPress;
     public boolean mIsAodEnabled;
+    public boolean mIsBackgroundEnabled;
     public final Set<String> mLastReceivedTargets;
     public final Runnable mLongPressCallback;
     public PageIndicator mPageIndicator;
     public PagerDots mPagerDots;
-    public List mPendingTargets;
+    public List<SmartspaceTarget> mPendingTargets;
     public RecyclerView.ViewHolder mPreInflatedViewHolder;
     public float mPreviousDozeAmount;
     public final RecyclerView.RecycledViewPool mRecycledViewPool;
@@ -80,15 +83,13 @@ public class BcSmartspaceView extends FrameLayout implements BcSmartspaceDataPlu
     public final class ViewPager2OnPageChangeCallback extends ViewPager2.OnPageChangeCallback {
         @Override
         public final void onPageScrollStateChanged(int state) {
-            Integer num;
-            SmartspaceCard cardAtPosition;
             mScrollState = state;
             if (state == ViewPager2.SCROLL_STATE_DRAGGING) {
-                mSwipedCardPosition = Integer.valueOf(mViewPager2.getCurrentItem());
+                mSwipedCardPosition = mViewPager2.getCurrentItem();
             }
             if (state == ViewPager2.SCROLL_STATE_IDLE) {
-                if (mConfigProvider.isSwipeEventLoggingEnabled() && (num = mSwipedCardPosition) != null && num.intValue() != mViewPager2.getCurrentItem() && (cardAtPosition = mAdapter.getCardAtPosition(mSwipedCardPosition.intValue())) != null) {
-                    BcSmartspaceCardLogger.log(BcSmartspaceEvent.SMARTSPACE_CARD_SWIPE, cardAtPosition.getLoggingInfo());
+                if (mConfigProvider.isSwipeEventLoggingEnabled() && mSwipedCardPosition != null && mSwipedCardPosition != mViewPager2.getCurrentItem() && mAdapter.getCardAtPosition(mSwipedCardPosition) != null) {
+                    BcSmartspaceCardLogger.log(BcSmartspaceEvent.SMARTSPACE_CARD_SWIPE, mAdapter.getCardAtPosition(mSwipedCardPosition).getLoggingInfo());
                 }
                 mSwipedCardPosition = null;
             }
@@ -180,6 +181,7 @@ public class BcSmartspaceView extends FrameLayout implements BcSmartspaceDataPlu
         mPreInflatedViewHolder = null;
         mLastReceivedTargets = new ArraySet<>();
         mIsAodEnabled = false;
+        mIsBackgroundEnabled = false;
         mCardPosition = 0;
         mPreviousDozeAmount = 0.0f;
         mScrollState = 0;
@@ -190,6 +192,13 @@ public class BcSmartspaceView extends FrameLayout implements BcSmartspaceDataPlu
                 mIsAodEnabled = Settings.Secure.getIntForUser(getContext().getContentResolver(), "doze_always_on", 0, getContext().getUserId()) == 1;
             }
         };
+        mBackgroundToggleObserver =
+                new ContentObserver(new Handler(Looper.getMainLooper())) {
+                    @Override
+                    public final void onChange(boolean selfChange) {
+                        onBackgroundToggled();
+                    }
+                };
         mViewPager2OnPageChangeCallback = new ViewPager2OnPageChangeCallback();
         mViewPagerOnPageChangeListener = new ViewPagerOnPageChangeListener();
         mLongPressCallback =
@@ -315,6 +324,7 @@ public class BcSmartspaceView extends FrameLayout implements BcSmartspaceDataPlu
                 if (mPagerDots != null) {
                     mPagerDots.setNumPages(mAdapter.getCount(), isLayoutRtl());
                 }
+	    ContentResolver resolver = getContext().getContentResolver();
                 if (TextUtils.equals(mAdapter.getUiSurface(), BcSmartspaceDataPlugin.UI_SURFACE_LOCK_SCREEN_AOD)) {
                     try {
                         if (mBgHandler == null) {
@@ -322,7 +332,6 @@ public class BcSmartspaceView extends FrameLayout implements BcSmartspaceDataPlu
                         }
                         mBgHandler.post(
                                 () -> {
-                                    ContentResolver resolver = getContext().getContentResolver();
                                     int userId = getContext().getUserId();
                                     mIsAodEnabled =
                                             Settings.Secure.getIntForUser(
@@ -338,9 +347,24 @@ public class BcSmartspaceView extends FrameLayout implements BcSmartspaceDataPlu
                         Log.w("BcSmartspaceView", "Unable to register Doze Always on content observer.", e);
                     }
                 }
+                try {
+                    mBgHandler.post(
+                            () -> {
+                                resolver.registerContentObserver(
+                                        Settings.Secure.getUriFor("smartspace_settings_background"),
+                                        false,
+                                        mBackgroundToggleObserver,
+                                        -1);
+                            });
+                } catch (Exception e) {
+                    Log.w(
+                            "BcSmartspaceView",
+                            "Unable to register Smartspace Background Settings observer.",
+                            e);
+                }
+                onBackgroundToggled();
                 if (mDataProvider != null) {
                     registerDataProvider(mDataProvider);
-                    return;
                 }
                 return;
             }
@@ -359,11 +383,27 @@ public class BcSmartspaceView extends FrameLayout implements BcSmartspaceDataPlu
         }
         Log.w("BcSmartspaceView", "Unable to attach the view pager adapter");
         if (mPagerDots != null) {
+            mPagerDots.setNumPages(mAdapter.getCount(), isLayoutRtl());
         }
         if (TextUtils.equals(mAdapter.getUiSurface(), BcSmartspaceDataPlugin.UI_SURFACE_LOCK_SCREEN_AOD)) {
         }
         if (mDataProvider != null) {
         }
+    }
+
+    public final void onBackgroundToggled() {
+        boolean z =
+                Settings.Secure.getIntForUser(
+                                getContext().getContentResolver(),
+                                "smartspace_settings_background",
+                                0,
+                                getContext().getUserId())
+                        == 1;
+        if (mIsBackgroundEnabled == z) {
+            return;
+        }
+        mIsBackgroundEnabled = z;
+        mAdapter.onBackgroundToggled(z);
     }
 
     @Override
@@ -373,7 +413,12 @@ public class BcSmartspaceView extends FrameLayout implements BcSmartspaceDataPlu
             throw new IllegalStateException("Must set background handler to avoid making binder calls on main thread");
         }
         mBgHandler.post(
-                () -> getContext().getContentResolver().unregisterContentObserver(mAodObserver));
+                () -> {
+                    getContext().getContentResolver().unregisterContentObserver(mAodObserver);
+                    getContext()
+                            .getContentResolver()
+                            .unregisterContentObserver(mBackgroundToggleObserver);
+                });
         if (mViewPager != null) {
             mViewPager.removeOnPageChangeListener(mViewPagerOnPageChangeListener);
         } else if (mViewPager2 != null) {

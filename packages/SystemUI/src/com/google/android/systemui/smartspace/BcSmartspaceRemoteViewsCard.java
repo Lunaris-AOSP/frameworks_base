@@ -27,6 +27,7 @@ public final class BcSmartspaceRemoteViewsCard extends AppWidgetHostView impleme
 
     @Override
     public final void bindData(SmartspaceTarget target, BcSmartspaceDataPlugin.SmartspaceEventNotifier eventNotifier, BcSmartspaceCardLoggingInfo loggingInfo, boolean usePageIndicatorUi) {
+        updateAppWidget(null);
         mTarget = target;
         mLoggingInfo = loggingInfo;
         mEventNotifier = eventNotifier;

@@ -42,6 +42,7 @@ public class WeatherSmartspaceView extends LinearLayout implements BcSmartspaceD
     public final int mIconSize;
     public boolean mIsAodEnabled;
     public BcSmartspaceCardLoggingInfo mLoggingInfo;
+    public View.OnClickListener mOnClickListener;
     public int mPrimaryTextColor;
     public final boolean mRemoveTextDescent;
     public final int mTextDescentExtraPadding;
@@ -220,6 +221,12 @@ public class WeatherSmartspaceView extends LinearLayout implements BcSmartspaceD
     @Override
     public final void setFalsingManager(FalsingManager falsingManager) {
         BcSmartSpaceUtil.sFalsingManager = falsingManager;
+    }
+
+    @Override
+    public final void setOnClickListener(View.OnClickListener listener) {
+        super.setOnClickListener(listener);
+        mOnClickListener = listener;
     }
 
     @Override

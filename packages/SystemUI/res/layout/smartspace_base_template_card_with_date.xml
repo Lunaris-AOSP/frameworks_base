@@ -42,6 +42,8 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/date">
             <include
+                layout="@layout/smartspace_subtitle_aqi_chip" />
+            <include
                 layout="@layout/smartspace_subtitle_text" />
             <include
                 android:layout_width="0.0dp"
