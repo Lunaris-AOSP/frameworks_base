@@ -14648,6 +14648,27 @@ public final class Settings {
         public static final String CLIPBOARD_AUTO_CLEAR_ENABLED = "clipboard_auto_clear_enabled";
 
         /**
+         * Idle Manager
+         * @hide
+         */
+        public static final String IDLE_MANAGER = "idle_manager";
+
+        /**
+         * @hide
+         */
+        public static final String IDLE_MANAGER_APPS = "idle_manager_apps";
+
+        /**
+         * @hide
+         */
+        public static final String IDLE_MANAGER_TIMEOUT = "idle_manager_timeout";
+
+        /**
+         * @hide
+         */
+        public static final String IDLE_MANAGER_KILL_STATS = "idle_manager_kill_stats";
+
+        /**
          * Timeout length for clipboard auto clear
          * @hide
          */
