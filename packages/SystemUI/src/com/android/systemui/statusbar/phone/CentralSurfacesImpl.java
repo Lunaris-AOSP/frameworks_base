@@ -110,6 +110,7 @@ import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
 import com.android.keyguard.ViewMediatorCallback;
 import com.android.systemui.ActivityIntentHelper;
+import com.android.systemui.IdleManager;
 import com.android.systemui.AutoReinflateContainer;
 import com.android.systemui.CoreStartable;
 import com.android.systemui.DejankUtils;
@@ -2731,6 +2732,14 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces,
             }
 
             DejankUtils.stopDetectingBlockingIpcs(tag);
+            if (Settings.Secure.getInt(mContext.getContentResolver(),
+                    Settings.Secure.IDLE_MANAGER, 1) == 1) {
+                IdleManager.initManager(mContext);
+                IdleManager instance = IdleManager.getInstance();
+                if (instance != null) {
+                    instance.executeManager();
+                }
+            }
         }
 
         @Override
@@ -2755,6 +2764,13 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces,
             });
             DejankUtils.stopDetectingBlockingIpcs(tag);
             mHandler.removeCallbacks(mSystemUiGcOpt);
+            if (Settings.Secure.getInt(mContext.getContentResolver(),
+                    Settings.Secure.IDLE_MANAGER, 1) == 1) {
+                IdleManager instance = IdleManager.getInstance();
+                if (instance != null) {
+                    instance.haltManager();
+                }
+            }
         }
 
         /**
