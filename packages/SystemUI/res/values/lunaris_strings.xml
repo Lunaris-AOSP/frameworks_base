@@ -290,4 +290,8 @@
 
     <!-- Wifi Standard. -->
     <string name="status_bar_wifi_standard">Wifi Standard</string>
+
+    <!-- Essential Notifications -->
+    <string name="essential_notifications_title">Essentials</string>
+    <string name="essential_notifications_summary">Important messages and alerts</string>
 </resources>
