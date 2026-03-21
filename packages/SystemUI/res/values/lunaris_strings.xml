@@ -287,4 +287,7 @@
 
     <!-- Sleep Mode -->
     <string name="quick_settings_sleep_mode_label">Sleep Mode</string>
+
+    <!-- Wifi Standard. -->
+    <string name="status_bar_wifi_standard">Wifi Standard</string>
 </resources>

@@ -59,6 +59,7 @@ import com.android.systemui.statusbar.pipeline.wifi.ui.WifiUiAdapter;
 import com.android.systemui.statusbar.pipeline.wifi.ui.view.ModernStatusBarWifiView;
 import com.android.systemui.statusbar.pipeline.wifi.ui.viewmodel.LocationBasedWifiViewModel;
 import com.android.systemui.statusbar.policy.NetworkSpeedController;
+import com.android.systemui.statusbar.WifiStandardViewController;
 import com.android.systemui.util.Assert;
 
 import dagger.Lazy;
@@ -86,6 +87,7 @@ public class IconManager implements DemoModeCommandReceiver {
     private final Lazy<MobileUiAdapterKairos> mMobileUiAdapterKairos;
     private final KairosNetwork mKairosNetwork;
     private final CoroutineScope mAppScope;
+    protected final WifiStandardViewController.Factory mWifiStandardFactory;
     private final MutableIntObjectMap<Job> mBindingJobs = new MutableIntObjectMap<>();
 
     /**
@@ -118,7 +120,8 @@ public class IconManager implements DemoModeCommandReceiver {
             Lazy<MobileUiAdapterKairos> mobileUiAdapterKairos,
             MobileContextProvider mobileContextProvider,
             KairosNetwork kairosNetwork,
-            CoroutineScope appScope
+            CoroutineScope appScope,
+            WifiStandardViewController.Factory wifiStandardFactory
     ) {
         mGroup = group;
         mMobileContextProvider = mobileContextProvider;
@@ -126,8 +129,9 @@ public class IconManager implements DemoModeCommandReceiver {
         mLocation = location;
         mKairosNetwork = kairosNetwork;
         mAppScope = appScope;
+        mWifiStandardFactory = wifiStandardFactory;
 
-        mNewIconStyle = Settings.System.getIntForUser(mContext.getContentResolver(),
+	mNewIconStyle = Settings.System.getIntForUser(mContext.getContentResolver(),
             Settings.System.STATUSBAR_COLORED_ICONS, 0, UserHandle.USER_CURRENT) == 1;
         mShowNotificationCount = Settings.System.getIntForUser(mContext.getContentResolver(),
             Settings.System.STATUSBAR_NOTIF_COUNT, 0,
@@ -264,7 +268,7 @@ public class IconManager implements DemoModeCommandReceiver {
     }
 
     private ModernStatusBarWifiView onCreateModernStatusBarWifiView(String slot) {
-        return ModernStatusBarWifiView.constructAndBind(mContext, slot, mWifiViewModel);
+        return ModernStatusBarWifiView.constructAndBind(mContext, slot, mWifiViewModel, mWifiStandardFactory);
     }
 
     private ModernStatusBarMobileView onCreateModernStatusBarMobileView(
@@ -408,7 +412,8 @@ public class IconManager implements DemoModeCommandReceiver {
                 mIconSize,
                 mMobileUiAdapterKairos,
                 mKairosNetwork,
-                mAppScope
+                mAppScope,
+                mWifiStandardFactory
         );
     }
 }
