@@ -1927,6 +1927,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
             if (sandboxService != null) {
                 sandboxService.removeTask(task, reason);
             }
+            GameSpaceService.get().removeTask(task, reason);
         } finally {
             task.mInRemoveTask = false;
             mService.mChainTracker.endPartial();
