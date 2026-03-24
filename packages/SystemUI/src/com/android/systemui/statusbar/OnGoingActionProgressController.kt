@@ -217,10 +217,43 @@ class OnGoingActionProgressController(
         currentArtistName = (metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
             ?: metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST))?.takeIf { it.isNotBlank() }
 
-        val art =
+        var art =
             metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
                 ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART)
                 ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
+
+        // =========================================================================
+        // [Lunaris AOSP: Spotify Notification Extraction Fallback]
+        // If the MediaSession lacks the bitmap (common with Spotify to save IPC memory),
+        // we intercept the active StatusBarNotification and extract the LargeIcon directly.
+        // =========================================================================
+        if (art == null) {
+            val actives = notificationListener.activeNotifications
+            if (actives != null) {
+                for (sbn in actives) {
+                    val extras = sbn.notification.extras
+                    val template = extras?.getString(Notification.EXTRA_TEMPLATE) ?: ""
+                    
+                    // Look for MediaStyle notifications or explicitly target Spotify
+                    if (template.contains("MediaStyle") || sbn.packageName == "com.spotify.music") {
+                        val largeIcon = sbn.notification.getLargeIcon()
+                        if (largeIcon != null) {
+                            try {
+                                val drawable = largeIcon.loadDrawable(context)
+                                art = drawable?.toBitmap()
+                                if (art != null) {
+                                    Log.d(TAG, "Successfully extracted album art from Notification LargeIcon")
+                                    break
+                                }
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Failed to load LargeIcon from media notification", e)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // =========================================================================
 
         if (art != null) {
             currentAlbumArt = art
@@ -228,8 +261,49 @@ class OnGoingActionProgressController(
                 invalidateChipBgColor()
                 currentAlbumArt?.let { extractAndApplyChipBgColorFromAlbumArt(it) }
             }
-        } else if (metadata != null) {  // Partial update, force refresh
-            mediaSessionHelper.refreshActiveControllerMetadata()
+        } else {
+            // =========================================================================
+            // [Lunaris AOSP: URI String Fallback]
+            // Keep URI check just in case it works for other players like Apple Music
+            // =========================================================================
+            val artUri = metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
+                ?: metadata?.getString(MediaMetadata.METADATA_KEY_ART_URI)
+
+            if (!artUri.isNullOrBlank()) {
+                fetchAlbumArtFromUriAsync(artUri)
+            } else if (metadata != null) {
+                mediaSessionHelper.refreshActiveControllerMetadata()
+            }
+        }
+    }
+
+    /**
+     * [Lunaris AOSP: Media URI Fix]
+     * Helper function to asynchronously load album art from a content URI.
+     */
+    private fun fetchAlbumArtFromUriAsync(uriString: String) {
+        mainScope.launch {
+            try {
+                val bitmap = withContext(bgDispatcher) {
+                    val uri = Uri.parse(uriString)
+                    val source = android.graphics.ImageDecoder.createSource(contentResolver, uri)
+                    android.graphics.ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
+                        // CRITICAL: Force software allocation here to avoid hardware bitmap crashes in SystemUI
+                        decoder.setAllocator(android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE)
+                        decoder.isMutableRequired = true
+                    }
+                }
+                
+                currentAlbumArt = bitmap
+                if (chipColorMode == CHIP_COLOR_MODE_ALBUM_ART) {
+                    invalidateChipBgColor()
+                    extractAndApplyChipBgColorFromAlbumArt(bitmap)
+                } else {
+                    updateProgressState() 
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to decode media URI for ongoing chip: $uriString", e)
+            }
         }
     }
 
