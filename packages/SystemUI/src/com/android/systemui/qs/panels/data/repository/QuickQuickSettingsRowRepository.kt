@@ -33,6 +33,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.merge
 
@@ -71,6 +72,7 @@ class QuickQuickSettingsRowRepository @Inject constructor(
         merge(configurationRepository.onConfigurationChange, settingsChanges())
             .emitOnStart()
             .mapLatest { readRows() }
+            .distinctUntilChanged()
 
     val defaultRows: Int =
         resources.getInteger(R.integer.quick_qs_paginated_grid_num_rows)
