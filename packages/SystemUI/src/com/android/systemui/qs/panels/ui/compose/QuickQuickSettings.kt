@@ -36,6 +36,7 @@ import com.android.systemui.qs.composefragment.ui.GridAnchor
 import com.android.systemui.qs.flags.QSMaterialExpressiveTiles
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.Tile
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberQSPanelStyle
 import com.android.systemui.qs.panels.ui.viewmodel.BounceableTileViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.QuickQuickSettingsViewModel
 import com.android.systemui.qs.shared.ui.QuickSettings.Elements.toElementKey
@@ -57,6 +58,7 @@ fun ContentScope.QuickQuickSettings(
     val useModifiedSpacing = remember {
         Settings.System.getInt(context.contentResolver, Settings.System.QS_USE_MODIFIED_TILE_SPACING, 0) == 1
     }
+    val classicStyle = rememberQSPanelStyle()
 
     Box(modifier = modifier) {
         GridAnchor()
@@ -72,7 +74,7 @@ fun ContentScope.QuickQuickSettings(
             ) { sizedTile, interactionSource ->
                 Tile(
                     tile = sizedTile.tile,
-                    iconOnly = sizedTile.isIcon,
+                    iconOnly = classicStyle || sizedTile.isIcon,
                     squishiness = { squishiness },
                     coroutineScope = scope,
                     tileHapticsViewModelFactoryProvider =
@@ -111,7 +113,7 @@ fun ContentScope.QuickQuickSettings(
                 Element(it.tile.spec.toElementKey(), Modifier) {
                     Tile(
                         tile = it.tile,
-                        iconOnly = it.isIcon,
+                        iconOnly = classicStyle || it.isIcon,
                         squishiness = { squishiness },
                         coroutineScope = scope,
                         bounceableInfo =
