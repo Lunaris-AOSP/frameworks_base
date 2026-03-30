@@ -14696,6 +14696,12 @@ public final class Settings {
         public static final String MEDIA_SQUIGGLE_ANIMATION = "media_squiggle_animation";
 
         /**
+         * Whether to show qs media player
+         * @hide
+         */
+        public static final String QS_SHOW_MEDIA_PLAYER = "qs_show_media_player";
+
+        /**
          * Control whether the process CPU info meter should be shown.
          * @hide
          */
