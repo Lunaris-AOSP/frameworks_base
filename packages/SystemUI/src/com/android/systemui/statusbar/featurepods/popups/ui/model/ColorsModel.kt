@@ -102,4 +102,60 @@ sealed interface ColorsModel {
         override fun iconBackgroundOnHover(isPopupShown: Boolean, colorScheme: ColorScheme): Color =
             colorScheme.onPrimary
     }
+
+    /** A dark, pill-shaped treatment for the centered dynamic island. */
+    data object DynamicIsland : ColorsModel {
+        private val baseBackground = Color(0xE6000000)
+        private val expandedBackground = Color(0xF2000000)
+
+        @Composable
+        override fun chipBackground(isPopupShown: Boolean, colorScheme: ColorScheme): Color =
+            if (isPopupShown) expandedBackground else baseBackground
+
+        @Composable
+        override fun chipContent(isPopupShown: Boolean, colorScheme: ColorScheme): Color =
+            Color.White
+
+        @Composable
+        override fun chipOutline(isPopupShown: Boolean, colorScheme: ColorScheme): Color =
+            Color.White.copy(alpha = if (isPopupShown) 0.18f else 0.10f)
+
+        @Composable
+        override fun icon(
+            isPopupShown: Boolean,
+            isHovered: Boolean,
+            colorScheme: ColorScheme,
+        ): Color = chipContent(isPopupShown = isPopupShown, colorScheme = colorScheme)
+
+        @Composable
+        override fun iconBackgroundOnHover(isPopupShown: Boolean, colorScheme: ColorScheme): Color =
+            Color.White.copy(alpha = 0.14f)
+    }
+
+    /** Dynamic island styling for destructive or time-critical states like recording. */
+    data object DynamicIslandAlert : ColorsModel {
+        private val accent = Color(0xFFFF5A5F)
+
+        @Composable
+        override fun chipBackground(isPopupShown: Boolean, colorScheme: ColorScheme): Color =
+            DynamicIsland.chipBackground(isPopupShown = isPopupShown, colorScheme = colorScheme)
+
+        @Composable
+        override fun chipContent(isPopupShown: Boolean, colorScheme: ColorScheme): Color = accent
+
+        @Composable
+        override fun chipOutline(isPopupShown: Boolean, colorScheme: ColorScheme): Color =
+            accent.copy(alpha = if (isPopupShown) 0.28f else 0.18f)
+
+        @Composable
+        override fun icon(
+            isPopupShown: Boolean,
+            isHovered: Boolean,
+            colorScheme: ColorScheme,
+        ): Color = accent
+
+        @Composable
+        override fun iconBackgroundOnHover(isPopupShown: Boolean, colorScheme: ColorScheme): Color =
+            accent.copy(alpha = 0.14f)
+    }
 }

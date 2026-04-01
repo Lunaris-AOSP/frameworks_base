@@ -16,9 +16,6 @@
 
 package com.android.systemui.statusbar.featurepods.popups.ui.compose
 
-import android.media.audiofx.Visualizer
-import android.os.Handler
-import android.os.Looper
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -40,9 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -71,8 +66,6 @@ import com.android.systemui.statusbar.featurepods.popups.ui.model.ColorsModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.HoverBehavior
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
-import kotlin.math.abs
-import kotlin.math.sqrt
 
 /**
  * A clickable chip that can show an anchored popup containing relevant system controls. The chip
@@ -291,110 +284,5 @@ private fun isMediaPlaying(viewModel: PopupChipModel.Shown): Boolean {
 
 @Composable
 private fun MusicVisualizerBars(isPlaying: Boolean, color: Color) {
-    val levels = remember { mutableStateListOf(0.22f, 0.45f, 0.34f, 0.56f) }
-    val mainHandler = remember { Handler(Looper.getMainLooper()) }
-
-    DisposableEffect(isPlaying) {
-        if (!isPlaying) {
-            levels[0] = 0.22f
-            levels[1] = 0.45f
-            levels[2] = 0.34f
-            levels[3] = 0.56f
-            onDispose {}
-        } else {
-            var visualizer: Visualizer? = null
-            val listener =
-                object : Visualizer.OnDataCaptureListener {
-                    override fun onWaveFormDataCapture(
-                        visualizer: Visualizer?,
-                        waveform: ByteArray?,
-                        samplingRate: Int,
-                    ) {
-                        if (waveform == null || waveform.isEmpty()) return
-                    val quarter = waveform.size / 4
-                    val secondQuarter = quarter * 2
-                    val thirdQuarter = quarter * 3
-                    val newLevels =
-                        floatArrayOf(
-                            waveform.windowEnergy(0, quarter),
-                            waveform.windowEnergy(quarter, secondQuarter),
-                            waveform.windowEnergy(secondQuarter, thirdQuarter),
-                            waveform.windowEnergy(thirdQuarter, waveform.size),
-                        )
-
-                        mainHandler.post {
-                            for (i in newLevels.indices) {
-                                levels[i] =
-                                    (levels[i] * 0.65f + newLevels[i] * 0.35f).coerceIn(0.1f, 1f)
-                            }
-                        }
-                    }
-
-                    override fun onFftDataCapture(
-                        visualizer: Visualizer?,
-                        fft: ByteArray?,
-                        samplingRate: Int,
-                    ) = Unit
-                }
-
-            runCatching {
-                    visualizer =
-                        Visualizer(0).apply {
-                            val captureSizes = Visualizer.getCaptureSizeRange()
-                            captureSize = captureSizes[1].coerceAtMost(256)
-                            setDataCaptureListener(
-                                listener,
-                                Visualizer.getMaxCaptureRate() / 2,
-                                true,
-                                false,
-                            )
-                            enabled = true
-                        }
-                }
-                .onFailure {
-                    levels[0] = 0.24f
-                    levels[1] = 0.48f
-                    levels[2] = 0.36f
-                    levels[3] = 0.52f
-                }
-
-            onDispose {
-                runCatching { visualizer?.enabled = false }
-                runCatching { visualizer?.release() }
-            }
-        }
-    }
-
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(1.5.dp),
-        modifier = Modifier.padding(start = 2.dp),
-    ) {
-        repeat(levels.size) { index ->
-            val scale = levels[index]
-            Box(
-                modifier = Modifier.size(width = 2.dp, height = 11.dp),
-                contentAlignment = Alignment.BottomCenter,
-            ) {
-                Box(
-                    modifier =
-                        Modifier.size(width = 2.dp, height = 11.dp * scale)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(color)
-                )
-            }
-        }
-    }
-}
-
-private fun ByteArray.windowEnergy(start: Int, end: Int): Float {
-    if (start >= end || start < 0 || end > size) return 0.1f
-    var sum = 0f
-    var count = 0
-    for (i in start until end) {
-        val normalized = abs(this[i].toInt()) / 128f
-        sum += normalized * normalized
-        count++
-    }
-    if (count == 0) return 0.1f
-    return sqrt(sum / count).coerceIn(0.1f, 1f)
+    AudioReactiveBars(isPlaying = isPlaying, color = color, startPadding = 2.dp)
 }

@@ -16,18 +16,18 @@
 
 package com.android.systemui.statusbar.featurepods.media.ui.viewmodel
 
-import android.content.Context
 import androidx.compose.runtime.getValue
 import com.android.systemui.common.shared.model.ContentDescription
 import com.android.systemui.common.shared.model.Icon
-import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.lifecycle.ExclusiveActivatable
 import com.android.systemui.lifecycle.Hydrator
 import com.android.systemui.statusbar.featurepods.media.domain.interactor.MediaControlChipInteractor
 import com.android.systemui.statusbar.featurepods.media.shared.model.MediaControlChipModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.ChipIcon
+import com.android.systemui.statusbar.featurepods.popups.ui.model.ColorsModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.HoverBehavior
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
+import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
 import com.android.systemui.statusbar.featurepods.popups.ui.viewmodel.StatusBarPopupChipViewModel
 import dagger.assisted.AssistedFactory
@@ -43,7 +43,6 @@ import java.util.Locale
 class MediaControlChipViewModel
 @AssistedInject
 constructor(
-    @Application private val applicationContext: Context,
     mediaControlChipInteractor: MediaControlChipInteractor,
 ) : StatusBarPopupChipViewModel, ExclusiveActivatable() {
     private val hydrator: Hydrator = Hydrator("MediaControlChipViewModel.hydrator")
@@ -71,25 +70,20 @@ constructor(
         }
 
         val contentDescription = model.appName?.let { ContentDescription.Loaded(description = it) }
-
         val defaultIcon =
-            when (model) {
-                is MediaControlChipModel.Legacy -> {
-                    (model.artworkIcon ?: model.appIcon)?.loadDrawable(applicationContext)?.let {
-                        Icon.Loaded(drawable = it, contentDescription = contentDescription)
-                    }
-                        ?: Icon.Resource(
-                            resId = com.android.internal.R.drawable.ic_audio_media,
-                            contentDescription = contentDescription,
-                        )
-                }
-                is MediaControlChipModel.Compose -> model.artworkIcon ?: model.appIcon
-            }
+            model.artworkIcon
+                ?: model.appIcon
+                ?: Icon.Resource(
+                    resId = com.android.internal.R.drawable.ic_audio_media,
+                    contentDescription = contentDescription,
+                )
         return PopupChipModel.Shown(
             chipId = PopupChipId.MediaControl,
             icons = listOf(ChipIcon(icon = defaultIcon)),
             chipText = normalizeSongTitle(model.songName.toString(), model.artistName?.toString()),
+            colors = ColorsModel.DynamicIsland,
             hoverBehavior = createHoverBehavior(model),
+            popupContent = PopupContentModel.Media(model),
         )
     }
 

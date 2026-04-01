@@ -87,7 +87,8 @@ import com.android.systemui.statusbar.core.RudimentaryBattery
 import com.android.systemui.statusbar.core.StatusBarConnectedDisplays
 import com.android.systemui.statusbar.core.StatusBarForDesktop
 import com.android.systemui.statusbar.events.domain.interactor.SystemStatusEventAnimationInteractor
-import com.android.systemui.statusbar.featurepods.popups.ui.compose.StatusBarPopupChipsContainer
+import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
+import com.android.systemui.statusbar.featurepods.popups.ui.compose.StatusBarDynamicIslandContainer
 import com.android.systemui.statusbar.layout.ui.viewmodel.AppHandlesViewModel
 import com.android.systemui.statusbar.notification.icon.ui.viewbinder.ConnectedDisplaysStatusBarNotificationIconViewStore
 import com.android.systemui.statusbar.notification.icon.ui.viewbinder.NotificationIconContainerStatusBarViewBinder
@@ -327,10 +328,8 @@ fun StatusBarRoot(
                         )
 
                         setContent {
-                            StatusBarPopupChipsContainer(
+                            StatusBarDynamicIslandContainer(
                                 chips = statusBarViewModel.popupChips,
-                                mediaViewModelFactory = mediaViewModelFactory,
-                                mediaHost = mediaHost,
                                 onMediaControlPopupVisibilityChanged = { popupShowing ->
                                     mediaHierarchyManager.isMediaControlPopupShowing =
                                         popupShowing
@@ -498,7 +497,9 @@ private fun addStartSideComposable(
                     )
                 }
                 val chipsVisibilityModel = statusBarViewModel.ongoingActivityChips
-                if (chipsVisibilityModel.areChipsAllowed) {
+                val shouldHideLegacyScreenRecordChip =
+                    statusBarViewModel.popupChips.any { it.chipId == PopupChipId.ScreenRecord }
+                if (chipsVisibilityModel.areChipsAllowed && !shouldHideLegacyScreenRecordChip) {
                     OngoingActivityChips(
                         chips = chipsVisibilityModel.chips,
                         iconViewStore = iconViewStore,

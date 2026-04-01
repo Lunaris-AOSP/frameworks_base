@@ -17,24 +17,19 @@
 package com.android.systemui.statusbar.featurepods.popups.ui.compose
 
 import android.view.ViewTreeObserver
-import androidx.activity.OnBackPressedDispatcher
-import androidx.activity.OnBackPressedDispatcherOwner
-import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleOut
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -45,17 +40,18 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.android.systemui.media.controls.ui.view.MediaHost
-import com.android.systemui.media.remedia.ui.viewmodel.MediaViewModel
 import com.android.systemui.res.R
+import com.android.systemui.statusbar.featurepods.alarm.ui.compose.AlarmPopup
 import com.android.systemui.statusbar.featurepods.av.ui.compose.AvControlsChipPopup
+import com.android.systemui.statusbar.featurepods.flashlight.ui.compose.FlashlightPopup
+import com.android.systemui.statusbar.featurepods.livescore.ui.compose.LiveScorePopup
 import com.android.systemui.statusbar.featurepods.media.ui.compose.MediaControlPopup
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
+import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentModel
+import com.android.systemui.statusbar.featurepods.screenrecord.ui.compose.ScreenRecordPopup
 import com.android.systemui.statusbar.featurepods.sharescreen.ui.compose.ShareScreenPrivacyIndicatorPopup
-import kotlinx.coroutines.delay
+import com.android.systemui.statusbar.featurepods.stopwatch.ui.compose.StopwatchPopup
 
 /**
  * Displays a popup in the status bar area. The offset is calculated to draw the popup below the
@@ -65,8 +61,6 @@ import kotlinx.coroutines.delay
 fun StatusBarPopup(
     viewModel: PopupChipModel.Shown,
     isVisible: Boolean,
-    mediaViewModelFactory: MediaViewModel.Factory,
-    mediaHost: MediaHost,
 ) {
     val density = Density(LocalContext.current)
     Popup(
@@ -97,14 +91,6 @@ fun StatusBarPopup(
             }
         }
 
-        LaunchedEffect(isVisible, viewModel.chipId) {
-            if (isVisible && viewModel.chipId is PopupChipId.MediaControl) {
-                // Fallback so popup does not remain stuck after app launch transitions.
-                delay(6000)
-                viewModel.hidePopup()
-            }
-        }
-
         AnimatedVisibility(
             visible = isVisible,
             enter =
@@ -123,35 +109,20 @@ fun StatusBarPopup(
                     ),
         ) {
             Box(modifier = Modifier.padding(8.dp).wrapContentSize()) {
-                when (viewModel.chipId) {
-                    is PopupChipId.MediaControl -> {
-                        val viewRootImpl = LocalView.current.viewRootImpl
-                        val lifecycle = LocalLifecycleOwner.current.lifecycle
-                        val owner =
-                            object : OnBackPressedDispatcherOwner {
-                                override val onBackPressedDispatcher =
-                                    OnBackPressedDispatcher().apply {
-                                        setOnBackInvokedDispatcher(
-                                            viewRootImpl.onBackInvokedDispatcher
-                                        )
-                                    }
-
-                                override val lifecycle: Lifecycle = lifecycle
-                            }
-                        CompositionLocalProvider(LocalOnBackPressedDispatcherOwner provides owner) {
-                            MediaControlPopup(
-                                viewModelFactory = mediaViewModelFactory,
-                                mediaHost = mediaHost,
-                            )
+                when (val popupContent = viewModel.popupContent) {
+                    is PopupContentModel.Media -> MediaControlPopup(model = popupContent.model)
+                    is PopupContentModel.ScreenRecord -> ScreenRecordPopup(model = popupContent.model)
+                    is PopupContentModel.LiveScore -> LiveScorePopup(model = popupContent.model)
+                    is PopupContentModel.Flashlight -> FlashlightPopup(model = popupContent.model)
+                    is PopupContentModel.Stopwatch -> StopwatchPopup(model = popupContent.model)
+                    is PopupContentModel.Alarm -> AlarmPopup(model = popupContent.model)
+                    PopupContentModel.None ->
+                        when (viewModel.chipId) {
+                            is PopupChipId.AvControlsIndicator -> AvControlsChipPopup()
+                            is PopupChipId.ShareScreenPrivacyIndicator ->
+                                ShareScreenPrivacyIndicatorPopup()
+                            else -> Unit
                         }
-                    }
-
-                    is PopupChipId.AvControlsIndicator -> {
-                        AvControlsChipPopup()
-                    }
-                    is PopupChipId.ShareScreenPrivacyIndicator -> {
-                        ShareScreenPrivacyIndicatorPopup()
-                    }
                 }
             }
         }

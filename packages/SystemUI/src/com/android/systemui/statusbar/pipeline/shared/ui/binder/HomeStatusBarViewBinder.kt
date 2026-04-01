@@ -114,6 +114,7 @@ constructor(
         val denyListed: Boolean,
         val hideForHun: Boolean,
         val chipStyle: Int,
+        val dynamicIslandEnabled: Boolean,
         val position: Int,
         val visibilityModel: VisibilityModel,
         val gradientStartColor: Int = Color.parseColor("#FF6B6B"),
@@ -177,6 +178,7 @@ constructor(
                             denyListed = false,
                             hideForHun = false,
                             chipStyle = 0,
+                            dynamicIslandEnabled = context.contentResolver.readDynamicIslandEnabled(),
                             position = context.contentResolver.readClockPosition(),
                             visibilityModel = VisibilityModel(View.GONE, true),
                             gradientStartColor = context.contentResolver.readGradientStartColor(),
@@ -204,6 +206,8 @@ constructor(
                     Settings.System.getUriFor(Settings.System.STATUSBAR_CLOCK_CHIP_GRADIENT_ANGLE)
                 val gradientMaskTextUri: Uri =
                     Settings.System.getUriFor(Settings.System.STATUSBAR_CLOCK_CHIP_GRADIENT_MASK_TEXT)
+                val dynamicIslandUri: Uri =
+                    Settings.System.getUriFor(Settings.System.STATUS_BAR_SHOW_DYNAMIC_ISLAND)
 
                 val taskStackListener =
                     object : TaskStackChangeListener {
@@ -284,6 +288,11 @@ constructor(
                                            gradientMaskText =
                                                context.contentResolver.readGradientMaskText()
                                        )
+                                    dynamicIslandUri ->
+                                        current.copy(
+                                            dynamicIslandEnabled =
+                                                context.contentResolver.readDynamicIslandEnabled()
+                                        )
                                     else -> current
                                 }
                             }
@@ -292,7 +301,7 @@ constructor(
 
                 val urisToObserve = listOf(clockAutoHideUri, iconHideListUri, statusBarClockUri,
                     statusBarClockChipUri, gradientStartColorUri, gradientEndColorUri, gradientAngleUri,
-                    gradientMaskTextUri)
+                    gradientMaskTextUri, dynamicIslandUri)
                 urisToObserve.forEach { uri ->
                     context.contentResolver.registerContentObserver(
                         uri,
@@ -516,7 +525,9 @@ constructor(
                                     state.visibilityModel.visibility == View.VISIBLE &&
                                         !hunBlocksClock &&
                                         !state.autoHide &&
-                                        !state.denyListed
+                                        !state.denyListed &&
+                                        !(state.position == CLOCK_POSITION_CENTER &&
+                                            state.dynamicIslandEnabled)
                                 ) {
                                     state.visibilityModel
                                 } else {
@@ -756,6 +767,15 @@ constructor(
             0,
             UserHandle.USER_CURRENT,
         ) == GRADIENT_TEXT_STYLE_MASK
+    
+    private fun ContentResolver.readDynamicIslandEnabled(): Boolean {
+        return Settings.System.getIntForUser(
+            this,
+            Settings.System.STATUS_BAR_SHOW_DYNAMIC_ISLAND,
+            0,
+            UserHandle.USER_CURRENT,
+        ) != 0
+    }
 
     private fun shouldClockAutoHideForCurrentTask(): Boolean {
         return ActivityManagerWrapper.getInstance()
