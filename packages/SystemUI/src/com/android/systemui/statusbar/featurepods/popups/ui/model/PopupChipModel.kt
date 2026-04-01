@@ -16,7 +16,13 @@
 
 package com.android.systemui.statusbar.featurepods.popups.ui.model
 
+import com.android.systemui.statusbar.featurepods.alarm.shared.model.AlarmPopupModel
+import com.android.systemui.statusbar.featurepods.flashlight.shared.model.FlashlightPopupModel
 import com.android.systemui.common.shared.model.Icon
+import com.android.systemui.statusbar.featurepods.livescore.shared.model.LiveScoreChipModel
+import com.android.systemui.statusbar.featurepods.media.shared.model.MediaControlChipModel
+import com.android.systemui.statusbar.featurepods.screenrecord.shared.model.ScreenRecordPopupModel
+import com.android.systemui.statusbar.featurepods.stopwatch.shared.model.StopwatchPopupModel
 
 /**
  * Ids used to track different types of popup chips. Will be used to ensure only one chip is
@@ -24,6 +30,16 @@ import com.android.systemui.common.shared.model.Icon
  */
 sealed class PopupChipId(val value: String) {
     data object MediaControl : PopupChipId("MediaControl")
+
+    data object ScreenRecord : PopupChipId("ScreenRecord")
+
+    data object LiveScore : PopupChipId("LiveScore")
+
+    data object Flashlight : PopupChipId("Flashlight")
+
+    data object Stopwatch : PopupChipId("Stopwatch")
+
+    data object Alarm : PopupChipId("Alarm")
 
     data object AvControlsIndicator : PopupChipId("AvControlsIndicator")
 
@@ -40,6 +56,23 @@ sealed interface HoverBehavior {
 
     /** Shows a list of buttons on hover with the given [icons] */
     data class Buttons(val icons: List<ChipIcon>) : HoverBehavior
+}
+
+/** Rich popup contents associated with a status bar chip. */
+sealed interface PopupContentModel {
+    data object None : PopupContentModel
+
+    data class Media(val model: MediaControlChipModel) : PopupContentModel
+
+    data class ScreenRecord(val model: ScreenRecordPopupModel) : PopupContentModel
+
+    data class LiveScore(val model: LiveScoreChipModel) : PopupContentModel
+
+    data class Flashlight(val model: FlashlightPopupModel) : PopupContentModel
+
+    data class Stopwatch(val model: StopwatchPopupModel) : PopupContentModel
+
+    data class Alarm(val model: AlarmPopupModel) : PopupContentModel
 }
 
 /** Model for individual status bar popup chips. */
@@ -64,6 +97,7 @@ sealed class PopupChipModel {
         val hidePopup: () -> Unit = {},
         val hoverBehavior: HoverBehavior = HoverBehavior.None,
         val contentDescription: String? = null,
+        val popupContent: PopupContentModel = PopupContentModel.None,
     ) : PopupChipModel() {
         override val logName = "Shown(id=$chipId, toggled=$isPopupShown)"
     }
