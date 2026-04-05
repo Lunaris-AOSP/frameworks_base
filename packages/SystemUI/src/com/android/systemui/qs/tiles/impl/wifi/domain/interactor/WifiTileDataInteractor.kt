@@ -20,6 +20,7 @@ import android.annotation.StringRes
 import android.content.Context
 import android.os.UserHandle
 import android.text.Html
+import com.android.settingslib.StatusBarIconSettings.useNewStatusBarIcons
 import com.android.systemui.Flags as AconfigFlags
 import com.android.systemui.common.shared.model.ContentDescription
 import com.android.systemui.common.shared.model.ContentDescription.Companion.loadContentDescription
@@ -258,7 +259,7 @@ constructor(
                         if (isEnabled) {
                             WifiIcons.WIFI_NO_SIGNAL
                         } else {
-                            R.drawable.ic_signal_wifi_off
+                            wifiTileOffIconRes(context)
                         }
                     ),
                 secondaryLabel = notConnectedDescription,
@@ -270,6 +271,14 @@ constructor(
     fun isAvailable(): Boolean = AconfigFlags.qsSplitInternetTile()
 
     private companion object {
+        fun wifiTileOffIconRes(context: Context): Int =
+            if (useNewStatusBarIcons(context)) {
+                R.drawable.ic_signal_wifi_off_updated
+            } else {
+                // This needs its own resource name because ic_signal_wifi_off is flag-overlaid.
+                R.drawable.ic_signal_wifi_off_classic
+            }
+
         fun removeDoubleQuotes(string: String?): String? {
             if (string == null) return null
             return if (string.firstOrNull() == '"' && string.lastOrNull() == '"') {
