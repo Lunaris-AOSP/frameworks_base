@@ -601,7 +601,9 @@ constructor(
             changes += combinedShadeHeadersConstraintManager.emptyCutoutConstraints()
         }
 
-        view.setPadding(view.paddingLeft, sbInsets.top, view.paddingRight, view.paddingBottom)
+        (date as VariableDateView).freezeSwitching = true
+        view.setPadding(view.paddingLeft, sbInsets.top.coerceAtLeast(0), view.paddingRight, view.paddingBottom)
+        view.post { (date as VariableDateView).freezeSwitching = false }
         view.updateAllConstraints(changes)
         updateBatteryMode()
     }
