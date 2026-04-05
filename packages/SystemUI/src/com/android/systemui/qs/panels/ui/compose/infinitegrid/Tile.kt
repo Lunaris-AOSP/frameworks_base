@@ -652,6 +652,7 @@ data class TileColors(
     val secondaryLabel: Color,
     val icon: Color,
     val iconBackgroundGradient: Brush? = null,
+    val outline: Color,
 )
 
 @Composable
@@ -1075,6 +1076,7 @@ private object TileDefaults {
             secondaryLabel = MaterialTheme.colorScheme.onPrimary,
             icon = MaterialTheme.colorScheme.onPrimary,
             iconBackgroundGradient = gradient,
+            outline = MaterialTheme.colorScheme.primary,
         )
     }
 
@@ -1093,6 +1095,7 @@ private object TileDefaults {
                 label = MaterialTheme.colorScheme.onPrimary,
                 secondaryLabel = MaterialTheme.colorScheme.onPrimary,
                 icon = MaterialTheme.colorScheme.onPrimary,
+                outline = MaterialTheme.colorScheme.primary,
             )
         } else {
             TileColors(
@@ -1102,6 +1105,7 @@ private object TileDefaults {
                 secondaryLabel = MaterialTheme.colorScheme.onSurface,
                 icon = MaterialTheme.colorScheme.onPrimary,
                 iconBackgroundGradient = gradient,
+                outline = MaterialTheme.colorScheme.primary,
             )
         }
     }
@@ -1119,6 +1123,7 @@ private object TileDefaults {
                 label = MaterialTheme.colorScheme.onSurface,
                 secondaryLabel = MaterialTheme.colorScheme.onSurface,
                 icon = MaterialTheme.colorScheme.onSurface,
+                outline = MaterialTheme.colorScheme.primary,
             )
         } else {
             TileColors(
@@ -1127,6 +1132,7 @@ private object TileDefaults {
                 label = MaterialTheme.colorScheme.onSurface,
                 secondaryLabel = MaterialTheme.colorScheme.onSurface,
                 icon = MaterialTheme.colorScheme.onSurface,
+                outline = MaterialTheme.colorScheme.primary,
             )
         }
     }
@@ -1140,6 +1146,7 @@ private object TileDefaults {
             label = MaterialTheme.colorScheme.onSurface,
             secondaryLabel = MaterialTheme.colorScheme.onSurface,
             icon = MaterialTheme.colorScheme.onSurface,
+            outline = MaterialTheme.colorScheme.onSurface,
         )
 
     @Composable
@@ -1153,6 +1160,7 @@ private object TileDefaults {
             label = onSurfaceVariantColor,
             secondaryLabel = onSurfaceVariantColor,
             icon = onSurfaceVariantColor,
+            outline = onSurfaceVariantColor,
         )
     }
 
@@ -1165,6 +1173,7 @@ private object TileDefaults {
             label = MaterialTheme.colorScheme.onPrimary,
             secondaryLabel = MaterialTheme.colorScheme.onPrimary,
             icon = MaterialTheme.colorScheme.onPrimary,
+            outline = MaterialTheme.colorScheme.primary,
         )
 
     @Composable
@@ -1176,6 +1185,7 @@ private object TileDefaults {
             label = MaterialTheme.colorScheme.onSurface,
             secondaryLabel = MaterialTheme.colorScheme.onSurface,
             icon = MaterialTheme.colorScheme.onSurface,
+            outline = MaterialTheme.colorScheme.primary,
         )
 
     @Composable
