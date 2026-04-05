@@ -19,8 +19,8 @@ package com.android.systemui
 import android.animation.ArgbEvaluator
 import android.content.Context
 import android.view.ContextThemeWrapper
+import com.android.settingslib.StatusBarIconSettings
 import com.android.settingslib.Utils
-import com.android.settingslib.flags.Flags.newStatusBarIcons
 import com.android.systemui.res.R
 
 /**
@@ -54,7 +54,7 @@ class DualToneHandler(context: Context) {
                 Utils.getThemeAttr(context, R.attr.darkIconTheme))
         val dualToneLightTheme = ContextThemeWrapper(context,
                 Utils.getThemeAttr(context, R.attr.lightIconTheme))
-        if (newStatusBarIcons()) {
+        if (StatusBarIconSettings.useNewStatusBarIcons(context)) {
             darkColor = Color(
                 android.graphics.Color.BLACK,
                 Utils.getColorAttrDefaultColor(dualToneDarkTheme, R.attr.iconBackgroundColor),

@@ -16,8 +16,11 @@
 
 package com.android.systemui.shade.carrier;
 
+import static com.android.settingslib.StatusBarIconSettings.useNewStatusBarIcons;
+
 import android.annotation.StyleRes;
 import android.content.Context;
+import android.content.res.Configuration;
 import android.util.AttributeSet;
 import android.view.Gravity;
 import android.view.View;
@@ -41,6 +44,13 @@ public class ShadeCarrierGroup extends LinearLayout {
         if (Flags.fixShadeHeaderWrongIconSize()) {
             getNoSimTextView().setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
         }
+        updateResources();
+    }
+
+    @Override
+    protected void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        updateResources();
     }
 
     TextView getNoSimTextView() {
@@ -73,5 +83,17 @@ public class ShadeCarrierGroup extends LinearLayout {
         getCarrier1View().updateTextAppearanceAndTint(resId, fgColor, bgColor);
         getCarrier2View().updateTextAppearanceAndTint(resId, fgColor, bgColor);
         getCarrier3View().updateTextAppearanceAndTint(resId, fgColor, bgColor);
+    }
+
+    private void updateResources() {
+        final int dividerWidth =
+                useNewStatusBarIcons(getContext())
+                        ? getResources().getDimensionPixelSize(
+                                R.dimen.qs_header_carrier_separator_width)
+                        : 0;
+        getCarrierDivider1().getLayoutParams().width = dividerWidth;
+        getCarrierDivider1().requestLayout();
+        getCarrierDivider2().getLayoutParams().width = dividerWidth;
+        getCarrierDivider2().requestLayout();
     }
 }

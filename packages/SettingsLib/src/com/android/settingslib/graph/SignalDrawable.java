@@ -14,8 +14,6 @@
 
 package com.android.settingslib.graph;
 
-import static com.android.settingslib.flags.Flags.newStatusBarIcons;
-
 import android.animation.ArgbEvaluator;
 import android.annotation.IntRange;
 import android.content.Context;
@@ -40,6 +38,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.android.settingslib.R;
+import com.android.settingslib.StatusBarIconSettings;
 import com.android.settingslib.Utils;
 
 import java.util.Objects;
@@ -71,9 +70,6 @@ public class SignalDrawable extends DrawableWrapper {
 
     private static final long DOT_DELAY = 1000;
 
-    // Check the config for which icon we want to use
-    private static final int ICON_RES = SignalDrawable.getIconRes();
-
     private final Paint mForegroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mTransparentPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final int mDarkModeFillColor;
@@ -86,6 +82,7 @@ public class SignalDrawable extends DrawableWrapper {
     private final Handler mHandler;
     private final float mCutoutWidthFraction;
     private final float mCutoutHeightFraction;
+    private final boolean mUseNewStatusBarIcons;
     private float mDarkIntensity = -1;
     private final int mIntrinsicSize;
     private boolean mAnimating;
@@ -96,7 +93,16 @@ public class SignalDrawable extends DrawableWrapper {
     }
 
     public SignalDrawable(@NonNull Context context, @NonNull Handler handler) {
-        super(context.getDrawable(ICON_RES));
+        this(context, handler, StatusBarIconSettings.useNewStatusBarIcons(context));
+    }
+
+    private SignalDrawable(
+            @NonNull Context context,
+            @NonNull Handler handler,
+            boolean useNewStatusBarIcons) {
+        super(context.getDrawable(getIconRes(useNewStatusBarIcons)));
+        mUseNewStatusBarIcons = useNewStatusBarIcons;
+
         final String attributionPathString = context.getString(
                 com.android.internal.R.string.config_signalAttributionPath);
         mAttributionPath.set(PathParser.createPathFromPathData(attributionPathString));
@@ -128,7 +134,7 @@ public class SignalDrawable extends DrawableWrapper {
 
     @Override
     public int getIntrinsicWidth() {
-        if (newStatusBarIcons()) {
+        if (mUseNewStatusBarIcons) {
             return super.getIntrinsicWidth();
         } else {
             return mIntrinsicSize;
@@ -137,7 +143,7 @@ public class SignalDrawable extends DrawableWrapper {
 
     @Override
     public int getIntrinsicHeight() {
-        if (newStatusBarIcons()) {
+        if (mUseNewStatusBarIcons) {
             return super.getIntrinsicHeight();
         } else {
             return mIntrinsicSize;
@@ -179,7 +185,7 @@ public class SignalDrawable extends DrawableWrapper {
         int levelOffset = numBins == (CellSignalStrength.getNumSignalStrengthLevels() + 1) ? 10 : 0;
         int level = (packedState & LEVEL_MASK);
 
-        if (newStatusBarIcons()) {
+        if (mUseNewStatusBarIcons) {
             if (isInState(STATE_CUT)) {
                 cutOutOffset = 20;
             }
@@ -250,7 +256,7 @@ public class SignalDrawable extends DrawableWrapper {
             drawDotAndPadding(x - dotSpacing * 2, y, dotPadding, dotSize, 0);
             canvas.drawPath(mCutoutPath, mTransparentPaint);
             canvas.drawPath(mForegroundPath, mForegroundPaint);
-        } else if (!newStatusBarIcons() && isInState(STATE_CUT)) {
+        } else if (!mUseNewStatusBarIcons && isInState(STATE_CUT)) {
             float cutX = (mCutoutWidthFraction * width / VIEWPORT);
             float cutY = (mCutoutHeightFraction * height / VIEWPORT);
             mCutoutPath.moveTo(width, height);
@@ -348,8 +354,8 @@ public class SignalDrawable extends DrawableWrapper {
         return (STATE_CARRIER_CHANGE << STATE_SHIFT) | (numLevels << NUM_LEVEL_SHIFT);
     }
 
-    private static int getIconRes() {
-        if (newStatusBarIcons()) {
+    private static int getIconRes(boolean useNewStatusBarIcons) {
+        if (useNewStatusBarIcons) {
             return R.drawable.ic_mobile_level_list;
         } else {
             return com.android.internal.R.drawable.ic_signal_cellular;

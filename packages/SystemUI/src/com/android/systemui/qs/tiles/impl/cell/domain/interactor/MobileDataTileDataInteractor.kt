@@ -19,6 +19,7 @@ package com.android.systemui.qs.tiles.impl.cell.domain.interactor
 import android.content.Context
 import android.os.UserHandle
 import android.telephony.TelephonyManager
+import com.android.settingslib.StatusBarIconSettings.useNewStatusBarIcons
 import com.android.settingslib.graph.SignalDrawable
 import com.android.systemui.Flags as AconfigFlags
 import com.android.systemui.common.shared.model.ContentDescription
@@ -30,6 +31,7 @@ import com.android.systemui.qs.tiles.base.domain.model.DataUpdateTrigger
 import com.android.systemui.qs.tiles.impl.cell.domain.model.MobileDataTileIcon
 import com.android.systemui.qs.tiles.impl.cell.domain.model.MobileDataTileModel
 import com.android.systemui.res.R
+import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionRepository.Companion.DEFAULT_NUM_LEVELS
 import com.android.systemui.statusbar.pipeline.mobile.domain.interactor.MobileIconsInteractor
 import com.android.systemui.statusbar.pipeline.mobile.domain.model.SignalIconModel
 import javax.inject.Inject
@@ -57,72 +59,60 @@ constructor(
     fun tileData(): Flow<MobileDataTileModel> =
         mobileIconsInteractor.activeDataIconInteractor.flatMapLatest {
             if (it == null) {
-                    flowOf(
-                        MobileDataTileModel(
-                            isSimActive = false,
-                            isEnabled = false,
-                            icon =
-                                MobileDataTileIcon.ResourceIcon(
-                                    Icon.Resource(
-                                        com.android.settingslib.R.drawable.ic_mobile_4_4_bar,
-                                        ContentDescription.Loaded(mobileDataLabel),
-                                    )
-                                ),
-                        )
-                    )
-                } else {
-                    combine(it.isDataEnabled, it.signalLevelIcon) { isDataEnabled, signalLevelIcon
-                        ->
-                        val icon =
-                            if (isDataEnabled) {
-                                when (signalLevelIcon) {
-                                    is SignalIconModel.Cellular -> {
-                                        val signalState =
-                                            SignalDrawable.getState(
-                                                signalLevelIcon.level,
-                                                signalLevelIcon.numberOfLevels,
-                                                signalLevelIcon.showExclamationMark,
-                                            )
-                                        MobileDataTileIcon.SignalIcon(signalState)
-                                    }
-
-                                    is SignalIconModel.Satellite -> {
-                                        MobileDataTileIcon.ResourceIcon(
-                                            Icon.Resource(
-                                                signalLevelIcon.icon.resId,
-                                                signalLevelIcon.icon.contentDescription,
-                                            )
-                                        )
-                                    }
-                                }
-                            } else {
-                                MobileDataTileIcon.ResourceIcon(
-                                    Icon.Resource(
-                                        R.drawable.ic_signal_mobile_data_off,
-                                        ContentDescription.Loaded(mobileDataLabel),
-                                    )
-                                )
-                            }
-                        MobileDataTileModel(
-                            isSimActive = true,
-                            isEnabled = isDataEnabled,
-                            icon = icon,
-                        )
-                    }
-                }
-                .onStart {
+                flowOf(
                     MobileDataTileModel(
                         isSimActive = false,
                         isEnabled = false,
-                        icon =
-                            MobileDataTileIcon.ResourceIcon(
-                                Icon.Resource(
-                                    R.drawable.ic_signal_mobile_data_off,
-                                    ContentDescription.Loaded(mobileDataLabel),
-                                )
-                            ),
+                        icon = mobileDataUnavailableIcon(),
+                    )
+                )
+            } else {
+                combine(it.isDataEnabled, it.isInService, it.signalLevelIcon) {
+                    isDataEnabled,
+                    isInService,
+                    signalLevelIcon ->
+                    val isTileEnabled = isDataEnabled && isInService
+                    val icon =
+                        if (!isInService) {
+                            mobileDataUnavailableIcon(signalLevelIcon)
+                        } else if (isDataEnabled) {
+                            when (signalLevelIcon) {
+                                is SignalIconModel.Cellular -> {
+                                    val signalState =
+                                        SignalDrawable.getState(
+                                            signalLevelIcon.level,
+                                            signalLevelIcon.numberOfLevels,
+                                            signalLevelIcon.showExclamationMark,
+                                        )
+                                    MobileDataTileIcon.SignalIcon(signalState)
+                                }
+
+                                is SignalIconModel.Satellite -> {
+                                    MobileDataTileIcon.ResourceIcon(
+                                        Icon.Resource(
+                                            signalLevelIcon.icon.resId,
+                                            signalLevelIcon.icon.contentDescription,
+                                        )
+                                    )
+                                }
+                            }
+                        } else {
+                            mobileDataOffIcon(signalLevelIcon)
+                        }
+                    MobileDataTileModel(
+                        isSimActive = true,
+                        isEnabled = isTileEnabled,
+                        icon = icon,
                     )
                 }
+            }
+            .onStart {
+                MobileDataTileModel(
+                    isSimActive = false,
+                    isEnabled = false,
+                    icon = mobileDataOffIcon(),
+                )
+            }
         }
 
     override fun availability(user: UserHandle): Flow<Boolean> = flowOf(isAvailable())
@@ -135,4 +125,58 @@ constructor(
     fun isAvailable(): Boolean {
         return isVoiceCapable() && AconfigFlags.qsSplitInternetTile()
     }
+
+    private fun mobileDataUnavailableIcon(
+        signalLevelIcon: SignalIconModel =
+            SignalIconModel.Cellular(
+                level = 0,
+                numberOfLevels = DEFAULT_NUM_LEVELS,
+                showExclamationMark = true,
+                carrierNetworkChange = false,
+            )
+    ): MobileDataTileIcon =
+        if (!useNewStatusBarIcons(context) && signalLevelIcon is SignalIconModel.Cellular) {
+            MobileDataTileIcon.SignalIcon(
+                SignalDrawable.getState(
+                    signalLevelIcon.level,
+                    signalLevelIcon.numberOfLevels,
+                    true,
+                )
+            )
+        } else if (useNewStatusBarIcons(context)) {
+            MobileDataTileIcon.ResourceIcon(
+                Icon.Resource(
+                    com.android.settingslib.R.drawable.ic_mobile_4_4_bar,
+                    ContentDescription.Loaded(mobileDataLabel),
+                )
+            )
+        } else {
+            MobileDataTileIcon.SignalIcon(SignalDrawable.getEmptyState(DEFAULT_NUM_LEVELS))
+        }
+
+    private fun mobileDataOffIcon(
+        signalLevelIcon: SignalIconModel =
+            SignalIconModel.Cellular(
+                level = 0,
+                numberOfLevels = DEFAULT_NUM_LEVELS,
+                showExclamationMark = true,
+                carrierNetworkChange = false,
+            )
+    ): MobileDataTileIcon =
+        if (!useNewStatusBarIcons(context) && signalLevelIcon is SignalIconModel.Cellular) {
+            MobileDataTileIcon.SignalIcon(
+                SignalDrawable.getState(
+                    signalLevelIcon.level,
+                    signalLevelIcon.numberOfLevels,
+                    true,
+                )
+            )
+        } else {
+            MobileDataTileIcon.ResourceIcon(
+                Icon.Resource(
+                    R.drawable.ic_signal_mobile_data_off,
+                    ContentDescription.Loaded(mobileDataLabel),
+                )
+            )
+        }
 }

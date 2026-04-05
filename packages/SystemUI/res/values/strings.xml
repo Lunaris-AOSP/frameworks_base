@@ -2109,6 +2109,18 @@
     <!-- Name of status bar -->
     <string name="status_bar">Status bar</string>
 
+    <!-- Title for the status bar icon style toggle. -->
+    <string name="status_bar_classic_icons_title">Switch to classic status bar icons</string>
+
+    <!-- Summary for the status bar icon style toggle. -->
+    <string name="status_bar_classic_icons_summary">Show filled Wi-Fi, signal, and battery icons</string>
+
+    <!-- Title for the dialog shown before restarting System UI from a tuner switch. -->
+    <string name="tuner_restart_systemui_dialog_title">Restart SystemUI?</string>
+
+    <!-- Message for the dialog shown before restarting System UI from a tuner switch. -->
+    <string name="tuner_restart_systemui_dialog_message">SystemUI needs to restart to apply this change. Would you like to continue?</string>
+
     <!-- Name of System UI demo mode (mode with preset icons for screenshots) -->
     <string name="demo_mode">System UI demo mode</string>
 

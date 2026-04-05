@@ -55,7 +55,7 @@ class ModernStatusBarMobileView(context: Context, attrs: AttributeSet?) :
     }
 
     public override fun onConfigurationChanged(newConfig: Configuration?) {
-        if (Flags.fixShadeHeaderWrongIconSize()) {
+        if (Flags.fixShadeHeaderWrongIconSize() && NewStatusBarIcons.isEnabled) {
             configureLayoutForNewStatusBarIcons()
         }
     }

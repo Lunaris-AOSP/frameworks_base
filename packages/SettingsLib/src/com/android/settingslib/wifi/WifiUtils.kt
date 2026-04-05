@@ -33,7 +33,7 @@ import androidx.annotation.VisibleForTesting
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import com.android.settingslib.R
-import com.android.settingslib.flags.Flags.newStatusBarIcons
+import com.android.settingslib.StatusBarIconSettings.useNewStatusBarIcons
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -117,7 +117,7 @@ open class WifiUtils {
         val WIFI_PIE = getIconsBasedOnFlag()
 
         private fun getIconsBasedOnFlag(): IntArray {
-            return if (newStatusBarIcons()) {
+            return if (useNewStatusBarIcons()) {
                 // TODO(b/396664075):
                 // The new wifi icons only define a range of [0, 3]. Since this array is indexed on
                 // level, we can simulate the range squash by mapping both level 3 to drawn-level 2,
@@ -143,7 +143,7 @@ open class WifiUtils {
         val NO_INTERNET_WIFI_PIE = getErrorIconsBasedOnFlag()
 
         private fun getErrorIconsBasedOnFlag(): IntArray {
-            return if (newStatusBarIcons()) {
+            return if (useNewStatusBarIcons()) {
                 // See above note, new wifi icons only have 3 bars, so levels 2 and 3 are the same
                 intArrayOf(
                     R.drawable.ic_wifi_0_error,
