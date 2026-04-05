@@ -18,6 +18,12 @@
     android:key="status_bar"
     android:title="@string/status_bar">
 
+    <com.android.systemui.tuner.RestartingTunerSwitch
+        android:key="status_bar_classic_icons"
+        android:summary="@string/status_bar_classic_icons_summary"
+        android:title="@string/status_bar_classic_icons_title"
+        sysui:defValue="false" />
+
     <com.android.systemui.tuner.StatusBarSwitch
         android:icon="@drawable/ic_statusbar_auto_rotate"
         android:key="rotate"

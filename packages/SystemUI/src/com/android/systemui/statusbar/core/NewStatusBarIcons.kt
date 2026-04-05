@@ -16,6 +16,7 @@
 
 package com.android.systemui.statusbar.core
 
+import com.android.settingslib.StatusBarIconSettings
 import com.android.settingslib.flags.Flags
 import com.android.systemui.flags.FlagToken
 import com.android.systemui.flags.RefactorFlagUtils
@@ -32,7 +33,7 @@ object NewStatusBarIcons {
     /** Is the refactor enabled. Dependency on [StatusBarRootModernization] */
     @JvmStatic
     inline val isEnabled
-        get() = Flags.newStatusBarIcons() && StatusBarRootModernization.isEnabled
+        get() = StatusBarIconSettings.useNewStatusBarIcons() && StatusBarRootModernization.isEnabled
 
     /**
      * Called to ensure code is only run when the flag is enabled. This protects users from the
