@@ -14899,13 +14899,6 @@ public final class Settings {
         public static final String SMART_PIXEL_FILTER_PERCENT = "smart_pixel_filter_percent";
 
         /**
-         * Whether to use PIF spoof for google apps
-         * @hide
-         */
-        @Readable
-        public static final String PI_ENABLE_SPOOF = "pi_enable_spoof";
-
-        /**
          * Whether to use PixelProps spoof for google apps
          * @hide
          */
