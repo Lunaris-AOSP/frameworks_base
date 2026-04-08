@@ -35,7 +35,7 @@ import android.security.trickystore.TrickyStoreService;
 import android.util.Base64;
 import android.util.Log;
 
-import com.android.internal.util.evolution.PixelDeviceRepository;
+import com.android.internal.util.lunaris.PixelDeviceRepository;
 import com.android.server.NtServiceInjector;
 
 import java.net.HttpURLConnection;
@@ -501,7 +501,7 @@ public class AxSpoofManager implements IAxSpoofManager {
         PixelDeviceRepository.PixelProfile matched = runBounded(mFingerprintExecutor, () -> {
             List<PixelDeviceRepository.PixelProfile> profiles =
                     PixelDeviceRepository.getProfiles(mContext, true);
-            String defaultCodename = PixelDeviceRepository.getDefaultPhoneCodename(profiles);
+            String defaultCodename = PixelDeviceRepository.getDefaultPifCodename(profiles);
             return PixelDeviceRepository.getProfileByCodename(mContext, defaultCodename, false);
         });
         if (matched == null || !PixelDeviceRepository.isValidFingerprint(matched.fingerprint)) {
