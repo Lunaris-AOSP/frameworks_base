@@ -11,7 +11,7 @@
     <string-array name="config_alarmManagerValidationBypassPackages" translatable="false"/>
 
     <!-- Whitelist of package names to bypass broadcast reciever validation -->
-    <string-array name="config_broadcaseReceiverValidationBypassPackages" translatable="false"/>
+    <string-array name="config_broadcastReceiverValidationBypassPackages" translatable="false"/>
     
     <!-- Default line spacing multiplier between hours and minutes of the keyguard clock -->
     <item name="keyguard_clock_line_spacing_scale" type="dimen" format="float">.7</item>
