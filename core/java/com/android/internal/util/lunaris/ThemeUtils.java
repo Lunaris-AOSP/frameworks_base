@@ -32,6 +32,7 @@ import android.content.pm.ProviderInfo;
 import android.content.res.Resources;
 import android.content.res.Resources.NotFoundException;
 import android.content.res.Configuration;
+import android.content.res.ThemeEngine;
 import android.database.Cursor;
 import android.graphics.Typeface;
 import android.graphics.Path;
@@ -68,6 +69,12 @@ public class ThemeUtils {
 
     public static final String FONT_KEY = "android.theme.customization.font";
     public static final String ICON_SHAPE_KEY= "android.theme.customization.adaptive_icon_shape";
+
+    /** @see ThemeEngineManagerService — status bar Wi‑Fi / cellular icons use theme_engine_data, not only RRO. */
+    private static final String OVERLAY_CATEGORY_WIFI_ICON = "android.theme.customization.wifi_icon";
+    private static final String OVERLAY_CATEGORY_SIGNAL_ICON = "android.theme.customization.signal_icon";
+    private static final String OVERLAY_CATEGORY_BATTERY_STYLE =
+            "android.theme.customization.battery_style";
 
     public static final Comparator<OverlayInfo> OVERLAY_INFO_COMPARATOR =
             Comparator.comparingInt(a -> a.priority);
@@ -139,8 +146,74 @@ public class ThemeUtils {
             Settings.Secure.putStringForUser(mContext.getContentResolver(),
                     Settings.Secure.THEME_CUSTOMIZATION_OVERLAY_PACKAGES,
                     object.toString(), UserHandle.USER_CURRENT);
+
+            if (OVERLAY_CATEGORY_WIFI_ICON.equals(category)
+                    || OVERLAY_CATEGORY_SIGNAL_ICON.equals(category)
+                    || OVERLAY_CATEGORY_BATTERY_STYLE.equals(category)) {
+                syncThemeEngineStatusIconOverlay(category, packageName, disable);
+            }
         } catch (JSONException e) {
             Log.e(TAG, "Failed to parse THEME_CUSTOMIZATION_OVERLAY_PACKAGES.", e);
+        }
+    }
+
+    /**
+     * Keeps {@link ThemeEngine#SETTINGS_THEME_ENGINE_DATA} in sync so
+     * {@link com.android.systemui.statusbar.connectivity.ThemeIconController} can resolve
+     * Wi‑Fi / signal drawables (ThemeEngine path), while RRO state is still driven by
+     * {@link Settings.Secure#THEME_CUSTOMIZATION_OVERLAY_PACKAGES}.
+     */
+    private void syncThemeEngineStatusIconOverlay(String overlayCategory, String packageName,
+            boolean disable) {
+        final String engineKey;
+        if (OVERLAY_CATEGORY_WIFI_ICON.equals(overlayCategory)) {
+            engineKey = "wifi";
+        } else if (OVERLAY_CATEGORY_SIGNAL_ICON.equals(overlayCategory)) {
+            engineKey = "signal";
+        } else if (OVERLAY_CATEGORY_BATTERY_STYLE.equals(overlayCategory)) {
+            engineKey = ThemeEngine.CATEGORY_BATTERY_STYLE;
+        } else {
+            return;
+        }
+        try {
+            String json = Settings.Secure.getStringForUser(mContext.getContentResolver(),
+                    ThemeEngine.SETTINGS_THEME_ENGINE_DATA, UserHandle.USER_CURRENT);
+            JSONObject root = (json == null || json.isEmpty())
+                    ? new JSONObject() : new JSONObject(json);
+
+            JSONObject themes = root.optJSONObject("themes");
+            if (themes == null) {
+                themes = new JSONObject();
+            }
+            JSONObject categoryThemes = root.optJSONObject("categoryThemes");
+            if (categoryThemes == null) {
+                categoryThemes = new JSONObject();
+            }
+
+            if (disable) {
+                themes.remove(engineKey);
+                categoryThemes.remove(engineKey);
+                categoryThemes.remove("statusbar_" + engineKey);
+            } else {
+                JSONObject catEntry = new JSONObject();
+                catEntry.put("enabled", true);
+                catEntry.put("packageName", packageName);
+                themes.put(engineKey, catEntry);
+                categoryThemes.put(engineKey, packageName);
+                categoryThemes.put("statusbar_" + engineKey, packageName);
+            }
+
+            root.put("themes", themes);
+            root.put("categoryThemes", categoryThemes);
+            if (!root.has("version")) {
+                root.put("version", 1);
+            }
+
+            Settings.Secure.putStringForUser(mContext.getContentResolver(),
+                    ThemeEngine.SETTINGS_THEME_ENGINE_DATA, root.toString(),
+                    UserHandle.USER_CURRENT);
+        } catch (JSONException e) {
+            Log.e(TAG, "Failed to sync theme_engine_data for " + overlayCategory, e);
         }
     }
 
