@@ -18,6 +18,8 @@ package com.android.internal.util.lunaris;
 
 import static android.os.UserHandle.USER_SYSTEM;
 
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.util.PathParser;
 
 import android.content.ContentResolver;
@@ -75,6 +77,22 @@ public class ThemeUtils {
     private static final String OVERLAY_CATEGORY_SIGNAL_ICON = "android.theme.customization.signal_icon";
     private static final String OVERLAY_CATEGORY_BATTERY_STYLE =
             "android.theme.customization.battery_style";
+
+    /**
+     * {@link android.content.om.OverlayInfo#getCategory()} value for charging-animation RROs.
+     * Matches {@code ThemeOverlayApplier} / ThemePicker; not the same string as
+     * {@link ThemeEngine#CATEGORY_CHARGING_ANIMATION} ({@code charging_animation} is the
+     * engine JSON key only).
+     */
+    public static final String OVERLAY_CATEGORY_CHARGING_ANIMATION =
+            "android.theme.customization.charging_animation";
+
+    /**
+     * {@link OverlayInfo#getCategory()} for back-gesture RROs targeting SystemUI.
+     * Matches {@link com.android.systemui.theme.ThemeOverlayApplier#OVERLAY_CATEGORY_BACK_GESTURE}.
+     */
+    public static final String OVERLAY_CATEGORY_BACK_GESTURE =
+            "android.theme.customization.back_gesture";
 
     public static final Comparator<OverlayInfo> OVERLAY_INFO_COMPARATOR =
             Comparator.comparingInt(a -> a.priority);
@@ -149,8 +167,10 @@ public class ThemeUtils {
 
             if (OVERLAY_CATEGORY_WIFI_ICON.equals(category)
                     || OVERLAY_CATEGORY_SIGNAL_ICON.equals(category)
-                    || OVERLAY_CATEGORY_BATTERY_STYLE.equals(category)) {
-                syncThemeEngineStatusIconOverlay(category, packageName, disable);
+                    || OVERLAY_CATEGORY_BATTERY_STYLE.equals(category)
+                    || OVERLAY_CATEGORY_CHARGING_ANIMATION.equals(category)
+                    || OVERLAY_CATEGORY_BACK_GESTURE.equals(category)) {
+                syncThemeEngineOverlayInSettings(category, packageName, disable);
             }
         } catch (JSONException e) {
             Log.e(TAG, "Failed to parse THEME_CUSTOMIZATION_OVERLAY_PACKAGES.", e);
@@ -158,20 +178,33 @@ public class ThemeUtils {
     }
 
     /**
-     * Keeps {@link ThemeEngine#SETTINGS_THEME_ENGINE_DATA} in sync so
-     * {@link com.android.systemui.statusbar.connectivity.ThemeIconController} can resolve
-     * Wi‑Fi / signal drawables (ThemeEngine path), while RRO state is still driven by
-     * {@link Settings.Secure#THEME_CUSTOMIZATION_OVERLAY_PACKAGES}.
+     * Keeps {@link ThemeEngine#SETTINGS_THEME_ENGINE_DATA} aligned with
+     * {@link Settings.Secure#THEME_CUSTOMIZATION_OVERLAY_PACKAGES} when overlays are applied
+     * from ThemePicker / Alpha so {@link ThemeEngineManagerService} sees the same categories as RRO.
+     * Wi‑Fi / signal / battery also mirror {@code statusbar_<key>} for
+     * {@link com.android.systemui.statusbar.connectivity.ThemeIconController}; charging uses
+     * {@link ThemeEngine#CATEGORY_CHARGING_ANIMATION} and back-gesture uses
+     * {@link ThemeEngine#CATEGORY_BACK_GESTURE} only.
      */
-    private void syncThemeEngineStatusIconOverlay(String overlayCategory, String packageName,
+    private void syncThemeEngineOverlayInSettings(String overlayCategory, String packageName,
             boolean disable) {
         final String engineKey;
+        final boolean mirrorStatusBarAlias;
         if (OVERLAY_CATEGORY_WIFI_ICON.equals(overlayCategory)) {
             engineKey = "wifi";
+            mirrorStatusBarAlias = true;
         } else if (OVERLAY_CATEGORY_SIGNAL_ICON.equals(overlayCategory)) {
             engineKey = "signal";
+            mirrorStatusBarAlias = true;
         } else if (OVERLAY_CATEGORY_BATTERY_STYLE.equals(overlayCategory)) {
             engineKey = ThemeEngine.CATEGORY_BATTERY_STYLE;
+            mirrorStatusBarAlias = true;
+        } else if (OVERLAY_CATEGORY_CHARGING_ANIMATION.equals(overlayCategory)) {
+            engineKey = ThemeEngine.CATEGORY_CHARGING_ANIMATION;
+            mirrorStatusBarAlias = false;
+        } else if (OVERLAY_CATEGORY_BACK_GESTURE.equals(overlayCategory)) {
+            engineKey = ThemeEngine.CATEGORY_BACK_GESTURE;
+            mirrorStatusBarAlias = false;
         } else {
             return;
         }
@@ -193,14 +226,18 @@ public class ThemeUtils {
             if (disable) {
                 themes.remove(engineKey);
                 categoryThemes.remove(engineKey);
-                categoryThemes.remove("statusbar_" + engineKey);
+                if (mirrorStatusBarAlias) {
+                    categoryThemes.remove("statusbar_" + engineKey);
+                }
             } else {
                 JSONObject catEntry = new JSONObject();
                 catEntry.put("enabled", true);
                 catEntry.put("packageName", packageName);
                 themes.put(engineKey, catEntry);
                 categoryThemes.put(engineKey, packageName);
-                categoryThemes.put("statusbar_" + engineKey, packageName);
+                if (mirrorStatusBarAlias) {
+                    categoryThemes.put("statusbar_" + engineKey, packageName);
+                }
             }
 
             root.put("themes", themes);
@@ -397,5 +434,42 @@ public class ThemeUtils {
                 }
             }
         }
+    }
+
+    /**
+     * Whether {@code targetPackage} has an enabled overlay in {@code category} for {@code user}.
+     * Prefer this over ad-hoc scans so category strings stay consistent with
+     * {@link #OVERLAY_CATEGORY_CHARGING_ANIMATION} and friends.
+     */
+    public static boolean isOverlayEnabledForCategory(
+            @Nullable IOverlayManager overlayManager,
+            @NonNull String targetPackage,
+            @NonNull String category,
+            @NonNull UserHandle user) {
+        if (overlayManager == null) {
+            return false;
+        }
+        try {
+            List<OverlayInfo> overlays = overlayManager.getOverlayInfosForTarget(
+                    targetPackage, user.getIdentifier());
+            if (overlays == null) {
+                return false;
+            }
+            for (int i = 0; i < overlays.size(); i++) {
+                OverlayInfo o = overlays.get(i);
+                if (o == null) {
+                    continue;
+                }
+                if (!category.equals(o.getCategory())) {
+                    continue;
+                }
+                if (o.isEnabled()) {
+                    return true;
+                }
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "isOverlayEnabledForCategory: " + category, e);
+        }
+        return false;
     }
 }
