@@ -17,7 +17,10 @@
 
 package com.android.systemui.biometrics;
 
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
@@ -30,6 +33,7 @@ import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.UserHandle;
+import android.os.UserManager;
 import android.provider.Settings;
 import android.util.Log;
 
@@ -76,10 +80,24 @@ public abstract class UdfpsIconDrawable extends Drawable {
     private boolean mIsDestroyed = false;
 
     private TunerService.Tunable mTunable;
+    private boolean mTunableRegistered = false;
+
+    private BroadcastReceiver mUserUnlockedReceiver;
+    private boolean mReceiverRegistered = false;
 
     public UdfpsIconDrawable(@NonNull Context context) {
         mContext = context;
         init();
+    }
+
+    private boolean isUserUnlocked() {
+        try {
+            UserManager um = mContext.getSystemService(UserManager.class);
+            return um == null || um.isUserUnlocked();
+        } catch (Exception e) {
+            Log.w(TAG, "Could not query UserManager, assuming locked", e);
+            return false;
+        }
     }
 
     private void init() {
@@ -94,57 +112,111 @@ public abstract class UdfpsIconDrawable extends Drawable {
             }
         }
 
-        mCurrentIconType = Settings.System.getIntForUser(
-                mContext.getContentResolver(),
-                Settings.System.UDFPS_ICON_TYPE,
-                ICON_TYPE_PREBUILT,
-                UserHandle.USER_CURRENT
-        );
+        if (isUserUnlocked()) {
+            setupAfterUnlock();
+        } else {
+            Log.w(TAG, "User is locked, deferring UDFPS icon setup until unlock");
+            registerUnlockReceiver();
+            updateIcon();
+        }
+    }
 
-        mTunable = (key, newValue) -> {
-            if (mIsDestroyed) return;
-            
-            if (UDFPS_ICON_TYPE.equals(key)) {
-                int iconType = newValue == null ? ICON_TYPE_PREBUILT : Integer.parseInt(newValue);
-                mCurrentIconType = iconType;
+    private void setupAfterUnlock() {
+        if (mIsDestroyed) return;
 
-                if (mCurrentIconType == ICON_TYPE_PREBUILT) {
-                    runOnMainThread(() -> {
-                        if (!mIsDestroyed) {
-                            Settings.System.putStringForUser(
-                                    mContext.getContentResolver(),
-                                    Settings.System.UDFPS_CUSTOM_FP_ICON_PATH,
-                                    null,
-                                    UserHandle.USER_CURRENT
-                            );
-                        }
-                    });
-                    mLastLoadedCustomPath = null;
-                }
+        try {
+            mCurrentIconType = Settings.System.getIntForUser(
+                    mContext.getContentResolver(),
+                    Settings.System.UDFPS_ICON_TYPE,
+                    ICON_TYPE_PREBUILT,
+                    UserHandle.USER_CURRENT
+            );
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to read UDFPS_ICON_TYPE, using default", e);
+            mCurrentIconType = ICON_TYPE_PREBUILT;
+        }
 
-                updateIcon();
-            } else if (UDFPS_ICON.equals(key)) {
-                if (mCurrentIconType == ICON_TYPE_PREBUILT) {
+        if (!mTunableRegistered) {
+            mTunable = (key, newValue) -> {
+                if (mIsDestroyed) return;
+
+                if (UDFPS_ICON_TYPE.equals(key)) {
+                    int iconType = newValue == null ? ICON_TYPE_PREBUILT : Integer.parseInt(newValue);
+                    mCurrentIconType = iconType;
+
+                    if (mCurrentIconType == ICON_TYPE_PREBUILT) {
+                        runOnMainThread(() -> {
+                            if (!mIsDestroyed) {
+                                try {
+                                    Settings.System.putStringForUser(
+                                            mContext.getContentResolver(),
+                                            Settings.System.UDFPS_CUSTOM_FP_ICON_PATH,
+                                            null,
+                                            UserHandle.USER_CURRENT
+                                    );
+                                } catch (Exception e) {
+                                    Log.e(TAG, "Failed to clear custom icon path", e);
+                                }
+                            }
+                        });
+                        mLastLoadedCustomPath = null;
+                    }
+
                     updateIcon();
+                } else if (UDFPS_ICON.equals(key)) {
+                    if (mCurrentIconType == ICON_TYPE_PREBUILT) {
+                        updateIcon();
+                    }
+                } else if (UDFPS_CUSTOM_ICON_PATH.equals(key)) {
+                    String newPath = newValue;
+                    if (mCurrentIconType == ICON_TYPE_CUSTOM &&
+                            (newPath == null || !newPath.equals(mLastLoadedCustomPath))) {
+                        mLastLoadedCustomPath = null;
+                        updateIcon();
+                    }
                 }
-            } else if (UDFPS_CUSTOM_ICON_PATH.equals(key)) {
-                String newPath = newValue;
-                if (mCurrentIconType == ICON_TYPE_CUSTOM &&
-                    (newPath == null || !newPath.equals(mLastLoadedCustomPath))) {
-                    mLastLoadedCustomPath = null;
-                    updateIcon();
-                }
+                };
+
+            try {
+                Dependency.get(TunerService.class).addTunable(
+                        mTunable,
+                        UDFPS_ICON_TYPE,
+                        UDFPS_ICON,
+                        UDFPS_CUSTOM_ICON_PATH
+                );
+                mTunableRegistered = true;
+            } catch (Exception e) {
+                Log.e(TAG, "Failed to register tunable", e);
+            }
+        }
+        
+        updateIcon();
+    }
+
+    private void registerUnlockReceiver() {
+        if (mReceiverRegistered || mIsDestroyed) return;
+
+        mUserUnlockedReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (mIsDestroyed) return;
+                Log.d(TAG, "User unlocked, finishing UDFPS icon setup");
+                mMainHandler.post(() -> {
+                    if (!mIsDestroyed) {
+                        setupAfterUnlock();
+                    }
+                });
             }
         };
 
-        Dependency.get(TunerService.class).addTunable(
-                mTunable,
-                UDFPS_ICON_TYPE,
-                UDFPS_ICON,
-                UDFPS_CUSTOM_ICON_PATH
-        );
-        
-        updateIcon();
+        try {
+            IntentFilter filter = new IntentFilter(Intent.ACTION_USER_UNLOCKED);
+            mContext.registerReceiver(mUserUnlockedReceiver, filter);
+            mReceiverRegistered = true;
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to register user unlocked receiver", e);
+            mUserUnlockedReceiver = null;
+        }
     }
 
     private void runOnMainThread(Runnable runnable) {
@@ -179,11 +251,22 @@ public abstract class UdfpsIconDrawable extends Drawable {
     }
 
     private void loadPrebuiltIcon() {
-        int selectedIcon = Settings.System.getIntForUser(mContext.getContentResolver(),
-                Settings.System.UDFPS_ICON, 0,
-                UserHandle.USER_CURRENT);
+        int selectedIcon = 0;
+        try {
+            selectedIcon = Settings.System.getIntForUser(mContext.getContentResolver(),
+                    Settings.System.UDFPS_ICON, 0,
+                    UserHandle.USER_CURRENT);
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to read UDFPS_ICON, using default", e);
+        }
         
         if (selectedIcon == 0 || udfpsRes == null || mUdfpsIcons == null) {
+            mUdfpsDrawable = null;
+            return;
+        }
+
+        if (selectedIcon < 0 || selectedIcon >= mUdfpsIcons.length) {
+            Log.w(TAG, "Invalid prebuilt icon index: " + selectedIcon);
             mUdfpsDrawable = null;
             return;
         }
@@ -212,9 +295,22 @@ public abstract class UdfpsIconDrawable extends Drawable {
     }
 
     private void loadCustomIcon() {
-        String path = Settings.System.getStringForUser(mContext.getContentResolver(),
-                Settings.System.UDFPS_CUSTOM_FP_ICON_PATH,
-                UserHandle.USER_CURRENT);
+        if (!isUserUnlocked()) {
+            if (DEBUG) Log.d(TAG, "User locked, skipping custom icon load");
+            mUdfpsDrawable = null;
+            return;
+        }
+
+        String path = null;
+        try {
+            path = Settings.System.getStringForUser(mContext.getContentResolver(),
+                    Settings.System.UDFPS_CUSTOM_FP_ICON_PATH,
+                    UserHandle.USER_CURRENT);
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to read custom icon path", e);
+            mUdfpsDrawable = null;
+            return;
+        }
         
         if (path == null || path.isEmpty()) {
             if (DEBUG) Log.d(TAG, "No custom icon path set");
@@ -444,10 +540,23 @@ public abstract class UdfpsIconDrawable extends Drawable {
     public void destroy() {
         mIsDestroyed = true;
         
-        try {
-            Dependency.get(TunerService.class).removeTunable(mTunable);
-        } catch (Exception e) {
-            Log.e(TAG, "Error removing tunable: " + e.getMessage());
+        if (mTunableRegistered) {
+            try {
+                Dependency.get(TunerService.class).removeTunable(mTunable);
+            } catch (Exception e) {
+                Log.e(TAG, "Error removing tunable: " + e.getMessage());
+            }
+            mTunableRegistered = false;
+        }
+
+        if (mReceiverRegistered && mUserUnlockedReceiver != null) {
+            try {
+                mContext.unregisterReceiver(mUserUnlockedReceiver);
+            } catch (Exception e) {
+                Log.e(TAG, "Error unregistering user unlocked receiver", e);
+            }
+            mReceiverRegistered = false;
+            mUserUnlockedReceiver = null;
         }
         
         mMainHandler.removeCallbacksAndMessages(null);
