@@ -17,6 +17,7 @@
 package com.android.systemui.charging
 
 import android.graphics.Rect
+import android.provider.Settings
 import android.view.Surface
 import android.view.View
 import android.view.WindowManager
@@ -66,6 +67,11 @@ class WiredChargingRippleControllerTest : SysuiTestCase() {
     fun setUp() {
         MockitoAnnotations.initMocks(this)
         `when`(featureFlags.isEnabled(Flags.CHARGING_RIPPLE)).thenReturn(true)
+        Settings.System.putIntForUser(
+                context.contentResolver,
+                Settings.System.CHARGING_ANIMATION,
+                1,
+                0)
         controller = WiredChargingRippleController(
                 commandRegistry, batteryController, configurationController,
                 featureFlags, context, windowManager, systemClock, uiEventLogger)
@@ -154,6 +160,26 @@ class WiredChargingRippleControllerTest : SysuiTestCase() {
         controller.startRippleWithDebounce()
         // Verify that ripple is triggered.
         verify(rippleView).addOnAttachStateChangeListener(ArgumentMatchers.any())
+    }
+
+    @Test
+    fun testRipple_whenChargingAnimationDisabled_doesNotPlayRipple() {
+        Settings.System.putIntForUser(
+                context.contentResolver,
+                Settings.System.CHARGING_ANIMATION,
+                0,
+                0)
+        val captor = ArgumentCaptor
+                .forClass(BatteryController.BatteryStateChangeCallback::class.java)
+        verify(batteryController).addCallback(captor.capture())
+
+        captor.value.onBatteryLevelChanged(
+                /* unusedBatteryLevel= */ 0,
+                /* plugged in= */ true,
+                /* charging= */ false)
+
+        verify(rippleView, never()).addOnAttachStateChangeListener(ArgumentMatchers.any())
+        verify(windowManager, never()).addView(eq(rippleView), any<WindowManager.LayoutParams>())
     }
 
     @Test

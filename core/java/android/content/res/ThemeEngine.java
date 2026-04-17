@@ -59,6 +59,7 @@ public class ThemeEngine {
     public static final String CATEGORY_UI_QS = "ui_qs";
     public static final String CATEGORY_UI_VOLUME = "ui_volume";
     public static final String CATEGORY_BACK_GESTURE = "back_gesture";
+    /** Theme-engine JSON key; overlay-manager category is {@link com.android.internal.util.alpha.ThemeUtils#OVERLAY_CATEGORY_CHARGING_ANIMATION}. */
     public static final String CATEGORY_CHARGING_ANIMATION = "charging_animation";
     public static final String CATEGORY_BATTERY_STYLE = "battery_style";
 

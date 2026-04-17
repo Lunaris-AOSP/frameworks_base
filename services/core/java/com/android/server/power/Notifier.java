@@ -27,6 +27,7 @@ import android.app.trust.TrustManager;
 import android.content.Context;
 import android.content.IIntentReceiver;
 import android.content.Intent;
+import android.content.om.IOverlayManager;
 import android.hardware.display.DisplayManagerInternal;
 import android.media.AudioManager;
 import android.media.Ringtone;
@@ -47,6 +48,7 @@ import android.os.PowerManagerInternal;
 import android.os.Process;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
+import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
 import android.os.VibrationAttributes;
@@ -69,6 +71,7 @@ import com.android.internal.app.IBatteryStats;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.util.FrameworkStatsLog;
+import com.android.internal.util.lunaris.ThemeUtils;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.EventLogTags;
 import com.android.server.LocalServices;
@@ -1225,30 +1228,49 @@ public class Notifier {
     }
 
     private void showWirelessChargingStarted(int batteryLevel, @UserIdInt int userId) {
-        final boolean animationEnabled = Settings.System.getIntForUser(mContext.getContentResolver(),
-                Settings.System.CHARGING_ANIMATION, 1, userId) == 1;
+        final boolean showAospAnimation = shouldShowAospChargingAnimation(userId);
 
         // play sounds + haptics
         playChargingStartedFeedback(userId, true /* wireless */);
 
         // show animation
-        if (animationEnabled && mStatusBarManagerInternal != null) {
+        if (showAospAnimation && mStatusBarManagerInternal != null) {
             mStatusBarManagerInternal.showChargingAnimation(batteryLevel);
         }
         mSuspendBlocker.release();
     }
 
     private void showWiredChargingStarted(int batteryLevel, @UserIdInt int userId) {
-        final boolean animationEnabled = Settings.System.getIntForUser(mContext.getContentResolver(),
-                Settings.System.CHARGING_ANIMATION, 1, userId) == 1;
+        final boolean showAospAnimation = shouldShowAospChargingAnimation(userId);
 
         playChargingStartedFeedback(userId, false /* wireless */);
 
         // show animation
-        if (animationEnabled && mStatusBarManagerInternal != null) {
+        if (showAospAnimation && mStatusBarManagerInternal != null) {
             mStatusBarManagerInternal.showChargingAnimation(batteryLevel);
         }
         mSuspendBlocker.release();
+    }
+
+    /**
+     * AOSP charging animation is shown only when:
+     * 1) global charging animation switch is enabled, and
+     * 2) no charging-animation overlay is active for SystemUI.
+     */
+    private boolean shouldShowAospChargingAnimation(@UserIdInt int userId) {
+        final boolean animationEnabled = Settings.System.getIntForUser(mContext.getContentResolver(),
+                Settings.System.CHARGING_ANIMATION, 1, userId) == 1;
+        if (!animationEnabled) {
+            return false;
+        }
+        final IOverlayManager overlayManager = IOverlayManager.Stub.asInterface(
+                ServiceManager.getService(Context.OVERLAY_SERVICE));
+        final boolean chargingOverlayEnabled = ThemeUtils.isOverlayEnabledForCategory(
+                overlayManager,
+                "com.android.systemui",
+                ThemeUtils.OVERLAY_CATEGORY_CHARGING_ANIMATION,
+                UserHandle.of(userId));
+        return !chargingOverlayEnabled;
     }
 
     private void showChargingStopped(@UserIdInt int userId, boolean wireless) {
