@@ -1859,8 +1859,17 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces,
         showChargingAnimation(batteryLevel, UNKNOWN_BATTERY_LEVEL, 0);
     }
 
+    /** Honors {@link Settings.System#CHARGING_ANIMATION} (same default as power notifier). */
+    private boolean isChargingAnimationSettingEnabled() {
+        return Settings.System.getIntForUser(mContext.getContentResolver(),
+                Settings.System.CHARGING_ANIMATION, 1, UserHandle.USER_CURRENT) == 1;
+    }
+
     protected void showChargingAnimation(int batteryLevel, int transmittingBatteryLevel,
             long animationDelay) {
+        if (!isChargingAnimationSettingEnabled()) {
+            return;
+        }
         WirelessChargingAnimation.makeWirelessChargingAnimation(mContext, null,
                 transmittingBatteryLevel, batteryLevel,
                 new WirelessChargingAnimation.Callback() {
