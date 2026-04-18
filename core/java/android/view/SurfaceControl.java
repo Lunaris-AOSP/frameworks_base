@@ -2742,6 +2742,35 @@ public final class SurfaceControl implements Parcelable {
     }
 
     /**
+     * Labels {@link #enumLabels} and property tokens {@link #propertyTokens}
+     * for supported blur algorithms.
+     *
+     * @hide
+     */
+    public static final class SupportedBlurAlgorithms {
+        /** RenderEngine enumerator names (e.g. Gaussian, Kawase). */
+        @NonNull public final String[] enumLabels;
+        /** Values for {@code persist.sys.renderengine.blur_algorithm}. */
+        @NonNull public final String[] propertyTokens;
+
+        private SupportedBlurAlgorithms(@NonNull String[] enumLabels,
+                @NonNull String[] propertyTokens) {
+            this.enumLabels = enumLabels;
+            this.propertyTokens = propertyTokens;
+        }
+    }
+
+    /**
+     * @hide
+     */
+    @Nullable
+    public static SupportedBlurAlgorithms getSupportedBlurAlgorithms() {
+        return nativeGetSupportedBlurAlgorithms();
+    }
+
+    private static native SupportedBlurAlgorithms nativeGetSupportedBlurAlgorithms();
+
+    /**
      * Returns whether brightness operations are supported on a display.
      *
      * @param displayToken

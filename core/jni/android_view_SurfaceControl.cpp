@@ -45,6 +45,7 @@
 #include <nativehelper/ScopedUtfChars.h>
 #include <private/gui/ComposerService.h>
 #include <stdio.h>
+#include <vector>
 #include <system/graphics.h>
 #include <ui/BlurRegion.h>
 #include <ui/ConfigStoreTypes.h>
@@ -1899,6 +1900,74 @@ static jboolean nativeGetProtectedContentSupport(JNIEnv* env, jclass) {
     return static_cast<jboolean>(SurfaceComposerClient::getProtectedContentSupport());
 }
 
+static jobject nativeGetSupportedBlurAlgorithms(JNIEnv* env, jclass) {
+    std::vector<std::string> enumLabels;
+    std::vector<std::string> propertyTokens;
+    SurfaceComposerClient::getSupportedBlurAlgorithms(&enumLabels, &propertyTokens);
+
+    jclass stringClass = env->FindClass("java/lang/String");
+    jclass catalogClass = env->FindClass("android/view/SurfaceControl$SupportedBlurAlgorithms");
+    if (stringClass == nullptr || catalogClass == nullptr) {
+        if (stringClass != nullptr) {
+            env->DeleteLocalRef(stringClass);
+        }
+        if (catalogClass != nullptr) {
+            env->DeleteLocalRef(catalogClass);
+        }
+        return nullptr;
+    }
+
+    auto cleanup = [&](jobjectArray jEnumLabels, jobjectArray jPropertyTokens) {
+        env->DeleteLocalRef(catalogClass);
+        env->DeleteLocalRef(stringClass);
+        if (jEnumLabels != nullptr) {
+            env->DeleteLocalRef(jEnumLabels);
+        }
+        if (jPropertyTokens != nullptr) {
+            env->DeleteLocalRef(jPropertyTokens);
+        }
+    };
+
+    jmethodID ctor = env->GetMethodID(catalogClass, "<init>",
+            "([Ljava/lang/String;[Ljava/lang/String;)V");
+    if (ctor == nullptr) {
+        cleanup(nullptr, nullptr);
+        return nullptr;
+    }
+
+    auto makeStringArray = [&](const std::vector<std::string>& v) -> jobjectArray {
+        jobjectArray arr = env->NewObjectArray(v.size(), stringClass, nullptr);
+        if (arr == nullptr) {
+            return nullptr;
+        }
+        for (size_t i = 0; i < v.size(); i++) {
+            jstring s = env->NewStringUTF(v[i].c_str());
+            if (s == nullptr) {
+                env->DeleteLocalRef(arr);
+                return nullptr;
+            }
+            env->SetObjectArrayElement(arr, i, s);
+            env->DeleteLocalRef(s);
+            if (env->ExceptionCheck()) {
+                env->DeleteLocalRef(arr);
+                return nullptr;
+            }
+        }
+        return arr;
+    };
+
+    jobjectArray jEnumLabels = makeStringArray(enumLabels);
+    jobjectArray jPropertyTokens = makeStringArray(propertyTokens);
+    if (jEnumLabels == nullptr || jPropertyTokens == nullptr) {
+        cleanup(jEnumLabels, jPropertyTokens);
+        return nullptr;
+    }
+
+    jobject result = env->NewObject(catalogClass, ctor, jEnumLabels, jPropertyTokens);
+    cleanup(jEnumLabels, jPropertyTokens);
+    return result;
+}
+
 static jboolean nativeClearContentFrameStats(JNIEnv* env, jclass clazz, jlong nativeObject) {
     SurfaceControl* const ctrl = reinterpret_cast<SurfaceControl *>(nativeObject);
     status_t err = ctrl->clearLayerFrameStats();
@@ -2785,6 +2854,9 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeSetDisplayPowerMode },
     {"nativeGetProtectedContentSupport", "()Z",
             (void*)nativeGetProtectedContentSupport },
+    {"nativeGetSupportedBlurAlgorithms",
+            "()Landroid/view/SurfaceControl$SupportedBlurAlgorithms;",
+            (void*)nativeGetSupportedBlurAlgorithms },
     {"nativeReparent", "(JJJ)V",
             (void*)nativeReparent },
     {"nativeSetInputWindowInfo", "(JJLandroid/view/InputWindowHandle;)V",
