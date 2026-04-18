@@ -20,12 +20,16 @@ import android.content.Context;
 import com.android.server.am.*;
 import com.android.server.pm.*;
 import com.android.server.wm.GameSpaceService;
+import com.android.server.spoof.AxSpoofManager;
+import com.android.server.spoof.IAxSpoofManager;
 import com.android.server.wm.WindowManagerService;
 
 public class AxExtServiceFactory {
     private static AxExtServiceFactory sInstance = null;
 
     private static final Object sLock = new Object();
+    
+    private static volatile IAxSpoofManager sAxSpoofManager;
 
     private AxExtServiceFactory(Context context) {
         NtServiceInjector.get().setCtx(context);
@@ -61,6 +65,17 @@ public class AxExtServiceFactory {
     public static <T> T getOrCreate(IAxExtServiceFactory.ExtType type) {
         Object instance;
         switch (type) {
+            case AX_SPOOF_MANAGER:
+                if (sAxSpoofManager == null) {
+                    synchronized (sLock) {
+                        if (sAxSpoofManager == null) {
+                            sAxSpoofManager = new AxSpoofManager();
+                        }
+                    }
+                }
+                instance = sAxSpoofManager;
+                break;
+
             default:
                 throw new IllegalArgumentException("Unknown ExtType: " + type);
         }
@@ -70,8 +85,13 @@ public class AxExtServiceFactory {
 
     public static void systemReady() {
         GameSpaceService.systemReady();
+        getSpoofManager().systemReady();
     }
     
     public static void onLateSystemReady() {
+    }
+    
+    public static IAxSpoofManager getSpoofManager() {
+        return getOrCreate(IAxExtServiceFactory.ExtType.AX_SPOOF_MANAGER);
     }
 }
