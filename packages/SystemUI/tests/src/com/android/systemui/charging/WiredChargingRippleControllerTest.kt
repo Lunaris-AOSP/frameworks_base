@@ -43,7 +43,6 @@ import org.mockito.ArgumentMatchers
 import org.mockito.Mock
 import org.mockito.Mockito.`when`
 import org.mockito.Mockito.any
-import org.mockito.Mockito.eq
 import org.mockito.Mockito.never
 import org.mockito.Mockito.reset
 import org.mockito.Mockito.verify
@@ -94,10 +93,12 @@ class WiredChargingRippleControllerTest : SysuiTestCase() {
                 /* unusedBatteryLevel= */ 0,
                 /* plugged in= */ true,
                 /* charging= */ false)
+        val addViewCaptor = ArgumentCaptor.forClass(View::class.java)
+        verify(windowManager).addView(addViewCaptor.capture(), any<WindowManager.LayoutParams>())
+        val overlayRoot = addViewCaptor.value
         val attachListenerCaptor =
                 ArgumentCaptor.forClass(View.OnAttachStateChangeListener::class.java)
         verify(rippleView).addOnAttachStateChangeListener(attachListenerCaptor.capture())
-        verify(windowManager).addView(eq(rippleView), any<WindowManager.LayoutParams>())
 
         // Verify ripple started
         val runnableCaptor =
@@ -107,7 +108,7 @@ class WiredChargingRippleControllerTest : SysuiTestCase() {
 
         // Verify ripple removed
         runnableCaptor.value.run()
-        verify(windowManager).removeView(rippleView)
+        verify(windowManager).removeView(overlayRoot)
 
         // Verify event logged
         verify(uiEventLogger).log(
@@ -135,16 +136,19 @@ class WiredChargingRippleControllerTest : SysuiTestCase() {
         systemClock.setElapsedRealtime(time)
 
         controller.startRippleWithDebounce()
-        verify(rippleView).addOnAttachStateChangeListener(ArgumentMatchers.any())
+        verify(windowManager).addView(ArgumentMatchers.any(View::class.java),
+                any<WindowManager.LayoutParams>())
 
         reset(rippleView)
+        reset(windowManager)
         // Wait a short while and trigger.
         time += 100
         systemClock.setElapsedRealtime(time)
         controller.startRippleWithDebounce()
 
-        // Verify the ripple is debounced.
-        verify(rippleView, never()).addOnAttachStateChangeListener(ArgumentMatchers.any())
+        // Verify the ripple is debounced (no second overlay while within debounce window).
+        verify(windowManager, never()).addView(ArgumentMatchers.any(View::class.java),
+                any<WindowManager.LayoutParams>())
 
         // Trigger many times.
         for (i in 0..100) {
@@ -153,13 +157,15 @@ class WiredChargingRippleControllerTest : SysuiTestCase() {
             controller.startRippleWithDebounce()
         }
         // Verify all attempts are debounced.
-        verify(rippleView, never()).addOnAttachStateChangeListener(ArgumentMatchers.any())
+        verify(windowManager, never()).addView(ArgumentMatchers.any(View::class.java),
+                any<WindowManager.LayoutParams>())
 
         // Wait a long while and trigger.
         systemClock.setElapsedRealtime(time + 500000)
         controller.startRippleWithDebounce()
         // Verify that ripple is triggered.
-        verify(rippleView).addOnAttachStateChangeListener(ArgumentMatchers.any())
+        verify(windowManager).addView(ArgumentMatchers.any(View::class.java),
+                any<WindowManager.LayoutParams>())
     }
 
     @Test
@@ -178,8 +184,8 @@ class WiredChargingRippleControllerTest : SysuiTestCase() {
                 /* plugged in= */ true,
                 /* charging= */ false)
 
-        verify(rippleView, never()).addOnAttachStateChangeListener(ArgumentMatchers.any())
-        verify(windowManager, never()).addView(eq(rippleView), any<WindowManager.LayoutParams>())
+        verify(windowManager, never()).addView(ArgumentMatchers.any(View::class.java),
+                any<WindowManager.LayoutParams>())
     }
 
     @Test
@@ -194,10 +200,8 @@ class WiredChargingRippleControllerTest : SysuiTestCase() {
                 /* plugged in= */ true,
                 /* charging= */ false)
 
-        val attachListenerCaptor =
-                ArgumentCaptor.forClass(View.OnAttachStateChangeListener::class.java)
-        verify(rippleView, never()).addOnAttachStateChangeListener(attachListenerCaptor.capture())
-        verify(windowManager, never()).addView(eq(rippleView), any<WindowManager.LayoutParams>())
+        verify(windowManager, never()).addView(ArgumentMatchers.any(View::class.java),
+                any<WindowManager.LayoutParams>())
     }
 
     @Test
@@ -217,10 +221,11 @@ class WiredChargingRippleControllerTest : SysuiTestCase() {
                 /* plugged in= */ true,
                 /* charging= */ false)
 
+        verify(windowManager).addView(ArgumentMatchers.any(View::class.java),
+                any<WindowManager.LayoutParams>())
         val attachListenerCaptor =
                 ArgumentCaptor.forClass(View.OnAttachStateChangeListener::class.java)
         verify(rippleView).addOnAttachStateChangeListener(attachListenerCaptor.capture())
-        verify(windowManager).addView(eq(rippleView), any<WindowManager.LayoutParams>())
 
         val runnableCaptor =
                 ArgumentCaptor.forClass(Runnable::class.java)
