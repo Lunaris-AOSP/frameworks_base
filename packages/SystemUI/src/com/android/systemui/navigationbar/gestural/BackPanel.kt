@@ -344,7 +344,7 @@ class BackPanel(context: Context, private val latencyTracker: LatencyTracker) : 
         showBackgroundEnabled = Settings.Secure.getInt(
             context.contentResolver,
             Settings.Secure.SHOW_BACK_GESTURE_BACKGROUND,
-            0
+            1
         ) == 1
         edgePanelParams?.setArrowSizeScale(showBackgroundEnabled)
         invalidate()
