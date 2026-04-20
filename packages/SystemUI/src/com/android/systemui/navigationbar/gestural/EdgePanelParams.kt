@@ -133,7 +133,7 @@ data class EdgePanelParams(
         val showBackground = Settings.Secure.getInt(
             context.contentResolver,
             Settings.Secure.SHOW_BACK_GESTURE_BACKGROUND,
-            0
+            1
         ) == 1
         arrowSizeScale = if (showBackground) 0.8f else 1.0f
         update(resources)
