@@ -19,10 +19,12 @@ package com.android.systemui.charging
 import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.content.Context
+import android.content.om.IOverlayManager
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
+import android.os.ServiceManager
 import android.os.SystemProperties
 import android.os.UserHandle
 import android.provider.Settings
@@ -46,6 +48,7 @@ import com.android.systemui.statusbar.commandline.Command
 import com.android.systemui.statusbar.commandline.CommandRegistry
 import com.android.systemui.statusbar.policy.BatteryController
 import com.android.systemui.statusbar.policy.ConfigurationController
+import com.android.internal.util.lunaris.ThemeUtils
 import com.android.systemui.util.time.SystemClock
 import java.io.PrintWriter
 import javax.inject.Inject
@@ -109,6 +112,22 @@ class WiredChargingRippleController @Inject constructor(
         updateRippleColor()
     }
 
+    private fun isChargingOverlayActive(): Boolean {
+        return try {
+            val overlayManager = IOverlayManager.Stub.asInterface(
+                ServiceManager.getService(Context.OVERLAY_SERVICE)
+            )
+            ThemeUtils.isOverlayEnabledForCategory(
+                overlayManager,
+                "com.android.systemui",
+                ThemeUtils.OVERLAY_CATEGORY_CHARGING_ANIMATION,
+                UserHandle.of(UserHandle.USER_CURRENT)
+            )
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     fun registerCallbacks() {
         val batteryStateChangeCallback = object : BatteryController.BatteryStateChangeCallback {
             override fun onBatteryLevelChanged(
@@ -124,7 +143,7 @@ class WiredChargingRippleController @Inject constructor(
                 }
 
                 batteryLevel = level
-                if (!pluggedIn && nowPluggedIn) {
+                if (!pluggedIn && nowPluggedIn && isChargingOverlayActive()) {
                     startRippleWithDebounce()
                 }
                 pluggedIn = nowPluggedIn
