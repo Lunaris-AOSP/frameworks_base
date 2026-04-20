@@ -88,9 +88,11 @@ import android.graphics.Color;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
+import android.hardware.power.Boost;
 import android.hardware.HardwareBuffer;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.PowerManagerInternal;
 import android.os.UserHandle;
 import android.util.ArrayMap;
 import android.view.SurfaceControl;
@@ -107,6 +109,7 @@ import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.policy.ScreenDecorationsUtils;
 import com.android.internal.policy.TransitionAnimation;
 import com.android.internal.protolog.ProtoLog;
+import com.android.server.LocalServices;
 import com.android.window.flags.Flags;
 import com.android.wm.shell.RootTaskDisplayAreaOrganizer;
 import com.android.wm.shell.animation.SizeChangeAnimation;
@@ -659,6 +662,21 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
             if (isTaskTransition) {
                 mInteractionJankMonitor.begin(info.getRoot(0).getLeash(), mContext,
                         mMainHandler, CUJ_DEFAULT_TASK_TO_TASK_ANIMATION);
+            }
+
+            long longestDurationMs = 0L;
+            for (int i = 0; i < animations.size(); ++i) {
+                final Animator a = animations.get(i);
+                if (a instanceof ValueAnimator va) {
+                    final long d = va.getDuration();
+                    if (d > longestDurationMs) longestDurationMs = d;
+                }
+            }
+            if (longestDurationMs > 0L) {
+                PowerManagerInternal pmi = LocalServices.getService(PowerManagerInternal.class);
+                if (pmi != null) {
+                    pmi.setPowerBoost(Boost.INTERACTION, (int) (longestDurationMs + 100L));
+                }
             }
 
             // now start animations. they are started on another thread, so we have to post them
