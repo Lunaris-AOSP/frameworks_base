@@ -22,25 +22,11 @@
 
     <TextView
         android:id="@android:id/title"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="start"
-        android:textAlignment="viewStart"
-        android:maxLines="2"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        android:textColor="@color/luna_text_color_primary"
-        android:ellipsize="marquee"/>
+        style="?expressivePreferenceTextFrameTitleStyle"
+        android:textColor="@color/luna_text_color_primary" />
 
     <TextView
         android:id="@android:id/summary"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_below="@android:id/title"
-        android:layout_alignStart="@android:id/title"
-        android:layout_gravity="start"
-        android:textAlignment="viewStart"
-        android:textSize="14sp"
-        android:textColor="@color/luna_text_color_secondary"
-        android:maxLines="10"/>
+        style="?expressivePreferenceTextFrameSummaryStyle"
+        android:textColor="@color/luna_text_color_secondary" />
 </RelativeLayout>
