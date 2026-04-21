@@ -15,13 +15,17 @@
 package com.android.internal.util.lunaris;
 
 import android.app.ActivityThread;
+import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.graphics.Typeface;
 import android.os.SystemProperties;
+import android.util.ArrayMap;
 import android.util.Log;
 import android.util.LruCache;
 
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 public class FontController {
@@ -82,6 +86,40 @@ public class FontController {
             {"medium", "500"},
             {"black", "900"},
     };
+
+    private static final Map<String, Integer> VARIABLE_WEIGHT_MAP = new ArrayMap<>();
+    static {
+        VARIABLE_WEIGHT_MAP.put("variable-display-large", 400);
+        VARIABLE_WEIGHT_MAP.put("variable-display-medium", 400);
+        VARIABLE_WEIGHT_MAP.put("variable-display-small", 400);
+        VARIABLE_WEIGHT_MAP.put("variable-headline-large", 400);
+        VARIABLE_WEIGHT_MAP.put("variable-headline-medium", 400);
+        VARIABLE_WEIGHT_MAP.put("variable-headline-small", 400);
+        VARIABLE_WEIGHT_MAP.put("variable-title-large", 400);
+        VARIABLE_WEIGHT_MAP.put("variable-title-medium", 500);
+        VARIABLE_WEIGHT_MAP.put("variable-title-small", 500);
+        VARIABLE_WEIGHT_MAP.put("variable-label-large", 500);
+        VARIABLE_WEIGHT_MAP.put("variable-label-medium", 500);
+        VARIABLE_WEIGHT_MAP.put("variable-label-small", 500);
+        VARIABLE_WEIGHT_MAP.put("variable-body-large", 400);
+        VARIABLE_WEIGHT_MAP.put("variable-body-medium", 400);
+        VARIABLE_WEIGHT_MAP.put("variable-body-small", 400);
+        VARIABLE_WEIGHT_MAP.put("variable-display-large-emphasized", 500);
+        VARIABLE_WEIGHT_MAP.put("variable-display-medium-emphasized", 500);
+        VARIABLE_WEIGHT_MAP.put("variable-display-small-emphasized", 500);
+        VARIABLE_WEIGHT_MAP.put("variable-headline-large-emphasized", 500);
+        VARIABLE_WEIGHT_MAP.put("variable-headline-medium-emphasized", 500);
+        VARIABLE_WEIGHT_MAP.put("variable-headline-small-emphasized", 500);
+        VARIABLE_WEIGHT_MAP.put("variable-title-large-emphasized", 500);
+        VARIABLE_WEIGHT_MAP.put("variable-title-medium-emphasized", 600);
+        VARIABLE_WEIGHT_MAP.put("variable-title-small-emphasized", 600);
+        VARIABLE_WEIGHT_MAP.put("variable-label-large-emphasized", 600);
+        VARIABLE_WEIGHT_MAP.put("variable-label-medium-emphasized", 600);
+        VARIABLE_WEIGHT_MAP.put("variable-label-small-emphasized", 600);
+        VARIABLE_WEIGHT_MAP.put("variable-body-large-emphasized", 500);
+        VARIABLE_WEIGHT_MAP.put("variable-body-medium-emphasized", 500);
+        VARIABLE_WEIGHT_MAP.put("variable-body-small-emphasized", 500);
+    }
 
     public static FontController get() {
         if (sInstance == null) {
@@ -145,9 +183,14 @@ public class FontController {
         }
 
         boolean isVariable = familyName.startsWith("variable-");
-        int weight = isVariable ? resolveWeight(familyName) : resolveWeight(familyName);
+        int weight = resolveWeight(familyName);
         boolean isItalic = familyName.contains("italic");
 
+        int weightAdjustment = getFontWeightAdjustment();
+        if (weightAdjustment != 0) {
+            weight = Math.min(1000, Math.max(100, weight + weightAdjustment));
+        }
+        
         Typeface base = resolveBase(config, familyName, isVariable, weight);
 
         if (weight == 400 && !isItalic && base == Typeface.DEFAULT) {
@@ -166,8 +209,7 @@ public class FontController {
             boolean isVariable, int weight) {
         if (!isVariable) return Typeface.DEFAULT;
 
-        boolean isHeadlineRole = name.startsWith("variable-display")
-                || name.startsWith("variable-headline");
+        boolean isHeadlineRole = name.startsWith("variable-headline");
         boolean isMediumWeight = weight >= 500;
 
         String baseName;
@@ -183,18 +225,28 @@ public class FontController {
 
     private static int resolveWeight(String name) {
         if (name.startsWith("variable-")) {
-            boolean emphasized = name.endsWith("-emphasized");
-            if (name.contains("-title-medium") || name.contains("-title-small")
-                    || name.contains("-label-")) {
-                return emphasized ? 600 : 500;
-            }
-            return emphasized ? 500 : 400;
+            Integer exact = VARIABLE_WEIGHT_MAP.get(name);
+            if (exact != null) return exact;
+            return name.endsWith("-emphasized") ? 500 : 400;
         }
 
         for (String[] entry : WEIGHT_KEYWORDS) {
             if (name.contains(entry[0])) return Integer.parseInt(entry[1]);
         }
         return 400;
+    }
+
+    private static int getFontWeightAdjustment() {
+        try {
+            ActivityThread at = ActivityThread.currentActivityThread();
+            if (at == null) return 0;
+            Resources res = at.getApplication().getResources();
+            if (res == null) return 0;
+            Configuration cfg = res.getConfiguration();
+            return cfg != null ? cfg.fontWeightAdjustment : 0;
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     public static void clearCaches() {
