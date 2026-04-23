@@ -661,12 +661,12 @@ public class StatusBarIconView extends AnimatedImageView implements StatusIconDi
             canvas.scale(mIconScale * mIconAppearAmount, mIconScale * mIconAppearAmount,
                     (float) px, (float) py);
             super.onDraw(canvas);
-            canvas.restore();
-        }
 
-        if (mNumberBackground != null) {
-            mNumberBackground.draw(canvas);
-            canvas.drawText(mNumberText, mNumberX, mNumberY, mNumberPain);
+            if (mNumberBackground != null) {
+                mNumberBackground.draw(canvas);
+                canvas.drawText(mNumberText, mNumberX, mNumberY, mNumberPain);
+            }
+            canvas.restore();
         }
 
         if (mDotAppearAmount != 0.0f) {
