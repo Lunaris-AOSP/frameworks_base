@@ -32,6 +32,12 @@ private const val EXPANDED_BOTTOM_PROTECTION_DP = 16f
 private const val UNSET = -1
 
 private val HIDDEN_VIEW_IDS = listOf(
+    R.id.keyguard_weather,
+    R.id.default_weather_image,
+    R.id.default_weather_text,
+    R.id.clock_ls,
+    R.id.keyguard_info_widgets,
+    R.id.keyguard_widgets,
     R.id.shared_notification_container,
     R.id.notificationShelf,
 )
