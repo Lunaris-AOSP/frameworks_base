@@ -15322,6 +15322,12 @@ public final class Settings {
         public static final String KEYGUARD_AFFORDANCE_SINGLE_TAP = "keyguard_affordance_single_tap";
 
         /**
+         * keyguard scrim
+         * @hide
+         */
+        public static final String KEYGUARD_SCRIM_TRANSPARENT = "keyguard_scrim_transparent";
+
+        /**
          * Whether to enable Sleep Mode
          * @hide
          */

@@ -34,6 +34,7 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Color;
 import android.os.Handler;
+import android.provider.Settings;
 import android.util.Log;
 import android.util.MathUtils;
 import android.util.Pair;
@@ -1119,9 +1120,12 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
             int behindTint = result.first;
             float behindAlpha = result.second;
 
-            if (mState == ScrimState.KEYGUARD) {
+            if (mState == ScrimState.KEYGUARD && Settings.Secure.getInt(
+                    mContext.getContentResolver(),
+                    Settings.Secure.KEYGUARD_SCRIM_TRANSPARENT,
+                    1) != 0) {
                 behindAlpha = 0.0f;
-                behindTint = Color.TRANSPARENT; 
+                behindTint = Color.TRANSPARENT;
             }
             
             if (mTransitionToFullShadeProgress > 0.0f) {
