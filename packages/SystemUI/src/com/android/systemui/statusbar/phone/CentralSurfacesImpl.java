@@ -1206,7 +1206,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces,
                 new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
-        overlay.addView(mPulseViewController.getPulseView(),
+        root.addView(mPulseViewController.getPulseView(), scrimBehindIndex + 1,
                 new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
