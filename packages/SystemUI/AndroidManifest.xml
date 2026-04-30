@@ -612,11 +612,6 @@
             </intent-filter>
         </receiver>
 
-        <!-- Smart Pixels -->
-        <service android:name=".smartpixels.SmartPixelsService"
-                android:enabled="true"
-                android:exported="true" />
-
         <service android:name="com.android.systemui.CPUInfoService"
                 android:exported="true" />
 

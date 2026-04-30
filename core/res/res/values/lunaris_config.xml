@@ -87,9 +87,6 @@
     <bool name="config_dozePulseProximity">false</bool>
     <bool name="config_deviceHaveWakeUpProximity">false</bool>
 
-    <!-- Whether the device supports Smart Pixels -->
-    <bool name="config_supportSmartPixels">false</bool>
-
     <!-- Define device configs on boot -->
     <string-array name="global_device_configs_override" translatable="false">
     </string-array>
