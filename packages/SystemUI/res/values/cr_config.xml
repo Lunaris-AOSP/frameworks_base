@@ -15,9 +15,6 @@
     <integer name="quick_settings_onthego_dialog_short_timeout">3000</integer>
     <integer name="quick_settings_onthego_dialog_long_timeout">6000</integer>
 
-    <!-- Whether to disable Smart Pixels on UDFPS -->
-    <bool name="config_disableSmartPixelsOnUDFPS">false</bool>
-
     <!-- The CPU temperature sensor path, defaults to empty -->
     <string name="config_cpuTempSensor" translatable="false">/sys/class/thermal/thermal_zone0/temp</string>
 
