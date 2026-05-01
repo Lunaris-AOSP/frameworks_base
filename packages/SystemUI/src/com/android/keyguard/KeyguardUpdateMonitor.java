@@ -166,6 +166,7 @@ import com.android.systemui.shade.ShadeDisplayAware;
 import com.android.systemui.shared.system.TaskStackChangeListener;
 import com.android.systemui.shared.system.TaskStackChangeListeners;
 import com.android.systemui.statusbar.StatusBarState;
+import com.android.systemui.statusbar.phone.DozeParameters;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.policy.DevicePostureController;
 import com.android.systemui.statusbar.policy.DevicePostureController.DevicePostureInt;
@@ -328,6 +329,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, CoreSt
         }
     };
     private final FaceWakeUpTriggersConfig mFaceWakeUpTriggersConfig;
+    private final Provider<DozeParameters> mDozeParameters;
 
     private final Object mSimDataLockObject = new Object();
     HashMap<Integer, SimData> mSimDatasBySlotId = new HashMap<>();
@@ -2173,6 +2175,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, CoreSt
                 cb.onFinishedGoingToSleep(arg1);
             }
         }
+        if (isUdfpsSupported() && mDozeParameters.get().getAlwaysOn()) {
+            mGoingToSleep = false;
+        }
         updateFingerprintListeningState(BIOMETRIC_ACTION_UPDATE);
     }
 
@@ -2296,7 +2301,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, CoreSt
             Provider<SceneInteractor> sceneInteractor,
             Provider<CommunalSceneInteractor> communalSceneInteractor,
             Provider<KeyguardServiceShowLockscreenInteractor>
-                    keyguardServiceShowLockscreenInteractor) {
+                    keyguardServiceShowLockscreenInteractor,
+            Provider<DozeParameters> dozeParameters) {
         mContext = context;
         mSubscriptionManager = subscriptionManager;
         mUserTracker = userTracker;
@@ -2355,6 +2361,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, CoreSt
         if (mPocketManager != null) {
             mPocketManager.addCallback(mPocketCallback);
         }
+        mDozeParameters = dozeParameters;
 
         mHandler = new Handler(mainLooper) {
             @Override
