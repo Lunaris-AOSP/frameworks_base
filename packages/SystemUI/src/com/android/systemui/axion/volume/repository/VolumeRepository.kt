@@ -29,6 +29,7 @@ import android.provider.Settings
 import android.content.pm.PackageManager
 import android.content.pm.ApplicationInfo
 import android.telephony.TelephonyCallback
+import android.os.UserHandle
 import android.telephony.TelephonyManager
 import lineageos.providers.LineageSettings
 import com.android.systemui.axion.volume.domain.model.AxionAppVolumeModel
@@ -53,6 +54,7 @@ interface AxionVolumeRepository {
     val isLeftSideFlow: Flow<Boolean>
     val activeAppVolumes: Flow<List<AxionAppVolumeModel>>
     val activeAppPackageName: Flow<String?>
+    val isHapticEnabled: Flow<Boolean>
     fun setActiveApp(packageName: String?)
     val activeStreamFlow: Flow<Int>
     val inCallFlow: Flow<Boolean>
@@ -208,6 +210,19 @@ class AxionVolumeRepositoryImpl @Inject constructor(
         uri = LineageSettings.Secure.getUriFor(LineageSettings.Secure.VOLUME_PANEL_ON_LEFT),
         getValue = ::isLeftSide
     )
+
+    override val isHapticEnabled: Flow<Boolean> = settingsFlow(
+        uri = Settings.Secure.getUriFor(Settings.Secure.VOLUME_DIALOG_HAPTIC_FEEDBACK),
+        getValue = ::readHapticEnabled
+    )
+
+    private fun readHapticEnabled(): Boolean =
+        Settings.Secure.getIntForUser(
+            context.contentResolver,
+            Settings.Secure.VOLUME_DIALOG_HAPTIC_FEEDBACK,
+            1,
+            UserHandle.USER_CURRENT,
+        ) != 0
     
     override val activeStreamFlow: Flow<Int> = controllerState
         .filterNotNull()
