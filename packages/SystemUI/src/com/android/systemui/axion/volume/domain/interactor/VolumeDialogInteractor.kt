@@ -44,6 +44,7 @@ interface AxionVolumeDialogInteractor {
     fun openVolumePanel()
     fun rescheduleTimeout()
     fun setExpanded(expanded: Boolean)
+    val isHapticEnabled: Flow<Boolean>
     val isLeftSide: Flow<Boolean>
 }
 
@@ -181,4 +182,6 @@ class AxionVolumeDialogInteractorImpl @Inject constructor(
     override fun setExpanded(expanded: Boolean) {
         volumeRepository.setExpanded(expanded)
     }
+
+    override val isHapticEnabled: Flow<Boolean> = volumeRepository.isHapticEnabled
 }
