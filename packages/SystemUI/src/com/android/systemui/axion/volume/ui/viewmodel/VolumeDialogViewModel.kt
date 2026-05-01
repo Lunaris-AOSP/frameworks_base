@@ -120,6 +120,13 @@ class AxionVolumeDialogViewModel @Inject constructor(
     val overscrollOffset: StateFlow<Float> = _overscrollOffset.asStateFlow()
     val volumeKeyHapticTrigger: SharedFlow<Unit> = _volumeKeyHapticTrigger.asSharedFlow()
     val rescheduleTimeoutTrigger: SharedFlow<Unit> = _rescheduleTimeoutTrigger.asSharedFlow()
+
+    val isHapticEnabled: StateFlow<Boolean> = interactor.isHapticEnabled
+        .stateIn(
+            scope = scope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = true,
+        )
     
     fun setOverscrollOffset(offset: Float) {
         _overscrollOffset.value = offset

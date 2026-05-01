@@ -149,6 +149,7 @@ fun VolumeSlider(
     var sliderValue by remember { mutableFloatStateOf(value) }
     var isDragging by remember { mutableStateOf(false) }
     var isPressed by remember { mutableStateOf(false) }
+    val isHapticEnabled by viewModel.isHapticEnabled.collectAsState()
     
     LaunchedEffect(value) {
         if (!isDragging) {
@@ -258,18 +259,18 @@ fun VolumeSlider(
                                 streamType?.let { viewModel.setActiveStream(it) }
                                 sliderValue = 1f - (it.y / size.height).coerceIn(0f, 1f)
                                 onValueChange(sliderValue)
-                                hapticsViewModel.onValueChange(sliderValue)
+                                if (isHapticEnabled) hapticsViewModel.onValueChange(sliderValue)
                                 viewModel.isInteracting = true
                             },
                             onDragEnd = { 
                                 isDragging = false
-                                hapticsViewModel.onValueChangeEnded()
+                                if (isHapticEnabled) hapticsViewModel.onValueChangeEnded()
                                 viewModel.isInteracting = false
                                 viewModel.setOverscrollOffset(0f)
                             },
                             onDragCancel = { 
                                 isDragging = false
-                                hapticsViewModel.onValueChangeEnded()
+                                if (isHapticEnabled) hapticsViewModel.onValueChangeEnded()
                                 viewModel.isInteracting = false
                                 viewModel.setOverscrollOffset(0f)
                             },
@@ -293,8 +294,10 @@ fun VolumeSlider(
                                         viewModel.setOverscrollOffset(0f)
                                     }
                                 }
-                                hapticsViewModel.addVelocityDataPoint(sliderValue)
-                                hapticsViewModel.onValueChange(sliderValue)
+                                if (isHapticEnabled) {
+                                    hapticsViewModel.addVelocityDataPoint(sliderValue)
+                                    hapticsViewModel.onValueChange(sliderValue)
+                                }
                                 onValueChange(sliderValue)
                             }
                         )

@@ -83,11 +83,14 @@ fun AxionVolumeDialogContent(
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
         label = "overscroll"
     )
-    
+
+    val isHapticEnabled by viewModel.isHapticEnabled.collectAsStateWithLifecycle()
     val view = LocalView.current
     LaunchedEffect(Unit) {
         viewModel.volumeKeyHapticTrigger.collect {
-            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+            if (isHapticEnabled) {
+                view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+            }
         }
     }
 
