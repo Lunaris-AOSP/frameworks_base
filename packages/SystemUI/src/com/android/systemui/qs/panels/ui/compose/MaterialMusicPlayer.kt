@@ -17,14 +17,9 @@
 package com.android.systemui.qs.panels.ui.compose
 
 import android.content.Context
-import android.graphics.Bitmap
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
-import android.media.MediaMetadata
-import android.media.session.MediaController
-import android.media.session.MediaSessionManager
-import android.media.session.PlaybackState
 import android.view.KeyEvent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
@@ -90,90 +85,9 @@ import androidx.compose.ui.unit.dp
 
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CustomColorScheme
 
-private data class MediaState(
-    val title: String? = null,
-    val artist: String? = null,
-    val albumArt: Bitmap? = null,
-    val isPlaying: Boolean = false,
-    val controller: MediaController? = null,
-    val packageName: String? = null,
-)
-
 @Composable
 fun MaterialMusicPlayer(modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    val sessionManager = remember {
-        context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager
-    }
-
-    var mediaState by remember { mutableStateOf(MediaState()) }
-
-    DisposableEffect(Unit) {
-        var controllerCallback: MediaController.Callback? = null
-        var currentController: MediaController? = null
-
-        val logic = object {
-            fun attachCallback(ctrl: MediaController?) {
-                if (currentController == ctrl) return
-                controllerCallback?.let { cb -> currentController?.unregisterCallback(cb) }
-                currentController = ctrl
-                if (ctrl == null) return
-                val cb = object : MediaController.Callback() {
-                    override fun onMetadataChanged(m: MediaMetadata?) { refreshActiveSessions() }
-                    override fun onPlaybackStateChanged(s: PlaybackState?) { refreshActiveSessions() }
-                    override fun onSessionDestroyed() { refreshActiveSessions() }
-                }
-                ctrl.registerCallback(cb)
-                controllerCallback = cb
-            }
-
-            fun refreshActiveSessions() {
-                val sessions = try {
-                    sessionManager?.getActiveSessions(null) ?: emptyList()
-                } catch (_: Exception) { emptyList() }
-
-                val active = sessions.firstOrNull { c ->
-                    c.playbackState?.state == PlaybackState.STATE_PLAYING ||
-                        c.playbackState?.state == PlaybackState.STATE_PAUSED ||
-                        c.playbackState?.state == PlaybackState.STATE_FAST_FORWARDING ||
-                        c.playbackState?.state == PlaybackState.STATE_REWINDING ||
-                        c.playbackState?.state == PlaybackState.STATE_BUFFERING
-                } ?: sessions.firstOrNull()
-
-                attachCallback(active)
-
-                if (active == null) {
-                    mediaState = MediaState()
-                    return
-                }
-                val meta = active.metadata
-                mediaState = MediaState(
-                    title = meta?.getString(MediaMetadata.METADATA_KEY_TITLE),
-                    artist = meta?.getString(MediaMetadata.METADATA_KEY_ARTIST)
-                        ?: meta?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST),
-                    albumArt = meta?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
-                        ?: meta?.getBitmap(MediaMetadata.METADATA_KEY_ART),
-                    isPlaying = active.playbackState?.state == PlaybackState.STATE_PLAYING,
-                    controller = active,
-                    packageName = active.packageName,
-                )
-            }
-        }
-
-        logic.refreshActiveSessions()
-        val sessionListener = MediaSessionManager.OnActiveSessionsChangedListener {
-            logic.refreshActiveSessions()
-        }
-        try { sessionManager?.addOnActiveSessionsChangedListener(sessionListener, null) }
-        catch (_: Exception) {}
-
-        onDispose {
-            try { sessionManager?.removeOnActiveSessionsChangedListener(sessionListener) }
-            catch (_: Exception) {}
-            controllerCallback?.let { cb -> currentController?.unregisterCallback(cb) }
-        }
-    }
-
+    val mediaState = rememberMediaState()
     MaterialMusicPlayerContent(mediaState = mediaState, modifier = modifier)
 }
 
@@ -248,7 +162,7 @@ private fun SkipButton(
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun MaterialMusicPlayerContent(mediaState: MediaState, modifier: Modifier = Modifier) {
+private fun MaterialMusicPlayerContent(mediaState: SharedMediaState, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val tileColor = CustomColorScheme.current.qsTileColor
 
