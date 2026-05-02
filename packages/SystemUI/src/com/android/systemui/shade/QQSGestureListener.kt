@@ -27,6 +27,7 @@ import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.plugins.statusbar.StatusBarStateController
 import com.android.systemui.user.domain.interactor.SelectedUserInteractor
+import com.android.systemui.power.domain.interactor.PowerInteractor
 import com.android.systemui.statusbar.StatusBarState
 import com.android.systemui.statusbar.phone.CentralSurfaces
 import lineageos.providers.LineageSettings
@@ -40,6 +41,7 @@ class QQSGestureListener @Inject constructor(
         private val statusBarStateController: StatusBarStateController,
         private val selectedUserInteractor: SelectedUserInteractor,
         private val centralSurfaces: CentralSurfaces,
+        private val powerInteractor: PowerInteractor,
 ) : GestureDetector.SimpleOnGestureListener() {
 
     private var doubleTapToSleepEnabled = false
@@ -81,7 +83,9 @@ class QQSGestureListener @Inject constructor(
                 e.getY() < quickQsOffsetHeight &&
                 !falsingManager.isFalseDoubleTap
         ) {
-            powerManager.goToSleep(e.getEventTime())
+            powerInteractor.setLastTouchToSleepPosition(e.x, e.y)
+            powerManager.goToSleep(e.eventTime,
+                PowerManager.GO_TO_SLEEP_REASON_TOUCH, 0)
             return true
         } else if (!statusBarStateController.isDozing &&
             lockscreenDT2SEnabled &&
