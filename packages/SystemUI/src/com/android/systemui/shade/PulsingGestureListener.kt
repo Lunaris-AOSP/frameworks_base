@@ -140,10 +140,10 @@ constructor(
             return false
         }
 
-        return onDoubleTapEvent()
+        return onDoubleTapEvent(e.x, e.y)
     }
 
-    fun onDoubleTapEvent(): Boolean {
+    fun onDoubleTapEvent(x: Float = 0f, y: Float = 0f): Boolean {
         // React to the [MotionEvent.ACTION_UP] event after double tap is detected. Falsing
         // checks MUST be on the ACTION_UP event.
         if (
@@ -153,6 +153,7 @@ constructor(
                 !falsingManager.isFalseDoubleTap
         ) {
             if (doubleTapVibrate) wakeVibrate()
+            dozeInteractor.setLastTapToWakePosition(Point(x.toInt(), y.toInt()))
             powerInteractor.wakeUpIfDozing("PULSING_DOUBLE_TAP", PowerManager.WAKE_REASON_TAP)
             return true
         }
