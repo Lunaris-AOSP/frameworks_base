@@ -16,7 +16,6 @@
 package com.android.systemui.qs.panels.ui.compose.infinitegrid
 
 import android.content.Context
-import android.content.res.Configuration
 import android.os.SystemProperties
 import android.provider.Settings
 import androidx.compose.runtime.Composable
@@ -25,37 +24,42 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
 class CustomColorScheme(private val context: Context) {
-    val qsTileColor: Color 
+    val qsTileColor: Color
         get() {
-            val blurEnabledByDefault = SystemProperties.getBoolean("ro.custom.blur.enable", false) 
+            val resolver = context.contentResolver
             val blurEnabled = Settings.Global.getInt(
-                context.contentResolver,
-                Settings.Global.DISABLE_WINDOW_BLURS, 
+                resolver,
+                Settings.Global.DISABLE_WINDOW_BLURS,
                 if (blurEnabledByDefault) 0 else 1
             ) != 1
-            
+
             val useAlternateColor = Settings.System.getInt(
-                context.contentResolver,
+                resolver,
                 Settings.System.QS_TILE_ALTERNATE_COLOR,
                 0
             ) == 1
-            
+
             val colorRes = if (blurEnabled) {
-                if (useAlternateColor) 
+                if (useAlternateColor)
                     com.android.internal.R.color.surface_effect_2
-                else 
+                else
                     com.android.internal.R.color.surface_effect_1
             } else {
                 com.android.internal.R.color.materialColorSurfaceBright
             }
-            val tileColor = context.resources.getColor(colorRes, context.theme)
-            return Color(tileColor)
+
+            return Color(context.resources.getColor(colorRes, context.theme))
         }
 
     companion object {
+        private val blurEnabledByDefault: Boolean by lazy {
+            SystemProperties.getBoolean("ro.custom.blur.enable", false)
+        }
+
         val current: CustomColorScheme
             @Composable
             @ReadOnlyComposable
             get() = CustomColorScheme(LocalContext.current)
     }
 }
+
