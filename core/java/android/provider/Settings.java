@@ -14630,6 +14630,11 @@ public final class Settings {
          * @hide
          */
         public static final String PULSE_CUSTOM_COLOR = "pulse_custom_color";
+        
+        /**
+         * @hide
+         */
+	public static final String PULSE_BASS_HAPTICS = "pulse_bass_haptics";
 
         /**
          * Whether to show or hide the arrow for back gesture
