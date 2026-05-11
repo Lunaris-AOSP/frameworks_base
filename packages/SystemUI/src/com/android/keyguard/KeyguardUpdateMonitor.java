@@ -2175,9 +2175,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, CoreSt
                 cb.onFinishedGoingToSleep(arg1);
             }
         }
-        final int userId = mSelectedUserInteractor.getSelectedUserId();
-        final boolean canFpUnlock = isUnlockWithFingerprintPossible(userId);
-        if (canFpUnlock && mDozeParameters.get().getAlwaysOn()) {
+        if (isUdfpsSupported() && mDozeParameters.get().getAlwaysOn()) {
             mGoingToSleep = false;
         }
         updateFingerprintListeningState(BIOMETRIC_ACTION_UPDATE);
