@@ -39,11 +39,13 @@ import com.android.systemui.navigationbar.NavigationBarController;
 import com.android.systemui.navigationbar.NavigationModeController;
 import com.android.systemui.plugins.DarkIconDispatcher;
 import com.android.systemui.plugins.PluginManager;
+import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.VolumeDialogController;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.rotation.RotationPolicyWrapper;
 import com.android.systemui.settings.UserTracker;
 import com.android.systemui.statusbar.CommandQueue;
+import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.notification.collection.render.GroupExpansionManager;
 import com.android.systemui.statusbar.notification.collection.render.GroupMembershipManager;
 import com.android.systemui.statusbar.notification.stack.AmbientState;
@@ -160,6 +162,7 @@ public class Dependency {
     @Inject Lazy<GroupExpansionManager> mGroupExpansionManagerLazy;
     @Inject Lazy<SystemUIDialogManager> mSystemUIDialogManagerLazy;
     @Inject Lazy<DialogTransitionAnimator> mDialogTransitionAnimatorLazy;
+    @Inject Lazy<NotificationLockscreenUserManager> mNotificationLockscreenUserManagerLazy;
     @Inject Lazy<UserTracker> mUserTrackerLazy;
     @Inject Lazy<StatusBarWindowControllerStore> mStatusBarWindowControllerStoreLazy;
     @Inject Lazy<SysUIStateDisplaysInteractor> mSysUIStateDisplaysInteractor;
@@ -216,6 +219,7 @@ public class Dependency {
         mProviders.put(GroupExpansionManager.class, mGroupExpansionManagerLazy::get);
         mProviders.put(SystemUIDialogManager.class, mSystemUIDialogManagerLazy::get);
         mProviders.put(DialogTransitionAnimator.class, mDialogTransitionAnimatorLazy::get);
+        mProviders.put(NotificationLockscreenUserManager.class, mNotificationLockscreenUserManagerLazy::get);
         mProviders.put(UserTracker.class, mUserTrackerLazy::get);
         mProviders.put(SysUIStateDisplaysInteractor.class, mSysUIStateDisplaysInteractor::get);
         mProviders.put(
