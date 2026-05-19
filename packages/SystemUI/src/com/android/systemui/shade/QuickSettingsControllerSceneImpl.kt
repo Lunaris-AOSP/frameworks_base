@@ -35,6 +35,9 @@ constructor(
     override val isCustomizing: Boolean
         get() = editModeViewModel.isEditing.value
 
+    override val splitShadeEnabledLegacy: Boolean
+        get() = false
+
     @Deprecated("specific to legacy touch handling")
     override fun shouldQuickSettingsIntercept(x: Float, y: Float, yDiff: Float): Boolean {
         throw UnsupportedOperationException()
