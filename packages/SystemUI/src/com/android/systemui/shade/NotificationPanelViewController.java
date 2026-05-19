@@ -1226,10 +1226,9 @@ public final class NotificationPanelViewController implements
             updateClockAppearance();
         }
         if (!onKeyguard) {
-            if (mSplitShadeEnabled) {
+            if (mSplitShadeEnabled || (mQsController.getSplitShadeEnabledLegacy() && mBarState == StatusBarState.SHADE)) {
                 // Quick settings are not on the top of the notifications
-                // when in split shade mode (they are on the left side),
-                // so we should not add a padding for them
+                // when in split shade mode, so we should not add a padding for them
                 stackScrollerPadding = 0;
             } else {
                 stackScrollerPadding = mQsController.getHeaderHeight();
@@ -2026,6 +2025,8 @@ public final class NotificationPanelViewController implements
             float qsExpansionFraction;
             if (mSplitShadeEnabled) {
                 qsExpansionFraction = 1;
+            } else if (mQsController.getSplitShadeEnabledLegacy() && mBarState == StatusBarState.SHADE) {
+                qsExpansionFraction = (mQsController.isExpandImmediate() || mQsController.getExpanded()) ? getExpandedFraction() : 0;
             } else if (isKeyguardShowing()) {
                 // On Keyguard, interpolate the QS expansion linearly to the panel expansion
                 qsExpansionFraction = expandedHeight / (getMaxPanelHeight());
@@ -4207,6 +4208,14 @@ public final class NotificationPanelViewController implements
                     }
                     break;
                 case MotionEvent.ACTION_MOVE:
+                    boolean isLegacySplitShadeQs = mQsController.getSplitShadeEnabledLegacy()
+                            && mBarState == StatusBarState.SHADE
+                            && mQsController.isExpandImmediate()
+                            && isFullyExpanded();
+                    if (isLegacySplitShadeQs && mView != null && mDownY < mView.getHeight() / 2f) {
+                        break;
+                    }
+
                     final float h = y - mInitialExpandY;
                     addMovement(event);
                     final boolean openShadeWithoutHun =
@@ -4500,6 +4509,14 @@ public final class NotificationPanelViewController implements
                     }
                     break;
                 case MotionEvent.ACTION_MOVE:
+                    boolean isLegacySplitShadeQs = mQsController.getSplitShadeEnabledLegacy()
+                            && mBarState == StatusBarState.SHADE
+                            && mQsController.isExpandImmediate()
+                            && isFullyExpanded();
+                    if (isLegacySplitShadeQs && mView != null && mDownY < mView.getHeight() / 2f) {
+                        break;
+                    }
+
                     // If the shade is half-collapsed, a horizontal swipe inwards from L/R edge
                     // must be routed to the back gesture (which shows a preview animation).
                     if (QuickStepContract.ALLOW_BACK_GESTURE_IN_SHADE && mAnimateBack

@@ -27,6 +27,9 @@ class NoOpQuickSettingsController : QuickSettingsController {
     override val isCustomizing: Boolean
         get() = false
 
+    override val splitShadeEnabledLegacy: Boolean
+        get() = false
+
     @Deprecated("specific to legacy touch handling")
     override fun shouldQuickSettingsIntercept(x: Float, y: Float, yDiff: Float): Boolean {
         return false

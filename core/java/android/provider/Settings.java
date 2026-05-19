@@ -6105,6 +6105,13 @@ public final class Settings {
         public static final String ACCELEROMETER_ROTATION_ANGLES = "accelerometer_rotation_angles";
 
         /**
+         * Whether to split the notification shade (swipe left for notifications, right for QS)
+         * @hide
+         */
+        @Readable
+        public static final String QS_SPLIT_SHADE = "qs_split_shade";
+
+        /**
          * Default screen rotation when no other policy applies.
          * When {@link #ACCELEROMETER_ROTATION} is zero and no on-screen Activity expresses a
          * preference, this rotation value will be used. Must be one of the

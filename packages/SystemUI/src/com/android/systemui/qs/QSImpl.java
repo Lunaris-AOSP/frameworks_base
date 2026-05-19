@@ -29,6 +29,7 @@ import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Rect;
+import android.provider.Settings;
 import android.os.Bundle;
 import android.util.IndentingPrintWriter;
 import android.util.Log;
@@ -761,8 +762,10 @@ public class QSImpl implements QS, CommandQueue.Callbacks, StatusBarStateControl
     }
 
     private float calculateAlphaProgress(float panelExpansionFraction) {
-        if (mIsSmallScreen) {
-            // Small screens. QS alpha is not animated.
+        boolean isLegacySplitShade = android.provider.Settings.System.getInt(
+                getContext().getContentResolver(), Settings.System.QS_SPLIT_SHADE, 0) != 0;
+        if (mIsSmallScreen || isLegacySplitShade) {
+            // Small screens or legacy split shade. QS alpha is not animated.
             return 1;
         }
         if (mInSplitShade) {

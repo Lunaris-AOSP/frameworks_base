@@ -125,6 +125,11 @@ public final class NotificationPanelView extends FrameLayout {
     }
 
     @Override
+    public void requestDisallowInterceptTouchEvent(boolean disallowIntercept) {
+        super.requestDisallowInterceptTouchEvent(disallowIntercept);
+    }
+
+    @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
         return TouchLogger.logDispatchTouch("NPV", ev, super.dispatchTouchEvent(ev));
     }
