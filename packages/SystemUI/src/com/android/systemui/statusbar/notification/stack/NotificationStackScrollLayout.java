@@ -2137,7 +2137,7 @@ public class NotificationStackScrollLayout
      * @return The translation at the beginning when expanding.
      * Measured relative to the resting position.
      */
-    private float getExpandTranslationStart() {
+    public float getExpandTranslationStart() {
         SceneContainerFlag.assertInLegacyMode();
         return -getTopPadding() + getMinExpansionHeight() - mShelf.getIntrinsicHeight();
     }
