@@ -1182,10 +1182,11 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         );
         if (mQsSplitShadeEnabledLegacy && mBarState == StatusBarState.SHADE) {
             if (mQsFrame != null) {
+                float speedFraction = Math.min(mShadeExpandedFraction / 0.90f, 1.0f);
                 float translationLimit = mNotificationStackScrollLayoutController.getView().getExpandTranslationStart();
-                float translationY = (1.0f - mShadeExpandedFraction) * translationLimit;
+                float translationY = (1.0f - speedFraction) * translationLimit;
                 mQsFrame.setTranslationY(translationY);
-                mQsFrame.setAlpha(com.android.systemui.animation.ShadeInterpolation.getContentAlpha(mShadeExpandedFraction));
+                mQsFrame.setAlpha(com.android.systemui.animation.ShadeInterpolation.getContentAlpha(speedFraction));
             }
         } else {
             if (mQsFrame != null) {
