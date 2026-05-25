@@ -25,6 +25,7 @@ import android.text.method.LinkMovementMethod;
 import android.text.style.TextAppearanceSpan;
 import android.util.AttributeSet;
 import android.view.View;
+import android.view.animation.PathInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
@@ -55,6 +56,8 @@ public class UsageProgressBarPreference extends Preference implements GroupSecti
     private CharSequence mBottomSummaryContentDescription;
     private ImageView mCustomImageView;
     private int mPercent = -1;
+    private int mLastAnimatedPercent = -1;
+    private ValueAnimator mProgressAnimator;
 
     /**
      * Perform inflation from XML and apply a class-specific base style.
@@ -209,7 +212,7 @@ public class UsageProgressBarPreference extends Preference implements GroupSecti
                 progressBar.setIndeterminate(true);
             } else {
                 progressBar.setIndeterminate(false);
-                animateBatteryLevel(progressBar, 0, mPercent);
+                animateBatteryLevel(progressBar, mPercent);
             }
         }
 
@@ -244,16 +247,26 @@ public class UsageProgressBarPreference extends Preference implements GroupSecti
         return summary;
     }
     
-    private void animateBatteryLevel(final ProgressBar progressbar, final int startValue, final int endValue) {
-        final ValueAnimator animator = ValueAnimator.ofInt(startValue, endValue);
-        animator.setDuration(1000);
-        animator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-            @Override
-            public void onAnimationUpdate(ValueAnimator animation) {
-                int animatedValue = (int) animation.getAnimatedValue();
-                progressbar.setProgress(animatedValue);
-            }
-        });
-        animator.start();
+    private void animateBatteryLevel(final ProgressBar progressbar, final int endValue) {
+        // Reuse a single animator across rebinds. Stacking ValueAnimator instances on the same
+        // ProgressBar produces visible jitter because each animator drives setProgress() on its
+        // own frame cadence and the underlying LinearProgressIndicator runs its own smooth
+        // animator on top, so the two clocks fight each other.
+        final int startValue = mLastAnimatedPercent < 0 ? 0 : mLastAnimatedPercent;
+        if (mProgressAnimator != null) {
+            mProgressAnimator.cancel();
+        }
+        if (startValue == endValue) {
+            progressbar.setProgress(endValue, false);
+            mLastAnimatedPercent = endValue;
+            return;
+        }
+        mProgressAnimator = ValueAnimator.ofInt(startValue, endValue);
+        mProgressAnimator.setDuration(700L);
+        mProgressAnimator.setInterpolator(new PathInterpolator(0.4f, 0f, 0.2f, 1f));
+        mProgressAnimator.addUpdateListener(animation ->
+                progressbar.setProgress((int) animation.getAnimatedValue(), false));
+        mProgressAnimator.start();
+        mLastAnimatedPercent = endValue;
     }
 }
