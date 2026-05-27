@@ -129,6 +129,8 @@ public final class PlayIntegritySpoofService {
             if (secPatch != null && !secPatch.isEmpty()) {
                 mSystemProps.put("ro.build.version.security_patch", secPatch);
                 mSystemProps.put("ro.vendor.build.security_patch", secPatch);
+                mSystemProps.put("ro.system.build.version.security_patch", secPatch);
+                mSystemProps.put("ro.product.build.version.security_patch", secPatch);
             }
         } catch (Throwable e) {
             Log.e(TAG, "Failed to load PIF config", e);
