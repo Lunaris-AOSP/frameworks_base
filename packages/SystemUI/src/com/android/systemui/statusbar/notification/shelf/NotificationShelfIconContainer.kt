@@ -22,6 +22,7 @@ import android.view.View
 import com.android.internal.annotations.VisibleForTesting
 import com.android.systemui.statusbar.notification.shared.NotificationMinimalism
 import com.android.systemui.statusbar.phone.NotificationIconContainer
+import com.android.systemui.statusbar.StatusBarIconView
 import kotlin.math.max
 
 /** The NotificationIconContainer for the NotificationShelf. */
@@ -33,12 +34,25 @@ constructor(context: Context, attrs: AttributeSet? = null) :
     /** Whether the notification shelf is aligned to end. */
     var alignToEnd = false
 
+    private var mAlignToCenterShelf = false
+
+    override fun setAlignToCenter(alignToCenter: Boolean) {
+        super.setAlignToCenter(alignToCenter)
+        mAlignToCenterShelf = alignToCenter
+    }
+
+    override fun isAlignToCenter(): Boolean = mAlignToCenterShelf
+
     /**
      * @return The left boundary (not the RTL compatible start) of the area that icons can be added.
      */
     public override fun getLeftBound(): Float {
         if (!NotificationMinimalism.isEnabled) {
             return super.getLeftBound()
+        }
+
+        if (mAlignToCenterShelf) {
+            return centeredIconLeftBound()
         }
 
         if (isAlignedToRight) {
@@ -56,10 +70,38 @@ constructor(context: Context, attrs: AttributeSet? = null) :
             return super.getRightBound()
         }
 
+        if (mAlignToCenterShelf) {
+            val contentWidth = calculateCenteredContentWidth()
+            val blockLeft = centeredBlockLeft(contentWidth)
+            return (blockLeft + contentWidth - actualPaddingEnd).coerceAtMost(width.toFloat())
+        }
+
         if (isAlignedToRight) {
             return width - actualPaddingEnd
         }
         return actualWidth - actualPaddingEnd
+    }
+
+    private fun centeredIconLeftBound(): Float {
+        val contentWidth = calculateCenteredContentWidth()
+        val blockLeft = centeredBlockLeft(contentWidth)
+        return (blockLeft + actualPaddingStart).coerceAtLeast(0f)
+    }
+
+    private fun centeredBlockLeft(contentWidth: Float): Float {
+        return ((width - contentWidth) / 2f).coerceAtLeast(0f)
+    }
+
+    private fun calculateCenteredContentWidth(): Float {
+        if (iconSize == 0) return actualWidth.toFloat()
+        var visibleCount = 0
+        for (i in 0 until childCount) {
+            val iconView = getChildAt(i) as? StatusBarIconView ?: continue
+            val state = getIconState(iconView) ?: continue
+            if (!state.hidden) visibleCount++
+        }
+        if (visibleCount == 0) return 0f
+        return calculateWidthFor(visibleCount.toFloat())
     }
 
     /**
@@ -70,6 +112,15 @@ constructor(context: Context, attrs: AttributeSet? = null) :
     override fun getRtlIconTranslationX(iconState: IconState, iconView: View): Float {
         if (!NotificationMinimalism.isEnabled) {
             return super.getRtlIconTranslationX(iconState, iconView)
+        }
+
+        if (mAlignToCenterShelf) {
+            val contentWidth = calculateCenteredContentWidth()
+            val blockLeft = centeredBlockLeft(contentWidth)
+            val iconLeft = (blockLeft + actualPaddingStart).coerceAtLeast(0f)
+            val iconRight = (blockLeft + contentWidth - actualPaddingEnd).coerceAtMost(width.toFloat())
+            return (iconRight - (iconState.xTranslation - iconLeft) - iconView.width)
+                .coerceAtLeast(0f)
         }
 
         if (!isLayoutRtl) {
