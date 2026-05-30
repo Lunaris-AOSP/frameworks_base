@@ -47,6 +47,7 @@ import com.android.systemui.statusbar.StatusBarIconView;
 import com.android.systemui.statusbar.headsup.shared.StatusBarNoHunBehavior;
 import com.android.systemui.statusbar.notification.stack.AnimationFilter;
 import com.android.systemui.statusbar.notification.stack.AnimationProperties;
+import com.android.systemui.statusbar.notification.shared.NotificationMinimalism;
 import com.android.systemui.statusbar.notification.stack.ViewState;
 
 import java.util.ArrayList;
@@ -152,6 +153,7 @@ public class NotificationIconContainer extends ViewGroup {
     private boolean mAnimationsEnabled = true;
     private ArrayMap<String, StatusBarIcon> mReplacingIcons;
     private ArrayMap<String, ArrayList<StatusBarIcon>> mReplacingIconsLegacy;
+    private boolean mAlignToCenter = false;
     // Keep track of the last visible icon so collapsed container can report on its location
     private IconState mLastVisibleIconState;
     private IconState mFirstVisibleIconState;
@@ -584,13 +586,56 @@ public class NotificationIconContainer extends ViewGroup {
      * @return The right boundary (not the RTL compatible end) of the area that icons can be added.
      */
     protected float getRightBound() {
+        if (mAlignToCenter && NotificationMinimalism.isEnabled()) {
+            float contentWidth = computeVisibleIconsWidth();
+            float blockLeft = centeredBlockLeft(contentWidth);
+            return blockLeft + contentWidth - getActualPaddingEnd();
+        }
         return getActualWidth() - getActualPaddingEnd();
+    }
+
+    public void setAlignToCenter(boolean alignToCenter) {
+        if (mAlignToCenter == alignToCenter) return;
+        mAlignToCenter = alignToCenter;
+        if (mIsStaticLayout) {
+            updateState();
+        } else {
+            calculateIconXTranslations();
+            applyIconStates();
+        }
+    }
+
+    public boolean isAlignToCenter() {
+        return mAlignToCenter;
+    }
+
+    private float computeVisibleIconsWidth() {
+        if (mIconSize == 0) return 0f;
+        float weightedWidth = 0f;
+        for (int i = 0; i < getChildCount(); i++) {
+            View child = getChildAt(i);
+            IconState state = mIconStates.get(child);
+            if (state != null && !state.hidden && state.iconAppearAmount > 0f) {
+                weightedWidth += state.iconAppearAmount * mIconSize;
+            }
+        }
+        if (weightedWidth == 0f) return 0f;
+        return getActualPaddingStart() + weightedWidth + getActualPaddingEnd();
+    }
+
+    private float centeredBlockLeft(float contentWidth) {
+        return Math.max((getActualWidth() - contentWidth) / 2f, 0f);
     }
 
     /**
      * @return The left boundary (not the RTL compatible start) of the area that icons can be added.
      */
     protected float getLeftBound() {
+        if (mAlignToCenter && NotificationMinimalism.isEnabled()) {
+            float contentWidth = computeVisibleIconsWidth();
+            float blockLeft = centeredBlockLeft(contentWidth);
+            return blockLeft + getActualPaddingStart();
+        }
         return getActualPaddingStart();
     }
 

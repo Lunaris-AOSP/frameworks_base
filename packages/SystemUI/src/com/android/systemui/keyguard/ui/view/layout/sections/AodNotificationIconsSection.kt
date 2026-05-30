@@ -18,6 +18,10 @@
 package com.android.systemui.keyguard.ui.view.layout.sections
 
 import android.content.Context
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.UserHandle
+import android.provider.Settings
 import android.view.View
 import android.view.View.GONE
 import android.view.View.VISIBLE
@@ -35,6 +39,7 @@ import com.android.systemui.keyguard.ui.viewmodel.KeyguardRootViewModel
 import com.android.systemui.res.R
 import com.android.systemui.shade.ShadeDisplayAware
 import com.android.systemui.shade.domain.interactor.ShadeModeInteractor
+import com.android.systemui.statusbar.notification.shared.NotificationMinimalism
 import com.android.systemui.statusbar.notification.icon.ui.viewbinder.AlwaysOnDisplayNotificationIconViewStore
 import com.android.systemui.statusbar.notification.icon.ui.viewbinder.NotificationIconContainerViewBinder
 import com.android.systemui.statusbar.notification.icon.ui.viewbinder.StatusBarIconViewBindingFailureTracker
@@ -62,6 +67,7 @@ constructor(
     private var nicBindingDisposable: DisposableHandle? = null
     private val nicId = R.id.aod_notification_icon_container
     private lateinit var nic: NotificationIconContainer
+    private var centerIconsObserver: ContentObserver? = null
 
     override fun addViews(constraintLayout: ConstraintLayout) {
         nic =
@@ -77,6 +83,7 @@ constructor(
             }
 
         constraintLayout.addView(nic)
+        registerCenterIconsObserver(constraintLayout)
     }
 
     override fun bindData(constraintLayout: ConstraintLayout) {
@@ -90,6 +97,7 @@ constructor(
                 iconBindingFailureTracker,
                 nicAodIconViewStore,
             )
+        applyCenterAlignment()
     }
 
     override fun applyConstraints(constraintSet: ConstraintSet) {
@@ -100,6 +108,7 @@ constructor(
         val height = context.resources.getDimensionPixelSize(R.dimen.notification_shelf_height)
         val isVisible = rootViewModel.isNotifIconContainerVisible.value
         val isFullWidthShade = shadeModeInteractor.isFullWidthShade.value
+        val isCentered = isCenterAlignmentEnabled()
 
         constraintSet.apply {
             if (PromotedNotificationUi.isEnabled) {
@@ -111,19 +120,64 @@ constructor(
             setGoneMargin(nicId, BOTTOM, bottomMargin)
             setVisibility(nicId, if (isVisible.value) VISIBLE else GONE)
 
-            if (PromotedNotificationUi.isEnabled && !isFullWidthShade) {
-                // Don't create a start constraint, so the icons can hopefully right-align.
+            if (NotificationMinimalism.isEnabled && isCentered) {
+                connect(nicId, START, PARENT_ID, START, horizontalMargin)
+                connect(nicId, END, PARENT_ID, END, horizontalMargin)
+            } else if (PromotedNotificationUi.isEnabled && !isFullWidthShade) {
             } else {
                 connect(nicId, START, PARENT_ID, START, horizontalMargin)
+                connect(nicId, END, PARENT_ID, END, horizontalMargin)
             }
-            connect(nicId, END, PARENT_ID, END, horizontalMargin)
 
             constrainHeight(nicId, height)
         }
+        applyCenterAlignment()
     }
 
     override fun removeViews(constraintLayout: ConstraintLayout) {
+        unregisterCenterIconsObserver()
         constraintLayout.removeView(nicId)
         nicBindingDisposable?.dispose()
+    }
+
+    private fun isCenterAlignmentEnabled(): Boolean {
+        if (!NotificationMinimalism.isEnabled) return false
+        return Settings.System.getIntForUser(
+            context.contentResolver,
+            Settings.System.NOTIFICATION_ICONS_CENTER_ALIGNED,
+            0,
+            UserHandle.USER_CURRENT,
+        ) == 1
+    }
+
+    private fun applyCenterAlignment() {
+        if (!::nic.isInitialized) return
+        nic.setAlignToCenter(isCenterAlignmentEnabled())
+    }
+
+    private fun registerCenterIconsObserver(constraintLayout: ConstraintLayout) {
+        if (!NotificationMinimalism.isEnabled) return
+        centerIconsObserver = object : ContentObserver(Handler(context.mainLooper)) {
+            override fun onChange(selfChange: Boolean) {
+                applyCenterAlignment()
+                val cs = ConstraintSet()
+                cs.clone(constraintLayout)
+                applyConstraints(cs)
+                cs.applyTo(constraintLayout)
+            }
+        }
+        context.contentResolver.registerContentObserver(
+            Settings.System.getUriFor(Settings.System.NOTIFICATION_ICONS_CENTER_ALIGNED),
+            false,
+            centerIconsObserver!!,
+            UserHandle.USER_ALL,
+        )
+    }
+
+    private fun unregisterCenterIconsObserver() {
+        centerIconsObserver?.let {
+            context.contentResolver.unregisterContentObserver(it)
+            centerIconsObserver = null
+        }
     }
 }

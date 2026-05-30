@@ -31,16 +31,22 @@ constructor(context: Context, attrs: AttributeSet? = null) :
     /** Whether the notification shelf is aligned to end, need to keep persistent with the shelf. */
     var alignToEnd = false
 
+    /** Whether the notification shelf is in center-alignment mode. */
+    var alignToCenter = false
+
     /** @return whether the alignment of the notification shelf is right. */
     @VisibleForTesting
     public override fun isAlignedToRight(): Boolean {
         if (!NotificationMinimalism.isEnabled) {
             return super.isAlignedToRight()
         }
+        if (alignToCenter) {
+            return false
+        }
         return alignToEnd xor isLayoutRtl
     }
 
     override fun toDumpString(): String {
-        return super.toDumpString() + " alignToEnd=" + alignToEnd
+        return super.toDumpString() + " alignToEnd=" + alignToEnd + " alignToCenter=" + alignToCenter
     }
 }
