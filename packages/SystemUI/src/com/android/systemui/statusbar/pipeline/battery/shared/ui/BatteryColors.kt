@@ -135,11 +135,30 @@ sealed interface BatteryColors {
         override val backgroundWithGlyph = accentColor.copy(alpha = 0.55f)
     }
 
+    class AccentInsideIconLightTheme(private val accentColor: Color) : LightTheme() {
+        override val attribution = accentColor
+        override val fill = accentColor
+        override val backgroundOnly = accentColor.copy(alpha = 0.20f)
+        override val backgroundWithGlyph = accentColor.copy(alpha = 0.55f)
+    }
+
+    class AccentInsideIconDarkTheme(private val accentColor: Color) : DarkTheme() {
+        override val attribution = accentColor
+        override val fill = accentColor
+        override val backgroundOnly = accentColor.copy(alpha = 0.45f)
+        override val backgroundWithGlyph = accentColor.copy(alpha = 0.55f)
+    }
+
     companion object {
         /** Create accent color themes from Android color int */
         fun createAccentThemes(accentColorInt: Int): Pair<LightTheme, DarkTheme> {
             val accentColor = Color(accentColorInt)
             return Pair(AccentLightTheme(accentColor), AccentDarkTheme(accentColor))
+        }
+
+        fun createAccentInsideIconThemes(accentColorInt: Int): Pair<LightTheme, DarkTheme> {
+            val accentColor = Color(accentColorInt)
+            return Pair(AccentInsideIconLightTheme(accentColor), AccentInsideIconDarkTheme(accentColor))
         }
     }
 }
