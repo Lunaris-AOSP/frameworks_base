@@ -27,6 +27,7 @@ import android.provider.Settings
 import android.service.quicksettings.Tile.STATE_ACTIVE
 import android.service.quicksettings.Tile.STATE_INACTIVE
 import android.service.quicksettings.Tile.STATE_UNAVAILABLE
+import android.view.HapticFeedbackConstants
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -81,6 +82,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -217,7 +219,7 @@ fun ContentScope.Tile(
 
         val colors = TileDefaults.getColorForState(uiState, iconOnly, forceMonochrome = useMinimalStyle)
         val hapticsViewModel: TileHapticsViewModel? =
-            if (rememberTileHaptic()) {
+            if (rememberTileHaptic() && !Flags.msdlFeedback()) {
                 rememberViewModel(traceName = "TileHapticsViewModel") {
                     tileHapticsViewModelFactoryProvider.getHapticsViewModelFactory()?.create(tile)
                 }
@@ -225,6 +227,8 @@ fun ContentScope.Tile(
                 null
             }
 
+        val view = LocalView.current
+        val hapticEnabled = rememberTileHaptic()
         val classicStyle = rememberQSPanelStyle()
 
         if (tile.spec.spec == "sound" && !iconOnly) {
@@ -307,9 +311,9 @@ fun ContentScope.Tile(
             val useLongClickToSettings = !(iconOnly && isDualTarget && isClickable)
             val longClick: (() -> Unit)? =
                 {
-                        hapticsViewModel?.setTileInteractionState(
-                            TileHapticsViewModel.TileInteractionState.LONG_CLICKED
-                        )
+                        if (hapticEnabled) {
+                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                        }
 
                         if (useLongClickToSettings) {
                             tile.settingsClick(expandable)
@@ -344,9 +348,9 @@ fun ContentScope.Tile(
                         }
 
                         // Side effects of the click
-                        hapticsViewModel?.setTileInteractionState(
-                            TileHapticsViewModel.TileInteractionState.CLICKED
-                        )
+                        if (hapticEnabled) {
+                            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                        }
 
                         coroutineScope.launch {
                             // Bounce the tile's container if it is toggleable and is not a large
@@ -448,9 +452,9 @@ fun ContentScope.Tile(
                     } else {
                         val secondaryClick: (() -> Unit)? =
                             {
-                                    hapticsViewModel?.setTileInteractionState(
-                                        TileHapticsViewModel.TileInteractionState.CLICKED
-                                    )
+                                    if (hapticEnabled) {
+                                        view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                    }
                                     tile.toggleClick()
                                 }
                                 .takeIf { isDualTarget }
@@ -634,7 +638,7 @@ fun Modifier.tileCombinedClickable(
             onLongClick = onLongClick,
             onClickLabel = accessibilityUiState.clickLabel,
             onLongClickLabel = longPressLabel,
-            hapticFeedbackEnabled = rememberTileHaptic() && !Flags.msdlFeedback(),
+            hapticFeedbackEnabled = false,
             interactionSource = interactionSource,
         )
         .semantics {
