@@ -38,6 +38,7 @@ import com.android.systemui.statusbar.phone.domain.interactor.IsAreaDark
 import com.android.systemui.statusbar.pipeline.battery.data.repository.BatteryRepository
 import com.android.systemui.statusbar.pipeline.battery.shared.ui.BatteryColors
 import com.android.systemui.statusbar.pipeline.battery.ui.viewmodel.BatteryViewModel
+import com.android.systemui.statusbar.pipeline.battery.ui.viewmodel.ColorProfile
 
 @Composable
 fun BatteryWithPercent(
@@ -59,12 +60,10 @@ fun BatteryWithPercent(
 
     var bounds by remember { mutableStateOf(Rect()) }
 
+    val colorProfile = viewModel.colorProfile
     val colorProducer = {
-        if (isDarkProvider().isDarkTheme(bounds)) {
-            BatteryColors.DarkTheme.Default.fill
-        } else {
-            BatteryColors.LightTheme.Default.fill
-        }
+        if (isDarkProvider().isDarkTheme(bounds)) colorProfile.dark.fill
+        else colorProfile.light.fill
     }
 
     Row(
