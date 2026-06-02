@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -78,6 +79,12 @@ fun MaterialControlPanel(
         ) == 1
     } catch (_: Exception) { false }
 
+    fun readMediaPlayerSetting(): Int = try {
+        Settings.Secure.getIntForUser(
+            cr, Settings.Secure.QS_SHOW_MEDIA_PLAYER, 2, UserHandle.USER_CURRENT
+        )
+    } catch (_: Exception) { 2 }
+
     var enabled by remember {
         mutableStateOf(readEnabled())
     }
@@ -87,16 +94,31 @@ fun MaterialControlPanel(
     var sliderRounded by remember {
         mutableStateOf(readSliderRounded())
     }
+    var savedMediaPlayerValue by remember {
+        mutableIntStateOf(
+            if (readEnabled()) 0 else readMediaPlayerSetting()
+        )
+    }
 
     fun syncMediaPlayerSetting(widgetEnabled: Boolean) {
         scope.launch(Dispatchers.IO) {
             try {
-                Settings.Secure.putIntForUser(
-                    cr,
-                    Settings.Secure.QS_SHOW_MEDIA_PLAYER,
-                    if (widgetEnabled) 0 else 2,
-                    UserHandle.USER_CURRENT,
-                )
+                if (widgetEnabled) {
+                    savedMediaPlayerValue = readMediaPlayerSetting()
+                    Settings.Secure.putIntForUser(
+                        cr,
+                        Settings.Secure.QS_SHOW_MEDIA_PLAYER,
+                        0,
+                        UserHandle.USER_CURRENT,
+                    )
+                } else {
+                    Settings.Secure.putIntForUser(
+                        cr,
+                        Settings.Secure.QS_SHOW_MEDIA_PLAYER,
+                        savedMediaPlayerValue,
+                        UserHandle.USER_CURRENT,
+                    )
+                }
             } catch (_: Exception) {}
         }
     }
@@ -106,10 +128,13 @@ fun MaterialControlPanel(
         val observer = object : ContentObserver(handler) {
             override fun onChange(selfChange: Boolean) {
                 val nowEnabled = readEnabled()
+                val wasEnabled = enabled
                 enabled = nowEnabled
                 iosMusicStyle = readIosMusicStyle()
                 sliderRounded = readSliderRounded()
-                syncMediaPlayerSetting(nowEnabled)
+                if (nowEnabled != wasEnabled) {
+                    syncMediaPlayerSetting(nowEnabled)
+                }
             }
         }
         try {
@@ -127,7 +152,6 @@ fun MaterialControlPanel(
             )
         } catch (_: Exception) {}
 
-        syncMediaPlayerSetting(enabled)
         onDispose { cr.unregisterContentObserver(observer) }
     }
 
