@@ -17,6 +17,7 @@
 package com.android.systemui.bouncer.ui
 
 import android.content.Context
+import com.android.internal.graphics.ColorUtils
 import com.android.systemui.Flags
 import com.android.systemui.bouncer.shared.constants.KeyguardBouncerConstants.ColorId.NUM_PAD_BACKGROUND
 import com.android.systemui.common.shared.colors.SurfaceEffectColors
@@ -29,7 +30,11 @@ object BouncerColors {
         return if (blurSupported) {
             ShadeColors.shadePanel(context = this, blurSupported = blurSupported, withScrim = true)
         } else {
-            getColor(color.bouncer_fallback_bg)
+            ColorUtils.blendARGB(
+                getColor(color.nt_scrim_behind_1),
+                getColor(color.nt_scrim_behind_2),
+                0.2f
+            )
         }
     }
 
