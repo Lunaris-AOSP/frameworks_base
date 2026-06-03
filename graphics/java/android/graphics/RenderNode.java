@@ -816,6 +816,11 @@ public final class RenderNode {
     }
 
     /** @hide */
+    public boolean hasStretch() {
+        return nHasStretch(mNativeRenderNode);
+    }
+
+    /** @hide */
     public boolean stretch(float vecX, float vecY,
         float maxStretchAmountX, float maxStretchAmountY) {
         if (Float.isInfinite(vecX) || Float.isNaN(vecX)) {
@@ -1834,6 +1839,9 @@ public final class RenderNode {
 
     @CriticalNative
     private static native boolean nClearStretch(long renderNode);
+
+    @CriticalNative
+    private static native boolean nHasStretch(long renderNode);
 
     @CriticalNative
     private static native boolean nStretch(long renderNode, float vecX, float vecY,
