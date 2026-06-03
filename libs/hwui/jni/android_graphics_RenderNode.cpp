@@ -188,6 +188,12 @@ static jboolean android_view_RenderNode_clearStretch(CRITICAL_JNI_PARAMS_COMMA j
     return true;
 }
 
+static jboolean android_view_RenderNode_hasStretch(CRITICAL_JNI_PARAMS_COMMA jlong renderNodePtr) {
+    RenderNode* renderNode = reinterpret_cast<RenderNode*>(renderNodePtr);
+    return renderNode->stagingProperties()
+            .layerProperties().getStretchEffect().isEmpty() ? JNI_FALSE : JNI_TRUE;
+}
+
 static jboolean android_view_RenderNode_stretch(CRITICAL_JNI_PARAMS_COMMA jlong renderNodePtr,
                                                 jfloat vX, jfloat vY, jfloat maxX,
                                                 jfloat maxY) {
@@ -839,6 +845,7 @@ static const JNINativeMethod gMethods[] = {
         {"nSetOutlineEmpty", "(J)Z", (void*)android_view_RenderNode_setOutlineEmpty},
         {"nSetOutlineNone", "(J)Z", (void*)android_view_RenderNode_setOutlineNone},
         {"nClearStretch", "(J)Z", (void*)android_view_RenderNode_clearStretch},
+        {"nHasStretch", "(J)Z", (void*)android_view_RenderNode_hasStretch},
         {"nStretch", "(JFFFF)Z", (void*)android_view_RenderNode_stretch},
         {"nHasShadow", "(J)Z", (void*)android_view_RenderNode_hasShadow},
         {"nSetSpotShadowColor", "(JI)Z", (void*)android_view_RenderNode_setSpotShadowColor},
