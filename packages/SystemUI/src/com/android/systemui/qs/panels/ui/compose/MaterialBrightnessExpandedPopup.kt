@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2026 MistOS
+ * Copyright (C) 2024-2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,18 +19,21 @@ package com.android.systemui.qs.panels.ui.compose
 
 import android.app.UiModeManager
 import android.content.Context
-import com.android.settingslib.display.BrightnessUtils
-import android.hardware.display.ColorDisplayManager
+import android.graphics.drawable.ColorDrawable
 import android.os.UserHandle
 import android.provider.Settings
-import android.graphics.drawable.ColorDrawable
-import android.os.Build
+import android.view.HapticFeedbackConstants
 import android.view.WindowManager
+import android.hardware.display.ColorDisplayManager
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.platform.LocalView
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,32 +53,33 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.ui.input.pointer.PointerEventPass
 import com.android.compose.ui.graphics.painter.rememberDrawablePainter
+import com.android.settingslib.display.BrightnessUtils
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.CustomColorScheme
 import com.android.systemui.res.R
+import com.android.systemui.volume.dialog.sliders.ui.compose.rememberGradientColorMode
+import com.android.systemui.volume.dialog.sliders.ui.compose.rememberGradientCustomColors
+import com.android.systemui.volume.dialog.sliders.ui.compose.rememberVolumeGradientEnabled
 
 @Composable
 fun MaterialBrightnessExpandedPopup(
@@ -92,7 +97,21 @@ fun MaterialBrightnessExpandedPopup(
 
     var isDarkMode by remember { mutableStateOf(uiModeManager.nightMode == UiModeManager.MODE_NIGHT_YES) }
     var isNightMode by remember { mutableStateOf(colorDisplayManager.isNightDisplayActivated) }
-    var isAutoBrightness by remember { mutableStateOf(Settings.System.getIntForUser(cr, Settings.System.SCREEN_BRIGHTNESS_MODE, 0, UserHandle.USER_CURRENT) == Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC) }
+    var isAutoBrightness by remember {
+        mutableStateOf(
+            Settings.System.getIntForUser(
+                cr, Settings.System.SCREEN_BRIGHTNESS_MODE, 0, UserHandle.USER_CURRENT
+            ) == Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC
+        )
+    }
+
+    val blurEnabled = remember {
+        Settings.Global.getInt(
+            cr,
+            Settings.Global.DISABLE_WINDOW_BLURS,
+            if (android.os.SystemProperties.getBoolean("ro.custom.blur.enable", false)) 0 else 1
+        ) != 1
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -105,11 +124,13 @@ fun MaterialBrightnessExpandedPopup(
         SideEffect {
             dialogWindowProvider?.window?.let { w ->
                 w.setBackgroundDrawable(ColorDrawable(android.graphics.Color.TRANSPARENT))
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                if (blurEnabled) {
                     w.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
                     val lp = w.attributes
                     lp.blurBehindRadius = 150
                     w.attributes = lp
+                } else {
+                    w.clearFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
                 }
             }
         }
@@ -117,7 +138,7 @@ fun MaterialBrightnessExpandedPopup(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.25f))
+                .background(Color.Black.copy(alpha = if (blurEnabled) 0.25f else 0.55f))
                 .pointerInput(Unit) {
                     detectTapGestures(onTap = { onDismiss() })
                 },
@@ -127,13 +148,15 @@ fun MaterialBrightnessExpandedPopup(
                 modifier = Modifier
                     .fillMaxWidth()
                     .pointerInput(Unit) {
-                        detectTapGestures(onTap = { /* no-op */ })
+                        detectTapGestures(onTap = { /* no-op: consume taps inside column */ })
                     },
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
                 Icon(
-                    painter = rememberDrawablePainter(LocalContext.current.getDrawable(R.drawable.ic_qs_brightness_auto_off)),
+                    painter = rememberDrawablePainter(
+                        LocalContext.current.getDrawable(R.drawable.ic_qs_brightness_auto_off)
+                    ),
                     contentDescription = null,
                     tint = Color.White,
                     modifier = Modifier.size(28.dp)
@@ -172,25 +195,36 @@ fun MaterialBrightnessExpandedPopup(
                     verticalAlignment = Alignment.Top
                 ) {
                     MaterialPopupToggle(
-                        iconRes = if (isAutoBrightness) R.drawable.ic_qs_brightness_auto_on else R.drawable.ic_qs_brightness_auto_off,
+                        iconRes = if (isAutoBrightness) R.drawable.ic_qs_brightness_auto_on
+                                  else R.drawable.ic_qs_brightness_auto_off,
                         label = "Auto",
                         isActive = isAutoBrightness,
                         onClick = {
                             isAutoBrightness = !isAutoBrightness
-                            Settings.System.putIntForUser(cr, Settings.System.SCREEN_BRIGHTNESS_MODE, if (isAutoBrightness) Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC else Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL, UserHandle.USER_CURRENT)
+                            Settings.System.putIntForUser(
+                                cr,
+                                Settings.System.SCREEN_BRIGHTNESS_MODE,
+                                if (isAutoBrightness) Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC
+                                else Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL,
+                                UserHandle.USER_CURRENT
+                            )
                         }
                     )
                     MaterialPopupToggle(
-                        iconRes = if (isDarkMode) R.drawable.qs_light_dark_theme_icon_on else R.drawable.qs_light_dark_theme_icon_off,
+                        iconRes = if (isDarkMode) R.drawable.qs_light_dark_theme_icon_on
+                                  else R.drawable.qs_light_dark_theme_icon_off,
                         label = "Dark Mode",
                         isActive = isDarkMode,
                         onClick = {
                             isDarkMode = !isDarkMode
-                            uiModeManager.nightMode = if (isDarkMode) UiModeManager.MODE_NIGHT_YES else UiModeManager.MODE_NIGHT_NO
+                            uiModeManager.nightMode =
+                                if (isDarkMode) UiModeManager.MODE_NIGHT_YES
+                                else UiModeManager.MODE_NIGHT_NO
                         }
                     )
                     MaterialPopupToggle(
-                        iconRes = if (isNightMode) R.drawable.qs_nightlight_icon_on else R.drawable.qs_nightlight_icon_off,
+                        iconRes = if (isNightMode) R.drawable.qs_nightlight_icon_on
+                                  else R.drawable.qs_nightlight_icon_off,
                         label = "Eye Shield",
                         isActive = isNightMode,
                         onClick = {
@@ -211,16 +245,20 @@ private fun MaterialPopupToggle(
     isActive: Boolean,
     onClick: () -> Unit
 ) {
+    val view = LocalView.current
+
     val bgColor by animateColorAsState(
-        targetValue = if (isActive) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.15f),
-        label = "PopupToggleBg"
+        targetValue = if (isActive) MaterialTheme.colorScheme.primary
+                      else CustomColorScheme.current.qsTileColor,
+        animationSpec = tween(300),
+        label = "MaterialPopupToggleBg"
     )
     val iconTint by animateColorAsState(
-        targetValue = if (isActive) MaterialTheme.colorScheme.onPrimary else Color.White,
-        label = "PopupToggleIconTint"
+        targetValue = if (isActive) MaterialTheme.colorScheme.onPrimary
+                      else MaterialTheme.colorScheme.onSurface,
+        animationSpec = tween(300),
+        label = "MaterialPopupToggleIconTint"
     )
-
-    val haptic = LocalHapticFeedback.current
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -231,9 +269,9 @@ private fun MaterialPopupToggle(
                 .size(64.dp)
                 .clip(CircleShape)
                 .background(bgColor)
-                .clickable { 
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onClick() 
+                .clickable {
+                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                    onClick()
                 },
             contentAlignment = Alignment.Center
         ) {
@@ -255,12 +293,12 @@ private fun MaterialPopupToggle(
     }
 }
 
-private fun brightnessToFraction(brightness: Float, min: Float = 1f, max: Float = 255f): Float {
+private fun brightnessToFraction(brightness: Float, min: Float, max: Float): Float {
     val gamma = BrightnessUtils.convertLinearToGammaFloat(brightness, min, max)
     return (gamma.toFloat() / BrightnessUtils.GAMMA_SPACE_MAX).coerceIn(0f, 1f)
 }
 
-private fun fractionToBrightness(fraction: Float, min: Float = 1f, max: Float = 255f): Float {
+private fun fractionToBrightness(fraction: Float, min: Float, max: Float): Float {
     val gamma = (fraction.coerceIn(0f, 1f) * BrightnessUtils.GAMMA_SPACE_MAX).toInt()
     return BrightnessUtils.convertGammaToLinearFloat(gamma, min, max)
 }
@@ -274,26 +312,54 @@ private fun MaterialLargeVerticalBrightnessSlider(
     onBrightnessChanged: (Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val view = LocalView.current
     var isDragging by remember { mutableStateOf(false) }
     var currentBrightness by remember { mutableStateOf(initialBrightness) }
 
     val targetFraction = brightnessToFraction(currentBrightness, brightnessMin, brightnessMax)
-    val animFraction by androidx.compose.animation.core.animateFloatAsState(
+    val animFraction by animateFloatAsState(
         targetValue = targetFraction,
-        animationSpec = androidx.compose.animation.core.tween(if (isDragging) 0 else 150),
-        label = "LargeBrightnessFraction"
+        animationSpec = if (isDragging)
+            spring(Spring.DampingRatioNoBouncy, Spring.StiffnessHigh)
+        else
+            spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow),
+        label = "MaterialLargeBrightnessFraction"
     )
     val currentFraction = if (isDragging) targetFraction else animFraction
+
+    val gradientEnabled = rememberVolumeGradientEnabled()
+    val gradientColors = if (rememberGradientColorMode() == 1) {
+        val g = rememberGradientCustomColors()
+        listOf(g.startColor, g.endColor)
+    } else {
+        listOf(
+            MaterialTheme.colorScheme.primary,
+            MaterialTheme.colorScheme.secondary,
+        )
+    }
+    val fillBrush: Brush? = if (gradientEnabled && !isAutoBrightness)
+        Brush.verticalGradient(colors = gradientColors.reversed())
+    else null
+
+    val fillColor by animateColorAsState(
+        targetValue = MaterialTheme.colorScheme.primary,
+        animationSpec = tween(300),
+        label = "MaterialLargeBrightnessFill"
+    )
+
+    val trackColor = CustomColorScheme.current.qsTileColor
+    val sliderShape = RoundedCornerShape(40.dp)
 
     Box(
         modifier = modifier
             .fillMaxSize()
-            .clip(RoundedCornerShape(40.dp))
-            .background(Color.White.copy(alpha = 0.45f))
+            .clip(sliderShape)
+            .background(trackColor)
             .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     isDragging = true
+                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
 
                     fun update(y: Float) {
                         val fraction = 1f - (y / size.height).coerceIn(0f, 1f)
@@ -309,9 +375,7 @@ private fun MaterialLargeVerticalBrightnessSlider(
                             val event = awaitPointerEvent(PointerEventPass.Main)
                             val currentPointer = event.changes.firstOrNull { it.id == down.id }
                                 ?: break
-
                             if (!currentPointer.pressed) break
-
                             currentPointer.consume()
                             update(currentPointer.position.y)
                         }
@@ -326,9 +390,11 @@ private fun MaterialLargeVerticalBrightnessSlider(
                 .fillMaxWidth()
                 .fillMaxHeight(currentFraction)
                 .align(Alignment.BottomCenter)
-                .background(
-                    if (isAutoBrightness) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.85f),
-                    RoundedCornerShape(40.dp)
+                .then(
+                    if (fillBrush != null)
+                        Modifier.background(fillBrush, sliderShape)
+                    else
+                        Modifier.background(fillColor, sliderShape)
                 )
         )
     }
