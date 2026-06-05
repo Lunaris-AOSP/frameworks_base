@@ -146,10 +146,7 @@ fun MaterialBrightnessExpandedPopup(
         ) {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .pointerInput(Unit) {
-                        detectTapGestures(onTap = { /* no-op: consume taps inside column */ })
-                    },
+                    .fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
