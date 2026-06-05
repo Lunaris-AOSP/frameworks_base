@@ -324,6 +324,7 @@ fun MaterialVerticalBrightnessSlider(
             initialBrightness = linearBrightness,
             brightnessMin = info?.brightnessMinimum ?: 0f,
             brightnessMax = info?.brightnessMaximum ?: 1f,
+            rounded = rounded,
             onDismiss = {
                 showExpandedPopup = false
             },
