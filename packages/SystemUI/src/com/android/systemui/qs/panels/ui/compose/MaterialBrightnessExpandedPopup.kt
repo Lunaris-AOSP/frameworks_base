@@ -152,7 +152,12 @@ fun MaterialBrightnessExpandedPopup(
             ) {
                 Icon(
                     painter = rememberDrawablePainter(
-                        LocalContext.current.getDrawable(R.drawable.ic_qs_brightness_auto_off)
+                        LocalContext.current.getDrawable(
+                            if (isAutoBrightness)
+                                R.drawable.ic_qs_brightness_auto_on
+                            else
+                                R.drawable.ic_qs_brightness_auto_off
+                        )
                     ),
                     contentDescription = null,
                     tint = Color.White,
