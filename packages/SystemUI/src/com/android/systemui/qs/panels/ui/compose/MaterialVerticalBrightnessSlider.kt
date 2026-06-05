@@ -319,16 +319,17 @@ fun MaterialVerticalBrightnessSlider(
     }
 
     if (showExpandedPopup) {
+        val info = brightnessInfo()
         MaterialBrightnessExpandedPopup(
-            initialBrightness = brightness,
-            brightnessMin = brightnessMin,
-            brightnessMax = brightnessMax,
+            initialBrightness = linearBrightness,
+            brightnessMin = info?.brightnessMinimum ?: 0f,
+            brightnessMax = info?.brightnessMaximum ?: 1f,
             onDismiss = {
                 showExpandedPopup = false
             },
-            onBrightnessChanged = { 
-                brightness = it
-                writeBrightness(it)
+            onBrightnessChanged = { value ->
+                linearBrightness = value
+                writeLinearBrightness(value)
             }
         )
     }
