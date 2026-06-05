@@ -134,6 +134,7 @@ fun MaterialVerticalBrightnessSlider(
     var linearBrightness by remember { mutableFloatStateOf(readLinearBrightness()) }
     var autoMode by remember { mutableStateOf(readAutoMode()) }
     var isDragging by remember { mutableStateOf(false) }
+    var showExpandedPopup by remember { mutableStateOf(false) }
 
     val targetFraction = linearToFraction(linearBrightness)
     val hapticEnabled = rememberTileHaptic()
@@ -242,22 +243,11 @@ fun MaterialVerticalBrightnessSlider(
                     var dragging = false
 
                     longPressJob = scope.launch {
-                        delay(500)
-                        val newAuto = !autoMode
-                        autoMode = newAuto
-                        val mode = if (newAuto)
-                            Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC
-                        else
-                            Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL
-                        launch(Dispatchers.IO) {
-                            try {
-                                Settings.System.putIntForUser(
-                                    cr, Settings.System.SCREEN_BRIGHTNESS_MODE,
-                                    mode, UserHandle.USER_CURRENT,
-                                )
-                            } catch (_: Exception) {}
+                        delay(400)
+                        if (!isDragging) {
+                            showExpandedPopup = true
+                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                         }
-                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                     }
 
                     try {
@@ -325,6 +315,21 @@ fun MaterialVerticalBrightnessSlider(
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 10.dp)
                 .size(20.dp),
+        )
+    }
+
+    if (showExpandedPopup) {
+        MaterialBrightnessExpandedPopup(
+            initialBrightness = brightness,
+            brightnessMin = brightnessMin,
+            brightnessMax = brightnessMax,
+            onDismiss = {
+                showExpandedPopup = false
+            },
+            onBrightnessChanged = { 
+                brightness = it
+                writeBrightness(it)
+            }
         )
     }
 }
