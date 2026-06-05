@@ -81,11 +81,16 @@ import com.android.systemui.volume.dialog.sliders.ui.compose.rememberGradientCol
 import com.android.systemui.volume.dialog.sliders.ui.compose.rememberGradientCustomColors
 import com.android.systemui.volume.dialog.sliders.ui.compose.rememberVolumeGradientEnabled
 
+private val CORNER_DEFAULT = 40.dp
+private val CORNER_ROUNDED = 90.dp
+private val CORNER_INNER = 50.dp
+
 @Composable
 fun MaterialBrightnessExpandedPopup(
     initialBrightness: Float,
     brightnessMin: Float,
     brightnessMax: Float,
+    rounded: Boolean = false,
     onDismiss: () -> Unit,
     onBrightnessChanged: (Float) -> Unit
 ) {
@@ -183,6 +188,7 @@ fun MaterialBrightnessExpandedPopup(
                         brightnessMin = brightnessMin,
                         brightnessMax = brightnessMax,
                         isAutoBrightness = isAutoBrightness,
+                        rounded = rounded,
                         onBrightnessChanged = onBrightnessChanged
                     )
                 }
@@ -311,6 +317,7 @@ private fun MaterialLargeVerticalBrightnessSlider(
     brightnessMin: Float,
     brightnessMax: Float,
     isAutoBrightness: Boolean,
+    rounded: Boolean = false,
     onBrightnessChanged: (Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -350,7 +357,8 @@ private fun MaterialLargeVerticalBrightnessSlider(
     )
 
     val trackColor = CustomColorScheme.current.qsTileColor
-    val sliderShape = RoundedCornerShape(40.dp)
+    val sliderShape = RoundedCornerShape(if (rounded) CORNER_ROUNDED else CORNER_DEFAULT)
+    val fillShape  = RoundedCornerShape(if (rounded) CORNER_INNER else CORNER_DEFAULT)
 
     Box(
         modifier = modifier
@@ -394,9 +402,9 @@ private fun MaterialLargeVerticalBrightnessSlider(
                 .align(Alignment.BottomCenter)
                 .then(
                     if (fillBrush != null)
-                        Modifier.background(fillBrush, sliderShape)
+                        Modifier.background(fillBrush, fillShape)
                     else
-                        Modifier.background(fillColor, sliderShape)
+                        Modifier.background(fillColor, fillShape)
                 )
         )
     }
