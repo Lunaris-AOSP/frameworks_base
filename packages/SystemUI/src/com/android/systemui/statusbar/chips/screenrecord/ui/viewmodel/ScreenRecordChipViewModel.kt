@@ -49,6 +49,8 @@ import com.android.systemui.statusbar.chips.ui.viewmodel.OngoingActivityChipView
 import com.android.systemui.statusbar.chips.ui.viewmodel.OngoingActivityChipViewModel.Companion.createDialogLaunchOnClickCallback
 import com.android.systemui.statusbar.chips.ui.viewmodel.OngoingActivityChipViewModel.Companion.createDialogLaunchOnClickListener
 import com.android.systemui.statusbar.chips.uievents.StatusBarChipsUiEventLogger
+import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.SCREEN_RECORDING
+import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.observeDynamicIslandFeatureEnabled
 import com.android.systemui.util.kotlin.pairwise
 import com.android.systemui.util.time.SystemClock
 import javax.inject.Inject
@@ -101,8 +103,13 @@ constructor(
 
     /** A direct mapping from [ScreenRecordChipModel] to [OngoingActivityChipModel]. */
     private val simpleChip =
-        combine(interactor.screenRecordState, isDynamicIslandEnabled) { state, dynamicIslandEnabled ->
-                if (dynamicIslandEnabled) {
+        combine(
+            interactor.screenRecordState,
+            isDynamicIslandEnabled,
+            observeDynamicIslandFeatureEnabled(context, SCREEN_RECORDING),
+        ) { state, dynamicIslandEnabled, screenRecordingEnabled ->
+                val showInIsland = dynamicIslandEnabled && screenRecordingEnabled
+                if (showInIsland) {
                     return@combine OngoingActivityChipModel.Inactive()
                 }
                 when (state) {
