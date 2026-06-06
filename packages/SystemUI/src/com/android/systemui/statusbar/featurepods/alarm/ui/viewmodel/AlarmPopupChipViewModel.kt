@@ -32,6 +32,8 @@ import com.android.systemui.res.R
 import com.android.systemui.statusbar.NotificationLockscreenUserManager
 import com.android.systemui.statusbar.featurepods.popups.shared.model.PopupActionModel
 import com.android.systemui.statusbar.featurepods.popups.shared.toSendAction
+import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.ALARMS
+import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.observeDynamicIslandFeatureEnabled
 import com.android.systemui.statusbar.featurepods.alarm.shared.model.AlarmPopupModel
 import com.android.systemui.statusbar.featurepods.popups.shared.toActivityLaunchAction
 import com.android.systemui.statusbar.featurepods.popups.ui.model.ChipIcon
@@ -49,6 +51,7 @@ import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import java.util.Locale
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.map
 
@@ -108,7 +111,10 @@ constructor(
                             notifCollection.removeCollectionListener(notificationListener)
                         }
                     }
-                    .map(::toPopupChipModel),
+                    .map(::toPopupChipModel)
+                    .combine(observeDynamicIslandFeatureEnabled(context, ALARMS)) { model, enabled ->
+                        if (enabled) model else PopupChipModel.Hidden(PopupChipId.Alarm)
+                    },
         )
 
     override suspend fun onActivated(): Nothing {
