@@ -14895,6 +14895,12 @@ public final class Settings {
         public static final String LOCK_SCREEN_CUSTOM_CLOCK_ALBUM_ART_COLOR = "lock_screen_custom_clock_album_art_color";
 
         /**
+         * Custom clock wobble
+         * @hide
+         */
+        public static final String LOCK_SCREEN_CUSTOM_CLOCK_WOBBLE_ON_CHARGE = "lock_screen_custom_clock_wobble_on_charge";
+
+        /**
          * Timeout length for clipboard auto clear
          * @hide
          */
