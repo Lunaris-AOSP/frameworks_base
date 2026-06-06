@@ -20,6 +20,7 @@
 
     <com.android.systemui.tuner.RestartingTunerSwitch
         android:key="status_bar_classic_icons"
+        android:icon="@drawable/ic_wifi_icon"
         android:summary="@string/status_bar_classic_icons_summary"
         android:title="@string/status_bar_classic_icons_title"
         sysui:defValue="false" />
