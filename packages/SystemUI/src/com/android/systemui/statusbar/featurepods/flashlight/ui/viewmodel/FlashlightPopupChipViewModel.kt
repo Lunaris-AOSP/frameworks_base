@@ -26,6 +26,8 @@ import com.android.systemui.lifecycle.ExclusiveActivatable
 import com.android.systemui.lifecycle.Hydrator
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.featurepods.flashlight.shared.model.FlashlightPopupModel
+import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.FLASHLIGHT
+import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.observeDynamicIslandFeatureEnabled
 import com.android.systemui.statusbar.featurepods.popups.ui.model.ChipIcon
 import com.android.systemui.statusbar.featurepods.popups.ui.model.ColorsModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
@@ -36,6 +38,7 @@ import com.android.systemui.statusbar.policy.FlashlightController
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.map
 
@@ -73,7 +76,12 @@ constructor(
                         trySend(readFlashlightState())
                         awaitClose { flashlightController.removeCallback(callback) }
                     }
-                    .map(::toPopupChipModel),
+                    .map(::toPopupChipModel)
+                    .combine(
+                        observeDynamicIslandFeatureEnabled(context, FLASHLIGHT)
+                    ) { model, enabled ->
+                        if (enabled) model else PopupChipModel.Hidden(PopupChipId.Flashlight)
+                    },
         )
 
     override suspend fun onActivated(): Nothing {
