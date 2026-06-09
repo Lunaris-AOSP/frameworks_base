@@ -440,12 +440,20 @@ public class NotificationShelf extends ActivatableNotificationView {
     public void getBoundsOnScreen(Rect outRect, boolean clipToParent) {
         super.getBoundsOnScreen(outRect, clipToParent);
         final int actualWidth = getActualWidth();
-        final boolean alignedToRight = NotificationMinimalism.isEnabled() ? isAlignedToRight() :
-                isLayoutRtl();
-        if (alignedToRight) {
-            outRect.left = outRect.right - actualWidth;
+        if (NotificationMinimalism.isEnabled() && mAlignToCenter) {
+            final int fullWidth = outRect.width();
+            final int left = outRect.left + (fullWidth - actualWidth) / 2;
+            outRect.left = left;
+            outRect.right = left + actualWidth;
         } else {
-            outRect.right = outRect.left + actualWidth;
+            final boolean alignedToRight = NotificationMinimalism.isEnabled()
+                    ? isAlignedToRight()
+                    : isLayoutRtl();
+            if (alignedToRight) {
+                outRect.left = outRect.right - actualWidth;
+            } else {
+                outRect.right = outRect.left + actualWidth;
+            }
         }
     }
 
@@ -491,8 +499,15 @@ public class NotificationShelf extends ActivatableNotificationView {
         final float left, right;
 
         if (NotificationMinimalism.isEnabled()) {
-            left = getShelfLeftBound();
-            right = getShelfRightBound();
+            if (mAlignToCenter) {
+                final float screenWidth = getWidth();
+                final float actualWidth = getActualWidth();
+                left = (screenWidth - actualWidth) / 2f;
+                right = left + actualWidth;
+            } else {
+                left = getShelfLeftBound();
+                right = getShelfRightBound();
+            }
         } else {
             final float containerWidth = getWidth();
             final float shelfWidth = getActualWidth();
