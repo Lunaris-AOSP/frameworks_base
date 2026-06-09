@@ -18,8 +18,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import com.android.systemui.volume.dialog.dagger.scope.VolumeDialog
 
@@ -41,9 +41,9 @@ constructor(
             UserHandle.USER_CURRENT,
         ) == 1
 
-    private fun currentPercentage(): String {
-        val current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+    fun percentageForStream(streamType: Int): String {
+        val current = audioManager.getStreamVolume(streamType)
+        val max = audioManager.getStreamMaxVolume(streamType)
         return if (max > 0) "${(current * 100 / max)}%" else "0%"
     }
 
@@ -67,10 +67,4 @@ constructor(
     val isVisible: StateFlow<Boolean> =
         observeSettings()
             .stateIn(coroutineScope, SharingStarted.Eagerly, isEnabled())
-
-    val percentage: StateFlow<String> =
-        callbackFlow {
-            trySend(currentPercentage())
-            awaitClose {}
-        }.stateIn(coroutineScope, SharingStarted.Eagerly, currentPercentage())
 }

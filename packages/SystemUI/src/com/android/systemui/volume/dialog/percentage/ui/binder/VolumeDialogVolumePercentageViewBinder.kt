@@ -36,24 +36,34 @@ constructor(
             }
             .launchInTraced("VDVPVB#isVisible", this)
 
+        fun activeStream(): Int {
+            val audioManager =
+                view.context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            return when {
+                audioManager.isMusicActive -> AudioManager.STREAM_MUSIC
+                audioManager.mode == AudioManager.MODE_IN_CALL ||
+                        audioManager.mode == AudioManager.MODE_IN_COMMUNICATION ->
+                    AudioManager.STREAM_VOICE_CALL
+                else -> AudioManager.STREAM_MUSIC
+            }
+        }
+
+        fun updatePercentage(streamType: Int) {
+            percentageText.text = viewModel.percentageForStream(streamType)
+        }
+
+        updatePercentage(activeStream())
+
         val intentFilter = IntentFilter(AudioManager.VOLUME_CHANGED_ACTION)
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                val streamType = intent.getIntExtra(AudioManager.EXTRA_VOLUME_STREAM_TYPE, -1)
-                if (streamType == AudioManager.STREAM_MUSIC) {
-                    val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                    val current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-                    val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-                    percentageText.text = if (max > 0) "${current * 100 / max}%" else "0%"
-                }
+                val streamType =
+                    intent.getIntExtra(AudioManager.EXTRA_VOLUME_STREAM_TYPE, -1)
+                if (streamType < 0) return
+                updatePercentage(streamType)
             }
         }
         view.context.registerReceiver(receiver, intentFilter)
-
-        val audioManager = view.context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        val current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-        percentageText.text = if (max > 0) "${current * 100 / max}%" else "0%"
 
         coroutineContext[Job]?.invokeOnCompletion {
             view.context.unregisterReceiver(receiver)
