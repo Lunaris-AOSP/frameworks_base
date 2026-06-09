@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 class VolumeDialogVolumePercentageViewModel
 @Inject
 constructor(private val interactor: VolumeDialogVolumePercentageInteractor) {
-    val percentage: StateFlow<String> = interactor.percentage
     val isVisible: StateFlow<Boolean> = interactor.isVisible
+    fun percentageForStream(streamType: Int): String =
+        interactor.percentageForStream(streamType)
 }
