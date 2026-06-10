@@ -112,7 +112,6 @@ class WeatherViewController(
         } else {
             OmniJawsClient.get().addObserver(context, this@WeatherViewController)
             updateWeather()
-            showAllViews()
         }
     }
 
@@ -155,15 +154,6 @@ class WeatherViewController(
             listOf(weatherInfoView, weatherIcon, weatherTemp).forEach {
                 updateViewVisibility(it, false)
             }
-        }
-    }
-
-    private fun showAllViews() {
-        scope.launch {
-            listOf(weatherInfoView, weatherIcon, weatherTemp).forEach {
-                updateViewVisibility(it, true)
-            }
-            applyElementVisibility(weatherSettingsFlow.value)
         }
     }
 
