@@ -1136,8 +1136,10 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
                     mContext.getContentResolver(),
                     Settings.Secure.KEYGUARD_SCRIM_TRANSPARENT,
                     1) != 0) {
-                behindAlpha = 0.0f;
-                behindTint = Color.TRANSPARENT;
+                if (mQsExpansion == 0) {
+                    behindAlpha = 0.0f;
+                    behindTint = Color.TRANSPARENT;
+                }
             }
             
             if (mTransitionToFullShadeProgress > 0.0f) {
