@@ -36,6 +36,11 @@ import android.os.UserManager
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.provider.Settings
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.os.Bundle
+import java.io.File
+import java.io.FileOutputStream
 import android.util.DisplayMetrics
 import android.util.Log
 import android.view.Display
@@ -589,6 +594,55 @@ internal constructor(
         finisher: Consumer<Uri?>,
         onResult: Consumer<ImageExporter.Result>,
     ) {
+        if (Settings.System.getInt(
+                context.contentResolver,
+                Settings.System.SCREENSHOT_CLIPBOARD_ONLY,
+                0
+            ) == 1
+        ) {
+            bgExecutor.execute {
+                try {
+                    val cacheDir = File(context.cacheDir, "screenshot")
+                    if (!cacheDir.exists()) {
+                        cacheDir.mkdirs()
+                    }
+                    cacheDir.listFiles()?.forEach { it.delete() }
+                    val file = File(cacheDir, "screenshot_${System.currentTimeMillis()}.png")
+                    FileOutputStream(file).use { out ->
+                        screenshot.bitmap?.compress(Bitmap.CompressFormat.PNG, 100, out)
+                    }
+                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                        context,
+                        "com.android.systemui.fileprovider",
+                        file
+                    )
+                    val clipboardManager =
+                        context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    val clipData = ClipData.newUri(context.contentResolver, "Screenshot", uri)
+                    val extras = android.os.PersistableBundle()
+                    extras.putBoolean("com.android.systemui.SUPPRESS_CLIPBOARD_OVERLAY", true)
+                    clipData.description.extras = extras
+                    clipboardManager.setPrimaryClip(clipData)
+                    mainExecutor.execute {
+                        val result = ImageExporter.Result().apply {
+                            this.uri = uri
+                            this.requestId = requestId
+                            this.fileName = file.name
+                            this.timestamp = System.currentTimeMillis()
+                            this.format = Bitmap.CompressFormat.PNG
+                        }
+                        onResult.accept(result)
+                        finisher.accept(uri)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to copy screenshot to clipboard", e)
+                    mainExecutor.execute {
+                        finisher.accept(null)
+                    }
+                }
+            }
+            return
+        }
         val future =
             imageExporter.export(
                 bgExecutor,
