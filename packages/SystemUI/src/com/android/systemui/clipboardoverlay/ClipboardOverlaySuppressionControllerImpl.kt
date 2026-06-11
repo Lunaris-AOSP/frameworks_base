@@ -32,13 +32,15 @@ open class ClipboardOverlaySuppressionControllerImpl @Inject constructor() :
         clipSource: String?,
         isEmulator: Boolean,
     ): Boolean {
+        if (clipData != null && clipData.description.extras != null) {
+            if (clipData.description.extras.getBoolean(EXTRA_SUPPRESS_OVERLAY, false)) {
+                return true
+            }
+        }
         if (!(isEmulator || SHELL_PACKAGE == clipSource)) {
             return false
         }
-        if (clipData == null || clipData.description.extras == null) {
-            return false
-        }
-        return clipData.description.extras.getBoolean(EXTRA_SUPPRESS_OVERLAY, false)
+        return false
     }
 
     companion object {
