@@ -182,13 +182,15 @@ public class ClipboardListener implements
     @VisibleForTesting
     static boolean shouldSuppressOverlay(ClipData clipData, String clipSource,
             boolean isEmulator) {
+        if (clipData != null && clipData.getDescription().getExtras() != null) {
+            if (clipData.getDescription().getExtras().getBoolean(EXTRA_SUPPRESS_OVERLAY, false)) {
+                return true;
+            }
+        }
         if (!(isEmulator || SHELL_PACKAGE.equals(clipSource))) {
             return false;
         }
-        if (clipData == null || clipData.getDescription().getExtras() == null) {
-            return false;
-        }
-        return clipData.getDescription().getExtras().getBoolean(EXTRA_SUPPRESS_OVERLAY, false);
+        return false;
     }
 
     boolean shouldShowToast(ClipData clipData) {

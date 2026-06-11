@@ -7994,6 +7994,11 @@ public final class Settings {
         public static final String NOTIFICATION_ICONS_CENTER_ALIGNED = "notification_icons_center_aligned";
 
         /**
+         * @hide
+         */
+        public static final String SCREENSHOT_CLIPBOARD_ONLY = "screenshot_clipboard_only";
+
+        /**
          * Keys we no longer back up under the current schema, but want to continue to
          * process when restoring historical backup datasets.
          *
