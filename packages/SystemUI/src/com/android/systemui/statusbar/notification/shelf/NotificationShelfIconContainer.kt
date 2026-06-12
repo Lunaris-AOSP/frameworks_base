@@ -93,15 +93,7 @@ constructor(context: Context, attrs: AttributeSet? = null) :
     }
 
     private fun calculateCenteredContentWidth(): Float {
-        if (iconSize == 0) return actualWidth.toFloat()
-        var visibleCount = 0
-        for (i in 0 until childCount) {
-            val iconView = getChildAt(i) as? StatusBarIconView ?: continue
-            val state = getIconState(iconView) ?: continue
-            if (!state.hidden) visibleCount++
-        }
-        if (visibleCount == 0) return 0f
-        return calculateWidthFor(visibleCount.toFloat())
+        return actualWidth.toFloat()
     }
 
     /**
