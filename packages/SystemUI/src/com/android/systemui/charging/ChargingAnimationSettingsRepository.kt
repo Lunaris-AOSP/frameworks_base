@@ -43,8 +43,8 @@ class ChargingAnimationSettingsRepository(context: Context) {
     private val resolver: ContentResolver = context.contentResolver
 
     private val DEFAULT_ANIMATION_STYLE = 0
-    private val DEFAULT_COLOR_MODE = 0
-    private val DEFAULT_RIPPLE_OPACITY = 60
+    private val DEFAULT_COLOR_MODE = 1
+    private val DEFAULT_RIPPLE_OPACITY = 100
     private val DEFAULT_GLOW_INTENSITY = 80
     private val DEFAULT_ARC_COUNT = 3
 
