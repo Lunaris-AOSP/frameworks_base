@@ -130,6 +130,8 @@ const val LOCKSCREEN_WALLPAPER_ZOOM = 1f
 const val SCREEN_ON_WALLPAPER_ZOOM_DURATION_MS = 550L
 const val SCREEN_ON_WALLPAPER_ZOOM_START_DELAY_MS = 0L
 
+const val PIXEL_LAUNCHER_PACKAGE = "com.google.android.apps.nexuslauncher"
+
 /**
  * Duration for the alpha animation on the surface behind. This plays to fade in the surface during
  * a swipe to unlock (and to fade it back out if the swipe is cancelled).
@@ -821,13 +823,21 @@ constructor(
         try {
             val biometricUnlockController = biometricUnlockControllerLazy.get()
             // Begin the animation, waiting for the shade to animate out.
-            launcherUnlockController?.playUnlockAnimationWithWallpaperDepth(
-                true /* unlocked */,
-                LAUNCHER_ICONS_ANIMATION_DURATION_MS /* duration */,
-                getLauncherUnlockRevealStartDelay(), /* startDelay */
-                biometricUnlockController.isWakeAndUnlock &&
-                    biometricUnlockController.mode != MODE_WAKE_AND_UNLOCK_FROM_DREAM,
-            )
+            if (isPixelLauncherUnderneath()) {
+                launcherUnlockController?.playUnlockAnimation(
+                    true /* unlocked */,
+                    LAUNCHER_ICONS_ANIMATION_DURATION_MS /* duration */,
+                    getLauncherUnlockRevealStartDelay(), /* startDelay */
+                )
+            } else {
+                launcherUnlockController?.playUnlockAnimationWithWallpaperDepth(
+                    true /* unlocked */,
+                    LAUNCHER_ICONS_ANIMATION_DURATION_MS /* duration */,
+                    getLauncherUnlockRevealStartDelay(), /* startDelay */
+                    biometricUnlockController.isWakeAndUnlock &&
+                        biometricUnlockController.mode != MODE_WAKE_AND_UNLOCK_FROM_DREAM,
+                )
+            }
         } catch (e: DeadObjectException) {
             // Hello! If you are here investigating a bug where Launcher is blank (no icons)
             // then the below assumption about Launcher's destruction was incorrect. This
@@ -1401,5 +1411,9 @@ constructor(
         return launcherActivityClass?.let {
             ActivityManagerWrapper.getInstance().runningTask?.topActivity?.className?.equals(it)
         } ?: false
+    }
+
+    private fun isPixelLauncherUnderneath(): Boolean {
+        return launcherActivityClass?.startsWith(PIXEL_LAUNCHER_PACKAGE) == true
     }
 }

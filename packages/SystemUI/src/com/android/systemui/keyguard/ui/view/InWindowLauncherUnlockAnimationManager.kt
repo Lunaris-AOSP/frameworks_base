@@ -39,6 +39,8 @@ private val TAG = InWindowLauncherUnlockAnimationManager::class.simpleName
 private const val UNLOCK_ANIMATION_DURATION = 633L
 private const val UNLOCK_START_DELAY = 100L
 
+private const val PIXEL_LAUNCHER_PACKAGE = "com.google.android.apps.nexuslauncher"
+
 /**
  * Handles interactions between System UI and Launcher related to the in-window unlock animation.
  *
@@ -62,6 +64,8 @@ constructor(
     var lockscreenSmartspace: View? = null
 
     private var launcherAnimationController: ILauncherUnlockAnimationController? = null
+
+    private var launcherActivityClass: String? = null
 
     /**
      * Whether we've called [ILauncherUnlockAnimationController.prepareForUnlock], and have *not*
@@ -87,6 +91,7 @@ constructor(
         activityClass: String,
         launcherController: ILauncherUnlockAnimationController,
     ) {
+        launcherActivityClass = activityClass
         interactor.setLauncherActivityClass(activityClass)
         launcherAnimationController = launcherController
 
@@ -164,13 +169,17 @@ constructor(
     ) {
         if (preparedForUnlock) {
             launcherAnimationController?.let { launcher ->
-                launcher.playUnlockAnimationWithWallpaperDepth(
-                    unlocked,
-                    duration,
-                    startDelay,
-                    biometricUnlockController.isWakeAndUnlock &&
-                        biometricUnlockController.mode != MODE_WAKE_AND_UNLOCK_FROM_DREAM,
-                )
+                if (isPixelLauncherUnderneath()) {
+                    launcher.playUnlockAnimation(unlocked, duration, startDelay)
+                } else {
+                    launcher.playUnlockAnimationWithWallpaperDepth(
+                        unlocked,
+                        duration,
+                        startDelay,
+                        biometricUnlockController.isWakeAndUnlock &&
+                            biometricUnlockController.mode != MODE_WAKE_AND_UNLOCK_FROM_DREAM,
+                    )
+                }
                 interactor.setStartedUnlockAnimation(true)
             }
         } else {
@@ -209,5 +218,9 @@ constructor(
                 Log.e(TAG, "DeadObjectException in setUnlockAmount($amount, $forceIfAnimating)", e)
             }
         }
+    }
+
+    private fun isPixelLauncherUnderneath(): Boolean {
+        return launcherActivityClass?.startsWith(PIXEL_LAUNCHER_PACKAGE) == true
     }
 }
