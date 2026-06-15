@@ -171,7 +171,7 @@ fun BrightnessSlider(
     val shapeMode = rememberSliderShapeMode()
     val trackCornerDp: Dp = when (shapeMode) {
         1 -> 28.dp  /* Circle */
-        2 -> 12.dp  /* Rounded Square */
+        2 -> 18.dp  /* Rounded Square */
         3 -> 0.dp /* Square */
         else -> Dimensions.SliderTrackRoundedCorner
     }
@@ -940,7 +940,7 @@ fun BrightnessSliderContainer(
     val shapeMode = rememberSliderShapeMode()
     val trackCornerDp: Dp = when (shapeMode) {
         1 -> 28.dp  /* Circle */
-        2 -> 12.dp  /* Rounded Square */
+        2 -> 18.dp  /* Rounded Square */
         3 -> 0.dp /* Square */
         else -> Dimensions.SliderTrackRoundedCorner
     }
