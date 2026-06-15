@@ -51,14 +51,15 @@ fun QSTileRingerSlider(
     val containerCornerRadius = when (shapeMode) {
         1, 4 -> CommonTileDefaults.InactiveCornerRadius
         2 -> CommonTileDefaults.ActiveTileCornerRadius
-        3 -> CommonTileDefaults.ActiveTileCornerRadius
-        else -> CommonTileDefaults.ActiveTileCornerRadius
+        3 -> 0.dp
+        else -> CommonTileDefaults.InactiveCornerRadius
     }
 
     val thumbCornerRadius = when (shapeMode) {
         1 -> CommonTileDefaults.InactiveCornerRadius
+        3 -> 0.dp
         4 -> CommonTileDefaults.InactiveCornerRadius
-        else -> 16.dp
+        else -> CommonTileDefaults.InactiveCornerRadius
     }
 
     val animatedContainerRadius by animateDpAsState(targetValue = containerCornerRadius, label = "RingerContainerRadius")
