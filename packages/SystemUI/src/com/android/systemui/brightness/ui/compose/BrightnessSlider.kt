@@ -33,7 +33,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -130,9 +129,6 @@ import com.android.systemui.brightness.ui.viewmodel.BrightnessSliderViewModel
 import com.android.systemui.brightness.ui.viewmodel.Drag
 import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.compose.modifiers.sysuiResTag
-import com.android.systemui.haptics.slider.SeekableSliderTrackerConfig
-import com.android.systemui.haptics.slider.SliderHapticFeedbackConfig
-import com.android.systemui.haptics.slider.compose.ui.SliderHapticsViewModel
 import com.android.systemui.lifecycle.rememberViewModel
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CustomColorScheme
 import com.android.systemui.qs.ui.compose.borderOnFocus
@@ -159,10 +155,10 @@ fun BrightnessSlider(
     overriddenByAppState: Boolean,
     modifier: Modifier = Modifier,
     showToast: () -> Unit = {},
-    hapticsViewModelFactory: SliderHapticsViewModel.Factory,
 ) {
     val context = LocalContext.current
     val cr = context.contentResolver
+    val view = LocalView.current
 
     var hapticsEnabled by remember { mutableStateOf(readEnableHaptics(cr)) }
     var useAxStyle by remember { mutableStateOf(readUseAxStyle(cr)) }
@@ -186,23 +182,6 @@ fun BrightnessSlider(
     val enabled = !isRestricted
     val contentDescription = stringResource(R.string.accessibility_brightness)
     val interactionSource = remember { MutableInteractionSource() }
-    
-    val hapticsViewModel: SliderHapticsViewModel? =
-        if (hapticsEnabled) {
-            rememberViewModel(traceName = "SliderHapticsViewModel") {
-                hapticsViewModelFactory.create(
-                    interactionSource,
-                    floatValueRange,
-                    Orientation.Horizontal,
-                    SliderHapticFeedbackConfig(
-                        maxVelocityToScale = 1f /* slider progress(from 0 to 1) per sec */
-                    ),
-                    SeekableSliderTrackerConfig(),
-                )
-            }
-        } else {
-            null
-        }
 
     val hasAutoBrightness = context.resources.getBoolean(
         com.android.internal.R.bool.config_automatic_brightness_available
@@ -261,14 +240,15 @@ fun BrightnessSlider(
                 value = animatedValue,
                 onValueChange = {
                     if (enabled && !overriddenByAppState) {
-                        hapticsViewModel?.onValueChange(it)
+                        if (hapticsEnabled) {
+                            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                        }
                         value = it.toInt()
                         onDrag(value)
                     }
                 },
                 onValueChangeFinished = {
                     if (enabled && !overriddenByAppState) {
-                        hapticsViewModel?.onValueChangeEnded()
                         onStop(value)
                     }
                 },
@@ -428,7 +408,9 @@ fun BrightnessSlider(
             onValueChange = {
                 if (enabled) {
                     if (!overriddenByAppState) {
-                        hapticsViewModel?.onValueChange(it)
+                        if (hapticsEnabled) {
+                            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                        }
                         value = it.toInt()
                         onDrag(value)
                     }
@@ -437,7 +419,6 @@ fun BrightnessSlider(
             onValueChangeFinished = {
                 if (enabled) {
                     if (!overriddenByAppState) {
-                        hapticsViewModel?.onValueChangeEnded()
                         onStop(value)
                     }
                 }
@@ -1002,7 +983,6 @@ fun BrightnessSliderContainer(
                         }
                         false
                     },
-            hapticsViewModelFactory = viewModel.hapticsViewModelFactory,
             overriddenByAppState = overriddenByAppState,
             showToast = {
                 viewModel.showToast(context, R.string.quick_settings_brightness_unable_adjust_msg)
