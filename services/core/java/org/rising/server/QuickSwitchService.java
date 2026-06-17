@@ -25,6 +25,10 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.om.OverlayManager;
+import android.content.om.OverlayManagerTransaction;
+import android.content.om.OverlayIdentifier;
+import android.content.om.OverlayInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageInfo;
@@ -36,6 +40,8 @@ import android.os.IUserManager;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemProperties;
+import android.os.UserHandle;
+import android.util.Log;
 
 import com.android.server.ServiceThread;
 import com.android.server.SystemService;
@@ -48,6 +54,7 @@ public final class QuickSwitchService extends SystemService {
 
     private static final String TAG = "QuickSwitchService";
     private static final int THREAD_PRIORITY_DEFAULT = android.os.Process.THREAD_PRIORITY_DEFAULT;
+    private static final String WALLPAPER_OVERLAY = "com.android.system.qs.wallpaperoverlay";
 
     private final Context mContext;
     private final IPackageManager mPM;
@@ -139,6 +146,28 @@ public final class QuickSwitchService extends SystemService {
         return disabledLaunchersCache;
     }
 
+    private void applyOverlayForLauncher(int launcherValue) {
+        OverlayManager overlayManager = mContext.getSystemService(OverlayManager.class);
+        if (overlayManager == null) {
+            Log.e(TAG, "OverlayManager not available");
+            return;
+        }
+        boolean enableOverlay = (launcherValue == 0);
+        try {
+            OverlayInfo info = overlayManager.getOverlayInfo(WALLPAPER_OVERLAY, UserHandle.CURRENT);
+            if (info == null) {
+                Log.e(TAG, "Overlay not found: " + WALLPAPER_OVERLAY);
+                return;
+            }
+            OverlayIdentifier overlayId = info.getOverlayIdentifier();
+            OverlayManagerTransaction.Builder transaction = new OverlayManagerTransaction.Builder();
+            transaction.setEnabled(overlayId, enableOverlay, UserHandle.USER_CURRENT);
+            overlayManager.commit(transaction.build());
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to apply wallpaper overlay", e);
+        }
+    }
+
     private void initForUser(int userId) {
         if (userId < 0)
             return;
@@ -173,7 +202,10 @@ public final class QuickSwitchService extends SystemService {
     public void onBootPhase(int phase) {
         super.onBootPhase(phase);
         if (phase == SystemService.PHASE_BOOT_COMPLETED) {
-            IntentFilter filter = new IntentFilter(Intent.ACTION_USER_PRESENT);
+            mHandler.post(() -> {
+                int defaultLauncher = SystemProperties.getInt("persist.sys.default_launcher", 0);
+                applyOverlayForLauncher(defaultLauncher);
+            });
         }
     }
 
