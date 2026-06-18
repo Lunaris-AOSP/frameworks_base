@@ -25,11 +25,14 @@ import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import androidx.annotation.VisibleForTesting
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.background
@@ -58,6 +61,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -142,6 +146,9 @@ import platform.test.motion.compose.values.MotionTestValueKey
 import platform.test.motion.compose.values.motionTestValues
 
 import kotlin.math.floor
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -435,6 +442,8 @@ fun BrightnessSlider(
         }
     }
 
+    var autoBrightnessToggleCount by remember { mutableIntStateOf(0) }
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
@@ -593,7 +602,11 @@ fun BrightnessSlider(
             drawAutoBrightnessButton(
                 autoMode = autoMode,
                 hapticsEnabled = hapticsEnabled,
-                onIconClick = onIconClick
+                toggleCount = autoBrightnessToggleCount,
+                onIconClick = {
+                    autoBrightnessToggleCount++
+                    onIconClick()
+                }
             )
         }
     }
@@ -848,9 +861,53 @@ private fun readUseAxStyle(cr: ContentResolver): Boolean =
     }
 
 @Composable
+private fun Modifier.squishAnimation(toggleCount: Int): Modifier {
+    val scaleX = remember { Animatable(1f, visibilityThreshold = 0.01f) }
+    val scaleY = remember { Animatable(1f, visibilityThreshold = 0.01f) }
+    val currentToggleCount by rememberUpdatedState(toggleCount)
+
+    LaunchedEffect(Unit) {
+        snapshotFlow { currentToggleCount }
+            .drop(1)
+            .collectLatest {
+                scaleX.snapTo(1f)
+                scaleY.snapTo(1f)
+                coroutineScope {
+                    launch {
+                        scaleX.animateTo(
+                            targetValue = 1f,
+                            animationSpec = keyframes {
+                                durationMillis = 400
+                                1.06f at 120 using FastOutSlowInEasing
+                                0.97f at 260
+                                1f at 400
+                            },
+                        )
+                    }
+                    scaleY.animateTo(
+                        targetValue = 1f,
+                        animationSpec = keyframes {
+                            durationMillis = 400
+                            0.95f at 120 using FastOutSlowInEasing
+                            1.03f at 260
+                            1f at 400
+                        },
+                    )
+                }
+            }
+    }
+
+    return this.graphicsLayer {
+        this.scaleX = scaleX.value
+        this.scaleY = scaleY.value
+    }
+}
+
+@Composable
 private fun drawAutoBrightnessButton(
     autoMode: Boolean,
     hapticsEnabled: Boolean,
+    toggleCount: Int,
     onIconClick: suspend () -> Unit,
 ) {
     val view = LocalView.current
@@ -899,6 +956,7 @@ private fun drawAutoBrightnessButton(
     Box(
         modifier = Modifier
             .size(TrackHeight)
+            .squishAnimation(toggleCount)
             .clip(autoIconShape)
             .then(
                 if (autoIconBrush != null) {
