@@ -366,8 +366,8 @@ private fun Modifier.squishAnimation(toggleCount: Int): Modifier {
                             targetValue = 1f,
                             animationSpec = keyframes {
                                 durationMillis = 500
-                                1.18f at 150 using FastOutSlowInEasing
-                                0.92f at 300
+                                1.07f at 150 using FastOutSlowInEasing
+                                0.97f at 300
                                 1f at 500
                             },
                         )
@@ -376,8 +376,8 @@ private fun Modifier.squishAnimation(toggleCount: Int): Modifier {
                         targetValue = 1f,
                         animationSpec = keyframes {
                             durationMillis = 500
-                            0.85f at 150 using FastOutSlowInEasing
-                            1.08f at 300
+                            0.94f at 150 using FastOutSlowInEasing
+                            1.04f at 300
                             1f at 500
                         },
                     )
