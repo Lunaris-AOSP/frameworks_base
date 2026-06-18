@@ -496,7 +496,7 @@ fun rememberQSTileAnimationStyle(): Int {
             Settings.System.getIntForUser(
                 contentResolver,
                 Settings.System.QS_TILE_ANIMATION_STYLE,
-                0,
+                9,
                 UserHandle.USER_CURRENT,
             )
         } catch (_: Throwable) {
