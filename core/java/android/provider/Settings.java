@@ -14900,6 +14900,12 @@ public final class Settings {
         public static final String LOCK_SCREEN_CUSTOM_CLOCK_WOBBLE_ON_CHARGE = "lock_screen_custom_clock_wobble_on_charge";
 
         /**
+         * Custom start margin
+         * @hide
+         */
+        public static final String LOCK_SCREEN_CUSTOM_CLOCK_MARGIN_START = "lock_screen_custom_clock_margin_start";
+
+        /**
          * Timeout length for clipboard auto clear
          * @hide
          */
