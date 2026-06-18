@@ -25,12 +25,13 @@ import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import androidx.annotation.VisibleForTesting
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.AnimationVector1D
-import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -59,6 +60,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -85,6 +87,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.graphics.painter.Painter
@@ -138,6 +141,8 @@ import lineageos.providers.LineageSettings
 import platform.test.motion.compose.values.MotionTestValueKey
 import platform.test.motion.compose.values.motionTestValues
 
+import kotlin.math.floor
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 @VisibleForTesting
@@ -176,12 +181,32 @@ fun BrightnessSlider(
 
     var value by remember(gammaValue) { mutableIntStateOf(gammaValue) }
     val animatedValue by
-        animateFloatAsState(targetValue = value.toFloat(), label = "BrightnessSliderAnimatedValue")
+        animateFloatAsState(
+            targetValue = value.toFloat(),
+            animationSpec = BrightnessSliderSpringSpec,
+            label = "BrightnessSliderAnimatedValue",
+        )
     val floatValueRange = valueRange.first.toFloat()..valueRange.last.toFloat()
     val isRestricted = restriction is PolicyRestriction.Restricted
     val enabled = !isRestricted
     val contentDescription = stringResource(R.string.accessibility_brightness)
     val interactionSource = remember { MutableInteractionSource() }
+
+    val hapticStepFraction = 0.1f
+    var lastHapticStep by remember(gammaValue) {
+        mutableFloatStateOf(
+            stepForValue(gammaValue, valueRange, hapticStepFraction)
+        )
+    }
+    val performStepHaptic: (Int) -> Unit = remember(valueRange) {
+        { newValue ->
+            val newStep = stepForValue(newValue, valueRange, hapticStepFraction)
+            if (newStep != lastHapticStep) {
+                lastHapticStep = newStep
+                view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+            }
+        }
+    }
 
     val hasAutoBrightness = context.resources.getBoolean(
         com.android.internal.R.bool.config_automatic_brightness_available
@@ -235,15 +260,28 @@ fun BrightnessSlider(
             trackColor = axTrackColor ?: CustomColorScheme.current.qsTileColor,
         )
 
+        val axActiveFraction by
+            animateFloatAsState(
+                targetValue = (value - valueRange.first).toFloat() /
+                        (valueRange.last - valueRange.first),
+                animationSpec = BrightnessSliderFractionSpringSpec,
+                label = "AxActiveFraction",
+            )
+        val axIconTransition = updateTransition(targetState = axIconRes, label = "AxIconTransition")
+        val axIconScale by axIconTransition.animateFloat(
+            transitionSpec = { IconSwapScaleSpec },
+            label = "AxIconScale",
+        ) { targetIcon -> if (targetIcon == axIconRes) 1f else 0.85f }
+
         Box(modifier = modifier) {
             PlatformSlider(
                 value = animatedValue,
                 onValueChange = {
                     if (enabled && !overriddenByAppState) {
-                        if (hapticsEnabled) {
-                            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                        }
                         value = it.toInt()
+                        if (hapticsEnabled) {
+                            performStepHaptic(value)
+                        }
                         onDrag(value)
                     }
                 },
@@ -271,8 +309,7 @@ fun BrightnessSlider(
                             // Draw gradient over the active portion of the AX style track
                             Modifier.drawWithContent {
                                 drawContent()
-                                val fraction = (value - valueRange.first).toFloat() / (valueRange.last - valueRange.first)
-                                val activeEnd = (size.width * fraction).coerceAtLeast(0f)
+                                val activeEnd = (size.width * axActiveFraction).coerceAtLeast(0f)
                                 if (activeEnd > 0f) {
                                     val cornerRadius = CornerRadius(28.dp.toPx())
                                     val clipPath = Path().apply {
@@ -309,7 +346,9 @@ fun BrightnessSlider(
                     Icon(
                         painter = painterResource(axIconRes),
                         contentDescription = null,
-                        modifier = Modifier.size(24.dp),
+                        modifier = Modifier
+                            .size(24.dp)
+                            .graphicsLayer(scaleX = axIconScale, scaleY = axIconScale),
                     )
                 },
             )
@@ -408,10 +447,10 @@ fun BrightnessSlider(
             onValueChange = {
                 if (enabled) {
                     if (!overriddenByAppState) {
-                        if (hapticsEnabled) {
-                            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                        }
                         value = it.toInt()
+                        if (hapticsEnabled) {
+                            performStepHaptic(value)
+                        }
                         onDrag(value)
                     }
                 }
@@ -446,42 +485,36 @@ fun BrightnessSlider(
             },
             track = { sliderState ->
                 var showIconActive by remember { mutableStateOf(true) }
-                val iconActiveAlphaAnimatable = remember {
-                    Animatable(
-                        initialValue = 1f,
-                        typeConverter = Float.VectorConverter,
-                        label = "iconActiveAlpha",
-                    )
-                }
+                val iconVisibilityTransition =
+                    updateTransition(targetState = showIconActive, label = "IconVisibilityTransition")
+                val iconActiveAlpha by iconVisibilityTransition.animateFloat(
+                    transitionSpec = {
+                        if (targetState) IconAppearSpec else IconDisappearSpec
+                    },
+                    label = "iconActiveAlpha",
+                ) { active -> if (active) 1f else 0f }
+                val iconInactiveAlpha by iconVisibilityTransition.animateFloat(
+                    transitionSpec = {
+                        if (targetState) IconDisappearSpec else IconAppearSpec
+                    },
+                    label = "iconInactiveAlpha",
+                ) { active -> if (active) 0f else 1f }
 
-                val iconInactiveAlphaAnimatable = remember {
-                    Animatable(
-                        initialValue = 0f,
-                        typeConverter = Float.VectorConverter,
-                        label = "iconInactiveAlpha",
+                val animatedFraction by
+                    animateFloatAsState(
+                        targetValue = sliderState.coercedValueAsFraction,
+                        animationSpec = BrightnessSliderFractionSpringSpec,
+                        label = "TrackFillFraction",
                     )
-                }
-
-                LaunchedEffect(iconActiveAlphaAnimatable, iconInactiveAlphaAnimatable, showIconActive) {
-                    if (showIconActive) {
-                        launch { iconActiveAlphaAnimatable.appear() }
-                        launch { iconInactiveAlphaAnimatable.disappear() }
-                    } else {
-                        launch { iconActiveAlphaAnimatable.disappear() }
-                        launch { iconInactiveAlphaAnimatable.appear() }
-                    }
-                }
 
                 Box(
                     modifier =
                         Modifier.motionTestValues {
-                                (iconActiveAlphaAnimatable.isRunning ||
-                                    iconInactiveAlphaAnimatable.isRunning) exportAs
+                                iconVisibilityTransition.isRunning exportAs
                                     BrightnessSliderMotionTestKeys.AnimatingIcon
-
-                                iconActiveAlphaAnimatable.value exportAs
+                                iconActiveAlpha exportAs
                                     BrightnessSliderMotionTestKeys.ActiveIconAlpha
-                                iconInactiveAlphaAnimatable.value exportAs
+                                iconInactiveAlpha exportAs
                                     BrightnessSliderMotionTestKeys.InactiveIconAlpha
                             }
                             .height(TrackHeight)
@@ -489,7 +522,7 @@ fun BrightnessSlider(
                             .drawWithContent {
                                 val trackHeight = size.height
                                 val trackWidth = size.width
-                                val activeTrackEnd = trackWidth * sliderState.coercedValueAsFraction
+                                val activeTrackEnd = trackWidth * animatedFraction
                                 
                                 val cornerRadius = CornerRadius(trackCornerDp.toPx())
                                 
@@ -538,7 +571,7 @@ fun BrightnessSlider(
                                     trackIcon(
                                         Offset(trackWidth, yOffset),
                                         inactiveIconColor,
-                                        iconInactiveAlphaAnimatable.value,
+                                        iconInactiveAlpha,
                                     )
                                 } else if (
                                     IconSize.toSize().width < activeTrackWidth - IconPadding.toPx() * 2
@@ -547,7 +580,7 @@ fun BrightnessSlider(
                                     trackIcon(
                                         Offset(activeTrackEnd, yOffset),
                                         activeIconColor,
-                                        iconActiveAlphaAnimatable.value,
+                                        iconActiveAlpha,
                                     )
                                 }
                             }
@@ -1032,11 +1065,27 @@ private object AnimationSpecs {
     val IconDisappearSpec = tween<Float>(durationMillis = 50)
 }
 
-private suspend fun Animatable<Float, AnimationVector1D>.appear() =
-    animateTo(targetValue = 1f, animationSpec = IconAppearSpec)
+private val BrightnessSliderSpringSpec = spring<Float>(
+    dampingRatio = Spring.DampingRatioMediumBouncy,
+    stiffness = Spring.StiffnessMedium,
+)
 
-private suspend fun Animatable<Float, AnimationVector1D>.disappear() =
-    animateTo(targetValue = 0f, animationSpec = IconDisappearSpec)
+private val BrightnessSliderFractionSpringSpec = spring<Float>(
+    dampingRatio = Spring.DampingRatioLowBouncy,
+    stiffness = Spring.StiffnessMedium,
+)
+
+private val IconSwapScaleSpec = spring<Float>(
+    dampingRatio = Spring.DampingRatioMediumBouncy,
+    stiffness = Spring.StiffnessHigh,
+)
+
+private fun stepForValue(value: Int, valueRange: IntRange, stepFraction: Float): Float {
+    val range = (valueRange.last - valueRange.first).toFloat()
+    if (range <= 0f) return 0f
+    val fraction = (value - valueRange.first) / range
+    return floor(fraction / stepFraction)
+}
 
 @VisibleForTesting
 object BrightnessSliderMotionTestKeys {
