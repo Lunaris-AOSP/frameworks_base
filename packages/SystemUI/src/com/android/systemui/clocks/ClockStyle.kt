@@ -355,10 +355,13 @@ class ClockStyle @JvmOverloads constructor(
         if (currentClockView == null) return
         for (i in styledTextViews.indices) {
             val tv = styledTextViews[i]
+            if (tv is TextClock) continue
             (tv.getTag(R.id.original_typeface) as? Typeface)?.let { tv.typeface = it }
         }
         for (i in textClocks.indices) {
-            textClocks[i].refreshTime()
+            val tc = textClocks[i]
+            (tc.getTag(R.id.original_typeface) as? Typeface)?.let { tc.typeface = it }
+            tc.refreshTime()
         }
         lastUpdateTimeMillis = System.currentTimeMillis()
     }
