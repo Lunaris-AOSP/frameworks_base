@@ -15,6 +15,8 @@
  */
 package com.android.systemui.common.ringer
 
+import android.service.quicksettings.Tile.STATE_ACTIVE
+import android.service.quicksettings.Tile.STATE_INACTIVE
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
@@ -33,7 +35,12 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberQSTileAnimationStyle
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.tileToggleAnimation
+
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 
 @Composable
 fun RingerSliderWidget(
@@ -50,6 +57,9 @@ fun RingerSliderWidget(
     val availableModes = interactor.getAvailableRingerModes()
     val numModes = interactor.getNumberOfModes()
     val maxOffset = interactor.getMaxOffset()
+    val animationStyle = rememberQSTileAnimationStyle()
+    var toggleAnimState by remember { mutableIntStateOf(STATE_INACTIVE) }
+    var lastSnappedMode by remember { mutableIntStateOf(interactor.getCurrentMode()) }
     val isDndEnabled by interactor.dndMode.collectAsState(initial = interactor.isDndEnabled())
     
     val targetPosition by interactor.targetPositionFlow.collectAsState(
@@ -58,6 +68,21 @@ fun RingerSliderWidget(
 
     var dragOffset by remember { mutableStateOf(targetPosition) }
     var isDragging by remember { mutableStateOf(false) }
+
+    LaunchedEffect(toggleAnimState) {
+        if (toggleAnimState == STATE_ACTIVE) {
+            delay(16L)
+            toggleAnimState = STATE_INACTIVE
+        }
+    }
+
+    fun commitMode(newMode: Int) {
+        interactor.setRingerMode(newMode)
+        if (newMode != lastSnappedMode) {
+            lastSnappedMode = newMode
+            toggleAnimState = STATE_ACTIVE
+        }
+    }
 
     val animatedPosition by animateFloatAsState(
         targetValue = if (isDragging) dragOffset else targetPosition,
@@ -96,12 +121,12 @@ fun RingerSliderWidget(
         onTap = { tapOffset ->
             if (isDndEnabled) return@detectTapGestures
 
-            val sectionWidth = size.width / numModes.toFloat()
+            val sectionWidth = size.width / numModes.coerceAtLeast(1).toFloat()
             val snappedIndex = (tapOffset.x / sectionWidth).toInt().coerceIn(0, numModes - 1)
 
             dragOffset = snappedIndex.toFloat()
 
-            interactor.setRingerMode(availableModes[snappedIndex].mode)
+            commitMode(availableModes[snappedIndex].mode)
         },
         onLongPress = {
             onLongClick?.invoke()
@@ -115,7 +140,7 @@ fun RingerSliderWidget(
                         isDragging = false
                         if (isDndEnabled) return@detectDragGestures
 
-                        interactor.setRingerMode(interactor.snapMode(dragOffset))
+                        commitMode(interactor.snapMode(dragOffset))
                     },
                     onDragCancel = { 
                         isDragging = false
@@ -170,6 +195,10 @@ fun RingerSliderWidget(
             Box(
                 modifier = Modifier
                     .offset(x = thumbOffset)
+                    .tileToggleAnimation(
+                        animationStyle = animationStyle,
+                        state = toggleAnimState,
+                    )
                     .size(dimens.thumbSize)
                     .padding(dimens.thumbPadding)
                     .background(
