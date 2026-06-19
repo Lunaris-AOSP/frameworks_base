@@ -15,8 +15,11 @@
  */
 package com.android.systemui.common.ringer
 
+import android.media.AudioManager
 import android.service.quicksettings.Tile.STATE_ACTIVE
 import android.service.quicksettings.Tile.STATE_INACTIVE
+import android.view.HapticFeedbackConstants
+
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
@@ -34,13 +37,16 @@ import androidx.compose.ui.draw.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberQSTileAnimationStyle
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberTileHaptic
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.tileToggleAnimation
 
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun RingerSliderWidget(
@@ -57,6 +63,9 @@ fun RingerSliderWidget(
     val availableModes = interactor.getAvailableRingerModes()
     val numModes = interactor.getNumberOfModes()
     val maxOffset = interactor.getMaxOffset()
+    val view = LocalView.current
+    val coroutineScope = rememberCoroutineScope()
+    val hapticEnabled = rememberTileHaptic()
     val animationStyle = rememberQSTileAnimationStyle()
     var toggleAnimState by remember { mutableIntStateOf(STATE_INACTIVE) }
     var lastSnappedMode by remember { mutableIntStateOf(interactor.getCurrentMode()) }
@@ -81,6 +90,29 @@ fun RingerSliderWidget(
         if (newMode != lastSnappedMode) {
             lastSnappedMode = newMode
             toggleAnimState = STATE_ACTIVE
+            if (hapticEnabled) {
+                coroutineScope.launch {
+                    when (newMode) {
+                        AudioManager.RINGER_MODE_VIBRATE -> {
+                            view.performHapticFeedback(
+                                HapticFeedbackConstants.CLOCK_TICK,
+                                HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING,
+                            )
+                            delay(80L)
+                            view.performHapticFeedback(
+                                HapticFeedbackConstants.CLOCK_TICK,
+                                HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING,
+                            )
+                        }
+                        else -> {
+                            view.performHapticFeedback(
+                                HapticFeedbackConstants.CLOCK_TICK,
+                                HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING,
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 
