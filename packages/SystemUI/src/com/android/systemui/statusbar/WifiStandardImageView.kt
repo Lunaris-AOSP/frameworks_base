@@ -65,7 +65,7 @@ class WifiStandardImageView @JvmOverloads constructor(
             visibility = View.VISIBLE
             layoutParams?.let {
                 it.marginEnd = resources.getDimensionPixelSize(
-                    R.dimen.status_bar_airplane_spacer_width
+                    R.dimen.wifi_standard_spacer_width
                 )
                 this.layoutParams = it
             }

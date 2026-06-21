@@ -2319,4 +2319,6 @@
     <dimen name="tile_details_title_row_end">8dp</dimen>
     <!-- Tile Details end -->
 
+    <dimen name="wifi_standard_spacer_width">1sp</dimen>
+
 </resources>
