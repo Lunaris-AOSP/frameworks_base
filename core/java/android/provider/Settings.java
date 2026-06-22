@@ -7487,7 +7487,41 @@ public final class Settings {
         public static final String QS_BRIGHTNESS_SLIDER_STYLE = "qs_brightness_slider_style";
 
         /**
-         * Haptic feedback on QS tiles
+         * @hide
+         */
+        public static final String QS_VOLUME_SLIDER_STYLE = "qs_volume_slider_style";
+
+        /**
+         * @hide
+         */
+        public static final String QS_VOLUME_SLIDER_HAPTIC = "qs_volume_slider_haptic";
+
+        /**
+         * @hide
+         */
+        public static final String QS_VOLUME_SLIDER_SHAPE = "qs_volume_slider_shape";
+
+        /**
+         * @hide
+         */
+        public static final String QS_VOLUME_SLIDER_GRADIENT = "qs_volume_slider_gradient";
+
+        /**
+         * @hide
+         */
+        public static final String QS_SHOW_VOLUME_SLIDER = "qs_show_volume_slider";
+
+        /**
+         * @hide
+         */
+        public static final String QS_VOLUME_SLIDER_POSITION = "qs_volume_slider_position";
+
+        /**
+         * @hide
+         */
+        public static final String QS_SHOW_RINGER_BUTTON = "qs_show_ringer_button";
+
+        /**
          * @hide
          */
         public static final String QS_TILE_HAPTIC = "qs_tile_haptic";

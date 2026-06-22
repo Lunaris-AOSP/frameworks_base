@@ -176,6 +176,7 @@ import com.android.systemui.util.children
 import com.android.systemui.util.kotlin.pairwise
 import com.android.systemui.util.printSection
 import com.android.systemui.util.println
+import com.android.systemui.volume.panel.component.volume.ui.composable.VolumeSliderQS
 import java.io.PrintWriter
 import java.util.function.Consumer
 import javax.inject.Inject
@@ -772,6 +773,11 @@ constructor(
                         BrightnessSlider(viewModel, layoutState)
                     }
                 }
+                val VolumeQS: @Composable () -> Unit = {
+                    Element(Elements.VolumeSliderQS, modifier = modifier) {
+                        VolumeSliderQSElement(viewModel, layoutState)
+                    }
+                }
                 val Tiles =
                     @Composable {
                         // When always compose is false, this will always be true, and we'll be
@@ -833,6 +839,7 @@ constructor(
                         Box(modifier = Modifier.padding(horizontal = qsHorizontalMargin())) {
                             QuickQuickSettingsLayout(
                                 brightness = BrightnessSlider,
+                                volume = VolumeQS,
                                 tiles = Tiles,
                                 media = Media,
                                 mediaInRow = viewModel.qqsMediaInRow,
@@ -911,6 +918,11 @@ constructor(
                                 BrightnessSlider(viewModel, layoutState)
                             }
                         }
+                        val VolumeQS: @Composable () -> Unit = {
+                            Element(Elements.VolumeSliderQS, modifier = modifier) {
+                                VolumeSliderQSElement(viewModel, layoutState)
+                            }
+                        }
                         val TileGrid =
                             @Composable {
                                 Box {
@@ -972,6 +984,7 @@ constructor(
                                     } else {
                                         {}
                                     },
+                                volume = { VolumeQS() },
                                 tiles = TileGrid,
                                 media = Media,
                                 mediaInRow = viewModel.qsMediaInRow,
@@ -1025,6 +1038,23 @@ constructor(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
+        }
+    }
+
+    @Composable
+    private fun VolumeSliderQSElement(
+        viewModel: QSFragmentComposeViewModel,
+        layoutState: SceneTransitionLayoutState,
+    ) {
+        Box(
+            Modifier.systemGestureExclusionInShade(
+                enabled = {
+                    layoutState.transitionState is TransitionState.Idle &&
+                        viewModel.isNotTransitioning
+                }
+            )
+        ) {
+            AlwaysDarkMode { VolumeSliderQS(modifier = Modifier.fillMaxWidth()) }
         }
     }
 
@@ -1593,11 +1623,13 @@ private fun rememberWidgetPanelEnabled(): Boolean {
 @VisibleForTesting
 fun QuickQuickSettingsLayout(
     brightness: @Composable () -> Unit,
+    volume: @Composable () -> Unit = {},
     tiles: @Composable () -> Unit,
     media: @Composable () -> Unit,
     mediaInRow: Boolean,
 ) {
     val brightnessSettings = rememberQsBrightnessSettings()
+    val volumeSettings = rememberQsVolumeSliderSettings()
     val sliderAtTop = brightnessSettings.sliderAtTop
     val showSlider = brightnessSettings.showSlider
     val mediaPosition = rememberShowMediaPlayer()
@@ -1612,6 +1644,10 @@ fun QuickQuickSettingsLayout(
 
         if (showSlider == 2 && sliderAtTop) {
             brightness()
+        }
+
+        if (volumeSettings.showSlider == 2 && volumeSettings.sliderAtTop) {
+            volume()
         }
 
         if (mediaInRow && mediaPosition != 0) {
@@ -1630,6 +1666,10 @@ fun QuickQuickSettingsLayout(
             brightness()
         }
 
+        if (volumeSettings.showSlider == 2 && !volumeSettings.sliderAtTop) {
+            volume()
+        }
+
         if (mediaPosition == 2 && !mediaInRow) {
             media()
         }
@@ -1641,11 +1681,13 @@ fun QuickQuickSettingsLayout(
 @VisibleForTesting
 fun QuickSettingsLayout(
     brightness: @Composable () -> Unit,
+    volume: @Composable () -> Unit = {},
     tiles: @Composable () -> Unit,
     media: @Composable () -> Unit,
     mediaInRow: Boolean,
 ) {
     val brightnessSettings = rememberQsBrightnessSettings()
+    val volumeSettings = rememberQsVolumeSliderSettings()
     val sliderAtTop = brightnessSettings.sliderAtTop
     val showSlider = brightnessSettings.showSlider
     val mediaPosition = rememberShowMediaPlayer()
@@ -1662,6 +1704,10 @@ fun QuickSettingsLayout(
             brightness()
         }
 
+        if (volumeSettings.showSlider >= 1 && volumeSettings.sliderAtTop) {
+            volume()
+        }
+
         if (mediaInRow && mediaPosition != 0) {
             Row(
                 horizontalArrangement = spacedBy(QuickSettingsShade.Dimensions.Padding),
@@ -1676,6 +1722,10 @@ fun QuickSettingsLayout(
 
         if (showSlider != 0 && !sliderAtTop) {
             brightness()
+        }
+
+        if (volumeSettings.showSlider >= 1 && !volumeSettings.sliderAtTop) {
+            volume()
         }
 
         if (mediaPosition == 2 && !mediaInRow) {
@@ -1794,4 +1844,60 @@ private fun rememberQsBrightnessSettings(): QsBrightnessSettings {
 private data class QsBrightnessSettings(
     val sliderAtTop: Boolean,
     val showSlider: Int,
+)
+
+@Composable
+private fun rememberQsVolumeSliderSettings(): QsVolumeSliderSettings {
+    val context = LocalContext.current
+    val cr = remember { context.contentResolver }
+
+    return produceState(
+        initialValue = QsVolumeSliderSettings(sliderAtTop = false, showSlider = 0),
+        key1 = cr,
+    ) {
+        val readSettings = suspend {
+            withContext(Dispatchers.IO) {
+                val position = runCatching {
+                    Settings.System.getIntForUser(
+                        cr, Settings.System.QS_VOLUME_SLIDER_POSITION,
+                        1, UserHandle.USER_CURRENT,
+                    )
+                }.getOrElse { 1 }
+
+                val showSliderValue = runCatching {
+                    Settings.System.getIntForUser(
+                        cr, Settings.System.QS_SHOW_VOLUME_SLIDER,
+                        0, UserHandle.USER_CURRENT,
+                    )
+                }.getOrElse { 0 }
+
+                QsVolumeSliderSettings(
+                    sliderAtTop = position == 0,
+                    showSlider = showSliderValue,
+                )
+            }
+        }
+
+        value = readSettings()
+
+        val observer = object : ContentObserver(null) {
+            override fun onChange(selfChange: Boolean) {
+                launch { value = readSettings() }
+            }
+        }
+        cr.registerContentObserver(
+            Settings.System.getUriFor(Settings.System.QS_VOLUME_SLIDER_POSITION),
+            false, observer, UserHandle.USER_ALL,
+        )
+        cr.registerContentObserver(
+            Settings.System.getUriFor(Settings.System.QS_SHOW_VOLUME_SLIDER),
+            false, observer, UserHandle.USER_ALL,
+        )
+        awaitDispose { cr.unregisterContentObserver(observer) }
+    }.value
+}
+
+private data class QsVolumeSliderSettings(
+    val sliderAtTop: Boolean,
+    val showSlider:  Int,
 )
