@@ -67,6 +67,9 @@ public class StatusBarSwitch extends SwitchPreferenceCompat implements Tunable {
 
     @Override
     protected boolean persistBoolean(boolean value) {
+        if (mHideList == null) {
+            return true;
+        }
         if (!value) {
             // If not enabled add to hideList.
             if (!mHideList.contains(getKey())) {
