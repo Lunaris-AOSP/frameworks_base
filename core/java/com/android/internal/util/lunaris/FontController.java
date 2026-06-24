@@ -76,6 +76,7 @@ public class FontController {
             "google-sans-flex-clock",
             // Clock fonts
             "Ayame",
+            "Badeen",
             "BR_SC",
             "Bebas",
             "Blackout",
@@ -102,6 +103,7 @@ public class FontController {
             "LightPixel",
             "Longest",
             "Modak",
+            "Neu",
             "Neumatic",
             "PXtall",
             "PlayfairDisplay",
