@@ -94,4 +94,7 @@
     
     <!-- Biometric view -->
     <dimen name="biometric_indicator_above_margin_bottom">8dp</dimen>
+
+    <!-- Extra bottom offset for the Dynamic Bar keyguard chip -->
+    <dimen name="ax_dynamic_bar_keyguard_chip_extra_bottom_margin">0dp</dimen>
 </resources>
