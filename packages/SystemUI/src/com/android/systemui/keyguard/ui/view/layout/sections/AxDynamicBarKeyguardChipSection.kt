@@ -35,6 +35,9 @@ private const val CHIP_ABOVE_LOCK_MARGIN_DP = 12f
 private const val EXPANDED_BOTTOM_PROTECTION_DP = 16f
 private const val UNSET = -1
 
+private const val HIDDEN_VIEWS_FADE_DURATION_START_MS = 50L
+private const val HIDDEN_VIEWS_FADE_DURATION_END_MS = 250L
+
 private fun extraBottomMarginPx(context: Context): Int =
     context.resources.getDimensionPixelSize(R.dimen.ax_dynamic_bar_keyguard_chip_extra_bottom_margin)
 
@@ -165,10 +168,28 @@ constructor(
 
     private fun setHiddenViewsVisibility(constraintLayout: ConstraintLayout, visibility: Int) {
         hiddenTargets(constraintLayout).forEach { v ->
-            v.alpha = 1f
-            if (v.visibility != visibility) v.visibility = visibility
+            v.animate().cancel()
+            if (visibility == View.VISIBLE) {
+                if (v.visibility != View.VISIBLE) {
+                    v.alpha = 0f
+                    v.visibility = View.VISIBLE
+                }
+                v.animate()
+                    .alpha(1f)
+                    .setDuration(HIDDEN_VIEWS_FADE_DURATION_START_MS)
+                    .withEndAction(null)
+                    .start()
+            } else {
+                v.animate()
+                    .alpha(0f)
+                    .setDuration(HIDDEN_VIEWS_FADE_DURATION_END_MS)
+                    .withEndAction {
+                        if (v.visibility != visibility) v.visibility = visibility
+                    }
+                    .start()
+            }
         }
-         WallpaperDepthUtils.get()?.let {
+        WallpaperDepthUtils.get()?.let {
             if (visibility == View.INVISIBLE) it.hideDepthWallpaper()
             else it.updateDepthWallpaperVisibility()
         }
