@@ -7557,10 +7557,16 @@ public final class Settings {
         public static final String QQS_TILES_ROWS = "qqs_tiles_rows";
 
         /**
-         * Customizable notification shade scrim alpha (0-100).
+         * Customizable qs shade scrim alpha (0-100).
          * @hide
          */
         public static final String SHADE_SCRIM_ALPHA = "shade_scrim_alpha";
+
+        /**
+         * Customizable notification shade scrim alpha (0-100).
+         * @hide
+         */
+        public static final String NOTIFICATION_SCRIM_ALPHA = "notification_scrim_alpha";
 
         /**
          * Lockscreen Media Art
