@@ -34,6 +34,8 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.app.Fragment;
+import android.content.Context;
+import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Insets;
 import android.graphics.Rect;
@@ -639,7 +641,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
 
         final boolean isRtl = mPanelView != null && mPanelView.isLayoutRtl();
 
-        if (mQsSplitShadeEnabledLegacy && mBarState == StatusBarState.SHADE) {
+        if (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE) {
             float halfRegion = w * 1.f / 2.f;
             showQsOverride = isRtl ? x < halfRegion : w - halfRegion < x;
         } else {
@@ -662,7 +664,13 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
 
     @Override
     public boolean getSplitShadeEnabledLegacy() {
-        return mQsSplitShadeEnabledLegacy;
+        return isLegacySplitShadeEligible();
+    }
+
+    private boolean isLegacySplitShadeEligible() {
+        return mQsSplitShadeEnabledLegacy
+                && mResources.getConfiguration().orientation
+                        == Configuration.ORIENTATION_PORTRAIT;
     }
 
     @Override
@@ -784,7 +792,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
 
     /** Returns amount header should be translated */
     private float getHeaderTranslation() {
-        if (mSplitShadeEnabled || (mQsSplitShadeEnabledLegacy && mBarState == StatusBarState.SHADE)) {
+        if (mSplitShadeEnabled || (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE)) {
             // in split shade QS don't translate, just (un)squish and overshoot
             return 0;
         }
@@ -1001,7 +1009,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
 
     private void updateQsSplitShadeState() {
         if (mQs != null) {
-            mQs.setInSplitShade(mSplitShadeEnabled || (mQsSplitShadeEnabledLegacy && mBarState == StatusBarState.SHADE));
+            mQs.setInSplitShade(mSplitShadeEnabled || (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE));
         }
     }
 
@@ -1121,7 +1129,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         if (mQs == null) return;
         mQs.setExpanded(getExpanded());
 
-        if (mQsSplitShadeEnabledLegacy && mBarState == StatusBarState.SHADE) {
+        if (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE) {
             boolean isQsVisible = isExpandImmediate();
             int qsVisibility = (isQsVisible || mSwipeInProgress) ? View.VISIBLE : View.INVISIBLE;
             int nsslVisibility = (!isQsVisible || mSwipeInProgress) ? View.VISIBLE : View.INVISIBLE;
@@ -1171,7 +1179,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
                     .getNotificationSquishinessFraction();
         }
         final float qsExpansionFraction = computeExpansionFraction();
-        final float adjustedExpansionFraction = (mSplitShadeEnabled || (mQsSplitShadeEnabledLegacy && mBarState == StatusBarState.SHADE))
+        final float adjustedExpansionFraction = (mSplitShadeEnabled || (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE))
                 ? 1f : computeExpansionFraction();
         mQs.setQsExpansion(
                 adjustedExpansionFraction,
@@ -1179,7 +1187,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
                 getHeaderTranslation(),
                 squishiness
         );
-        if (mQsSplitShadeEnabledLegacy && mBarState == StatusBarState.SHADE) {
+        if (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE) {
             if (mQsFrame != null) {
                 float speedFraction = Math.min(mShadeExpandedFraction / 0.90f, 1.0f);
                 float translationLimit = mNotificationStackScrollLayoutController.getView().getExpandTranslationStart();
@@ -1284,7 +1292,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
             // be larger than 0 because of the timing, leading to flickers.
             return 0.0f;
         }
-        if (mQsSplitShadeEnabledLegacy && mBarState == StatusBarState.SHADE) {
+        if (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE) {
             return (getExpanded() || isExpandImmediate()) ? mShadeExpandedFraction : 0.0f;
         }
         return Math.min(
@@ -1467,7 +1475,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
                         mDisplayRightInset,
                         clipBottom,
                         radius,
-                        qsVisible && !mSplitShadeEnabled && !(mQsSplitShadeEnabledLegacy && mBarState == StatusBarState.SHADE),
+                        qsVisible && !mSplitShadeEnabled && !(isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE),
                         mIsFullWidth);
             }
 
@@ -1563,7 +1571,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         SceneContainerFlag.assertInLegacyMode();
         float topPadding;
         boolean keyguardShowing = mBarState == KEYGUARD;
-        if (mQsSplitShadeEnabledLegacy && mBarState == StatusBarState.SHADE) {
+        if (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE) {
             return mQuickQsHeaderHeight + mResources.getDimensionPixelSize(R.dimen.notification_side_paddings) * 4;
         }
         if (mSplitShadeEnabled) {
@@ -1647,7 +1655,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
 
     private int calculateTopClippingBound(int qsPanelBottomY) {
         int top;
-        if (mSplitShadeEnabled || (mQsSplitShadeEnabledLegacy && mBarState == StatusBarState.SHADE)) {
+        if (mSplitShadeEnabled || (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE)) {
             top = Math.min(qsPanelBottomY, mLargeScreenShadeHeaderHeight);
         } else {
             if (mTransitioningToFullShadeProgress > 0.0f) {
@@ -1790,7 +1798,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
     /** handles touches in Qs panel area */
     boolean handleTouch(MotionEvent event, boolean isFullyCollapsed,
             boolean isShadeOrQsHeightAnimationRunning) {
-        if (mQsSplitShadeEnabledLegacy && mBarState == StatusBarState.SHADE) {
+        if (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE) {
             if (!isFullyCollapsed) {
                 return false;
             }
@@ -2571,7 +2579,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         @Override
         public void onOverscrollTopChanged(float amount, boolean isRubberbanded) {
             // When in split shade, overscroll shouldn't carry through to QS
-            if (mSplitShadeEnabled || (mQsSplitShadeEnabledLegacy && mBarState == StatusBarState.SHADE)) {
+            if (mSplitShadeEnabled || (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE)) {
                 return;
             }
             cancelExpansionAnimation();
@@ -2589,7 +2597,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         @Override
         public void flingTopOverscroll(float velocity, boolean open) {
             // in split shade mode we want to expand/collapse QS only when touch happens within QS
-            if (mSplitShadeEnabled || (mQsSplitShadeEnabledLegacy && mBarState == StatusBarState.SHADE)) {
+            if (mSplitShadeEnabled || (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE)) {
                 return;
             }
             mLastOverscroll = 0f;
