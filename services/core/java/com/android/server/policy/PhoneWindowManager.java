@@ -2469,6 +2469,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             case RINGER_MODES:
                 toggleRingerModes();
                 break;
+            case AMBIENT_DISPLAY:
+                triggerAmbientDisplay();
+                break;
             default:
                 break;
         }
@@ -7861,6 +7864,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             }
         }
         return mRearFlashCameraId;
+    }
+
+    private void triggerAmbientDisplay() {
+        if (DEBUG_INPUT) {
+            Slog.d(TAG, "triggerAmbientDisplay");
+        }
+        Intent intent = new Intent("com.android.systemui.doze.pulse");
+        intent.setPackage("com.android.systemui");
+        mContext.sendBroadcastAsUser(intent, new UserHandle(UserHandle.USER_CURRENT));
     }
 
     private class TorchModeCallback extends CameraManager.TorchCallback {
