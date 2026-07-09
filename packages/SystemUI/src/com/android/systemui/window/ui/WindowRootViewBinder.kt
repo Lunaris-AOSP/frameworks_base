@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.filter
  */
 object WindowRootViewBinder {
     private const val TAG = "WindowRootViewBinder"
+    private val DEBUG = Log.isLoggable(TAG, Log.DEBUG)
 
     fun bind(
         view: WindowRootView,
@@ -51,14 +52,16 @@ object WindowRootViewBinder {
         if (blurUtils == null || choreographer == null) return
 
         view.repeatWhenAttached(mainDispatcher) {
-            Log.d(TAG, "Binding root view")
+            if (DEBUG) Log.d(TAG, "Binding root view")
             view.viewModel(
                 minWindowLifecycleState = WindowLifecycleState.ATTACHED,
                 factory = { viewModelFactory.create() },
                 traceName = "WindowRootViewBinder#bind",
             ) { viewModel ->
                 try {
-                    Log.d(TAG, "Launching coroutines that update window root view state")
+                    if (DEBUG) {
+                        Log.d(TAG, "Launching coroutines that update window root view state")
+                    }
                     launchTraced("early-wakeup") {
                         viewModel.isPersistentEarlyWakeupRequired.collect { wakeupRequired ->
                             blurUtils.setPersistentEarlyWakeup(
@@ -114,7 +117,7 @@ object WindowRootViewBinder {
                                         lastScheduledBlurRadius != newBlurRadius ||
                                             lastScheduledBlurScale != newBlurScale
                                     ) {
-                                        Log.d(TAG, "Multiple blur values emitted in the same frame")
+                                        if (DEBUG) Log.d(TAG, "Multiple blur values emitted in the same frame")
                                     }
                                     lastScheduledBlurRadius = newBlurRadius
                                     lastScheduledBlurScale = newBlurScale
@@ -135,7 +138,9 @@ object WindowRootViewBinder {
                     }
                     awaitCancellation()
                 } finally {
-                    Log.d(TAG, "Wrapped up coroutines that update window root view state")
+                    if (DEBUG) {
+                        Log.d(TAG, "Wrapped up coroutines that update window root view state")
+                    }
                 }
             }
         }
