@@ -91,6 +91,7 @@ class SystemIconsPopupController(
 ) {
     private val windowManager = context.getSystemService(WindowManager::class.java)
     private var popupView: ComposeView? = null
+    private var isDismissing = false
     var isShowing = false
         private set
 
@@ -177,21 +178,21 @@ class SystemIconsPopupController(
     }
 
     fun hidePopup(anchorView: View? = null) {
-        if (isShowing && popupView != null) {
-            if (anchorView != null) {
-                (popupView as? ComposeView)?.let { view ->
-                    view.setContent {
-                        PopupTheme {
-                            DismissAnimationContent(anchorView = anchorView) {
-                                actuallyHidePopup()
-                            }
-                        }
+        val view = popupView
+        if (!isShowing || view == null) return
+        if (anchorView != null) {
+            if (isDismissing) return
+            isDismissing = true
+            view.setContent {
+                PopupTheme {
+                    DismissAnimationContent(anchorView = anchorView) {
+                        actuallyHidePopup()
                     }
-                    return
                 }
             }
-            actuallyHidePopup()
+            return
         }
+        actuallyHidePopup()
     }
 
     private fun actuallyHidePopup() {
@@ -205,6 +206,7 @@ class SystemIconsPopupController(
             popupView = null
             lifecycleOwner = null
             isShowing = false
+            isDismissing = false
         }
     }
 
