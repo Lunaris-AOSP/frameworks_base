@@ -56,8 +56,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -70,6 +68,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -320,10 +319,13 @@ class SystemIconsPopupController(
             Column(
                 modifier = Modifier
                     .padding(top = 8.dp, end = 16.dp)
-                    .offset(x = offsetX.value.dp)
-                    .offset(y = offsetY.value.dp)
-                    .scale(scale.value)
-                    .graphicsLayer(alpha = alpha.value),
+                    .graphicsLayer {
+                        translationX = offsetX.value.dp.toPx()
+                        translationY = offsetY.value.dp.toPx()
+                        scaleX = scale.value
+                        scaleY = scale.value
+                        this.alpha = alpha.value
+                    },
                 horizontalAlignment = Alignment.End
             ) {
                 Box(
@@ -474,10 +476,13 @@ class SystemIconsPopupController(
             Column(
                 modifier = Modifier
                     .padding(top = 8.dp, end = 16.dp)
-                    .offset(x = offsetX.value.dp)
-                    .offset(y = offsetY.value.dp)
-                    .scale(scale.value)
-                    .graphicsLayer(alpha = alpha.value),
+                    .graphicsLayer {
+                        translationX = offsetX.value.dp.toPx()
+                        translationY = offsetY.value.dp.toPx()
+                        scaleX = scale.value
+                        scaleY = scale.value
+                        this.alpha = alpha.value
+                    },
                 horizontalAlignment = Alignment.End
             ) {
                 Box(
@@ -1182,7 +1187,7 @@ class SystemIconsPopupController(
                     textLayoutResult = layoutResult
                 },
                 modifier = Modifier
-                    .offset(x = with(density) { offsetX.value.toDp() })
+                    .offset { IntOffset(offsetX.value.roundToInt(), 0) }
             )
         }
     }
