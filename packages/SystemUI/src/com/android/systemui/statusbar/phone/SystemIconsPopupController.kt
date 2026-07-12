@@ -16,6 +16,7 @@
 package com.android.systemui.statusbar.phone
 
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -23,7 +24,9 @@ import android.content.BroadcastReceiver
 import android.content.Intent.ACTION_SCREEN_OFF
 import android.graphics.PixelFormat
 import android.net.ConnectivityManager
+import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.wifi.WifiManager
 import android.content.res.Configuration
 import android.os.BatteryManager
@@ -909,56 +912,79 @@ class SystemIconsPopupController(
         }
     }
 
+    private val bluetoothIsConnectedMethod by lazy(LazyThreadSafetyMode.NONE) {
+        try {
+            BluetoothDevice::class.java.getMethod("isConnected")
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun isAnyBluetoothDeviceConnected(adapter: BluetoothAdapter?): Boolean =
+        try {
+            if (adapter?.isEnabled == true) {
+                adapter.bondedDevices?.any { device ->
+                    bluetoothIsConnectedMethod?.invoke(device) as? Boolean ?: false
+                } ?: false
+            } else false
+        } catch (e: Exception) {
+            false
+        }
+
+    @Composable
+    private fun transportConnectedState(
+        connectivityManager: ConnectivityManager?,
+        transport: Int
+    ): State<Boolean> = produceState(initialValue = false, connectivityManager, transport) {
+        if (connectivityManager == null) return@produceState
+        val networks = mutableSetOf<Network>()
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                networks.add(network)
+                value = networks.isNotEmpty()
+            }
+
+            override fun onLost(network: Network) {
+                networks.remove(network)
+                value = networks.isNotEmpty()
+            }
+        }
+        try {
+            connectivityManager.registerNetworkCallback(
+                NetworkRequest.Builder().addTransportType(transport).build(),
+                callback
+            )
+        } catch (e: Exception) {
+            return@produceState
+        }
+        awaitDispose {
+            try {
+                connectivityManager.unregisterNetworkCallback(callback)
+            } catch (e: Exception) { }
+        }
+    }
+
     @Composable
     private fun ConnectionStatusCard() {
-        val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
         val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
         val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
 
-        var refreshTrigger by remember { mutableStateOf(0) }
+        val isWifiConnected by transportConnectedState(connectivityManager, NetworkCapabilities.TRANSPORT_WIFI)
+        val isVpnConnected by transportConnectedState(connectivityManager, NetworkCapabilities.TRANSPORT_VPN)
 
-        LaunchedEffect(Unit) {
-            while (true) {
-                delay(500)
-                refreshTrigger++
+        val isBluetoothConnected by produceState(
+            initialValue = isAnyBluetoothDeviceConnected(bluetoothAdapter)
+        ) {
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(c: Context?, intent: Intent?) {
+                    value = isAnyBluetoothDeviceConnected(bluetoothAdapter)
+                }
             }
-        }
-
-        val isWifiConnected = remember(refreshTrigger) {
-            try {
-                if (wifiManager?.isWifiEnabled == true) {
-                    val wifiInfo = wifiManager.connectionInfo
-                    wifiInfo != null && wifiInfo.networkId != -1
-                } else false
-            } catch (e: Exception) {
-                false
-            }
-        }
-
-        val isBluetoothConnected = remember(refreshTrigger) {
-            try {
-                if (bluetoothAdapter?.isEnabled == true) {
-                    bluetoothAdapter.bondedDevices?.any { device ->
-                        try {
-                            device.javaClass.getMethod("isConnected").invoke(device) as? Boolean ?: false
-                        } catch (e: Exception) {
-                            false
-                        }
-                    } ?: false
-                } else false
-            } catch (e: SecurityException) {
-                false
-            }
-        }
-
-        val isVpnConnected = remember(refreshTrigger) {
-            try {
-                val network = connectivityManager?.activeNetwork
-                val capabilities = network?.let { connectivityManager.getNetworkCapabilities(it) }
-                capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
-            } catch (e: Exception) {
-                false
-            }
+            context.registerReceiver(
+                receiver,
+                IntentFilter(BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED)
+            )
+            awaitDispose { context.unregisterReceiver(receiver) }
         }
 
         data class ConnectionInfo(
