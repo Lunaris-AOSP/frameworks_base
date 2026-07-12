@@ -653,17 +653,18 @@ class SystemIconsPopupController(
     private fun BatteryIndicatorCard() {
         val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
 
-        var batteryPercent by remember { mutableStateOf(
-            batteryManager?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: 87
-        ) }
-
-        LaunchedEffect(Unit) {
-            while (true) {
-                delay(2000)
-                batteryPercent = batteryManager?.getIntProperty(
-                    BatteryManager.BATTERY_PROPERTY_CAPACITY
-                ) ?: batteryPercent
+        val batteryPercent by produceState(
+            initialValue = batteryManager?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: 0
+        ) {
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(c: Context?, intent: Intent?) {
+                    val level = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: return
+                    val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+                    if (level >= 0 && scale > 0) value = level * 100 / scale
+                }
             }
+            context.registerReceiver(receiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            awaitDispose { context.unregisterReceiver(receiver) }
         }
 
         val animatedPercent by animateIntAsState(targetValue = batteryPercent, label = "battery")
