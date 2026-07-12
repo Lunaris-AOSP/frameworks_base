@@ -107,7 +107,6 @@ private constructor(
     private var extraEndDp = 0
 
     private var systemIconsPopupController: SystemIconsPopupController? = null
-    private var isPopupShowing = false
     private val vibrator = context.getSystemService(android.os.Vibrator::class.java)
 
     // Creates a [View.OnTouchListener] that only handles mouse click events.
@@ -247,10 +246,8 @@ private constructor(
             onShowPowerMenu = { globalActionsComponent.get().handleShowGlobalActionsMenu() }
         )
 
-        // Set up long click listener for system icons popup
         endSideContainer.setOnLongClickListener { toggleSystemIconsPopup() }
-        endSideContainer.isLongClickable = true
-        
+
         endSideContainer.setOnHoverListener(
             statusOverlayHoverListenerFactory.createDarkAwareListener(endSideContainer)
         )
@@ -298,29 +295,22 @@ private constructor(
         systemIconsPopupController?.let { controller ->
             if (controller.isShowing) {
                 controller.hidePopup()
-                isPopupShowing = false
             } else {
                 vibrator?.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
-
                 controller.showPopup(endSideContainer)
-                isPopupShowing = true
             }
         }
         return true
     }
-    
+
     @VisibleForTesting
     public override fun onViewDetached() {
-        if (isPopupShowing) {
-            systemIconsPopupController?.hidePopup()
-            isPopupShowing = false
-        }
+        systemIconsPopupController?.hidePopup()
         systemIconsPopupController = null
         tunerService.removeTunable(this)
         removeDarkReceivers()
         startSideContainer.setOnHoverListener(null)
         endSideContainer.setOnHoverListener(null)
-        endSideContainer.setOnClickListener(null)
         endSideContainer.setOnLongClickListener(null)
         progressProvider?.setReadyToHandleTransition(false)
         if (!ShadeWindowGoesAround.isEnabled) {
