@@ -59,6 +59,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -729,6 +730,8 @@ class SystemIconsPopupController(
 
         val strokeColor = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.3f)
         val fillColor = MaterialTheme.colorScheme.tertiary
+        val wavePath = remember { Path() }
+        val circlePath = remember { Path() }
 
         Box(
             modifier = Modifier.size(60.dp),
@@ -745,18 +748,18 @@ class SystemIconsPopupController(
                 )
 
                 val fillHeight = size.height * (percentage / 100f)
-                val wavePath = Path().apply {
+                wavePath.reset()
+                wavePath.apply {
                     val startY = size.height - fillHeight
                     val waveAmplitude = 3f
                     val waveLength = size.width / 2
 
                     moveTo(0f, startY)
 
-                    for (x in 0..size.width.toInt() step 1) {
+                    for (x in 0..size.width.toInt() step 4) {
                         val normalX = x / waveLength
                         val wave = waveAmplitude * sin((normalX * PI + waveOffset * 2 * PI).toFloat())
-                        val y = startY + wave
-                        lineTo(x.toFloat(), y)
+                        lineTo(x.toFloat(), startY + wave)
                     }
 
                     lineTo(size.width, size.height)
@@ -764,27 +767,22 @@ class SystemIconsPopupController(
                     close()
                 }
 
-                val circlePath = Path().apply {
-                    addOval(
-                        androidx.compose.ui.geometry.Rect(
-                            left = center.x - radius,
-                            top = center.y - radius,
-                            right = center.x + radius,
-                            bottom = center.y + radius
-                        )
+                circlePath.reset()
+                circlePath.addOval(
+                    androidx.compose.ui.geometry.Rect(
+                        left = center.x - radius,
+                        top = center.y - radius,
+                        right = center.x + radius,
+                        bottom = center.y + radius
+                    )
+                )
+
+                clipPath(circlePath) {
+                    drawPath(
+                        path = wavePath,
+                        color = fillColor
                     )
                 }
-
-                val clippedPath = Path.combine(
-                    operation = PathOperation.Intersect,
-                    path1 = circlePath,
-                    path2 = wavePath
-                )
-
-                drawPath(
-                    path = clippedPath,
-                    color = fillColor
-                )
             }
         }
     }
