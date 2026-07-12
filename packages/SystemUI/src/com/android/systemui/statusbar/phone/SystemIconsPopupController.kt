@@ -76,7 +76,6 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
-import com.android.systemui.globalactions.GlobalActionsDialogLite
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.*
@@ -84,7 +83,7 @@ import kotlin.math.*
 class SystemIconsPopupController(
     private val context: Context,
     private val windowManager: WindowManager,
-    private val globalActionsDialog: GlobalActionsDialogLite
+    private val onShowPowerMenu: () -> Unit
 ) {
     private var popupView: ComposeView? = null
     var isShowing = false
@@ -402,10 +401,7 @@ class SystemIconsPopupController(
                         IconButton(
                             onClick = {
                                 onDismiss()
-                                try {
-                                    globalActionsDialog.showOrHideDialog(false, true, null, 0)
-                                } catch (e: Exception) {
-                                }
+                                onShowPowerMenu()
                             },
                             modifier = Modifier.size(32.dp)
                         ) {
