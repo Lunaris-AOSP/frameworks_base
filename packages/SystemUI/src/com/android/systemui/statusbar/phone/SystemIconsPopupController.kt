@@ -82,9 +82,9 @@ import kotlin.math.*
 
 class SystemIconsPopupController(
     private val context: Context,
-    private val windowManager: WindowManager,
     private val onShowPowerMenu: () -> Unit
 ) {
+    private val windowManager = context.getSystemService(WindowManager::class.java)
     private var popupView: ComposeView? = null
     var isShowing = false
         private set
