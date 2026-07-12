@@ -28,7 +28,9 @@ import android.net.wifi.WifiManager
 import android.content.res.Configuration
 import android.os.BatteryManager
 import android.provider.Settings
+import android.telephony.SignalStrength
 import android.telephony.SubscriptionManager
+import android.telephony.TelephonyCallback
 import android.telephony.TelephonyManager
 import android.view.Gravity
 import android.view.MotionEvent
@@ -779,45 +781,57 @@ class SystemIconsPopupController(
         }
     }
 
+    private fun readActiveSubscriptions(subscriptionManager: SubscriptionManager?) =
+        try {
+            subscriptionManager?.activeSubscriptionInfoList ?: emptyList()
+        } catch (e: SecurityException) {
+            emptyList()
+        }
+
+    private fun readAirplaneModeOn(): Boolean =
+        try {
+            Settings.Global.getInt(context.contentResolver, Settings.Global.AIRPLANE_MODE_ON, 0) != 0
+        } catch (e: Exception) {
+            false
+        }
+
+    private fun networkTypeLabel(type: Int?): String =
+        when (type) {
+            TelephonyManager.NETWORK_TYPE_LTE -> "4G LTE"
+            TelephonyManager.NETWORK_TYPE_NR -> "5G"
+            TelephonyManager.NETWORK_TYPE_HSPAP,
+            TelephonyManager.NETWORK_TYPE_HSPA,
+            TelephonyManager.NETWORK_TYPE_HSDPA,
+            TelephonyManager.NETWORK_TYPE_HSUPA -> "3G"
+            TelephonyManager.NETWORK_TYPE_EDGE,
+            TelephonyManager.NETWORK_TYPE_GPRS -> "2G"
+            else -> "unknown"
+        }
+
     @Composable
     private fun NetworkSection() {
         val subscriptionManager = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? SubscriptionManager
         val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
 
-        var activeSubscriptions by remember { mutableStateOf(
-            try {
-                subscriptionManager?.activeSubscriptionInfoList ?: emptyList()
-            } catch (e: SecurityException) {
-                emptyList()
-            }
-        ) }
-
-        var isAirplaneModeOn by remember { mutableStateOf(
-            try {
-                Settings.Global.getInt(
-                    context.contentResolver,
-                    Settings.Global.AIRPLANE_MODE_ON, 0
-                ) != 0
-            } catch (e: Exception) {
-                false
-            }
-        ) }
-
-        LaunchedEffect(Unit) {
-            while (true) {
-                delay(3000)
-                activeSubscriptions = try {
-                    subscriptionManager?.activeSubscriptionInfoList ?: emptyList()
-                } catch (e: SecurityException) {
-                    emptyList()
-                }
-                isAirplaneModeOn = try {
-                    Settings.Global.getInt(context.contentResolver, Settings.Global.AIRPLANE_MODE_ON, 0) != 0
-                } catch (e: Exception) {
-                    false
+        val activeSubscriptions by produceState(initialValue = readActiveSubscriptions(subscriptionManager)) {
+            val listener = object : SubscriptionManager.OnSubscriptionsChangedListener() {
+                override fun onSubscriptionsChanged() {
+                    value = readActiveSubscriptions(subscriptionManager)
                 }
             }
-         }
+            subscriptionManager?.addOnSubscriptionsChangedListener(context.mainExecutor, listener)
+            awaitDispose { subscriptionManager?.removeOnSubscriptionsChangedListener(listener) }
+        }
+
+        val isAirplaneModeOn by produceState(initialValue = readAirplaneModeOn()) {
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(c: Context?, intent: Intent?) {
+                    value = readAirplaneModeOn()
+                }
+            }
+            context.registerReceiver(receiver, IntentFilter(Intent.ACTION_AIRPLANE_MODE_CHANGED))
+            awaitDispose { context.unregisterReceiver(receiver) }
+        }
 
         Column(
             modifier = Modifier.fillMaxSize(),
@@ -841,51 +855,43 @@ class SystemIconsPopupController(
             } else {
                 activeSubscriptions.take(2).forEachIndexed { index, subscription ->
                     val subId = subscription.subscriptionId
-                    var signalStrength by remember { mutableStateOf(
+                    val subTelephonyManager = remember(subId) {
+                        telephonyManager?.createForSubscriptionId(subId)
+                    }
+                    var signalStrength by remember(subId) { mutableStateOf(
                         try {
-                            val tm = telephonyManager?.createForSubscriptionId(subId)
-                            tm?.signalStrength?.level ?: 4
+                            subTelephonyManager?.signalStrength?.level ?: 4
                         } catch (e: Exception) {
                             0
                         }
                     ) }
 
-                    var networkType by remember { mutableStateOf(
+                    var networkType by remember(subId) { mutableStateOf(
                         try {
-                            val tm = telephonyManager?.createForSubscriptionId(subId)
-                            when (tm?.dataNetworkType) {
-                                TelephonyManager.NETWORK_TYPE_LTE -> "4G LTE"
-                                TelephonyManager.NETWORK_TYPE_NR -> "5G"
-                                TelephonyManager.NETWORK_TYPE_HSPAP,
-                                TelephonyManager.NETWORK_TYPE_HSPA,
-                                TelephonyManager.NETWORK_TYPE_HSDPA,
-                                TelephonyManager.NETWORK_TYPE_HSUPA -> "3G"
-                                TelephonyManager.NETWORK_TYPE_EDGE,
-                                TelephonyManager.NETWORK_TYPE_GPRS -> "2G"
-                                else -> "unknown"
-                            }
+                            networkTypeLabel(subTelephonyManager?.dataNetworkType)
                         } catch (e: Exception) {
                             "unknown"
                         }
                     ) }
 
-                    LaunchedEffect(subId) {
-                        while (true) {
-                            delay(500)
-                            try {
-                                val tm = telephonyManager?.createForSubscriptionId(subId)
-                                signalStrength = tm?.signalStrength?.level ?: signalStrength
-                                networkType = when (tm?.dataNetworkType) {
-                                    TelephonyManager.NETWORK_TYPE_LTE -> "4G LTE"
-                                    TelephonyManager.NETWORK_TYPE_NR -> "5G"
-                                    TelephonyManager.NETWORK_TYPE_HSPAP,
-                                    TelephonyManager.NETWORK_TYPE_HSPA,
-                                    TelephonyManager.NETWORK_TYPE_HSDPA,
-                                    TelephonyManager.NETWORK_TYPE_HSUPA -> "3G"
-                                    TelephonyManager.NETWORK_TYPE_EDGE,
-                                    TelephonyManager.NETWORK_TYPE_GPRS -> "2G"
-                                else -> "unknown"
+                    DisposableEffect(subTelephonyManager) {
+                        val callback = object : TelephonyCallback(),
+                            TelephonyCallback.SignalStrengthsListener,
+                            TelephonyCallback.DataConnectionStateListener {
+                            override fun onSignalStrengthsChanged(strength: SignalStrength) {
+                                signalStrength = strength.level
                             }
+
+                            override fun onDataConnectionStateChanged(state: Int, netType: Int) {
+                                networkType = networkTypeLabel(netType)
+                            }
+                        }
+                        try {
+                            subTelephonyManager?.registerTelephonyCallback(context.mainExecutor, callback)
+                        } catch (e: Exception) { }
+                        onDispose {
+                            try {
+                                subTelephonyManager?.unregisterTelephonyCallback(callback)
                             } catch (e: Exception) { }
                         }
                     }
