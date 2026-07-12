@@ -137,39 +137,7 @@ class SystemIconsPopupController(
             setViewTreeLifecycleOwner(lifecycleOwner)
             setViewTreeSavedStateRegistryOwner(lifecycleOwner)
             setContent {
-                val isDarkMode = (context.resources.configuration.uiMode and 
-                    Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-
-                val accentColor = Color(context.getColor(android.R.color.system_accent1_500))
-
-                val backgroundColor = if (isDarkMode) Color.Black else Color.White
-                val surfaceColor = if (isDarkMode) Color(0xFF1C1C1C) else Color(0xFFF5F5F5)
-                val onSurfaceColor = if (isDarkMode) Color.White.copy(alpha = 0.95f) else Color.Black.copy(alpha = 0.87f)
-                val surfaceVariant = if (isDarkMode) Color(0xFF1C1C1C) else Color(0xFFE8E8E8)
-                val onSurfaceVariant = if (isDarkMode) Color.White.copy(alpha = 0.85f) else Color.Black.copy(alpha = 0.75f)
-                
-                val customColorScheme = darkColorScheme(
-                    surface = backgroundColor,
-                    background = backgroundColor,
-                    primary = accentColor,
-                    onPrimary = Color.White,
-                    primaryContainer = accentColor.copy(alpha = 0.25f),
-                    onPrimaryContainer = accentColor,
-                    secondary = accentColor,
-                    onSecondary = Color.White,
-                    secondaryContainer = surfaceColor,
-                    onSecondaryContainer = onSurfaceColor,
-                    tertiary = accentColor.copy(alpha = 0.8f),
-                    onTertiary = Color.White,
-                    tertiaryContainer = surfaceColor,
-                    onTertiaryContainer = onSurfaceColor,
-                    surfaceVariant = surfaceVariant,
-                    onSurfaceVariant = onSurfaceVariant,
-                    onSurface = onSurfaceColor,
-                    outline = onSurfaceColor.copy(alpha = 0.2f)
-                )
-                
-                MaterialTheme(colorScheme = customColorScheme) {
+                PopupTheme {
                     PopupContent(onDismiss = { hidePopup(anchorView) }, anchorView = anchorView)
                 }
             }
@@ -213,37 +181,7 @@ class SystemIconsPopupController(
             if (anchorView != null) {
                 (popupView as? ComposeView)?.let { view ->
                     view.setContent {
-                        val isDarkMode = (context.resources.configuration.uiMode and 
-                            Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-                        val accentColor = Color(context.getColor(android.R.color.system_accent1_500))
-                        val backgroundColor = if (isDarkMode) Color.Black else Color.White
-                        val surfaceColor = if (isDarkMode) Color(0xFF1C1C1C) else Color(0xFFF5F5F5)
-                        val onSurfaceColor = if (isDarkMode) Color.White.copy(alpha = 0.95f) else Color.Black.copy(alpha = 0.87f)
-                        val surfaceVariant = if (isDarkMode) Color(0xFF1C1C1C) else Color(0xFFE8E8E8)
-                        val onSurfaceVariant = if (isDarkMode) Color.White.copy(alpha = 0.85f) else Color.Black.copy(alpha = 0.75f)
-                        
-                        val customColorScheme = darkColorScheme(
-                            surface = backgroundColor,
-                            background = backgroundColor,
-                            primary = accentColor,
-                            onPrimary = Color.White,
-                            primaryContainer = accentColor.copy(alpha = 0.25f),
-                            onPrimaryContainer = accentColor,
-                            secondary = accentColor,
-                            onSecondary = Color.White,
-                            secondaryContainer = surfaceColor,
-                            onSecondaryContainer = onSurfaceColor,
-                            tertiary = accentColor.copy(alpha = 0.8f),
-                            onTertiary = Color.White,
-                            tertiaryContainer = surfaceColor,
-                            onTertiaryContainer = onSurfaceColor,
-                            surfaceVariant = surfaceVariant,
-                            onSurfaceVariant = onSurfaceVariant,
-                            onSurface = onSurfaceColor,
-                            outline = onSurfaceColor.copy(alpha = 0.2f)
-                        )
-                        
-                        MaterialTheme(colorScheme = customColorScheme) {
+                        PopupTheme {
                             DismissAnimationContent(anchorView = anchorView) {
                                 actuallyHidePopup()
                             }
@@ -268,6 +206,43 @@ class SystemIconsPopupController(
             lifecycleOwner = null
             isShowing = false
         }
+    }
+
+    @Composable
+    private fun PopupTheme(content: @Composable () -> Unit) {
+        val isDarkMode = (context.resources.configuration.uiMode and
+            Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+
+        val accentColor = Color(context.getColor(android.R.color.system_accent1_500))
+
+        val backgroundColor = if (isDarkMode) Color.Black else Color.White
+        val surfaceColor = if (isDarkMode) Color(0xFF1C1C1C) else Color(0xFFF5F5F5)
+        val onSurfaceColor = if (isDarkMode) Color.White.copy(alpha = 0.95f) else Color.Black.copy(alpha = 0.87f)
+        val surfaceVariant = if (isDarkMode) Color(0xFF1C1C1C) else Color(0xFFE8E8E8)
+        val onSurfaceVariant = if (isDarkMode) Color.White.copy(alpha = 0.85f) else Color.Black.copy(alpha = 0.75f)
+
+        val customColorScheme = darkColorScheme(
+            surface = backgroundColor,
+            background = backgroundColor,
+            primary = accentColor,
+            onPrimary = Color.White,
+            primaryContainer = accentColor.copy(alpha = 0.25f),
+            onPrimaryContainer = accentColor,
+            secondary = accentColor,
+            onSecondary = Color.White,
+            secondaryContainer = surfaceColor,
+            onSecondaryContainer = onSurfaceColor,
+            tertiary = accentColor.copy(alpha = 0.8f),
+            onTertiary = Color.White,
+            tertiaryContainer = surfaceColor,
+            onTertiaryContainer = onSurfaceColor,
+            surfaceVariant = surfaceVariant,
+            onSurfaceVariant = onSurfaceVariant,
+            onSurface = onSurfaceColor,
+            outline = onSurfaceColor.copy(alpha = 0.2f)
+        )
+
+        MaterialTheme(colorScheme = customColorScheme, content = content)
     }
 
     @Composable
