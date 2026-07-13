@@ -126,8 +126,10 @@ public class FontController {
             "japanese3017",
             "montserrat_bold",
             "ntype82",
+            "polyline",
             "samsung7",
             "slim",
+            "spaceage",
             "subway",
             "tallclock"
     ));
