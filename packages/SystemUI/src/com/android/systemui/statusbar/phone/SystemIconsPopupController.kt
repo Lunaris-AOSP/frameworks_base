@@ -52,6 +52,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -81,7 +83,10 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlin.math.*
 
@@ -502,13 +507,13 @@ class SystemIconsPopupController(
         var isBluetoothEnabled by remember { mutableStateOf(bluetoothAdapter?.isEnabled ?: false) }
         var isLocationEnabled by remember {
             mutableStateOf(
-                try {
-                    locationManager?.isLocationEnabled ?: false
-                } catch (e: Exception) {
-                    false
-                }
+                try { locationManager?.isLocationEnabled ?: false } catch (e: Exception) { false }
             )
         }
+
+        var wifiToggleCount by remember { mutableStateOf(0) }
+        var btToggleCount by remember { mutableStateOf(0) }
+        var locationToggleCount by remember { mutableStateOf(0) }
 
         Row(
             modifier = Modifier
@@ -520,8 +525,10 @@ class SystemIconsPopupController(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.Wifi,
                 isEnabled = isWifiEnabled,
+                toggleCount = wifiToggleCount,
                 onToggle = {
                     isWifiEnabled = !isWifiEnabled
+                    wifiToggleCount++
                     try {
                         wifiManager?.isWifiEnabled = isWifiEnabled
                     } catch (e: Exception) {
@@ -543,8 +550,10 @@ class SystemIconsPopupController(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.Bluetooth,
                 isEnabled = isBluetoothEnabled,
+                toggleCount = btToggleCount,
                 onToggle = {
                     isBluetoothEnabled = !isBluetoothEnabled
+                    btToggleCount++
                     try {
                         if (isBluetoothEnabled) bluetoothAdapter?.enable()
                         else bluetoothAdapter?.disable()
@@ -567,8 +576,10 @@ class SystemIconsPopupController(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.LocationOn,
                 isEnabled = isLocationEnabled,
+                toggleCount = locationToggleCount,
                 onToggle = {
                     isLocationEnabled = !isLocationEnabled
+                    locationToggleCount++
                     try {
                         locationManager?.setLocationEnabledForUser(
                             isLocationEnabled,
@@ -597,6 +608,7 @@ class SystemIconsPopupController(
         modifier: Modifier = Modifier,
         icon: androidx.compose.ui.graphics.vector.ImageVector,
         isEnabled: Boolean,
+        toggleCount: Int,
         onToggle: () -> Unit,
         onLongPress: () -> Unit
     ) {
@@ -612,6 +624,7 @@ class SystemIconsPopupController(
         Box(
             modifier = modifier
                 .fillMaxHeight()
+                .squishAnimation(toggleCount)
                 .clip(RoundedCornerShape(cornerRadius))
                 .background(
                     if (isEnabled) {
@@ -631,7 +644,7 @@ class SystemIconsPopupController(
                 imageVector = icon,
                 contentDescription = null,
                 tint = if (isEnabled) MaterialTheme.colorScheme.onPrimaryContainer 
-                       else MaterialTheme.colorScheme.onSurfaceVariant,
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(20.dp)
             )
         }
@@ -1182,6 +1195,49 @@ class SystemIconsPopupController(
 
         fun moveToState(state: Lifecycle.State) {
             lifecycleRegistry.currentState = state
+        }
+    }
+
+    @Composable
+    private fun Modifier.squishAnimation(toggleCount: Int): Modifier {
+        val scaleX = remember { Animatable(1f, visibilityThreshold = 0.01f) }
+        val scaleY = remember { Animatable(1f, visibilityThreshold = 0.01f) }
+        val currentToggleCount by rememberUpdatedState(toggleCount)
+        LaunchedEffect(Unit) {
+            snapshotFlow { currentToggleCount }
+                .drop(1)
+                .collectLatest {
+                    scaleX.snapTo(1f)
+                    scaleY.snapTo(1f)
+                    coroutineScope {
+                        launch {
+                            scaleX.animateTo(
+                                targetValue = 1f,
+                                animationSpec = keyframes {
+                                    durationMillis = 400
+                                    1.066f at 120 using FastOutSlowInEasing
+                                    0.967f at 260
+                                    1f at 400
+                                },
+                            )
+                        }
+                        launch {
+                            scaleY.animateTo(
+                                targetValue = 1f,
+                                animationSpec = keyframes {
+                                    durationMillis = 400
+                                    0.945f at 120 using FastOutSlowInEasing
+                                    1.033f at 260
+                                    1f at 400
+                                },
+                            )
+                        }
+                    }
+                }
+        }
+        return this.graphicsLayer {
+            this.scaleX = scaleX.value
+            this.scaleY = scaleY.value
         }
     }
 }
