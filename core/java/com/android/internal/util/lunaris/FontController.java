@@ -77,6 +77,7 @@ public class FontController {
             // Clock fonts
             "Ayame",
             "Badeen",
+            "Big-clock6",
             "BR_SC",
             "Bebas",
             "Blackout",
