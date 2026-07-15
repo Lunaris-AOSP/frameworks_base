@@ -40,6 +40,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import androidx.compose.animation.core.*
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -654,21 +655,36 @@ class SystemIconsPopupController(
     private fun BatteryIndicatorCard() {
         val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
 
-        val batteryPercent by produceState(
-            initialValue = batteryManager?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: 0
+        data class BatteryState(val percent: Int, val isCharging: Boolean)
+
+        val batteryState by produceState(
+            initialValue = BatteryState(
+                percent = batteryManager?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: 0,
+                isCharging = batteryManager?.isCharging ?: false
+            )
         ) {
             val receiver = object : BroadcastReceiver() {
                 override fun onReceive(c: Context?, intent: Intent?) {
                     val level = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: return
                     val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
-                    if (level >= 0 && scale > 0) value = level * 100 / scale
+                    val status = intent.getIntExtra(
+                        BatteryManager.EXTRA_STATUS,
+                        BatteryManager.BATTERY_STATUS_UNKNOWN
+                    )
+                    val charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                        status == BatteryManager.BATTERY_STATUS_FULL &&
+                            intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
+                    if (level >= 0 && scale > 0) {
+                        value = BatteryState(percent = level * 100 / scale, isCharging = charging)
+                    }
                 }
             }
             context.registerReceiver(receiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
             awaitDispose { context.unregisterReceiver(receiver) }
         }
 
-        val animatedPercent by animateIntAsState(targetValue = batteryPercent, label = "battery")
+        val animatedPercent by animateIntAsState(targetValue = batteryState.percent, label = "battery")
+        val isCharging = batteryState.isCharging
 
         Surface(
             modifier = Modifier
@@ -687,26 +703,39 @@ class SystemIconsPopupController(
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = "Battery",
+                        text = if (isCharging) "Charging" else "Battery",
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium
                     )
-                    Text(
-                        text = "$animatedPercent%",
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = "$animatedPercent%",
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        if (isCharging) {
+                            Icon(
+                                imageVector = Icons.Default.Bolt,
+                                contentDescription = "Charging",
+                                tint = BatteryChargingColor,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
                 }
 
-                CircleBattery(animatedPercent)
+                CircleBattery(percentage = animatedPercent, isCharging = isCharging)
             }
         }
     }
 
     @Composable
-    private fun CircleBattery(percentage: Int) {
+    private fun CircleBattery(percentage: Int, isCharging: Boolean) {
         val infiniteTransition = rememberInfiniteTransition(label = "battery")
         val waveOffset by infiniteTransition.animateFloat(
             initialValue = 0f,
@@ -719,7 +748,12 @@ class SystemIconsPopupController(
         )
 
         val strokeColor = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.3f)
-        val fillColor = MaterialTheme.colorScheme.tertiary
+        val fillColor by animateColorAsState(
+            targetValue = if (isCharging) BatteryChargingColor 
+                else MaterialTheme.colorScheme.tertiary,
+            animationSpec = tween(400),
+            label = "batteryFillColor"
+        )
         val wavePath = remember { Path() }
         val circlePath = remember { Path() }
 
@@ -775,6 +809,10 @@ class SystemIconsPopupController(
                 }
             }
         }
+    }
+
+    private companion object {
+        private val BatteryChargingColor = Color(0xFF2ECC71)
     }
 
     private fun readActiveSubscriptions(subscriptionManager: SubscriptionManager?) =
