@@ -312,4 +312,7 @@
     <string name="usb_mode_webcam">USB Webcam</string>
     <string name="usb_mode_charging_only">Charging only</string>
     <string name="usb_charging_status">USB charging is on</string>
+
+    <!-- Toast shown when the memory clean quick tile is tapped -->
+    <string name="quick_settings_memory_cleaned_toast">Memory cleaned</string>
 </resources>
