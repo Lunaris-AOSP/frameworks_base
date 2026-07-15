@@ -15,6 +15,7 @@
  */
 package com.android.systemui.statusbar.phone
 
+import android.graphics.Bitmap
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.content.Context
@@ -46,6 +47,7 @@ import android.widget.Toast
 import androidx.compose.animation.core.*
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -57,6 +59,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.runtime.*
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
@@ -91,6 +94,8 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.android.systemui.res.R
+import com.android.systemui.qs.panels.ui.compose.SharedMediaState
+import com.android.systemui.qs.panels.ui.compose.rememberMediaState
 import com.android.systemui.util.MemoryUtils
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -382,7 +387,12 @@ class SystemIconsPopupController(
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 QuickTogglesSection(onDismiss = onDismiss)
-                                BatteryIndicatorCard(onDismiss = onDismiss)
+                                val mediaState = rememberMediaState()
+                                if (mediaState.controller != null) {
+                                    MediaControlCard(mediaState = mediaState)
+                                } else {
+                                    BatteryIndicatorCard(onDismiss = onDismiss)
+                                }
                             }
 
                             Box(
@@ -858,6 +868,123 @@ class SystemIconsPopupController(
 
                 CircleBattery(percentage = animatedPercent, isCharging = isCharging)
             }
+        }
+    }
+
+    @Composable
+    private fun MediaControlCard(mediaState: SharedMediaState) {
+        val controller = mediaState.controller
+        val haptic = LocalHapticFeedback.current
+
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            tonalElevation = 1.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(14.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        MarqueeText(
+                            text = mediaState.title ?: "Unknown",
+                            style = TextStyle(
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        )
+                        MarqueeText(
+                            text = mediaState.artist ?: "",
+                            style = TextStyle(
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        )
+                    }
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        MediaControlButton(
+                            icon = Icons.Default.SkipPrevious,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+                                try { controller?.transportControls?.skipToPrevious() } catch (e: Exception) {}
+                            }
+                        )
+                        MediaControlButton(
+                            icon = if (mediaState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+                                try {
+                                    if (mediaState.isPlaying) controller?.transportControls?.pause()
+                                    else controller?.transportControls?.play()
+                                } catch (e: Exception) {}
+                            }
+                        )
+                        MediaControlButton(
+                            icon = Icons.Default.SkipNext,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+                                try { controller?.transportControls?.skipToNext() } catch (e: Exception) {}
+                            }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                Surface(
+                    modifier = Modifier.size(60.dp),
+                    shape = RoundedCornerShape(18.dp), // squircle-ish, not full circle
+                    color = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    val art = mediaState.albumArt
+                    if (art != null) {
+                        Image(
+                            bitmap = art.asImageBitmap(),
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                            Icon(
+                                imageVector = Icons.Default.MusicNote,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun MediaControlButton(icon: ImageVector, onClick: () -> Unit) {
+        IconButton(onClick = onClick, modifier = Modifier.size(28.dp)) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 
