@@ -7248,6 +7248,11 @@ public final class Settings {
         public static final String STATUSBAR_EXTRA_PADDING_END = "statusbar_extra_padding_end";
 
         /**
+         * @hide
+         */
+        public static final String STATUSBAR_SYSTEM_ICONS_POPUP_ENABLED = "statusbar_system_icons_popup_enabled";
+
+        /**
          * Whether to use the custom status bar header or not
          * @hide
          */
