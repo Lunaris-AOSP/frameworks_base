@@ -270,6 +270,7 @@ private constructor(
 
     private fun addCursorSupportToIconContainers() {
         endSideContainer = mView.requireViewById(R.id.system_icons)
+        endSideContainer.isLongClickable = false
         
         systemIconsPopupController = SystemIconsPopupController(
             context = context,
@@ -315,6 +316,7 @@ private constructor(
             endSideContainer.setOnLongClickListener { toggleSystemIconsPopup() }
         } else {
             endSideContainer.setOnLongClickListener(null)
+            endSideContainer.isLongClickable = false
             systemIconsPopupController?.let { if (it.isShowing) it.hidePopup() }
         }
     }
@@ -352,6 +354,7 @@ private constructor(
         startSideContainer.setOnHoverListener(null)
         endSideContainer.setOnHoverListener(null)
         endSideContainer.setOnLongClickListener(null)
+        endSideContainer.isLongClickable = false
         progressProvider?.setReadyToHandleTransition(false)
         if (!ShadeWindowGoesAround.isEnabled) {
             configurationController.removeCallback(configurationListener)
