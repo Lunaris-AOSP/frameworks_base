@@ -23,13 +23,16 @@ import android.content.IntentFilter
 import android.content.BroadcastReceiver
 import android.content.Intent.ACTION_SCREEN_OFF
 import android.graphics.PixelFormat
+import android.hardware.display.ColorDisplayManager
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
 import android.content.res.Configuration
 import android.os.BatteryManager
+import android.os.UserHandle
 import android.provider.Settings
 import android.telephony.SignalStrength
 import android.telephony.SubscriptionManager
@@ -39,6 +42,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.compose.animation.core.*
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Canvas
@@ -63,6 +67,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -84,6 +89,8 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.android.systemui.res.R
+import com.android.systemui.util.MemoryUtils
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -253,6 +260,30 @@ class SystemIconsPopupController(
         MaterialTheme(colorScheme = customColorScheme, content = content)
     }
 
+    private fun openSettingsAction(action: String, onDismiss: () -> Unit) {
+        try {
+            val intent = Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            onDismiss()
+        } catch (e: Exception) {
+        }
+    }
+
+    private fun setAirplaneMode(enabled: Boolean) {
+        try {
+            Settings.Global.putInt(
+                context.contentResolver,
+                Settings.Global.AIRPLANE_MODE_ON,
+                if (enabled) 1 else 0
+            )
+            val intent = Intent(Intent.ACTION_AIRPLANE_MODE_CHANGED).apply {
+                putExtra("state", enabled)
+            }
+            context.sendBroadcastAsUser(intent, UserHandle.ALL)
+        } catch (e: Exception) {
+        }
+    }
+
     @Composable
     private fun PopupContent(onDismiss: () -> Unit, anchorView: View) {
         val scale = remember { Animatable(0.7f) }
@@ -315,7 +346,7 @@ class SystemIconsPopupController(
                 Box(
                     modifier = Modifier
                         .width(380.dp)
-                        .height(190.dp)
+                        .height(230.dp)
                         .pointerInput(Unit) { detectTapGestures { /* Prevent dismiss */ } }
                 ) {
                     Surface(
@@ -472,7 +503,7 @@ class SystemIconsPopupController(
                 Box(
                     modifier = Modifier
                         .width(380.dp)
-                        .height(190.dp)
+                        .height(230.dp)
                 ) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
@@ -502,6 +533,7 @@ class SystemIconsPopupController(
         val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
         val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
         val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
+        val colorDisplayManager = context.getSystemService(ColorDisplayManager::class.java)
         val haptic = LocalHapticFeedback.current
 
         var isWifiEnabled by remember { mutableStateOf(wifiManager?.isWifiEnabled ?: false) }
@@ -511,95 +543,154 @@ class SystemIconsPopupController(
                 try { locationManager?.isLocationEnabled ?: false } catch (e: Exception) { false }
             )
         }
+        var isAirplaneModeEnabled by remember { mutableStateOf(readAirplaneModeOn()) }
+        var isExtraDimEnabled by remember {
+            mutableStateOf(
+                try { colorDisplayManager?.isReduceBrightColorsActivated ?: false } catch (e: Exception) { false }
+            )
+        }
 
         var wifiToggleCount by remember { mutableStateOf(0) }
         var btToggleCount by remember { mutableStateOf(0) }
         var locationToggleCount by remember { mutableStateOf(0) }
+        var airplaneToggleCount by remember { mutableStateOf(0) }
+        var extraDimToggleCount by remember { mutableStateOf(0) }
+        var memoryCleanToggleCount by remember { mutableStateOf(0) }
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            ShapeMorphingToggle(
-                modifier = Modifier.weight(1f),
-                icon = Icons.Default.Wifi,
-                isEnabled = isWifiEnabled,
-                toggleCount = wifiToggleCount,
-                onToggle = {
-                    isWifiEnabled = !isWifiEnabled
-                    wifiToggleCount++
-                    try {
-                        wifiManager?.isWifiEnabled = isWifiEnabled
-                    } catch (e: Exception) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ShapeMorphingToggle(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Default.Wifi,
+                    isEnabled = isWifiEnabled,
+                    toggleCount = wifiToggleCount,
+                    onToggle = {
+                        isWifiEnabled = !isWifiEnabled
+                        wifiToggleCount++
+                        try {
+                            wifiManager?.isWifiEnabled = isWifiEnabled
+                        } catch (e: Exception) {
+                        }
+                    },
+                    onLongPress = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        openSettingsAction(Settings.ACTION_WIFI_SETTINGS, onDismiss)
                     }
-                },
-                onLongPress = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    try {
-                        val intent = Intent(Settings.ACTION_WIFI_SETTINGS)
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        context.startActivity(intent)
-                        onDismiss()
-                    } catch (e: Exception) {
+                )
+
+                ShapeMorphingToggle(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Default.Bluetooth,
+                    isEnabled = isBluetoothEnabled,
+                    toggleCount = btToggleCount,
+                    onToggle = {
+                        isBluetoothEnabled = !isBluetoothEnabled
+                        btToggleCount++
+                        try {
+                            if (isBluetoothEnabled) bluetoothAdapter?.enable()
+                            else bluetoothAdapter?.disable()
+                        } catch (e: SecurityException) {
+                        }
+                    },
+                    onLongPress = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        openSettingsAction(Settings.ACTION_BLUETOOTH_SETTINGS, onDismiss)
                     }
-                }
-            )
+                )
 
             ShapeMorphingToggle(
-                modifier = Modifier.weight(1f),
-                icon = Icons.Default.Bluetooth,
-                isEnabled = isBluetoothEnabled,
-                toggleCount = btToggleCount,
-                onToggle = {
-                    isBluetoothEnabled = !isBluetoothEnabled
-                    btToggleCount++
-                    try {
-                        if (isBluetoothEnabled) bluetoothAdapter?.enable()
-                        else bluetoothAdapter?.disable()
-                    } catch (e: SecurityException) {
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Default.LocationOn,
+                    isEnabled = isLocationEnabled,
+                    toggleCount = locationToggleCount,
+                    onToggle = {
+                        isLocationEnabled = !isLocationEnabled
+                        locationToggleCount++
+                        try {
+                            locationManager?.setLocationEnabledForUser(
+                                isLocationEnabled,
+                                android.os.Process.myUserHandle()
+                            )
+                        } catch (e: Exception) {
+                        }
+                    },
+                    onLongPress = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        openSettingsAction(Settings.ACTION_LOCATION_SOURCE_SETTINGS, onDismiss)
                     }
-                },
-                onLongPress = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    try {
-                        val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        context.startActivity(intent)
-                        onDismiss()
-                    } catch (e: Exception) {
-                    }
-                }
-            )
+                )
+            }
 
-            ShapeMorphingToggle(
-                modifier = Modifier.weight(1f),
-                icon = Icons.Default.LocationOn,
-                isEnabled = isLocationEnabled,
-                toggleCount = locationToggleCount,
-                onToggle = {
-                    isLocationEnabled = !isLocationEnabled
-                    locationToggleCount++
-                    try {
-                        locationManager?.setLocationEnabledForUser(
-                            isLocationEnabled,
-                            android.os.Process.myUserHandle()
-                        )
-                    } catch (e: Exception) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ShapeMorphingToggle(
+                    modifier = Modifier.weight(1f),
+                    icon = if (isAirplaneModeEnabled) Icons.Default.AirplanemodeActive
+                           else Icons.Default.AirplanemodeInactive,
+                    isEnabled = isAirplaneModeEnabled,
+                    toggleCount = airplaneToggleCount,
+                    onToggle = {
+                        isAirplaneModeEnabled = !isAirplaneModeEnabled
+                        airplaneToggleCount++
+                        setAirplaneMode(isAirplaneModeEnabled)
+                    },
+                    onLongPress = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        openSettingsAction(Settings.ACTION_WIRELESS_SETTINGS, onDismiss)
                     }
-                },
-                onLongPress = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    try {
-                        val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        context.startActivity(intent)
-                        onDismiss()
-                    } catch (e: Exception) {
+                )
+
+                ShapeMorphingToggle(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Default.Brightness4,
+                    isEnabled = isExtraDimEnabled,
+                    toggleCount = extraDimToggleCount,
+                    onToggle = {
+                        isExtraDimEnabled = !isExtraDimEnabled
+                        extraDimToggleCount++
+                        try {
+                            colorDisplayManager?.setReduceBrightColorsActivated(isExtraDimEnabled)
+                        } catch (e: Exception) {
+                        }
+                    },
+                    onLongPress = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        openSettingsAction(Settings.ACTION_DISPLAY_SETTINGS, onDismiss)
                     }
-                }
-            )
+                )
+
+                ShapeMorphingToggle(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Default.CleaningServices,
+                    isEnabled = false,
+                    toggleCount = memoryCleanToggleCount,
+                    onToggle = {
+                        memoryCleanToggleCount++
+                        try {
+                            MemoryUtils.releaseMemory()
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.quick_settings_memory_cleaned_toast),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        } catch (e: Exception) {
+                        }
+                    },
+                    onLongPress = { }
+                )
+            }
         }
     }
 
@@ -607,7 +698,7 @@ class SystemIconsPopupController(
     @Composable
     private fun ShapeMorphingToggle(
         modifier: Modifier = Modifier,
-        icon: androidx.compose.ui.graphics.vector.ImageVector,
+        icon: ImageVector,
         isEnabled: Boolean,
         toggleCount: Int,
         onToggle: () -> Unit,
@@ -822,11 +913,52 @@ class SystemIconsPopupController(
             emptyList()
         }
 
+    private fun sanitizeSsid(rawSsid: String?): String {
+        if (rawSsid.isNullOrEmpty() || rawSsid == WifiManager.UNKNOWN_SSID) return "Connected"
+        return rawSsid.removeSurrounding("\"")
+    }
+
+    private data class WifiConnectionInfo(val ssid: String, val level: Int)
+
     private fun readAirplaneModeOn(): Boolean =
         try {
             Settings.Global.getInt(context.contentResolver, Settings.Global.AIRPLANE_MODE_ON, 0) != 0
         } catch (e: Exception) {
             false
+        }
+
+    @Composable
+    private fun wifiConnectionState(connectivityManager: ConnectivityManager?): State<WifiConnectionInfo?> =
+        produceState<WifiConnectionInfo?>(initialValue = null, connectivityManager) {
+            if (connectivityManager == null) return@produceState
+            val callback = object : ConnectivityManager.NetworkCallback(
+                ConnectivityManager.NetworkCallback.FLAG_INCLUDE_LOCATION_INFO
+            ) {
+                override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
+                    val info = capabilities.transportInfo as? WifiInfo
+                    value = if (info != null && capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                        WifiConnectionInfo(
+                            ssid = sanitizeSsid(info.ssid),
+                            level = WifiManager.calculateSignalLevel(info.rssi, 5)
+                        )
+                    } else null
+                }
+
+                override fun onLost(network: Network) {
+                    value = null
+                }
+            }
+            try {
+                connectivityManager.registerNetworkCallback(
+                    NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).build(),
+                    callback
+                )
+            } catch (e: Exception) {
+                return@produceState
+            }
+            awaitDispose {
+                try { connectivityManager.unregisterNetworkCallback(callback) } catch (e: Exception) { }
+            }
         }
 
     private fun networkTypeLabel(type: Int?): String =
@@ -962,6 +1094,17 @@ class SystemIconsPopupController(
             false
         }
 
+    private fun connectedBluetoothDeviceName(adapter: BluetoothAdapter?): String? =
+        try {
+            if (adapter?.isEnabled == true) {
+                adapter.bondedDevices?.firstOrNull { device ->
+                    bluetoothIsConnectedMethod?.invoke(device) as? Boolean ?: false
+                }?.name
+            } else null
+        } catch (e: Exception) {
+            null
+        }
+
     @Composable
     private fun transportConnectedState(
         connectivityManager: ConnectivityManager?,
@@ -1000,15 +1143,15 @@ class SystemIconsPopupController(
         val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
         val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
 
-        val isWifiConnected by transportConnectedState(connectivityManager, NetworkCapabilities.TRANSPORT_WIFI)
+        val wifiInfo by wifiConnectionState(connectivityManager)
         val isVpnConnected by transportConnectedState(connectivityManager, NetworkCapabilities.TRANSPORT_VPN)
 
-        val isBluetoothConnected by produceState(
-            initialValue = isAnyBluetoothDeviceConnected(bluetoothAdapter)
+        val connectedDeviceName by produceState(
+            initialValue = connectedBluetoothDeviceName(bluetoothAdapter)
         ) {
             val receiver = object : BroadcastReceiver() {
                 override fun onReceive(c: Context?, intent: Intent?) {
-                    value = isAnyBluetoothDeviceConnected(bluetoothAdapter)
+                    value = connectedBluetoothDeviceName(bluetoothAdapter)
                 }
             }
             context.registerReceiver(
@@ -1019,13 +1162,14 @@ class SystemIconsPopupController(
         }
 
         data class ConnectionInfo(
-            val icon: androidx.compose.ui.graphics.vector.ImageVector
+            val icon: ImageVector,
+            val label: String
         )
 
         val connections = mutableListOf<ConnectionInfo>()
-        if (isWifiConnected) connections.add(ConnectionInfo(Icons.Default.Wifi))
-        if (isBluetoothConnected) connections.add(ConnectionInfo(Icons.Default.Bluetooth))
-        if (isVpnConnected) connections.add(ConnectionInfo(Icons.Default.VpnKey))
+        wifiInfo?.let { connections.add(ConnectionInfo(Icons.Default.Wifi, it.ssid)) }
+        connectedDeviceName?.let { connections.add(ConnectionInfo(Icons.Default.Bluetooth, it)) }
+        if (isVpnConnected) connections.add(ConnectionInfo(Icons.Default.VpnKey, "VPN connected"))
 
         if (connections.isNotEmpty()) {
             Surface(
@@ -1036,20 +1180,33 @@ class SystemIconsPopupController(
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 tonalElevation = 1.dp
             ) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 8.dp, horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     connections.forEach { conn ->
-                        Icon(
-                            imageVector = conn.icon,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = conn.icon,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            MarqueeText(
+                                text = conn.label,
+                                style = TextStyle(
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium
+                                ),
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
                 }
             }
@@ -1061,7 +1218,7 @@ class SystemIconsPopupController(
         label: String,
         sublabel: String,
         strength: Int,
-        icon: androidx.compose.ui.graphics.vector.ImageVector
+        icon: ImageVector
     ) {
         Surface(
             modifier = Modifier
