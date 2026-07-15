@@ -795,7 +795,7 @@ class SystemIconsPopupController(
                 }
             },
             shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.secondaryContainer,
+            color = MaterialTheme.colorScheme.surfaceVariant,
             tonalElevation = 1.dp
         ) {
             Row(
