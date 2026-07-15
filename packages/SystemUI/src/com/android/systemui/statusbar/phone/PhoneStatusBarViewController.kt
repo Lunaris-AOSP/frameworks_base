@@ -16,6 +16,10 @@
 package com.android.systemui.statusbar.phone
 
 import android.app.StatusBarManager.WINDOW_STATUS_BAR
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.provider.Settings
 import android.util.Log
 import android.view.Display.DEFAULT_DISPLAY
@@ -109,6 +113,20 @@ private constructor(
 
     private var systemIconsPopupController: SystemIconsPopupController? = null
     private val vibrator = context.getSystemService(android.os.Vibrator::class.java)
+
+    private val systemPopupGestureReceiver =
+        object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action != ACTION_SHOW_SYSTEM_ICONS_POPUP) return
+
+                val atBottom = intent.getBooleanExtra(EXTRA_AT_BOTTOM, true)
+
+                systemIconsPopupController?.showPopup(
+                    endSideContainer,
+                    atBottom = atBottom,
+                )
+            }
+        }
 
     // Creates a [View.OnTouchListener] that only handles mouse click events.
     private fun createMouseClickListener(onClick: () -> Unit): View.OnTouchListener =
@@ -224,6 +242,12 @@ private constructor(
         tunerService.addTunable(this, STATUSBAR_EXTRA_PADDING_TOP)
         tunerService.addTunable(this, STATUSBAR_EXTRA_PADDING_END)
         tunerService.addTunable(this, STATUSBAR_SYSTEM_ICONS_POPUP_ENABLED)
+
+        context.registerReceiver(
+            systemPopupGestureReceiver,
+            IntentFilter(ACTION_SHOW_SYSTEM_ICONS_POPUP),
+            Context.RECEIVER_NOT_EXPORTED,
+        )
     }
 
     override fun onTuningChanged(key: String?, newValue: String?) {
@@ -332,6 +356,7 @@ private constructor(
         if (!ShadeWindowGoesAround.isEnabled) {
             configurationController.removeCallback(configurationListener)
         }
+        context.unregisterReceiver(systemPopupGestureReceiver)
     }
 
     init {
@@ -520,6 +545,9 @@ private constructor(
     }
 
     private companion object {
+        private const val ACTION_SHOW_SYSTEM_ICONS_POPUP =
+            "com.android.systemui.action.SHOW_SYSTEM_ICONS_POPUP"
+        private const val EXTRA_AT_BOTTOM = "at_bottom"
         private const val STATUSBAR_EXTRA_PADDING_START =
             "system:" + Settings.System.STATUSBAR_EXTRA_PADDING_START
         private const val STATUSBAR_EXTRA_PADDING_TOP =
