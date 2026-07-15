@@ -7970,6 +7970,11 @@ public final class Settings {
         public static final String QS_TILE_ANIMATION_STYLE = "qs_tile_animation_style";
 
         /**
+         * @hide
+         */
+        public static final String QS_SPLIT_NOTIFICATION = "qs_split_notification";
+
+        /**
          * Whether to control brightness from status bar
          * 0 = 0ff, 1 = on
          * @hide
