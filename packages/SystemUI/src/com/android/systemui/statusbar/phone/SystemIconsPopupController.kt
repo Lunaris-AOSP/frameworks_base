@@ -783,17 +783,17 @@ class SystemIconsPopupController(
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight()
-                .clickable {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    try {
-                        val intent = Intent(Intent.ACTION_POWER_USAGE_SUMMARY)
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        context.startActivity(intent)
-                        onDismiss()
-                    } catch (e: Exception) {
-                    }
-                },
+                .fillMaxHeight(),
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                try {
+                    val intent = Intent(Intent.ACTION_POWER_USAGE_SUMMARY)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                    onDismiss()
+                } catch (e: Exception) {
+                }
+            },
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.secondaryContainer,
             tonalElevation = 1.dp
@@ -1315,15 +1315,14 @@ class SystemIconsPopupController(
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp)
-                .let { m ->
-                    if (onClick != null) {
-                        m.clickable {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onClick()
-                        }
-                    } else m
-                },
+                .height(56.dp),
+            onClick = onClick?.let { click ->
+                {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    click()
+                }
+            } ?: {},
+            enabled = onClick != null,
             shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.surfaceVariant,
             tonalElevation = 1.dp
