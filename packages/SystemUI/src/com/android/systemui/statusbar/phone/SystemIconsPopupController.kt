@@ -229,7 +229,8 @@ class SystemIconsPopupController(
         val isDarkMode = (context.resources.configuration.uiMode and
             Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
 
-        val accentColor = Color(context.getColor(android.R.color.system_accent1_500))
+        val accentColor = if (isDarkMode) Color(context.getColor(android.R.color.system_accent1_200)) 
+            else Color(context.getColor(android.R.color.system_accent1_500))
 
         val backgroundColor = if (isDarkMode) Color.Black else Color.White
         val surfaceColor = if (isDarkMode) Color(0xFF1C1C1C) else Color(0xFFF5F5F5)
