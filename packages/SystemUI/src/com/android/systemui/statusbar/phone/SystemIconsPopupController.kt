@@ -106,6 +106,7 @@ class SystemIconsPopupController(
     private val windowManager = context.getSystemService(WindowManager::class.java)
     private var popupView: ComposeView? = null
     private var isDismissing = false
+    private var showAtBottom = false
     var isShowing = false
         private set
 
@@ -140,12 +141,13 @@ class SystemIconsPopupController(
 
     private var lifecycleOwner: CustomLifecycleOwner? = null
 
-    fun showPopup(anchorView: View) {
+    fun showPopup(anchorView: View, atBottom: Boolean = false) {
         if (isShowing) {
             hidePopup()
             return
         }
 
+        showAtBottom = atBottom
         registerScreenOffReceiver()
         lifecycleOwner = CustomLifecycleOwner()
         popupView = ComposeView(context).apply {
@@ -153,7 +155,11 @@ class SystemIconsPopupController(
             setViewTreeSavedStateRegistryOwner(lifecycleOwner)
             setContent {
                 PopupTheme {
-                    PopupContent(onDismiss = { hidePopup(anchorView) }, anchorView = anchorView)
+                    PopupContent(
+                        onDismiss = { hidePopup(anchorView) },
+                        anchorView = anchorView,
+                        atBottom = showAtBottom
+                    )
                 }
             }
         }
@@ -161,8 +167,9 @@ class SystemIconsPopupController(
         lifecycleOwner?.moveToState(Lifecycle.State.STARTED)
         lifecycleOwner?.moveToState(Lifecycle.State.RESUMED)
 
-        val location = IntArray(2)
-        anchorView.getLocationOnScreen(location)
+        val navBarHeight = context.resources.getDimensionPixelSize(
+            context.resources.getIdentifier("navigation_bar_height", "dimen", "android")
+        )
 
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -174,9 +181,17 @@ class SystemIconsPopupController(
                     WindowManager.LayoutParams.FLAG_SPLIT_TOUCH,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.END
-            x = 0
-            y = location[1] + anchorView.height
+            if (atBottom) {
+                gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                x = 0
+                y = navBarHeight
+            } else {
+                val location = IntArray(2)
+                anchorView.getLocationOnScreen(location)
+                gravity = Gravity.TOP or Gravity.END
+                x = 0
+                y = location[1] + anchorView.height
+            }
         }
 
         windowManager.addView(popupView, params)
@@ -191,6 +206,11 @@ class SystemIconsPopupController(
         isShowing = true
     }
 
+    fun showPopupFromGesture() {
+        val decor = (context.getSystemService(WindowManager::class.java))
+            ?.defaultDisplay?.let { windowManager.defaultDisplay }
+    }
+
     fun hidePopup(anchorView: View? = null) {
         val view = popupView
         if (!isShowing || view == null) return
@@ -199,7 +219,7 @@ class SystemIconsPopupController(
             isDismissing = true
             view.setContent {
                 PopupTheme {
-                    DismissAnimationContent(anchorView = anchorView) {
+                    DismissAnimationContent(anchorView = anchorView, atBottom = showAtBottom) {
                         actuallyHidePopup()
                     }
                 }
@@ -287,55 +307,47 @@ class SystemIconsPopupController(
     }
 
     @Composable
-    private fun PopupContent(onDismiss: () -> Unit, anchorView: View) {
+    private fun PopupContent(onDismiss: () -> Unit, anchorView: View, atBottom: Boolean) {
         val scale = remember { Animatable(0.7f) }
         val alpha = remember { Animatable(0f) }
-        val offsetX = remember { Animatable(200f) } // Start from right
-        val offsetY = remember { Animatable(-50f) } // Start from above
+        val offsetX = remember { Animatable(if (atBottom) 0f else 200f) }
+        val offsetY = remember { Animatable(if (atBottom) 50f else -50f) } // from below vs above
 
         LaunchedEffect(Unit) {
             launch {
-                scale.animateTo(
-                    1f,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioLowBouncy,
-                        stiffness = Spring.StiffnessLow
-                    )
-                )
+                scale.animateTo(1f, animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioLowBouncy,
+                    stiffness = Spring.StiffnessLow
+                ))
             }
             launch {
-                offsetY.animateTo(
-                    0f,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioLowBouncy,
-                        stiffness = Spring.StiffnessMediumLow
-                    )
-                )
+                offsetY.animateTo(0f, animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioLowBouncy,
+                    stiffness = Spring.StiffnessMediumLow
+                ))
             }
             launch {
-                offsetX.animateTo(
-                    0f,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioLowBouncy,
-                        stiffness = Spring.StiffnessMediumLow
-                    )
-                )
+                offsetX.animateTo(0f, animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioLowBouncy,
+                    stiffness = Spring.StiffnessMediumLow
+                ))
             }
-            launch {
-                alpha.animateTo(1f, animationSpec = tween(200))
-            }
-
+            launch { alpha.animateTo(1f, animationSpec = tween(200)) }
         }
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(Unit) { detectTapGestures { onDismiss() } },
-            contentAlignment = Alignment.TopEnd
+            contentAlignment = if (atBottom) Alignment.BottomCenter else Alignment.TopEnd
         ) {
             Column(
                 modifier = Modifier
-                    .padding(top = 8.dp, end = 16.dp)
+                    .padding(
+                        top = if (atBottom) 0.dp else 8.dp,
+                        bottom = if (atBottom) 8.dp else 0.dp,
+                        end = if (atBottom) 0.dp else 16.dp
+                    )
                     .graphicsLayer {
                         translationX = offsetX.value.dp.toPx()
                         translationY = offsetY.value.dp.toPx()
@@ -343,7 +355,7 @@ class SystemIconsPopupController(
                         scaleY = scale.value
                         this.alpha = alpha.value
                     },
-                horizontalAlignment = Alignment.End
+                horizontalAlignment = if (atBottom) Alignment.CenterHorizontally else Alignment.End
             ) {
                 Box(
                     modifier = Modifier
@@ -443,7 +455,11 @@ class SystemIconsPopupController(
     }
 
     @Composable
-    private fun DismissAnimationContent(anchorView: View, onAnimationComplete: () -> Unit) {
+    private fun DismissAnimationContent(
+        anchorView: View,
+        atBottom: Boolean,
+        onAnimationComplete: () -> Unit
+    ) {
         val scale = remember { Animatable(1f) }
         val alpha = remember { Animatable(1f) }
         val offsetX = remember { Animatable(0f) }
@@ -461,7 +477,7 @@ class SystemIconsPopupController(
             }
             launch {
                 offsetY.animateTo(
-                    -50f,
+                    if (atBottom) 50f else -50f,
                     animationSpec = spring(
                         dampingRatio = Spring.DampingRatioMediumBouncy,
                         stiffness = Spring.StiffnessMedium
@@ -470,7 +486,7 @@ class SystemIconsPopupController(
             }
             launch {
                 offsetX.animateTo(
-                    200f, // Move back to right
+                    if (atBottom) 0f else 200f,
                     animationSpec = spring(
                         dampingRatio = Spring.DampingRatioMediumBouncy,
                         stiffness = Spring.StiffnessMedium
@@ -488,11 +504,15 @@ class SystemIconsPopupController(
 
         Box(
             modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.TopEnd
+            contentAlignment = if (atBottom) Alignment.BottomCenter else Alignment.TopEnd
         ) {
             Column(
                 modifier = Modifier
-                    .padding(top = 8.dp, end = 16.dp)
+                    .padding(
+                        top = if (atBottom) 0.dp else 8.dp,
+                        bottom = if (atBottom) 8.dp else 0.dp,
+                        end = if (atBottom) 0.dp else 16.dp
+                    )
                     .graphicsLayer {
                         translationX = offsetX.value.dp.toPx()
                         translationY = offsetY.value.dp.toPx()
@@ -500,7 +520,10 @@ class SystemIconsPopupController(
                         scaleY = scale.value
                         this.alpha = alpha.value
                     },
-                horizontalAlignment = Alignment.End
+                horizontalAlignment =
+                    if (atBottom)
+                        Alignment.CenterHorizontally
+                    else Alignment.End
             ) {
                 Box(
                     modifier = Modifier
