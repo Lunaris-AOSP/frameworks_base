@@ -48,6 +48,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
@@ -368,7 +369,7 @@ class SystemIconsPopupController(
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 QuickTogglesSection(onDismiss = onDismiss)
-                                BatteryIndicatorCard()
+                                BatteryIndicatorCard(onDismiss = onDismiss)
                             }
 
                             Box(
@@ -743,7 +744,7 @@ class SystemIconsPopupController(
     }
 
     @Composable
-    private fun BatteryIndicatorCard() {
+    private fun BatteryIndicatorCard(onDismiss: () -> Unit) {
         val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
 
         data class BatteryState(val percent: Int, val isCharging: Boolean)
@@ -776,11 +777,22 @@ class SystemIconsPopupController(
 
         val animatedPercent by animateIntAsState(targetValue = batteryState.percent, label = "battery")
         val isCharging = batteryState.isCharging
+        val haptic = LocalHapticFeedback.current
 
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(),
+                .fillMaxHeight()
+                .clickable {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    try {
+                        val intent = Intent(Intent.ACTION_POWER_USAGE_SUMMARY)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(intent)
+                        onDismiss()
+                    } catch (e: Exception) {
+                    }
+                },
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.secondaryContainer,
             tonalElevation = 1.dp
