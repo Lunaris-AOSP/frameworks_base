@@ -832,7 +832,7 @@ class SystemIconsPopupController(
             initialValue = 0f,
             targetValue = 1f,
             animationSpec = infiniteRepeatable(
-                animation = tween(3000, easing = LinearEasing),
+                animation = tween(if (isCharging) 1800 else 3000, easing = LinearEasing),
                 repeatMode = RepeatMode.Restart
             ),
             label = "wave"
