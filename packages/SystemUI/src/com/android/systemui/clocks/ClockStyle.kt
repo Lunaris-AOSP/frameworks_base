@@ -13,6 +13,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Color.colorToHSV
 import android.graphics.Color.HSVToColor
@@ -78,6 +79,9 @@ class ClockStyle @JvmOverloads constructor(
     private var gradientAngleDeg = DEFAULT_GRADIENT_ANGLE
     private var gradientAnchorY = DEFAULT_GRADIENT_ANCHOR_Y
     private var gradientRadius = DEFAULT_GRADIENT_RADIUS
+    private var blurTextEnabled = false
+    private var cachedBlurBitmap: Bitmap? = null
+    private val screenDrawMatrix = android.graphics.Matrix()
 
     private var aodAnimEnabled = true
     private var albumArtColorEnabled = false
@@ -112,6 +116,9 @@ class ClockStyle @JvmOverloads constructor(
                     }
                 }
                 Intent.ACTION_POWER_DISCONNECTED -> cancelWobbleAnimation()
+                Intent.ACTION_WALLPAPER_CHANGED -> {
+                    if (blurTextEnabled) refreshBlurWallpaper()
+                }
             }
         }
     }
@@ -191,6 +198,7 @@ class ClockStyle @JvmOverloads constructor(
             CLOCK_GRADIENT_ANGLE_KEY,
             CLOCK_GRADIENT_ANCHOR_Y_KEY,
             CLOCK_GRADIENT_RADIUS_KEY,
+            CLOCK_BLUR_TEXT_KEY,
         )
         statusBarStateController.addCallback(statusBarStateListener)
         if (albumArtColorEnabled) {
@@ -212,6 +220,7 @@ class ClockStyle @JvmOverloads constructor(
             addAction(DOZE_PULSE_ACTION)
             addAction(Intent.ACTION_POWER_CONNECTED)
             addAction(Intent.ACTION_POWER_DISCONNECTED)
+            addAction(Intent.ACTION_WALLPAPER_CHANGED)
         }
         context.registerReceiver(screenReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         callbacksRegistered = true
@@ -321,6 +330,14 @@ class ClockStyle @JvmOverloads constructor(
                 gradientRadius = TunerService.parseInteger(newValue, DEFAULT_GRADIENT_RADIUS)
                     .coerceIn(MIN_GRADIENT_RADIUS, MAX_GRADIENT_RADIUS)
                 if (gradientEnabled) applyClockColors()
+            }
+            CLOCK_BLUR_TEXT_KEY -> {
+                val was = blurTextEnabled
+                blurTextEnabled = TunerService.parseInteger(newValue, 0) != 0
+                if (blurTextEnabled && !was) {
+                    refreshBlurWallpaper()
+                }
+                applyClockColors()
             }
         }
     }
@@ -579,6 +596,38 @@ class ClockStyle @JvmOverloads constructor(
         }
     }
 
+    private fun refreshBlurWallpaper() {
+        cachedBlurBitmap = ClockBlurWallpaperProvider.getBlurredWallpaper(context)
+        applyClockColors()
+    }
+
+    private fun applyBlurToView(view: TextView) {
+        val blurred = cachedBlurBitmap
+        if (view.width <= 0 || view.height <= 0 || blurred == null || blurred.isRecycled) return
+
+        val dm = resources.displayMetrics
+        val screenW = dm.widthPixels
+        val screenH = dm.heightPixels
+        val bmpW = blurred.width
+        val bmpH = blurred.height
+        val scale = maxOf(screenW.toFloat() / bmpW, screenH.toFloat() / bmpH)
+        val dx = (screenW - bmpW * scale) * 0.5f
+        val dy = (screenH - bmpH * scale) * 0.5f
+
+        val location = IntArray(2)
+        view.getLocationOnScreen(location)
+
+        screenDrawMatrix.reset()
+        screenDrawMatrix.postScale(scale, scale)
+        screenDrawMatrix.postTranslate(dx, dy)
+        screenDrawMatrix.postTranslate(-location[0].toFloat(), -location[1].toFloat())
+
+        view.paint.shader = android.graphics.BitmapShader(
+            blurred, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP
+        ).apply { setLocalMatrix(screenDrawMatrix) }
+        view.invalidate()
+    }
+
     private fun attachClockSizeListener(view: View) {
         val targets = textClocks + styledTextViews.filterNot { it is TextClock }
         for (target in targets) {
@@ -594,6 +643,7 @@ class ClockStyle @JvmOverloads constructor(
         if (isNoColorClock(clockStyle) || textClocks.isEmpty()) return
         val whiteColor = context.getColor(android.R.color.white)
         val useGradient = gradientEnabled && !isDozing
+        val useBlur = blurTextEnabled && !isDozing && cachedBlurBitmap != null
         for (i in textClocks.indices) {
             val tc = textClocks[i]
             (tc.getTag(R.id.original_typeface) as? Typeface)?.let { tc.typeface = it }
@@ -607,6 +657,10 @@ class ClockStyle @JvmOverloads constructor(
                 !isWhiteOriginal -> {
                     clearGradientFromView(tc)
                     tc.setTextColor(originalColor)
+                }
+                useBlur -> {
+                    tc.setTextColor(Color.WHITE)
+                    applyBlurToView(tc)
                 }
                 useGradient -> {
                     tc.setTextColor(Color.WHITE)
@@ -632,6 +686,10 @@ class ClockStyle @JvmOverloads constructor(
                 !isWhiteOriginal -> {
                     clearGradientFromView(tv)
                     tv.setTextColor(originalColor)
+                }
+                useBlur -> {
+                    tv.setTextColor(Color.WHITE)
+                    applyBlurToView(tv)
                 }
                 useGradient -> {
                     tv.setTextColor(Color.WHITE)
@@ -985,6 +1043,7 @@ class ClockStyle @JvmOverloads constructor(
         @JvmField val CLOCK_GRADIENT_ANGLE_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_GRADIENT_ANGLE
         @JvmField val CLOCK_GRADIENT_ANCHOR_Y_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_GRADIENT_ANCHOR_Y
         @JvmField val CLOCK_GRADIENT_RADIUS_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_GRADIENT_RADIUS
+        @JvmField val CLOCK_BLUR_TEXT_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_BLUR_TEXT
 
         const val COLOR_MODE_DEFAULT = "default"
         const val COLOR_MODE_ACCENT = "accent"
