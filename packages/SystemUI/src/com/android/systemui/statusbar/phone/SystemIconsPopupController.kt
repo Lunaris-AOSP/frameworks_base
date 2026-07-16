@@ -71,6 +71,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -313,17 +314,30 @@ class SystemIconsPopupController(
 
     @Composable
     private fun PopupContent(onDismiss: () -> Unit, anchorView: View, atBottom: Boolean) {
-        val scale = remember { Animatable(0.7f) }
+        val scaleX = remember { Animatable(0.5f) }
+        val scaleY = remember { Animatable(0.5f) }
         val alpha = remember { Animatable(0f) }
         val offsetX = remember { Animatable(if (atBottom) 0f else 200f) }
         val offsetY = remember { Animatable(if (atBottom) 50f else -50f) } // from below vs above
 
         LaunchedEffect(Unit) {
             launch {
-                scale.animateTo(1f, animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioLowBouncy,
-                    stiffness = Spring.StiffnessLow
-                ))
+                scaleX.animateTo(
+                    targetValue = 1f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessMediumLow
+                    )
+                )
+            }
+            launch {
+                scaleY.animateTo(
+                    targetValue = 1f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    )
+                )
             }
             launch {
                 offsetY.animateTo(0f, animationSpec = spring(
@@ -356,9 +370,14 @@ class SystemIconsPopupController(
                     .graphicsLayer {
                         translationX = offsetX.value.dp.toPx()
                         translationY = offsetY.value.dp.toPx()
-                        scaleX = scale.value
-                        scaleY = scale.value
+                        this.scaleX = scaleX.value
+                        this.scaleY = scaleY.value
                         this.alpha = alpha.value
+                        transformOrigin = if (atBottom) {
+                            TransformOrigin(0.5f, 1f)
+                        } else {
+                            TransformOrigin(1f, 0f)
+                        }
                     },
                 horizontalAlignment = if (atBottom) Alignment.CenterHorizontally else Alignment.End
             ) {
@@ -470,19 +489,35 @@ class SystemIconsPopupController(
         atBottom: Boolean,
         onAnimationComplete: () -> Unit
     ) {
-        val scale = remember { Animatable(1f) }
+        val scaleX = remember { Animatable(1f) }
+        val scaleY = remember { Animatable(1f) }
         val alpha = remember { Animatable(1f) }
         val offsetX = remember { Animatable(0f) }
         val offsetY = remember { Animatable(0f) }
         
         LaunchedEffect(Unit) {
             launch {
-                scale.animateTo(
-                    0.7f,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessMedium
-                    )
+                scaleX.animateTo(
+                    targetValue = 0.6f,
+                    animationSpec = keyframes {
+                        durationMillis = 260
+                        1f at 0
+                        0.9f at 90 using FastOutSlowInEasing
+                        1.08f at 160 using FastOutSlowInEasing
+                        0.6f at 260
+                    }
+                )
+            }
+            launch {
+                scaleY.animateTo(
+                    targetValue = 0.6f,
+                    animationSpec = keyframes {
+                        durationMillis = 260
+                        1f at 0
+                        1.1f at 90 using FastOutSlowInEasing
+                        0.9f at 160 using FastOutSlowInEasing
+                        0.6f at 260
+                    }
                 )
             }
             launch {
@@ -506,7 +541,7 @@ class SystemIconsPopupController(
             launch {
                 alpha.animateTo(
                     0f,
-                    animationSpec = tween(150, easing = FastOutSlowInEasing)
+                    animationSpec = tween(220, easing = FastOutSlowInEasing)
                 )
                 onAnimationComplete()
             }
@@ -526,9 +561,14 @@ class SystemIconsPopupController(
                     .graphicsLayer {
                         translationX = offsetX.value.dp.toPx()
                         translationY = offsetY.value.dp.toPx()
-                        scaleX = scale.value
-                        scaleY = scale.value
+                        this.scaleX = scaleX.value
+                        this.scaleY = scaleY.value
                         this.alpha = alpha.value
+                        transformOrigin = if (atBottom) {
+                            TransformOrigin(0.5f, 1f)
+                        } else {
+                            TransformOrigin(1f, 0f)
+                        }
                     },
                 horizontalAlignment =
                     if (atBottom)
