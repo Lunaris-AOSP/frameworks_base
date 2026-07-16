@@ -25,6 +25,8 @@ import android.content.BroadcastReceiver
 import android.content.Intent.ACTION_SCREEN_OFF
 import android.graphics.PixelFormat
 import android.hardware.display.ColorDisplayManager
+import android.hardware.camera2.CameraManager
+import android.hardware.camera2.CameraCharacteristics
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -66,6 +68,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
@@ -128,6 +131,13 @@ class SystemIconsPopupController(
         context.getSystemService(ColorDisplayManager::class.java)
     }
 
+    private val cameraManagerRef by lazy {
+        context.getSystemService(Context.CAMERA_SERVICE) as? CameraManager
+    }
+    private var torchCameraId: String? = null
+    private val torchEnabledState = mutableStateOf(false)
+    private val torchUnavailableState = mutableStateOf(false)
+
     private val wifiEnabledState = mutableStateOf(wifiManagerRef?.isWifiEnabled ?: false)
     private val bluetoothEnabledState = mutableStateOf(bluetoothAdapterRef?.isEnabled ?: false)
     private val locationEnabledState = mutableStateOf(
@@ -137,6 +147,46 @@ class SystemIconsPopupController(
     private val extraDimState = mutableStateOf(
         try { colorDisplayManagerRef?.isReduceBrightColorsActivated ?: false } catch (e: Exception) { false }
     )
+
+    private val torchCallback = object : CameraManager.TorchCallback() {
+        override fun onTorchModeChanged(cameraId: String, enabled: Boolean) {
+            if (cameraId == torchCameraId) {
+                torchEnabledState.value = enabled
+                torchUnavailableState.value = false
+            }
+        }
+        override fun onTorchModeUnavailable(cameraId: String) {
+            if (cameraId == torchCameraId) {
+                torchUnavailableState.value = true
+                torchEnabledState.value = false
+            }
+        }
+    }
+    private var torchCallbackRegistered = false
+
+    private fun findTorchCameraId(cm: CameraManager?): String? = try {
+        cm?.cameraIdList?.firstOrNull { id ->
+            cm.getCameraCharacteristics(id)
+                .get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+        }
+    } catch (e: Exception) { null }
+
+    private fun registerTorchCallback() {
+        if (torchCallbackRegistered) return
+        val cm = cameraManagerRef ?: return
+        torchCameraId = findTorchCameraId(cm)
+        try {
+            cm.registerTorchCallback(context.mainExecutor, torchCallback)
+            torchCallbackRegistered = true
+        } catch (e: Exception) { }
+    }
+
+    private fun unregisterTorchCallback() {
+        if (torchCallbackRegistered) {
+            try { cameraManagerRef?.unregisterTorchCallback(torchCallback) } catch (e: Exception) { }
+            torchCallbackRegistered = false
+        }
+    }
 
     private var toggleReceiversRegistered = false
     private val toggleStateReceiver = object : BroadcastReceiver() {
@@ -213,6 +263,7 @@ class SystemIconsPopupController(
         hidePopup()
         unregisterToggleStateReceivers()
         unregisterScreenOffReceiver()
+        unregisterTorchCallback()
     }
 
     fun showPopup(anchorView: View, atBottom: Boolean = false) {
@@ -224,6 +275,7 @@ class SystemIconsPopupController(
         showAtBottom = atBottom
         registerScreenOffReceiver()
         registerToggleStateReceivers()
+        registerTorchCallback()
         lifecycleOwner = CustomLifecycleOwner()
         popupView = ComposeView(context).apply {
             setViewTreeLifecycleOwner(lifecycleOwner)
@@ -676,19 +728,20 @@ class SystemIconsPopupController(
     private fun QuickTogglesSection(onDismiss: () -> Unit) {
         val wifiManager = wifiManagerRef
         val bluetoothAdapter = bluetoothAdapterRef
-        val locationManager = locationManagerRef
+        val cameraManager = cameraManagerRef
         val colorDisplayManager = colorDisplayManagerRef
         val haptic = LocalHapticFeedback.current
 
         var isWifiEnabled by wifiEnabledState
         var isBluetoothEnabled by bluetoothEnabledState
-        var isLocationEnabled by locationEnabledState
+        var isTorchEnabled by torchEnabledState
+        val isTorchUnavailable by torchUnavailableState
         var isAirplaneModeEnabled by airplaneModeState
         var isExtraDimEnabled by extraDimState
 
         var wifiToggleCount by remember { mutableStateOf(0) }
         var btToggleCount by remember { mutableStateOf(0) }
-        var locationToggleCount by remember { mutableStateOf(0) }
+        var torchToggleCount by remember { mutableStateOf(0) }
         var airplaneToggleCount by remember { mutableStateOf(0) }
         var extraDimToggleCount by remember { mutableStateOf(0) }
         var memoryCleanToggleCount by remember { mutableStateOf(0) }
@@ -744,27 +797,30 @@ class SystemIconsPopupController(
                     }
                 )
 
-            ShapeMorphingToggle(
+                ShapeMorphingToggle(
                     modifier = Modifier.weight(1f),
-                    icon = Icons.Default.LocationOn,
-                    isEnabled = isLocationEnabled,
-                    toggleCount = locationToggleCount,
+                    icon = if (isTorchEnabled) Icons.Default.FlashOn else Icons.Default.FlashOff,
+                    isEnabled = isTorchEnabled,
+                    isDisabled = isTorchUnavailable,
+                    toggleCount = torchToggleCount,
                     onToggle = {
+                        if (isTorchUnavailable) return@ShapeMorphingToggle
                         haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
-                        isLocationEnabled = !isLocationEnabled
-                        locationToggleCount++
-                        try {
-                            locationManager?.setLocationEnabledForUser(
-                                isLocationEnabled,
-                                android.os.Process.myUserHandle()
-                            )
-                        } catch (e: Exception) {
+                        val id = torchCameraId
+                        if (cameraManager != null && id != null) {
+                            try {
+                                cameraManager.setTorchMode(id, !isTorchEnabled)
+                                torchToggleCount++
+                            } catch (e: Exception) {
+                                Toast.makeText(
+                                    context,
+                                    "Flashlight unavailable",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
                         }
                     },
-                    onLongPress = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        openSettingsAction(Settings.ACTION_LOCATION_SOURCE_SETTINGS, onDismiss)
-                    }
+                    onLongPress = { }
                 )
             }
 
@@ -842,6 +898,7 @@ class SystemIconsPopupController(
         modifier: Modifier = Modifier,
         icon: ImageVector,
         isEnabled: Boolean,
+        isDisabled: Boolean = false,
         toggleCount: Int,
         onToggle: () -> Unit,
         onLongPress: () -> Unit
@@ -858,6 +915,7 @@ class SystemIconsPopupController(
         Box(
             modifier = modifier
                 .fillMaxHeight()
+                .alpha(if (isDisabled) 0.35f else 1f)
                 .squishAnimation(toggleCount)
                 .clip(RoundedCornerShape(cornerRadius))
                 .background(
@@ -868,6 +926,7 @@ class SystemIconsPopupController(
                     }
                 )
                 .combinedClickable(
+                    enabled = !isDisabled,
                     onClick = onToggle,
                     onLongClick = onLongPress
                 )
