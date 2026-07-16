@@ -164,7 +164,7 @@ class SystemIconsPopupController(
                 addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED)
                 addAction(android.location.LocationManager.MODE_CHANGED_ACTION)
             }
-            context.registerReceiver(toggleStateReceiver, filter)
+            context.registerReceiver(toggleStateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
             toggleReceiversRegistered = true
         } catch (e: Exception) { }
     }
@@ -192,7 +192,7 @@ class SystemIconsPopupController(
         if (!isReceiverRegistered) {
             try {
                 val filter = IntentFilter(ACTION_SCREEN_OFF)
-                context.registerReceiver(screenOffReceiver, filter)
+                context.registerReceiver(screenOffReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
                 isReceiverRegistered = true
             } catch (e: Exception) { }
         }
@@ -912,7 +912,11 @@ class SystemIconsPopupController(
                     }
                 }
             }
-            context.registerReceiver(receiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            context.registerReceiver(
+                receiver,
+                IntentFilter(Intent.ACTION_BATTERY_CHANGED),
+                Context.RECEIVER_NOT_EXPORTED
+            )
             awaitDispose { context.unregisterReceiver(receiver) }
         }
 
@@ -1301,7 +1305,11 @@ class SystemIconsPopupController(
                     value = readAirplaneModeOn()
                 }
             }
-            context.registerReceiver(receiver, IntentFilter(Intent.ACTION_AIRPLANE_MODE_CHANGED))
+            context.registerReceiver(
+                receiver,
+                IntentFilter(Intent.ACTION_AIRPLANE_MODE_CHANGED),
+                Context.RECEIVER_NOT_EXPORTED
+            )
             awaitDispose { context.unregisterReceiver(receiver) }
         }
 
@@ -1317,7 +1325,8 @@ class SystemIconsPopupController(
             }
             context.registerReceiver(
                 receiver,
-                IntentFilter("android.intent.action.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED")
+                IntentFilter("android.intent.action.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED"),
+                Context.RECEIVER_NOT_EXPORTED
             )
             onDispose { context.unregisterReceiver(receiver) }
         }
@@ -1332,7 +1341,11 @@ class SystemIconsPopupController(
                     mobileDataEnabled = try { telephonyManager?.isDataEnabled ?: false } catch (e: Exception) { false }
                 }
             }
-            context.registerReceiver(receiver, IntentFilter("android.intent.action.ANY_DATA_STATE"))
+            context.registerReceiver(
+                receiver,
+                IntentFilter("android.intent.action.ANY_DATA_STATE"),
+                Context.RECEIVER_NOT_EXPORTED
+            )
             onDispose { context.unregisterReceiver(receiver) }
         }
 
@@ -1523,7 +1536,8 @@ class SystemIconsPopupController(
             }
             context.registerReceiver(
                 receiver,
-                IntentFilter(BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED)
+                IntentFilter(BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED),
+                Context.RECEIVER_NOT_EXPORTED
             )
             awaitDispose { context.unregisterReceiver(receiver) }
         }
