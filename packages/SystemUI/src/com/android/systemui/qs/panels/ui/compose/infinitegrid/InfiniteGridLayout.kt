@@ -44,6 +44,7 @@ import com.android.systemui.qs.panels.ui.compose.ButtonGroupGrid
 import com.android.systemui.qs.panels.ui.compose.EditTileListState
 import com.android.systemui.qs.panels.ui.compose.PaginatableGridLayout
 import com.android.systemui.qs.panels.ui.compose.TileListener
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberClassicTileRowSpacing
 import com.android.systemui.qs.panels.ui.compose.bounceableInfo
 import com.android.systemui.qs.panels.ui.viewmodel.BounceableTileViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.DetailsViewModel
@@ -104,6 +105,7 @@ constructor(
         val scope = rememberCoroutineScope()
 
         val classicStyle = rememberQSPanelStyle()
+        val classicRowSpacing = if (classicStyle) rememberClassicTileRowSpacing() else dimensionResource(R.dimen.qs_tile_margin_vertical)
 
         if (QSMaterialExpressiveTiles.isEnabled) {
             ButtonGroupGrid(
@@ -143,7 +145,7 @@ constructor(
                 rowSpacing = if (useModifiedSpacing) {
                     CommonTileDefaults.TileRowSpacing
                 } else {
-                    dimensionResource(R.dimen.qs_tile_margin_vertical)
+                    classicRowSpacing
                 },
                 spans = spans,
                 keys = { sizedTiles[it].tile.spec },
