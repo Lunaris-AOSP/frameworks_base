@@ -540,19 +540,6 @@ class ClockStyle @JvmOverloads constructor(
         return HSVToColor(hsv)
     }
 
-    private fun getOffsetWithinAncestor(view: View, ancestor: View): Pair<Int, Int> {
-        var offsetX = 0
-        var offsetY = 0
-        var current: View = view
-        while (current !== ancestor) {
-            offsetX += current.left
-            offsetY += current.top
-            val parent = current.parent as? View ?: break
-            current = parent
-        }
-        return offsetX to offsetY
-    }
-
     private fun buildGradientShader(
         width: Int,
         height: Int,
@@ -580,11 +567,8 @@ class ClockStyle @JvmOverloads constructor(
     }
 
     private fun applyGradientToView(view: TextView) {
-        val container = currentClockView ?: return
         if (view.width <= 0 || view.height <= 0) return
-        if (container.width <= 0 || container.height <= 0) return
-        val (offsetX, offsetY) = getOffsetWithinAncestor(view, container)
-        view.paint.shader = buildGradientShader(container.width, container.height, offsetX, offsetY)
+        view.paint.shader = buildGradientShader(view.width, view.height, 0, 0)
         view.invalidate()
     }
 
@@ -596,14 +580,14 @@ class ClockStyle @JvmOverloads constructor(
     }
 
     private fun attachClockSizeListener(view: View) {
-        clockSizeListener?.let { currentClockView?.removeOnLayoutChangeListener(it) }
-        val listener = View.OnLayoutChangeListener { v, l, t, r, b, ol, ot, oR, ob ->
-            if (r - l != oR - ol || b - t != ob - ot) {
-                if (gradientEnabled) applyClockColors()
+        val targets = textClocks + styledTextViews.filterNot { it is TextClock }
+        for (target in targets) {
+            target.addOnLayoutChangeListener { v, l, t, r, b, ol, ot, oR, ob ->
+                if (r - l != oR - ol || b - t != ob - ot) {
+                    if (gradientEnabled) applyClockColors()
+                }
             }
         }
-        clockSizeListener = listener
-        view.addOnLayoutChangeListener(listener)
     }
 
     private fun applyClockColors() {
