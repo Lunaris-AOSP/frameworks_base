@@ -408,7 +408,7 @@ class SystemIconsPopupController(
                                 QuickTogglesSection(onDismiss = onDismiss)
                                 val mediaState = rememberMediaState()
                                 if (mediaState.controller != null) {
-                                    MediaControlCard(mediaState = mediaState)
+                                    MediaControlCard(mediaState = mediaState, onDismiss = onDismiss)
                                 } else {
                                     BatteryIndicatorCard(onDismiss = onDismiss)
                                 }
@@ -918,9 +918,26 @@ class SystemIconsPopupController(
     }
 
     @Composable
-    private fun MediaControlCard(mediaState: SharedMediaState) {
+    private fun MediaControlCard(mediaState: SharedMediaState, onDismiss: () -> Unit) {
         val controller = mediaState.controller
         val haptic = LocalHapticFeedback.current
+
+        fun launchMediaApp() {
+            try {
+                val pending = controller?.sessionActivity
+                if (pending != null) {
+                    pending.send()
+                } else {
+                    val pkg = mediaState.packageName ?: return
+                    val launchIntent = context.packageManager
+                        .getLaunchIntentForPackage(pkg)
+                        ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    launchIntent?.let { context.startActivity(it) }
+                }
+                onDismiss()
+            } catch (e: Exception) {
+            }
+        }
 
         Surface(
             modifier = Modifier
@@ -996,7 +1013,12 @@ class SystemIconsPopupController(
                 Spacer(modifier = Modifier.width(10.dp))
 
                 Surface(
-                    modifier = Modifier.size(60.dp),
+                    modifier = Modifier
+                        .size(60.dp)
+                        .clickable {
+                            haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+                            launchMediaApp()
+                        },
                     shape = RoundedCornerShape(18.dp), // squircle-ish, not full circle
                     color = MaterialTheme.colorScheme.primaryContainer
                 ) {
