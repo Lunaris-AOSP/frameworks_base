@@ -61,6 +61,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.runtime.*
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -116,6 +117,67 @@ class SystemIconsPopupController(
     var isShowing = false
         private set
 
+    private val wifiManagerRef by lazy {
+        context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+    }
+    private val bluetoothAdapterRef by lazy { BluetoothAdapter.getDefaultAdapter() }
+    private val locationManagerRef by lazy {
+        context.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
+    }
+    private val colorDisplayManagerRef by lazy {
+        context.getSystemService(ColorDisplayManager::class.java)
+    }
+
+    private val wifiEnabledState = mutableStateOf(wifiManagerRef?.isWifiEnabled ?: false)
+    private val bluetoothEnabledState = mutableStateOf(bluetoothAdapterRef?.isEnabled ?: false)
+    private val locationEnabledState = mutableStateOf(
+        try { locationManagerRef?.isLocationEnabled ?: false } catch (e: Exception) { false }
+    )
+    private val airplaneModeState = mutableStateOf(readAirplaneModeOn())
+    private val extraDimState = mutableStateOf(
+        try { colorDisplayManagerRef?.isReduceBrightColorsActivated ?: false } catch (e: Exception) { false }
+    )
+
+    private var toggleReceiversRegistered = false
+    private val toggleStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(c: Context?, intent: Intent?) {
+            when (intent?.action) {
+                WifiManager.WIFI_STATE_CHANGED_ACTION ->
+                    wifiEnabledState.value = wifiManagerRef?.isWifiEnabled ?: false
+                BluetoothAdapter.ACTION_STATE_CHANGED ->
+                    bluetoothEnabledState.value = bluetoothAdapterRef?.isEnabled ?: false
+                Intent.ACTION_AIRPLANE_MODE_CHANGED ->
+                    airplaneModeState.value = readAirplaneModeOn()
+                android.location.LocationManager.MODE_CHANGED_ACTION ->
+                    locationEnabledState.value =
+                        try { locationManagerRef?.isLocationEnabled ?: false } catch (e: Exception) { false }
+            }
+        }
+    }
+
+    private fun registerToggleStateReceivers() {
+        if (toggleReceiversRegistered) return
+        try {
+            val filter = IntentFilter().apply {
+                addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
+                addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
+                addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED)
+                addAction(android.location.LocationManager.MODE_CHANGED_ACTION)
+            }
+            context.registerReceiver(toggleStateReceiver, filter)
+            toggleReceiversRegistered = true
+        } catch (e: Exception) { }
+    }
+
+    private fun unregisterToggleStateReceivers() {
+        if (toggleReceiversRegistered) {
+            try {
+                context.unregisterReceiver(toggleStateReceiver)
+            } catch (e: Exception) { }
+            toggleReceiversRegistered = false
+        }
+    }
+
     private val screenOffReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == ACTION_SCREEN_OFF) {
@@ -147,6 +209,12 @@ class SystemIconsPopupController(
 
     private var lifecycleOwner: CustomLifecycleOwner? = null
 
+    fun destroy() {
+        hidePopup()
+        unregisterToggleStateReceivers()
+        unregisterScreenOffReceiver()
+    }
+
     fun showPopup(anchorView: View, atBottom: Boolean = false) {
         if (isShowing) {
             hidePopup()
@@ -155,6 +223,7 @@ class SystemIconsPopupController(
 
         showAtBottom = atBottom
         registerScreenOffReceiver()
+        registerToggleStateReceivers()
         lifecycleOwner = CustomLifecycleOwner()
         popupView = ComposeView(context).apply {
             setViewTreeLifecycleOwner(lifecycleOwner)
@@ -605,25 +674,17 @@ class SystemIconsPopupController(
     @OptIn(ExperimentalFoundationApi::class)
     @Composable
     private fun QuickTogglesSection(onDismiss: () -> Unit) {
-        val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-        val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
-        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
-        val colorDisplayManager = context.getSystemService(ColorDisplayManager::class.java)
+        val wifiManager = wifiManagerRef
+        val bluetoothAdapter = bluetoothAdapterRef
+        val locationManager = locationManagerRef
+        val colorDisplayManager = colorDisplayManagerRef
         val haptic = LocalHapticFeedback.current
 
-        var isWifiEnabled by remember { mutableStateOf(wifiManager?.isWifiEnabled ?: false) }
-        var isBluetoothEnabled by remember { mutableStateOf(bluetoothAdapter?.isEnabled ?: false) }
-        var isLocationEnabled by remember {
-            mutableStateOf(
-                try { locationManager?.isLocationEnabled ?: false } catch (e: Exception) { false }
-            )
-        }
-        var isAirplaneModeEnabled by remember { mutableStateOf(readAirplaneModeOn()) }
-        var isExtraDimEnabled by remember {
-            mutableStateOf(
-                try { colorDisplayManager?.isReduceBrightColorsActivated ?: false } catch (e: Exception) { false }
-            )
-        }
+        var isWifiEnabled by wifiEnabledState
+        var isBluetoothEnabled by bluetoothEnabledState
+        var isLocationEnabled by locationEnabledState
+        var isAirplaneModeEnabled by airplaneModeState
+        var isExtraDimEnabled by extraDimState
 
         var wifiToggleCount by remember { mutableStateOf(0) }
         var btToggleCount by remember { mutableStateOf(0) }
