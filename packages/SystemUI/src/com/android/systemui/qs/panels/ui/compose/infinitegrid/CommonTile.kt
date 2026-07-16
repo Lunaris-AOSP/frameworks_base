@@ -114,6 +114,7 @@ import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults.TileLabelBlurWidth
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults.TileStartPadding
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults.longPressLabelSettings
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberClassicTileIconSize
 import com.android.systemui.qs.panels.ui.viewmodel.AccessibilityUiState
 import com.android.systemui.qs.ui.compose.borderOnFocus
 import com.android.systemui.res.R
@@ -155,13 +156,9 @@ fun ClassicTileContent(
     val animatedColor by animateColorAsState(colors.background, label = "QSTileCircleBgColor")
     val animatedOutlineColor by animateColorAsState(colors.outline, label = "QSTileOutlineColor")
 
-    val (tileHeight, iconSize) = remember(labelHide) {
-        if (labelHide) {
-            CommonTileDefaults.TileHeight to CommonTileDefaults.IconSize
-        } else {
-            (CommonTileDefaults.TileHeight - 8.dp) to CommonTileDefaults.LargeTileIconSize
-        }
-    }
+    val classicIconSize = rememberClassicTileIconSize()
+    val boxHeight = if (labelHide) classicIconSize else classicIconSize - 8.dp
+    val iconSize = boxHeight * 0.5f
 
     Column(
         verticalArrangement = Arrangement.Center,
@@ -170,7 +167,7 @@ fun ClassicTileContent(
     ) {
         Box(
             modifier = Modifier
-                .size(tileHeight)
+                .size(boxHeight)
                 .thenIf(!isNoBackground) {
                     Modifier
                         .clip(iconShape)
@@ -212,7 +209,7 @@ fun ClassicTileContent(
             BasicText(
                 text = label,
                 style = TextStyle(
-                    fontSize = CommonTileDefaults.ClassicLabelSize,
+                    fontSize = (classicIconSize * 0.15625f).value.sp,
                     textAlign = TextAlign.Center,
                     hyphens = Hyphens.Auto,
                 ),

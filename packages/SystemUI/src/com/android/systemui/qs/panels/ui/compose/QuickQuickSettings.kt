@@ -37,6 +37,7 @@ import com.android.systemui.qs.flags.QSMaterialExpressiveTiles
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.Tile
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberQSPanelStyle
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberClassicTileRowSpacing
 import com.android.systemui.qs.panels.ui.viewmodel.BounceableTileViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.QuickQuickSettingsViewModel
 import com.android.systemui.qs.shared.ui.QuickSettings.Elements.toElementKey
@@ -59,6 +60,7 @@ fun ContentScope.QuickQuickSettings(
         Settings.System.getInt(context.contentResolver, Settings.System.QS_USE_MODIFIED_TILE_SPACING, 0) == 1
     }
     val classicStyle = rememberQSPanelStyle()
+    val classicRowSpacing = if (classicStyle) rememberClassicTileRowSpacing() else dimensionResource(R.dimen.qs_tile_margin_vertical)
 
     val bounceables = remember(sizedTiles) { List(sizedTiles.size) { BounceableTileViewModel() } }
     val spans by remember(sizedTiles) { derivedStateOf { sizedTiles.fastMap { it.width } } }
@@ -82,8 +84,7 @@ fun ContentScope.QuickQuickSettings(
                     coroutineScope = scope,
                     tileHapticsViewModelFactoryProvider =
                         viewModel.tileHapticsViewModelFactoryProvider,
-                    // There should be no QuickQuickSettings when the details
-                    // view is enabled.
+                    // There should be no QuickQuickSettings when the details view is enabled.
                     detailsViewModel = null,
                     isVisible = listening,
                     bounceableInfo = null,
@@ -101,7 +102,7 @@ fun ContentScope.QuickQuickSettings(
                 rowSpacing = if (useModifiedSpacing) {
                     CommonTileDefaults.TileRowSpacing
                 } else {
-                    dimensionResource(R.dimen.qs_tile_margin_vertical)
+                    classicRowSpacing
                 },
                 spans = spans,
                 modifier = Modifier.sysuiResTag("qqs_tile_layout")
@@ -126,7 +127,6 @@ fun ContentScope.QuickQuickSettings(
                             ),
                         tileHapticsViewModelFactoryProvider =
                             viewModel.tileHapticsViewModelFactoryProvider,
-                        // There should be no QuickQuickSettings when the details view is enabled.
                         detailsViewModel = null,
                         isVisible = listening,
                     )

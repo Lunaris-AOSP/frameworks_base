@@ -7964,6 +7964,18 @@ public final class Settings {
         public static final String QS_TILE_ICON_SHAPE = "qs_tile_icon_shape";
 
         /**
+         * Classic tile icon size in dp for QS panel
+         * @hide
+         */
+        public static final String QS_CLASSIC_TILE_ICON_SIZE = "qs_classic_tile_icon_size";
+
+        /**
+         * Row spacing in dp for classic QS panel style
+         * @hide
+         */
+        public static final String QS_CLASSIC_TILE_ROW_SPACING = "qs_classic_tile_row_spacing";
+
+        /**
          * Select QS tile animation style
          * @hide
          */
