@@ -648,6 +648,7 @@ class SystemIconsPopupController(
                     isEnabled = isWifiEnabled,
                     toggleCount = wifiToggleCount,
                     onToggle = {
+                        haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
                         isWifiEnabled = !isWifiEnabled
                         wifiToggleCount++
                         try {
@@ -667,6 +668,7 @@ class SystemIconsPopupController(
                     isEnabled = isBluetoothEnabled,
                     toggleCount = btToggleCount,
                     onToggle = {
+                        haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
                         isBluetoothEnabled = !isBluetoothEnabled
                         btToggleCount++
                         try {
@@ -687,6 +689,7 @@ class SystemIconsPopupController(
                     isEnabled = isLocationEnabled,
                     toggleCount = locationToggleCount,
                     onToggle = {
+                        haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
                         isLocationEnabled = !isLocationEnabled
                         locationToggleCount++
                         try {
@@ -717,6 +720,7 @@ class SystemIconsPopupController(
                     isEnabled = isAirplaneModeEnabled,
                     toggleCount = airplaneToggleCount,
                     onToggle = {
+                        haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
                         isAirplaneModeEnabled = !isAirplaneModeEnabled
                         airplaneToggleCount++
                         setAirplaneMode(isAirplaneModeEnabled)
@@ -733,6 +737,7 @@ class SystemIconsPopupController(
                     isEnabled = isExtraDimEnabled,
                     toggleCount = extraDimToggleCount,
                     onToggle = {
+                        haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
                         isExtraDimEnabled = !isExtraDimEnabled
                         extraDimToggleCount++
                         try {
@@ -752,6 +757,7 @@ class SystemIconsPopupController(
                     isEnabled = false,
                     toggleCount = memoryCleanToggleCount,
                     onToggle = {
+                        haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
                         memoryCleanToggleCount++
                         try {
                             MemoryUtils.releaseMemory()
