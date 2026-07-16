@@ -347,7 +347,7 @@ private constructor(
 
     @VisibleForTesting
     public override fun onViewDetached() {
-        systemIconsPopupController?.hidePopup()
+        systemIconsPopupController?.destroy()
         systemIconsPopupController = null
         tunerService.removeTunable(this)
         removeDarkReceivers()
