@@ -24,8 +24,12 @@ class AggregatedCompactionStats {
     // Throttling stats
     public long mFullCompactRequested;
     public long mSomeCompactRequested;
+    public long mAnonCompactRequested;
+    public long mPopulateCompactRequested;
     public long mFullCompactPerformed;
     public long mSomeCompactPerformed;
+    public long mAnonCompactPerformed;
+    public long mPopulateCompactPerformed;
     public long mProcCompactionsNoPidThrottled;
     public long mProcCompactionsOomAdjThrottled;
     public long mProcCompactionsTimeThrottled;
@@ -47,6 +51,8 @@ class AggregatedCompactionStats {
 
     public long getThrottledFull() { return mFullCompactRequested - mFullCompactPerformed; }
 
+    public long getThrottledAnon() { return mAnonCompactRequested - mAnonCompactPerformed; }
+
     public void addMemStats(long anonRssSaved, long zramConsumed, long memFreed,
             long origAnonRss, long totalCpuTimeMillis) {
         final double compactEfficiency = memFreed / (double) origAnonRss;
@@ -66,18 +72,25 @@ class AggregatedCompactionStats {
 
     @NeverCompile
     public void dump(PrintWriter pw) {
-        long totalCompactRequested = mSomeCompactRequested + mFullCompactRequested;
-        long totalCompactPerformed = mSomeCompactPerformed + mFullCompactPerformed;
+        long totalCompactRequested = mSomeCompactRequested + mFullCompactRequested
+                + mAnonCompactRequested + mPopulateCompactRequested;
+        long totalCompactPerformed = mSomeCompactPerformed + mFullCompactPerformed
+                + mAnonCompactPerformed + mPopulateCompactPerformed;
         pw.println("    Performed / Requested:");
         pw.println("      Some: (" + mSomeCompactPerformed + "/" + mSomeCompactRequested + ")");
         pw.println("      Full: (" + mFullCompactPerformed + "/" + mFullCompactRequested + ")");
+        pw.println("      Anon: (" + mAnonCompactPerformed + "/" + mAnonCompactRequested + ")");
+        pw.println("      Populate: (" + mPopulateCompactPerformed + "/"
+                + mPopulateCompactRequested + ")");
 
         long throttledSome = getThrottledSome();
         long throttledFull = getThrottledFull();
+        long throttledAnon = getThrottledAnon();
 
-        if (throttledSome > 0 || throttledFull > 0) {
+        if (throttledSome > 0 || throttledFull > 0 || throttledAnon > 0) {
             pw.println("    Throttled:");
-            pw.println("       Some: " + throttledSome + " Full: " + throttledFull);
+            pw.println("       Some: " + throttledSome + " Full: " + throttledFull
+                    + " Anon: " + throttledAnon);
             pw.println("    Throttled by Type:");
             final long compactionsThrottled = totalCompactRequested - totalCompactPerformed;
             // Any throttle that was not part of the previous categories
@@ -95,7 +108,7 @@ class AggregatedCompactionStats {
             pw.println("    Throttle Percentage: " + compactThrottlePercentage);
         }
 
-        if (mFullCompactPerformed > 0) {
+        if (mFullCompactPerformed > 0 || mAnonCompactPerformed > 0) {
             pw.println("    -----Memory Stats----");
             pw.println("    Total Delta Anon RSS (KB) : " + mTotalDeltaAnonRssKBs);
             pw.println("    Total Physical ZRAM Consumed (KB): " + mTotalZramConsumedKBs);
