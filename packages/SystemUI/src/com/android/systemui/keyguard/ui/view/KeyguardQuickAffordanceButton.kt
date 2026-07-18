@@ -33,7 +33,7 @@ class KeyguardQuickAffordanceButton @JvmOverloads constructor(
     defStyleAttr: Int = 0,
 ) : LaunchableImageView(context, attrs, defStyleAttr) {
     private val blur = AxBlurBackgroundRenderer(this)
-    private var overlayColor = AxBlurColors.surfaceBrightTint(context)
+    private var overlayColor = AxBlurColors.surfaceLightTint(context)
 
     init {
         updateThemeColors()
