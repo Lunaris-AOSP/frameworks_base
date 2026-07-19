@@ -252,8 +252,10 @@ constructor(
                             extras.containsKey(Notification.EXTRA_DECLINE_INTENT) ||
                             extras.containsKey(Notification.EXTRA_HANG_UP_INTENT)
                     if (isCallStyle) {
-                        if ("call" !in disabledTypes) handleCallNotification(sbn, extras)
-                        return
+                        if ("call" !in disabledTypes) {
+                            handleCallNotification(sbn, extras)
+                            return
+                        }
                     }
                 }
 
