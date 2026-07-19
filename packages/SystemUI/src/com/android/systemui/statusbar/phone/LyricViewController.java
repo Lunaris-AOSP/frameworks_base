@@ -66,6 +66,9 @@ public abstract class LyricViewController implements
     private String mCurrentNotificationPackage = null;
     private int mCurrentNotificationId;
 
+    private final LyricsFetcher mLyricsFetcher;
+    private boolean mMediaLyricsActive;
+
     private ColorStateList mTintColorStateList;
 
     public LyricViewController(Context context, View statusBar) {
@@ -94,8 +97,42 @@ public abstract class LyricViewController implements
             return false;
         });
 
+        mLyricsFetcher = new LyricsFetcher(mContext, new LyricsFetcher.Callback() {
+            @Override
+            public void onSyncedLineChanged(String line) {
+                if (!mEnabled) return;
+                if (line == null) {
+                    if (mMediaLyricsActive) {
+                        mMediaLyricsActive = false;
+                        stopLyric();
+                    }
+                    return;
+                }
+                mMediaLyricsActive = true;
+                mTextSwitcher.setText(line);
+                startLyric();
+            }
+
+            @Override
+            public void onPlainLyricsAvailable(String plainLyrics) {
+                if (!mEnabled) return;
+                mMediaLyricsActive = true;
+                mTextSwitcher.setText(plainLyrics);
+                startLyric();
+            }
+
+            @Override
+            public void onLyricsCleared() {
+                if (mMediaLyricsActive) {
+                    mMediaLyricsActive = false;
+                    stopLyric();
+                }
+            }
+        });
+
         Dependency.get(DarkIconDispatcher.class).addDarkReceiver(this);
         Dependency.get(NotificationListener.class).addNotificationHandler(this);
+        mLyricsFetcher.start();
     }
 
     public void setEnabled(boolean enabled) {
@@ -111,7 +148,7 @@ public abstract class LyricViewController implements
 
     @Override
     public void onNotificationPosted(StatusBarNotification sbn, RankingMap rankingMap) {
-        if (!mEnabled) return;
+        if (!mEnabled || mMediaLyricsActive) return;
 
         Notification notification = sbn.getNotification();
         boolean isLyric = (notification.flags & Notification.FLAG_ALWAYS_SHOW_TICKER) != 0;
@@ -166,6 +203,12 @@ public abstract class LyricViewController implements
 
     @Override
     public void onNotificationsInitialized() {
+    }
+
+    public void destroy() {
+        if (mLyricsFetcher != null) {
+            mLyricsFetcher.stop();
+        }
     }
 
     public void startLyric() {
