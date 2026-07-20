@@ -319,4 +319,7 @@
     <item type="id" name="original_typeface" />
     <item type="id" name="original_alpha" />
 
+    <!-- Now Playing -->
+    <item type="id" name="now_playing_view" />
+
 </resources>
