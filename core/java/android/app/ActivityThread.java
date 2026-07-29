@@ -8191,7 +8191,10 @@ public final class ActivityThread extends ClientTransactionHandler
 
         if (!Process.isIsolated()) {
             try {
-                if (AnimationUtils.sPerfAnimEnabled) {
+                int animStyle = Settings.System.getInt(
+                        getSystemContext().getContentResolver(),
+                        "system_animation_style", 0);
+                if (animStyle == 4) {
                     AnimationUtils.ActivityAnimations.preload();
                 }
             } catch (Exception e) {
