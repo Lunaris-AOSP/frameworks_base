@@ -32,7 +32,6 @@ import android.content.res.XmlResourceParser;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.os.SystemClock;
-import android.os.SystemProperties;
 import android.ravenwood.annotation.RavenwoodIgnore;
 import android.ravenwood.annotation.RavenwoodKeepPartialClass;
 import android.util.AttributeSet;
@@ -77,15 +76,12 @@ public class AnimationUtils {
      */
     private static final int TOGETHER = 0;
     private static final int SEQUENTIALLY = 1;
-    
-    /** @hide **/
-    public static final boolean sPerfAnimEnabled = SystemProperties.getBoolean(
-            "persist.sys.activity_anim_perf_override", false);
 
     private static Animation activityOpenEnterAnim;
     private static Animation activityOpenExitAnim;
     private static Animation activityCloseEnterAnim;
     private static Animation activityCloseExitAnim;
+    private static Animation activityAppStartingExitAnim;
     private static int lastAnimStyle = -1;
 
     private static boolean sExpectedPresentationTimeFlagValue;
@@ -257,21 +253,6 @@ public class AnimationUtils {
     public static Animation loadAnimation(Context context, @AnimRes int id)
             throws NotFoundException {
 
-        if (sPerfAnimEnabled) {
-            switch (id) {
-                case R.anim.activity_open_enter:
-                    return ActivityAnimations.getOpenEnter();
-                case R.anim.activity_open_exit:
-                    return ActivityAnimations.getOpenExit();
-                case R.anim.activity_close_enter:
-                    return ActivityAnimations.getCloseEnter();
-                case R.anim.activity_close_exit:
-                    return ActivityAnimations.getCloseExit();
-                case R.anim.app_starting_exit:
-                    return ActivityAnimations.getAppStartingExit();
-            }
-        }
-
         int animStyle = Settings.System.getInt(
                 context.getContentResolver(), 
                 "system_animation_style", 0);
@@ -289,6 +270,11 @@ public class AnimationUtils {
                     return getActivityCloseEnterAnim(animStyle);
                 case "activity_close_exit":
                     return getActivityCloseExitAnim(animStyle);
+                case "app_starting_exit":
+                    if (animStyle == 4) {
+                        return getActivityAppStartingExitAnim();
+                    }
+                    break;
             }
         }
         return loadAnimationFromXml(context, id);
@@ -299,6 +285,7 @@ public class AnimationUtils {
         activityOpenExitAnim = null;
         activityCloseEnterAnim = null;
         activityCloseExitAnim = null;
+        activityAppStartingExitAnim = null;
     }
 
     private static Animation getActivityOpenEnterAnim(int animStyle) {
@@ -327,6 +314,13 @@ public class AnimationUtils {
             activityCloseExitAnim = createActivityCloseExitAnim(animStyle);
         }
         return activityCloseExitAnim;
+    }
+
+    private static Animation getActivityAppStartingExitAnim() {
+        if (activityAppStartingExitAnim == null) {
+            activityAppStartingExitAnim = ActivityAnimations.getAppStartingExit();
+        }
+        return activityAppStartingExitAnim;
     }
 
     private static Animation createActivityOpenEnterAnim(int animStyle) {
@@ -365,6 +359,8 @@ public class AnimationUtils {
             slideIn.setInterpolator(new OutExpoInterpolator());
             animationSet.addAnimation(slideIn);
             return animationSet;
+        } else if (animStyle == 4) {
+            return ActivityAnimations.getOpenEnter();
         }
         return null;
     }
@@ -398,6 +394,8 @@ public class AnimationUtils {
             slideLeft.setInterpolator(new OutExpoInterpolator());
             animationSet.addAnimation(slideLeft);
             return animationSet;
+        } else if (animStyle == 4) {
+            return ActivityAnimations.getOpenExit();
         }
         return null;
     }
@@ -431,6 +429,8 @@ public class AnimationUtils {
             slideIn.setInterpolator(new OutExpoInterpolator());
             animationSet.addAnimation(slideIn);
             return animationSet;
+        } else if (animStyle == 4) {
+            return ActivityAnimations.getCloseEnter();
         }
         return null;
     }
@@ -465,6 +465,8 @@ public class AnimationUtils {
             slideOut.setInterpolator(new OutExpoInterpolator());
             animationSet.addAnimation(slideOut);
             return animationSet;
+        } else if (animStyle == 4) {
+            return ActivityAnimations.getCloseExit();
         }
         return null;
     }
