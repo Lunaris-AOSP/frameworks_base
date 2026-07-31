@@ -18,7 +18,6 @@ package com.android.systemui.statusbar.phone;
 
 import android.app.Notification;
 import android.content.Context;
-import android.content.res.ColorStateList;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.service.notification.NotificationListenerService;
@@ -30,17 +29,13 @@ import android.view.View;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
 import android.widget.ImageSwitcher;
-import android.widget.ImageView;
 import android.widget.TextSwitcher;
 import android.widget.TextView;
 
-import com.android.internal.statusbar.StatusBarIcon;
-import com.android.internal.util.ContrastColorUtil;
 import com.android.systemui.Dependency;
 import com.android.systemui.res.R;
 import com.android.systemui.plugins.DarkIconDispatcher;
 import com.android.systemui.statusbar.NotificationListener;
-import com.android.systemui.statusbar.StatusBarIconView;
 
 import java.util.ArrayList;
 
@@ -48,17 +43,11 @@ public abstract class LyricViewController implements
     DarkIconDispatcher.DarkReceiver,
     NotificationListener.NotificationHandler {
 
-    private static final String EXTRA_TICKER_ICON = "ticker_icon";
-    private static final String EXTRA_TICKER_ICON_SWITCH = "ticker_icon_switch";
-
     private static final int HIDE_LYRIC_DELAY = 1200;
 
     private final Context mContext;
-    private final ImageSwitcher mIconSwitcher;
     private final TextSwitcher mTextSwitcher;
     private final View mLyricContainer;
-
-    private final ContrastColorUtil mNotificationColorUtil;
 
     private boolean mEnabled;
     private boolean mStarted;
@@ -70,15 +59,10 @@ public abstract class LyricViewController implements
     private boolean mMediaLyricsActive;
     private final LyricsFetcher.Callback mLyricsCallback;
 
-    private ColorStateList mTintColorStateList;
-
     public LyricViewController(Context context, View statusBar) {
         mContext = context;
         mLyricContainer = statusBar.findViewById(R.id.lyric_container);
-        mIconSwitcher = statusBar.findViewById(R.id.lyric_icon);
         mTextSwitcher = statusBar.findViewById(R.id.lyric_text);
-
-        mNotificationColorUtil = ContrastColorUtil.getInstance(mContext);
 
         Animation animationIn = AnimationUtils.loadAnimation(mContext,
                 com.android.internal.R.anim.push_up_in);
@@ -87,8 +71,6 @@ public abstract class LyricViewController implements
 
         mTextSwitcher.setInAnimation(animationIn);
         mTextSwitcher.setOutAnimation(animationOut);
-        mIconSwitcher.setInAnimation(animationIn);
-        mIconSwitcher.setOutAnimation(animationOut);
 
         mLyricContainer.setOnTouchListener((v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_DOWN) {
@@ -169,18 +151,6 @@ public abstract class LyricViewController implements
                 stopLyric();
                 return;
             }
-            if (!isCurrentNotification || !mStarted ||
-                    notification.extras.getBoolean(EXTRA_TICKER_ICON_SWITCH, false)) {
-                int iconId = notification.extras.getInt(EXTRA_TICKER_ICON, -1);
-                String slot = sbn.getPackageName() + "/0x" + Integer.toHexString(sbn.getId());
-                StatusBarIconView statusBarIconView = new StatusBarIconView(mContext, slot, sbn);
-                Drawable icon = iconId == -1 ? notification.getSmallIcon().loadDrawable(mContext) :
-                        statusBarIconView.getIcon(mContext, sbn.getPackageContext(mContext),
-                                new StatusBarIcon(sbn.getPackageName(), sbn.getUser(),
-                                    iconId, notification.iconLevel, 0, null, StatusBarIcon.Type.NotifSmallIcon));
-                mIconSwitcher.setImageDrawable(icon);
-                updateIconTint();
-            }
             startLyric();
             mTextSwitcher.setText(notification.tickerText);
         }
@@ -241,26 +211,11 @@ public abstract class LyricViewController implements
         return mLyricContainer;
     }
 
-    private void updateIconTint() {
-        Drawable drawable = ((ImageView)mIconSwitcher.getCurrentView()).getDrawable();
-        boolean isGrayscale = mNotificationColorUtil.isGrayscaleIcon(drawable);
-        if (isGrayscale) {
-            ((ImageView) mIconSwitcher.getCurrentView()).setImageTintList(mTintColorStateList);
-            ((ImageView) mIconSwitcher.getNextView()).setImageTintList(mTintColorStateList);
-        } else {
-            ((ImageView) mIconSwitcher.getCurrentView()).setImageTintList(null);
-            ((ImageView) mIconSwitcher.getNextView()).setImageTintList(null);
-        }
-    }
-
     @Override
     public void onDarkChanged(ArrayList<Rect> area, float darkIntensity, int tint) {
         int tintColor = DarkIconDispatcher.getTint(area, mLyricContainer, tint);
 
         ((TextView) mTextSwitcher.getCurrentView()).setTextColor(tintColor);
         ((TextView) mTextSwitcher.getNextView()).setTextColor(tintColor);
-
-        mTintColorStateList = ColorStateList.valueOf(tintColor);
-        updateIconTint();
     }
 }
