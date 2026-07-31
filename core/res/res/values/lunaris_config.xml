@@ -116,5 +116,5 @@
     </integer-array>
 
     <!-- Smart 5G -->
-    <bool name="config_supportSmart5G">false</bool>
+    <bool name="config_supportSmart5G">true</bool>
 </resources>
