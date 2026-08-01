@@ -37,6 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,11 +46,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.keyframes
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -66,6 +79,10 @@ import com.android.systemui.statusbar.featurepods.popups.ui.model.ColorsModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.HoverBehavior
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
 
 /**
  * A clickable chip that can show an anchored popup containing relevant system controls. The chip
@@ -77,6 +94,7 @@ fun StatusBarPopupChip(
     viewModel: PopupChipModel.Shown,
     modifier: Modifier = Modifier,
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
+    onChipBoundsChanged: (Rect) -> Unit = {},
 ) {
     val hasHoverBehavior = viewModel.hoverBehavior !is HoverBehavior.None
     val hoveredState by interactionSource.collectIsHoveredAsState()
@@ -89,12 +107,19 @@ fun StatusBarPopupChip(
     val isMediaChip = viewModel.chipId == PopupChipId.MediaControl
     val chipBackgroundColor =
         colors.chipBackground(isPopupShown = isPopupShown, colorScheme = MaterialTheme.colorScheme)
+    val view = LocalView.current
+    var toggleCount by remember { mutableStateOf(0) }
+    LaunchedEffect(isPopupShown) { toggleCount++ }
 
     Box(
         contentAlignment = Alignment.Center,
         modifier =
             modifier
                 .minimumInteractiveComponentSize()
+                .onGloballyPositioned { coordinates ->
+                    onChipBoundsChanged(coordinates.boundsInScreen(view))
+                }
+                .squishAnimation(toggleCount)
                 .thenIf(viewModel.contentDescription != null) {
                     Modifier.semantics { contentDescription = viewModel.contentDescription!! }
                 }
@@ -285,4 +310,55 @@ private fun isMediaPlaying(viewModel: PopupChipModel.Shown): Boolean {
 @Composable
 private fun MusicVisualizerBars(isPlaying: Boolean, color: Color) {
     AudioReactiveBars(isPlaying = isPlaying, color = color, startPadding = 2.dp)
+}
+
+private fun LayoutCoordinates.boundsInScreen(view: android.view.View): Rect {
+    val location = IntArray(2)
+    view.getLocationOnScreen(location)
+    return boundsInRoot().translate(Offset(location[0].toFloat(), location[1].toFloat()))
+}
+
+@Composable
+private fun Modifier.squishAnimation(toggleCount: Int): Modifier {
+    val scaleX = remember { Animatable(1f, visibilityThreshold = 0.01f) }
+    val scaleY = remember { Animatable(1f, visibilityThreshold = 0.01f) }
+    val currentToggleCount by rememberUpdatedState(toggleCount)
+    LaunchedEffect(Unit) {
+        snapshotFlow { currentToggleCount }
+            .drop(1)
+            .collectLatest {
+                scaleX.snapTo(1f)
+                scaleY.snapTo(1f)
+                coroutineScope {
+                    launch {
+                        scaleX.animateTo(
+                            targetValue = 1f,
+                            animationSpec =
+                                keyframes {
+                                    durationMillis = 400
+                                    1.066f at 120 using FastOutSlowInEasing
+                                    0.967f at 260
+                                    1f at 400
+                                },
+                        )
+                    }
+                    launch {
+                        scaleY.animateTo(
+                            targetValue = 1f,
+                            animationSpec =
+                                keyframes {
+                                    durationMillis = 400
+                                    0.945f at 120 using FastOutSlowInEasing
+                                    1.033f at 260
+                                    1f at 400
+                                },
+                        )
+                    }
+                }
+            }
+    }
+    return this.graphicsLayer {
+        this.scaleX = scaleX.value
+        this.scaleY = scaleY.value
+    }
 }

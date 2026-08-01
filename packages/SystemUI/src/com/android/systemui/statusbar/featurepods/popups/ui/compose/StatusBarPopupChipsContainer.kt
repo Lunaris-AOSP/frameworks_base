@@ -27,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.dp
 import com.android.systemui.scene.shared.flag.SceneContainerFlag
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
@@ -42,6 +43,7 @@ fun StatusBarPopupChipsContainer(
 ) {
     var popupAnchorChip by remember { mutableStateOf<PopupChipModel.Shown?>(null) }
     var popupVisible by remember { mutableStateOf(false) }
+    var anchorBoundsByChip by remember { mutableStateOf<Map<PopupChipId, Rect>>(emptyMap()) }
 
     val shownChip = remember(chips) { chips.firstOrNull { it.isPopupShown } }
     LaunchedEffect(shownChip) {
@@ -73,12 +75,18 @@ fun StatusBarPopupChipsContainer(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             chips.forEach { chip ->
-                StatusBarPopupChip(chip)
+                StatusBarPopupChip(
+                    viewModel = chip,
+                    onChipBoundsChanged = { bounds ->
+                        anchorBoundsByChip = anchorBoundsByChip + (chip.chipId to bounds)
+                    },
+                )
             }
             popupAnchorChip?.let { anchoredChip ->
                 StatusBarPopup(
                     viewModel = anchoredChip,
                     isVisible = popupVisible,
+                    chipBoundsInScreen = anchorBoundsByChip[anchoredChip.chipId],
                 )
             }
         }
