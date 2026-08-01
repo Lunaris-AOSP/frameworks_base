@@ -33,6 +33,7 @@ import com.android.systemui.statusbar.featurepods.popups.ui.viewmodel.StatusBarP
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import java.util.Locale
 
 /**
@@ -55,8 +56,11 @@ constructor(
             traceName = "chip",
             initialValue = PopupChipModel.Hidden(PopupChipId.MediaControl),
             source =
-                mediaControlChipInteractor.mediaControlChipModel.map { model ->
-                    toPopupChipModel(model)
+                combine(
+                    mediaControlChipInteractor.mediaControlChipModel,
+                    mediaControlChipInteractor.mediaUseWaveform,
+                ) { model, useWaveform ->
+                    toPopupChipModel(model, useWaveform)
                 },
         )
 
@@ -64,7 +68,7 @@ constructor(
         hydrator.activate()
     }
 
-    private fun toPopupChipModel(model: MediaControlChipModel?): PopupChipModel {
+    private fun toPopupChipModel(model: MediaControlChipModel?, useWaveform: Boolean): PopupChipModel {
         if (model == null || model.songName.isNullOrEmpty()) {
             return PopupChipModel.Hidden(PopupChipId.MediaControl)
         }
@@ -83,7 +87,7 @@ constructor(
             chipText = normalizeSongTitle(model.songName.toString(), model.artistName?.toString()),
             colors = ColorsModel.DynamicIsland,
             hoverBehavior = createHoverBehavior(model),
-            popupContent = PopupContentModel.Media(model),
+            popupContent = PopupContentModel.Media(model, useWaveform),
         )
     }
 
