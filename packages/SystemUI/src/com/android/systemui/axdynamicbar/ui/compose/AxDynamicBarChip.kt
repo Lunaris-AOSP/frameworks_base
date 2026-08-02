@@ -103,6 +103,7 @@ fun AxDynamicBarChip(
     val isOnKeyguard by viewModel.isOnKeyguard.collectAsStateWithLifecycle()
     val keyguardCarrier by viewModel.keyguardCarrierText.collectAsStateWithLifecycle()
     val chipStyle by viewModel.chipStyle.collectAsStateWithLifecycle()
+    val isMediaEventTypeEnabled by viewModel.isMediaEventTypeEnabled.collectAsStateWithLifecycle()
 
     var toggleCount by remember { mutableIntStateOf(0) }
     
@@ -190,8 +191,16 @@ fun AxDynamicBarChip(
             },
     ) {
         state?.let { chipState ->
-            val displayEvent = chipState.notificationAlert ?: chipState.event
+            val rawDisplayEvent = chipState.notificationAlert ?: chipState.event
+            val displayEvent: IslandEvent? = when {
+                isMediaEventTypeEnabled -> rawDisplayEvent
+                rawDisplayEvent is IslandEvent.Media ->
+                    chipState.allEvents.firstOrNull { it !is IslandEvent.Media }
+                else -> rawDisplayEvent
+            }
             val isAlert = chipState.notificationAlert != null
+
+            if (displayEvent == null) return@let
 
             Expandable(
                 controller = expandableController,

@@ -63,12 +63,15 @@ constructor(
 
     private fun isTypeEnabled(typeId: String): Boolean = typeId !in disabled
 
+    private fun isMediaSourceNeeded(): Boolean =
+        isTypeEnabled("media") || settings.isKeyguardMusicPillEnabled.value
+
     fun startListening() {
         if (listenersStarted) return
         listenersStarted = true
         Log.d(TAG, "Starting event listeners")
         syncDisabledTypes()
-        if (isTypeEnabled("media")) media.startListening()
+        if (isMediaSourceNeeded()) media.startListening()
         if (isTypeEnabled("bluetooth")) connectivity.startBluetooth()
         if (isTypeEnabled("hotspot")) connectivity.startHotspot()
         if (isTypeEnabled("vpn")) connectivity.startVpn()
@@ -79,7 +82,7 @@ constructor(
         if (isTypeEnabled("app_switch")) appTracking.startListening()
         if (isTypeEnabled("torch")) torch.startListening()
         if (isTypeEnabled("biometric_unlock")) biometric.startListening()
-        if (isTypeEnabled("media") || isTypeEnabled("sports")) smartspace.startListening()
+        if (isMediaSourceNeeded() || isTypeEnabled("sports")) smartspace.startListening()
     }
 
     fun stopListening() {
@@ -100,7 +103,7 @@ constructor(
         if (!listenersStarted) return
         syncDisabledTypes()
 
-        if (isTypeEnabled("media")) media.startListening()
+        if (isMediaSourceNeeded()) media.startListening()
         else media.stopListening()
 
         if (isTypeEnabled("bluetooth")) connectivity.startBluetooth()
@@ -124,7 +127,7 @@ constructor(
         if (isTypeEnabled("biometric_unlock")) biometric.startListening()
         else biometric.stopListening()
 
-        if (isTypeEnabled("media") || isTypeEnabled("sports")) smartspace.startListening()
+        if (isMediaSourceNeeded() || isTypeEnabled("sports")) smartspace.startListening()
         else smartspace.stopListening()
     }
 
@@ -172,7 +175,7 @@ constructor(
                 notification.alarmEvent,
             ) { m, bt, hotspot, charging, alarm ->
                 listOfNotNull(
-                    m?.takeIf { isTypeEnabled("media") },
+                    m?.takeIf { isMediaSourceNeeded() },
                     bt?.takeIf { isTypeEnabled("bluetooth") },
                     hotspot?.takeIf { isTypeEnabled("hotspot") },
                     charging?.takeIf { isTypeEnabled("charging") },
