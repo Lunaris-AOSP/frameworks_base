@@ -89,6 +89,11 @@ constructor(
     val isKeyguardEnabled: StateFlow<Boolean> = interactor.settings.isKeyguardEnabled
     val keyguardBatteryChipMode: StateFlow<Int> = interactor.settings.keyguardBatteryChipMode
     val isKeyguardMusicPillEnabled: StateFlow<Boolean> = interactor.settings.isKeyguardMusicPillEnabled
+    val isMediaEventTypeEnabled: StateFlow<Boolean> =
+        interactor.settings.disabledEventTypes
+            .map { "media" !in it }
+            .distinctUntilChanged()
+            .stateIn(applicationScope, SharingStarted.Eagerly, true)
     val mediaUseWaveform: StateFlow<Boolean> = interactor.mediaUseWaveform
     val chipStyle: StateFlow<Int> = interactor.settings.chipStyle
 

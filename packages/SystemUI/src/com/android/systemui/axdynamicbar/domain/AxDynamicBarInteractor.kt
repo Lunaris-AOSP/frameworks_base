@@ -253,9 +253,16 @@ constructor(
             combine(
                 repository.events,
                 settings.disabledEventTypes,
+                settings.isKeyguardMusicPillEnabled,
                 _isOnKeyguard,
-            ) { raw, _, kg ->
-                raw.filter { settings.isEventEnabled(it) } to kg
+            ) { raw, _, pillEnabled, kg ->
+                raw.filter { e ->
+                    if (e is IslandEvent.Media) {
+                        settings.isEventEnabled(e) || pillEnabled
+                    } else {
+                        settings.isEventEnabled(e)
+                    }
+                } to kg
             }.collect { (rawEvents, onKeyguard) ->
                 if (!settings.isEnabled.value) return@collect
                 dismissedEventIds.removeAll { id -> rawEvents.none { it.id == id } }
