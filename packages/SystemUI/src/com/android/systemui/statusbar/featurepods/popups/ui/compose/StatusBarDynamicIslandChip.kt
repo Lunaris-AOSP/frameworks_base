@@ -17,6 +17,7 @@
 package com.android.systemui.statusbar.featurepods.popups.ui.compose
 
 import android.view.DisplayCutout
+import android.view.HapticFeedbackConstants
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.keyframes
@@ -108,10 +109,14 @@ fun StatusBarDynamicIslandChip(
         Modifier.onGloballyPositioned { coordinates ->
             onChipBoundsChanged(coordinates.boundsInScreen(view))
         }
+    val hapticOnTap: () -> Unit = {
+        view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+        onTap()
+    }
     if (viewModel.popupContent.isUtilityStatusContent() && viewModel.icons.isNotEmpty()) {
         UtilityStatusIslandChip(
             viewModel = viewModel,
-            onTap = onTap,
+            onTap = hapticOnTap,
             cutoutSpec = cutoutSpec,
             widthScale = widthScale,
             heightScale = heightScale,
@@ -162,7 +167,7 @@ fun StatusBarDynamicIslandChip(
                 .clip(chipShape)
                 .background(chipBackgroundColor)
                 .border(width = 1.dp, color = chipOutline, shape = chipShape)
-                .clickable(onClick = onTap)
+                .clickable(onClick = hapticOnTap)
                 .padding(horizontal = 12.dp * widthScale, vertical = 7.dp * heightScale),
         horizontalArrangement =
             if (isMediaChip) Arrangement.SpaceBetween else Arrangement.spacedBy(8.dp),
