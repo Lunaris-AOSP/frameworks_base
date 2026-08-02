@@ -326,12 +326,16 @@ fun AxDynamicBarKeyguardChip(
                         onClick = null,
                         defaultMinSize = false,
                     ) { expandable ->
+                        val keyguardEventCount = remember(chipState.allEvents, isKeyguardMusicPillEnabled) {
+                            if (isKeyguardMusicPillEnabled) chipState.eventCount
+                            else chipState.allEvents.count { it !is IslandEvent.Media }
+                        }
                         KeyguardChipBody(
                             event = event,
                             accent = accent,
                             contentColor = contentColor,
                             progress = progress,
-                            eventCount = chipState.eventCount,
+                            eventCount = keyguardEventCount,
                             viewModel = viewModel,
                             batteryString = batteryString,
                             aospChipExpandable = expandable,
