@@ -233,6 +233,10 @@ fun AxDynamicBarChip(
                     val contentColor by animateColorAsState(
                         chipContentColorOn(rawAccent), MaterialTheme.motionScheme.fastEffectsSpec(), label = "content",
                     )
+                    val statusBarEventCount = remember(chipState.allEvents, isMediaEventTypeEnabled) {
+                        if (isMediaEventTypeEnabled) chipState.eventCount
+                        else chipState.allEvents.count { it !is IslandEvent.Media }
+                    }
                 val useCircleStyle = chipStyle == 1 &&
                         !isAlert &&
                         event !is IslandEvent.AudioRecording &&
@@ -380,7 +384,7 @@ fun AxDynamicBarChip(
                                     overrideColor = contentColor,
                                 )
                             }
-                            if (chipState.eventCount > 1) {
+                            if (statusBarEventCount > 1) {
                                 Spacer(Modifier.width(SpaceXs))
                                 Box(
                                     contentAlignment = Alignment.Center,
@@ -394,7 +398,7 @@ fun AxDynamicBarChip(
                                         .padding(horizontal = 3.dp),
                                 ) {
                                     Text(
-                                        text = "${chipState.eventCount}",
+                                        text = "$statusBarEventCount",
                                         style = TsBadge,
                                         color = contentColor,
                                         maxLines = 1,
