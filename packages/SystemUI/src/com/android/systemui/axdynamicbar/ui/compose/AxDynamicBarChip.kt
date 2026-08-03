@@ -106,6 +106,15 @@ fun AxDynamicBarChip(
     val isMediaEventTypeEnabled by viewModel.isMediaEventTypeEnabled.collectAsStateWithLifecycle()
 
     var toggleCount by remember { mutableIntStateOf(0) }
+
+    val displayEvent: IslandEvent? = state?.let { chipState ->
+        val raw = chipState.notificationAlert ?: chipState.event
+        when {
+            isMediaEventTypeEnabled -> raw
+            raw is IslandEvent.Media -> chipState.allEvents.firstOrNull { it !is IslandEvent.Media }
+            else -> raw
+        }
+    }
     
     val carrierName = if (isOnKeyguard && ignoreKeyguard) keyguardCarrier.takeIf { it.isNotBlank() } else null
     val chipTextMaxWidth = dimensionResource(R.dimen.ongoing_activity_chip_max_text_width)
@@ -119,7 +128,7 @@ fun AxDynamicBarChip(
     val motionScheme = MaterialTheme.motionScheme
 
     AnimatedVisibility(
-        visible = state != null && (ignoreKeyguard || !isOnKeyguard),
+        visible = state != null && displayEvent != null && (ignoreKeyguard || !isOnKeyguard),
         enter = fadeIn(motionScheme.defaultEffectsSpec()) + scaleIn(initialScale = 0.8f, animationSpec = motionScheme.defaultSpatialSpec()),
         exit = fadeOut(motionScheme.fastEffectsSpec()) + scaleOut(targetScale = 0.8f, animationSpec = motionScheme.fastSpatialSpec()),
         modifier = modifier
@@ -191,16 +200,9 @@ fun AxDynamicBarChip(
             },
     ) {
         state?.let { chipState ->
-            val rawDisplayEvent = chipState.notificationAlert ?: chipState.event
-            val displayEvent: IslandEvent? = when {
-                isMediaEventTypeEnabled -> rawDisplayEvent
-                rawDisplayEvent is IslandEvent.Media ->
-                    chipState.allEvents.firstOrNull { it !is IslandEvent.Media }
-                else -> rawDisplayEvent
-            }
             val isAlert = chipState.notificationAlert != null
 
-            if (displayEvent == null) return@let
+            val event = displayEvent ?: return@let
 
             Expandable(
                 controller = expandableController,
