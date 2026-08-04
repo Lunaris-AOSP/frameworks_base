@@ -133,7 +133,9 @@ public class SystemSettings {
                 Settings.System.CV_PREFERRED_INTENSITY,
                 Settings.System.NAVBAR_LONG_PRESS_GESTURE,
                 Settings.System.SHADE_SCRIM_ALPHA,
-                Settings.System.NOTIFICATION_SCRIM_ALPHA
+                Settings.System.NOTIFICATION_SCRIM_ALPHA,
+                Settings.System.FLING_VELOCITY_MIN,
+                Settings.System.FLING_VELOCITY_MAX
         ));
         if (Flags.backUpSmoothDisplayAndForcePeakRefreshRate()) {
             settings.add(Settings.System.PEAK_REFRESH_RATE);

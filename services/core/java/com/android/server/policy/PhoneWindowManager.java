@@ -1174,6 +1174,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             resolver.registerContentObserver(Settings.System.getUriFor(
                     Settings.System.SCREEN_ON_MEMORY_RECLAIM), false, this,
                     UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.FLING_VELOCITY_MIN), false, this,
+                    UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.FLING_VELOCITY_MAX), false, this,
+                    UserHandle.USER_ALL);
             updateSettings();
         }
 
@@ -3759,6 +3765,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 updateKidsModeSettings = true;
             }
         }
+
+        ViewConfiguration.invalidateConfigurationCache();
+
         if (updateKidsModeSettings) {
             updateKidsModeSettings(kidsModeEnabled);
         }

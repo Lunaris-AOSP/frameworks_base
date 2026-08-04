@@ -8067,6 +8067,20 @@ public final class Settings {
         public static final String STATUS_BAR_DYNAMIC_ISLAND_LYRICS = "status_bar_dynamic_island_lyrics";
 
         /**
+         * Overrides the maximum fling velocity, in dips per second.
+         * @hide
+         */
+        @Readable
+        public static final String FLING_VELOCITY_MAX = "fling_velocity_max";
+
+        /**
+         * Overrides the minimum fling velocity, in dips per second.
+         * @hide
+         */
+        @Readable
+        public static final String FLING_VELOCITY_MIN = "fling_velocity_min";
+
+        /**
          * Keys we no longer back up under the current schema, but want to continue to
          * process when restoring historical backup datasets.
          *
