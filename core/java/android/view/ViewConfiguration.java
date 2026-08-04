@@ -249,6 +249,14 @@ public class ViewConfiguration {
     public static final int NO_HAPTIC_SCROLL_TICK_INTERVAL = Integer.MAX_VALUE;
 
     /**
+     * Valid range for user-configurable fling velocity overrides.
+     */
+    private static final int MIN_FLING_VELOCITY_LOWER_BOUND = 10;
+    private static final int MIN_FLING_VELOCITY_UPPER_BOUND = 600;
+    private static final int MAX_FLING_VELOCITY_LOWER_BOUND = 4000;
+    private static final int MAX_FLING_VELOCITY_UPPER_BOUND = 12000;
+
+    /**
      * Delay before dispatching a recurring accessibility event in milliseconds.
      * This delay guarantees that a recurring event will be send at most once
      * during the {@link #SEND_RECURRING_ACCESSIBILITY_EVENTS_INTERVAL_MILLIS} time
@@ -561,8 +569,32 @@ public class ViewConfiguration {
         mHandwritingGestureLineMargin = res.getDimensionPixelSize(
                 R.dimen.config_viewConfigurationHandwritingGestureLineMargin);
 
-        mMinimumFlingVelocity = res.getDimensionPixelSize(R.dimen.config_viewMinFlingVelocity);
-        mMaximumFlingVelocity = res.getDimensionPixelSize(R.dimen.config_viewMaxFlingVelocity);
+        int minFling = res.getDimensionPixelSize(R.dimen.config_viewMinFlingVelocity);
+        int maxFling = res.getDimensionPixelSize(R.dimen.config_viewMaxFlingVelocity);
+
+        final int minFlingOverride = Settings.System.getIntForUser(
+                context.getContentResolver(),
+                Settings.System.FLING_VELOCITY_MIN, -1,
+                context.getUserId());
+        final int maxFlingOverride = Settings.System.getIntForUser(
+                context.getContentResolver(),
+                Settings.System.FLING_VELOCITY_MAX, -1,
+                context.getUserId());
+
+        if (minFlingOverride >= MIN_FLING_VELOCITY_LOWER_BOUND
+                && minFlingOverride <= MIN_FLING_VELOCITY_UPPER_BOUND) {
+            minFling = (int) (minFlingOverride * density + 0.5f);
+        }
+        if (maxFlingOverride >= MAX_FLING_VELOCITY_LOWER_BOUND
+                && maxFlingOverride <= MAX_FLING_VELOCITY_UPPER_BOUND) {
+            maxFling = (int) (maxFlingOverride * density + 0.5f);
+        }
+        if (minFling > maxFling) {
+            minFling = maxFling;
+        }
+
+        mMinimumFlingVelocity = minFling;
+        mMaximumFlingVelocity = maxFling;
 
         int configMinRotaryEncoderFlingVelocity = res.getDimensionPixelSize(
                 R.dimen.config_viewMinRotaryEncoderFlingVelocity);
@@ -654,6 +686,14 @@ public class ViewConfiguration {
     public static void resetCacheForTesting() {
         sConfigurations.clear();
         sResourceCache = new ResourceCache();
+    }
+
+    /**
+     * Clears cached 
+     * @hide
+     */
+    public static void invalidateConfigurationCache() {
+        sConfigurations.clear();
     }
 
     /**
