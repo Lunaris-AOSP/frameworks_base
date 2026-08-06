@@ -27,6 +27,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.android.systemui.dagger.qualifiers.Application
+import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInteractor
+import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.lifecycle.ExclusiveActivatable
 import com.android.systemui.statusbar.featurepods.alarm.ui.viewmodel.AlarmPopupChipViewModel
 import com.android.systemui.statusbar.featurepods.flashlight.ui.viewmodel.FlashlightPopupChipViewModel
@@ -43,6 +45,7 @@ import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 /**
@@ -53,6 +56,7 @@ class StatusBarPopupChipsViewModel
 @AssistedInject
 constructor(
     @Application private val context: Context,
+    private val keyguardTransitionInteractor: KeyguardTransitionInteractor,
     mediaControlChipFactory: MediaControlChipViewModel.Factory,
     screenRecordChipFactory: ScreenRecordPopupChipViewModel.Factory,
     liveScoreChipFactory: LiveScorePopupChipViewModel.Factory,
@@ -82,6 +86,7 @@ constructor(
             }
         }
 
+    private var isOnLockscreen by mutableStateOf(false)
     /** The ID of the current chip that is showing its popup, or `null` if no chip is shown. */
     private var currentShownPopupChipId by mutableStateOf<PopupChipId?>(null)
 
@@ -99,7 +104,7 @@ constructor(
     }
 
     val shownPopupChips: List<PopupChipModel.Shown> by derivedStateOf {
-        if (!isDynamicIslandEnabled) {
+        if (!isDynamicIslandEnabled || isOnLockscreen) {
             return@derivedStateOf emptyList()
         }
 
@@ -148,6 +153,10 @@ constructor(
                 UserHandle.USER_ALL,
             )
             dynamicIslandObserver.onChange(false)
+            launch {
+                keyguardTransitionInteractor.isFinishedIn(KeyguardState.LOCKSCREEN)
+                    .collectLatest { isOnLockscreen = it }
+            }
             launch { avControlsChip.activate() }
             launch { mediaControlChip.activate() }
             launch { screenRecordChip.activate() }
