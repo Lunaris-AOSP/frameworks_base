@@ -35,8 +35,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -86,6 +90,7 @@ private val CORNER_INNER = 28.dp
 @Composable
 fun MaterialVerticalBrightnessSlider(
     modifier: Modifier = Modifier,
+    sliderStyle: Int = 0,
     rounded: Boolean = false,
 ) {
     val context = LocalContext.current
@@ -197,9 +202,13 @@ fun MaterialVerticalBrightnessSlider(
     val iconRes = if (autoMode) R.drawable.ic_qs_brightness_auto_on
                   else R.drawable.ic_qs_brightness_auto_off
 
-    val cornerRadius = if (rounded) CORNER_ROUNDED else CORNER_DEFAULT
+    val effectiveStyle = if (sliderStyle != 0) sliderStyle else if (rounded) 1 else 0
+    val cornerRadius = when (effectiveStyle) {
+        1 -> CORNER_ROUNDED
+        else -> CORNER_DEFAULT
+    }
     val shape = RoundedCornerShape(cornerRadius)
-    val fillShape = RoundedCornerShape(if (rounded) CORNER_INNER else CORNER_DEFAULT)
+    val fillShape = RoundedCornerShape(if (effectiveStyle != 0) CORNER_INNER else CORNER_DEFAULT)
     val trackBg  = CustomColorScheme.current.qsTileColor
 
     fun yToLinear(y: Float, heightPx: Int): Float {
@@ -226,12 +235,17 @@ fun MaterialVerticalBrightnessSlider(
         }
     }
 
-    Box(
-        modifier = modifier
+    val rootModifier = if (effectiveStyle == 2) {
+        modifier.fillMaxHeight()
+    } else {
+        modifier
             .fillMaxHeight()
             .clip(shape)
             .background(trackBg)
-            .pointerInput(Unit) {
+    }
+
+    Box(
+        modifier = rootModifier.pointerInput(Unit) {
                 var longPressJob: Job? = null
 
                 awaitEachGesture {
@@ -292,25 +306,92 @@ fun MaterialVerticalBrightnessSlider(
                         view.parent?.requestDisallowInterceptTouchEvent(false)
                     }
                 }
-            },
+        },
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(currentFraction)
-                .align(Alignment.BottomCenter)
-                .then(
-                    if (fillBrush != null)
-                        Modifier.background(fillBrush, fillShape)
-                    else
-                        Modifier.background(fillColor, fillShape)
-                ),
-        )
+        if (effectiveStyle == 2) {
+            val topWeight = (1f - currentFraction).coerceIn(0.001f, 0.999f)
+            val bottomWeight = currentFraction.coerceIn(0.001f, 0.999f)
+
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .weight(topWeight)
+                        .fillMaxWidth()
+                        .padding(horizontal = 7.dp)
+                        .clip(
+                            RoundedCornerShape(
+                                topStart = 16.dp,
+                                topEnd = 16.dp,
+                                bottomStart = if (currentFraction >= 0.95f) 16.dp else 4.dp,
+                                bottomEnd = if (currentFraction >= 0.95f) 16.dp else 4.dp,
+                            )
+                        )
+                        .background(trackBg),
+                )
+
+                Spacer(modifier = Modifier.height(3.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 1.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(MaterialTheme.colorScheme.primary),
+                )
+
+                Spacer(modifier = Modifier.height(3.dp))
+
+                Box(
+                    modifier = Modifier
+                        .weight(bottomWeight)
+                        .fillMaxWidth()
+                        .padding(horizontal = 7.dp)
+                        .clip(
+                            RoundedCornerShape(
+                                bottomStart = 16.dp,
+                                bottomEnd = 16.dp,
+                                topStart = if (currentFraction <= 0.05f) 16.dp else 4.dp,
+                                topEnd = if (currentFraction <= 0.05f) 16.dp else 4.dp,
+                            )
+                        )
+                        .then(
+                            if (fillBrush != null)
+                                Modifier.background(fillBrush)
+                            else
+                                Modifier.background(fillColor)
+                        ),
+                )
+            }
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(currentFraction)
+                    .align(Alignment.BottomCenter)
+                    .then(
+                        if (fillBrush != null)
+                            Modifier.background(fillBrush, fillShape)
+                        else
+                            Modifier.background(fillColor, fillShape)
+                    ),
+            )
+        }
+
+        val dynamicIconTint = if (effectiveStyle == 2) {
+            if (currentFraction > 0.15f) MaterialTheme.colorScheme.onPrimary
+            else MaterialTheme.colorScheme.onSurface
+        } else {
+            iconTint
+        }
 
         Icon(
             painter = painterResource(iconRes),
             contentDescription = "Brightness",
-            tint = iconTint,
+            tint = dynamicIconTint,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 10.dp)

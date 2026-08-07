@@ -73,11 +73,11 @@ fun MaterialControlPanel(
         ) == 1
     } catch (_: Exception) { false }
 
-    fun readSliderRounded(): Boolean = try {
+    fun readSliderStyle(): Int = try {
         Settings.System.getIntForUser(
             cr, Settings.System.QS_WIDGET_SLIDER_CORNER, 0, UserHandle.USER_CURRENT
-        ) == 1
-    } catch (_: Exception) { false }
+        )
+    } catch (_: Exception) { 0 }
 
     fun readMediaPlayerSetting(): Int = try {
         Settings.Secure.getIntForUser(
@@ -91,8 +91,8 @@ fun MaterialControlPanel(
     var iosMusicStyle by remember {
         mutableStateOf(readIosMusicStyle())
     }
-    var sliderRounded by remember {
-        mutableStateOf(readSliderRounded())
+    var sliderStyle by remember {
+        mutableIntStateOf(readSliderStyle())
     }
     var savedMediaPlayerValue by remember {
         mutableIntStateOf(
@@ -131,7 +131,7 @@ fun MaterialControlPanel(
                 val wasEnabled = enabled
                 enabled = nowEnabled
                 iosMusicStyle = readIosMusicStyle()
-                sliderRounded = readSliderRounded()
+                sliderStyle = readSliderStyle()
                 if (nowEnabled != wasEnabled) {
                     syncMediaPlayerSetting(nowEnabled)
                 }
@@ -182,7 +182,7 @@ fun MaterialControlPanel(
         MaterialControlPanelContent(
             verticalPadding = verticalPadding,
             iosMusicStyle = iosMusicStyle,
-            sliderRounded = sliderRounded,
+            sliderStyle = sliderStyle,
         )
     }
 }
@@ -191,7 +191,7 @@ fun MaterialControlPanel(
 private fun MaterialControlPanelContent(
     verticalPadding: Dp,
     iosMusicStyle: Boolean,
-    sliderRounded: Boolean,
+    sliderStyle: Int,
 ) {
     Row(
         modifier = Modifier
@@ -218,7 +218,7 @@ private fun MaterialControlPanelContent(
                 .weight(0.69f)
                 .fillMaxHeight()
                 .widthIn(max = 64.dp),
-            rounded = sliderRounded,
+            sliderStyle = sliderStyle,
         )
 
         MaterialVerticalVolumeSlider(
@@ -226,7 +226,7 @@ private fun MaterialControlPanelContent(
                 .weight(0.69f)
                 .fillMaxHeight()
                 .widthIn(max = 64.dp),
-            rounded = sliderRounded,
+            sliderStyle = sliderStyle,
         )
     }
 }
