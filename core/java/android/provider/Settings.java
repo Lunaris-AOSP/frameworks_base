@@ -7627,6 +7627,26 @@ public final class Settings {
          * @hide
          */
         public static final String QS_MEDIA_ART_SCRIM_ENABLED = "qs_media_art_scrim_enabled";
+ 
+        /**
+         * @hide
+         */
+        public static final String CUSTOM_SHADE_COLOR_ENABLED = "custom_shade_color_enabled";
+
+        /**
+         * @hide
+         */
+        public static final String CUSTOM_SHADE_COLOR = "custom_shade_color";
+
+        /**
+         * @hide
+         */
+        public static final String CUSTOM_NOTIF_SCRIM_COLOR_ENABLED = "custom_notif_scrim_color_enabled";
+
+        /**
+         * @hide
+         */
+        public static final String CUSTOM_NOTIF_SCRIM_COLOR = "custom_notif_scrim_color";
 
         /**
          * Dim amount for media artwork scrim

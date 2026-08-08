@@ -17,10 +17,21 @@
 package com.android.systemui.shade.ui
 
 import android.content.Context
+import android.os.UserHandle
+import android.provider.Settings
 import com.android.internal.graphics.ColorUtils
 import com.android.systemui.res.R
 
 object ShadeColors {
+
+    @JvmField
+    val CUSTOM_COLOR_KEYS = arrayOf(
+        Settings.System.CUSTOM_SHADE_COLOR_ENABLED,
+        Settings.System.CUSTOM_SHADE_COLOR,
+        Settings.System.CUSTOM_NOTIF_SCRIM_COLOR_ENABLED,
+        Settings.System.CUSTOM_NOTIF_SCRIM_COLOR,
+    )
+
     /**
      * Calculate notification shade panel color.
      *
@@ -30,15 +41,20 @@ object ShadeColors {
      * @return color for the shade panel.
      */
     @JvmStatic
-    fun shadePanel(context: Context, blurSupported: Boolean, withScrim: Boolean): Int {
+    fun shadePanel(
+        context: Context,
+        blurSupported: Boolean,
+        withScrim: Boolean,
+        allowCustomColor: Boolean = true,
+    ): Int {
         return if (blurSupported) {
             if (withScrim) {
                 ColorUtils.compositeColors(
-                    shadePanelStandard(context),
+                    shadePanelStandard(context, allowCustomColor),
                     shadePanelScrimBehind(context),
                 )
             } else {
-                shadePanelStandard(context)
+                shadePanelStandard(context, allowCustomColor)
             }
         } else {
             shadePanelFallback(context)
@@ -63,7 +79,11 @@ object ShadeColors {
     }
 
     @JvmStatic
-    private fun shadePanelStandard(context: Context): Int {
+    private fun shadePanelStandard(context: Context, allowCustomColor: Boolean = true): Int {
+        val customColor = if (allowCustomColor) getCustomShadeColor(context) else null
+        if (customColor != null) {
+            return customColor
+        }
         val layerAbove =
             context.resources.getColor(com.android.internal.R.color.shade_panel_fg, context.theme)
         val layerBelow =
@@ -73,15 +93,23 @@ object ShadeColors {
 
     @JvmStatic
     private fun shadePanelFallback(context: Context): Int {
+        val customColor = getCustomShadeColor(context)
+        if (customColor != null) {
+            return customColor
+        }
         return ColorUtils.blendARGB(
-            context.getColor(R.color.nt_scrim_behind_1), 
-            context.getColor(R.color.nt_scrim_behind_2), 
+            context.getColor(R.color.nt_scrim_behind_1),
+            context.getColor(R.color.nt_scrim_behind_2),
             0.5f
         )
     }
 
     @JvmStatic
     private fun notificationScrimStandard(context: Context): Int {
+        val customColor = getCustomNotifScrimColor(context)
+        if (customColor != null) {
+            return ColorUtils.setAlphaComponent(customColor, (0.5f * 255).toInt())
+        }
         return ColorUtils.setAlphaComponent(
             context.getColor(R.color.notification_scrim_base),
             (0.5f * 255).toInt(),
@@ -90,10 +118,52 @@ object ShadeColors {
 
     @JvmStatic
     private fun notificationScrimFallback(context: Context): Int {
+        val customColor = getCustomNotifScrimColor(context)
+        if (customColor != null) {
+            return ColorUtils.setAlphaComponent(customColor, (0.2f * 255).toInt())
+        }
         return ColorUtils.blendARGB(
-            context.getColor(R.color.nt_notification_behind_1), 
-            context.getColor(R.color.nt_notification_behind_2), 
+            context.getColor(R.color.nt_notification_behind_1),
+            context.getColor(R.color.nt_notification_behind_2),
             0.2f
         )
+    }
+
+    @JvmStatic
+    private fun getCustomShadeColor(context: Context): Int? {
+        val enabled = Settings.System.getIntForUser(
+            context.contentResolver,
+            Settings.System.CUSTOM_SHADE_COLOR_ENABLED,
+            0,
+            UserHandle.USER_CURRENT,
+        ) == 1
+        if (!enabled) return null
+
+        val color = Settings.System.getIntForUser(
+            context.contentResolver,
+            Settings.System.CUSTOM_SHADE_COLOR,
+            Int.MIN_VALUE,
+            UserHandle.USER_CURRENT,
+        )
+        return if (color == Int.MIN_VALUE) null else color
+    }
+
+    @JvmStatic
+    private fun getCustomNotifScrimColor(context: Context): Int? {
+        val enabled = Settings.System.getIntForUser(
+            context.contentResolver,
+            Settings.System.CUSTOM_NOTIF_SCRIM_COLOR_ENABLED,
+            0,
+            UserHandle.USER_CURRENT,
+        ) == 1
+        if (!enabled) return null
+
+        val color = Settings.System.getIntForUser(
+            context.contentResolver,
+            Settings.System.CUSTOM_NOTIF_SCRIM_COLOR,
+            Int.MIN_VALUE,
+            UserHandle.USER_CURRENT,
+        )
+        return if (color == Int.MIN_VALUE) null else color
     }
 }
