@@ -284,6 +284,10 @@ public class SystemSettingsValidators {
         VALIDATORS.put(System.CV_DYNAMIC_ENABLED, new InclusiveIntegerRangeValidator(0, 1));
         VALIDATORS.put(System.FLING_VELOCITY_MIN, new InclusiveIntegerRangeValidator(10, 600));
         VALIDATORS.put(System.FLING_VELOCITY_MAX, new InclusiveIntegerRangeValidator(4000, 12000));
+        VALIDATORS.put(System.CUSTOM_SHADE_COLOR_ENABLED, BOOLEAN_VALIDATOR);
+        VALIDATORS.put(System.CUSTOM_SHADE_COLOR, ANY_INTEGER_VALIDATOR);
+        VALIDATORS.put(System.CUSTOM_NOTIF_SCRIM_COLOR_ENABLED, BOOLEAN_VALIDATOR);
+        VALIDATORS.put(System.CUSTOM_NOTIF_SCRIM_COLOR, ANY_INTEGER_VALIDATOR);
         VALIDATORS.put(
                 System.CV_PREFERRED_INTENSITY,
                 new InclusiveFloatRangeValidator(
