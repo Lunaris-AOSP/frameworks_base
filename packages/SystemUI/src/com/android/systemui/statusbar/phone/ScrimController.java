@@ -78,6 +78,7 @@ import com.android.systemui.keyguard.ui.viewmodel.AlternateBouncerToGoneTransiti
 import com.android.systemui.keyguard.ui.viewmodel.LockscreenToDreamingTransitionViewModel;
 import com.android.systemui.keyguard.ui.viewmodel.PrimaryBouncerToDreamingTransitionViewModel;
 import com.android.systemui.keyguard.ui.viewmodel.PrimaryBouncerToGoneTransitionViewModel;
+import com.android.systemui.media.controls.domain.pipeline.MediaDataManager;
 import com.android.systemui.qs.flags.QSComposeFragment;
 import com.android.systemui.res.R;
 import com.android.systemui.scene.shared.flag.SceneContainerFlag;
@@ -150,6 +151,8 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
      */
     public static final int OPAQUE = 2;
     private boolean mClipsQsScrim;
+
+    private boolean mUseMediaArtScrim = false;
 
     /**
      * Whether an activity is launching over the lockscreen. During the launch animation, we want to
@@ -307,6 +310,8 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
     private boolean mWakeLockHeld;
     private boolean mKeyguardOccluded;
 
+    private MediaArtScrimController mMediaArtScrimController;
+
     private final KeyguardTransitionInteractor mKeyguardTransitionInteractor;
     private final CoroutineDispatcher mMainDispatcher;
     private boolean mIsBouncerToGoneTransitionRunning = false;
@@ -459,6 +464,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
         mKeyguardTransitionInteractor = keyguardTransitionInteractor;
         mKeyguardInteractor = keyguardInteractor;
         mMainDispatcher = mainDispatcher;
+        mMediaArtScrimController = new MediaArtScrimController(context);
     }
 
     /**
@@ -484,6 +490,10 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
             scrimState.setDefaultScrimAlpha(getDefaultScrimAlpha());
         }
 
+        if (mMediaArtScrimController != null) {
+            mMediaArtScrimController.attachViews(notificationsScrim, behindScrim);
+        }
+
         mTransparentScrimBackground = notificationsScrim.getResources()
                 .getBoolean(R.bool.notification_scrim_transparent);
         updateScrims();
@@ -497,6 +507,19 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
         hydrateStateInternally(behindScrim);
 
         mViewsAttached = true;
+    }
+
+    public void setUseMediaArtScrim(boolean use) {
+        if (mUseMediaArtScrim != use) {
+            mUseMediaArtScrim = use;
+            scheduleUpdate();
+        }
+    }
+
+    public void setPanelExpansion(float expansion) {
+        if (mMediaArtScrimController != null) {
+            mMediaArtScrimController.onPanelExpansionChanged(expansion);
+        }
     }
 
     private void hydrateStateInternally(ScrimView behindScrim) {
@@ -1408,7 +1431,9 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
                 if (mScrimBehind != null) {
                     mScrimBehind.setColors(mColors, animateBehindScrim);
                 }
-                mNotificationsScrim.setColors(mColors, animateScrimNotifications);
+                if (!shouldSkipNotificationsScrimUpdate()) {
+                    mNotificationsScrim.setColors(mColors, animateScrimNotifications);
+                }
              }
 
             if (mScrimBehind != null) {
@@ -1419,7 +1444,9 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
             // Blur the notification scrim as needed. The blur is needed only when we show the
             // expanded shade behind the bouncer. Without it, the notification scrim outline is
             // visible behind the bouncer.
-            mNotificationsScrim.setBlurRadius(mState.getNotifBlurRadius());
+            if (!shouldSkipNotificationsScrimUpdate()) {
+                mNotificationsScrim.setBlurRadius(mState.getNotifBlurRadius());
+            }
         }
 
         // We also want to hide FLAG_SHOW_WHEN_LOCKED activities under the scrim.
@@ -1486,7 +1513,21 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
         return ShadeInterpolation.getNotificationScrimAlpha(mPanelExpansionFraction);
     }
 
+    private boolean shouldSkipNotificationsScrimUpdate() {
+        return mMediaArtScrimController != null 
+            && mMediaArtScrimController.isMediaArtApplied();
+    }
+
+    public void notifyBrightnessMirrorChanged(boolean showing) {
+        if (mMediaArtScrimController != null) {
+            mMediaArtScrimController.setBrightnessMirrorShowing(showing);
+        }
+    }
+
     private void setScrimAlpha(ScrimView scrim, float alpha) {
+        if (scrim == mNotificationsScrim && shouldSkipNotificationsScrimUpdate()) {
+            return;
+        }
         if (alpha == 0f) {
             scrim.setClickable(false);
         } else {
@@ -1510,6 +1551,9 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
     private void updateScrimColor(View scrim, float alpha, int tint) {
         alpha = Math.max(0, Math.min(1.0f, alpha));
         if (scrim instanceof ScrimView scrimView) {
+            if (scrimView == mNotificationsScrim && shouldSkipNotificationsScrimUpdate()) {
+                return;
+            }
             if (DEBUG_MODE) {
                 tint = getDebugScrimTint(scrimView);
             }
@@ -1678,6 +1722,9 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
     }
 
     private void updateScrim(ScrimView scrim, float alpha) {
+        if (scrim == mNotificationsScrim && shouldSkipNotificationsScrimUpdate()) {
+            return;
+        }
         float currentAlpha;
 
         if (scrim == null) return;
