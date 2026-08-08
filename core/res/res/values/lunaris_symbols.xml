@@ -115,4 +115,6 @@
 
     <!-- Smart 5G -->
     <java-symbol type="bool" name="config_supportSmart5G" />
+
+    <java-symbol type="integer" name="config_lowBatteryReclaimSkipThreshold" />
 </resources>
