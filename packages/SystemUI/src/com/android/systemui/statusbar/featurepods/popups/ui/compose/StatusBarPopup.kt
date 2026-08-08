@@ -66,6 +66,7 @@ import com.android.systemui.statusbar.featurepods.screenrecord.ui.compose.Screen
 import com.android.systemui.statusbar.featurepods.sharescreen.ui.compose.ShareScreenPrivacyIndicatorPopup
 import com.android.systemui.statusbar.featurepods.stopwatch.ui.compose.StopwatchPopup
 import kotlinx.coroutines.coroutineScope
+import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.POPUP_COLOR_MODE_BLUR
 import kotlinx.coroutines.launch
 
 /**
@@ -138,6 +139,8 @@ fun StatusBarPopup(
         val scaleY = remember { Animatable(initialScaleFromChip.y) }
         val alpha = remember { Animatable(0f) }
         val translationY = remember { Animatable(-24f) }
+        val colorMode = rememberPopupColorMode()
+        val skipMotionOnDismiss = colorMode == POPUP_COLOR_MODE_BLUR
 
         LaunchedEffect(isVisible, popupBoundsInScreen != null) {
             if (isVisible && popupBoundsInScreen != null) {
@@ -179,31 +182,49 @@ fun StatusBarPopup(
                     launch { alpha.animateTo(1f, animationSpec = tween(180)) }
                 }
             } else if (!isVisible) {
-                coroutineScope {
-                    launch {
-                        scaleX.animateTo(
-                            targetValue = initialScaleFromChip.x,
-                            animationSpec =
-                                spring(
-                                    dampingRatio = 0.8f,
-                                    stiffness = Spring.StiffnessMediumLow,
-                                ),
-                        )
+                if (skipMotionOnDismiss) {
+                    coroutineScope {
+                        launch {
+                            scaleX.animateTo(
+                                targetValue = 0.01f,
+                                animationSpec = tween(130),
+                            )
+                        }
+                        launch {
+                            scaleY.animateTo(
+                                targetValue = 0.01f,
+                                animationSpec = tween(130),
+                            )
+                        }
+                        launch { alpha.animateTo(0f, animationSpec = tween(120)) }
                     }
-                    launch {
-                        scaleY.animateTo(
-                            targetValue = initialScaleFromChip.y,
-                            animationSpec =
-                                spring(
-                                    dampingRatio = 0.8f,
-                                    stiffness = Spring.StiffnessMediumLow,
-                                ),
-                        )
+                } else {
+                    coroutineScope {
+                        launch {
+                            scaleX.animateTo(
+                                targetValue = initialScaleFromChip.x,
+                                animationSpec =
+                                    spring(
+                                        dampingRatio = 0.8f,
+                                        stiffness = Spring.StiffnessMediumLow,
+                                    ),
+                            )
+                        }
+                        launch {
+                            scaleY.animateTo(
+                                targetValue = initialScaleFromChip.y,
+                                animationSpec =
+                                    spring(
+                                        dampingRatio = 0.8f,
+                                        stiffness = Spring.StiffnessMediumLow,
+                                    ),
+                            )
+                        }
+                        launch {
+                            translationY.animateTo(-16f, animationSpec = spring(stiffness = Spring.StiffnessMedium))
+                        }
+                        launch { alpha.animateTo(0f, animationSpec = tween(160)) }
                     }
-                    launch {
-                        translationY.animateTo(-16f, animationSpec = spring(stiffness = Spring.StiffnessMedium))
-                    }
-                    launch { alpha.animateTo(0f, animationSpec = tween(160)) }
                 }
             }
         }
