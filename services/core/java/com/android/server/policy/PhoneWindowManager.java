@@ -172,6 +172,7 @@ import android.media.AudioManagerInternal;
 import android.media.AudioSystem;
 import android.media.IAudioService;
 import android.media.session.MediaSessionLegacyHelper;
+import android.os.BatteryManager;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.DeviceIdleManager;
@@ -6625,17 +6626,19 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private final Runnable mSystemServerGcOpt = new Runnable() {
         @Override
         public void run() {
+            if (isBatteryLow()) {
+                Slog.d(TAG, "Skipping system_server compaction: battery low");
+                return;
+            }
             long currentTime = System.currentTimeMillis();
             if (lastGcTime == 0L || currentTime - lastGcTime > GC_INTERVAL_MS) {
-                System.gc();
-                System.runFinalization();
-                System.gc();
                 try {
                     mActivityManagerService.compactAllSystem();
+                    lastGcTime = currentTime;
+                    Slog.d(TAG, "Performing garbage collection for system_server");
                 } catch (RemoteException e) {
+                    Slog.w(TAG, "compactAllSystem failed", e);
                 }
-                lastGcTime = currentTime;
-                Slog.d(TAG, "Performing garbage collection for system_server");
             }
         }
     };
@@ -8356,14 +8359,26 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
     }
 
+    private boolean isBatteryLow() {
+        BatteryManager bm = mContext.getSystemService(BatteryManager.class);
+        return bm != null && bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) <=
+                mContext.getResources().getInteger(
+                        com.android.internal.R.integer.config_lowBatteryReclaimSkipThreshold);
+    }
+
     private void releaseMemoryAtScreenOn() {
         long currentTime = System.currentTimeMillis();
+        if (isBatteryLow()) {
+            Slog.d(TAG, "Skipping screen-on memory reclaim: battery low");
+            return;
+        }
         if (lastMemoryReleaseTime == 0L || currentTime - lastMemoryReleaseTime > MEMORY_RELEASE_INTERVAL_MS) {
             try {
                 mActivityManagerService.releaseMemory(900, 25, false, false);
                 lastMemoryReleaseTime = currentTime;
                 Slog.d(TAG, "Performing screen-on memory reclaim.");
             } catch (RemoteException e) {
+                Slog.w(TAG, "releaseMemory failed", e);
             }
         }
     }
