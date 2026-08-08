@@ -24,8 +24,10 @@ import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.content.res.ColorStateList;
 import android.database.ContentObserver;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.hardware.camera2.CameraManager;
 import android.media.AudioManager;
@@ -82,8 +84,13 @@ import com.android.internal.util.lunaris.VibrationUtils;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 
 import com.android.internal.util.lunaris.OmniJawsClient;
+
+import com.android.axion.blur.AxBlurBackgroundRenderer;
+import com.android.axion.blur.AxBlurColors;
 
 public class LockScreenWidgetsController implements OmniJawsClient.OmniJawsObserver, MediaSessionManagerHelper.MediaMetadataListener {
 
@@ -134,6 +141,9 @@ public class LockScreenWidgetsController implements OmniJawsClient.OmniJawsObser
     public static final int TORCH_LABEL_INACTIVE = R.string.quick_settings_flashlight_label;
     public static final int WIFI_LABEL_INACTIVE = R.string.quick_settings_wifi_label;
     public static final int HOTSPOT_LABEL = R.string.accessibility_status_bar_hotspot;
+
+    private static final int STYLE_SQUARE_BLUR = 4;
+    private static final int STYLE_CIRCLE_BLUR = 5;
 
     private OmniJawsClient mWeatherClient;
     private OmniJawsClient.WeatherInfo mWeatherInfo;
@@ -187,6 +197,8 @@ public class LockScreenWidgetsController implements OmniJawsClient.OmniJawsObser
     private boolean mLockscreenWidgetsEnabled;
     private int mThemeStyle = 0;
     private float mTransparency = 0.3f;
+
+    private final Map<View, BlurBackgroundDrawable> mBlurDrawables = new HashMap<>();
 
     final ConfigurationListener mConfigurationListener = new ConfigurationListener() {
         @Override
@@ -369,6 +381,7 @@ public class LockScreenWidgetsController implements OmniJawsClient.OmniJawsObser
         mLockscreenWidgetsObserver.unobserve();
         mHandler.removeCallbacksAndMessages(null);
         mMediaSessionManagerHelper.removeMediaMetadataListener(this);
+        releaseAllBlurDrawables();
     }
 
     public void initViews() {
@@ -434,17 +447,23 @@ public class LockScreenWidgetsController implements OmniJawsClient.OmniJawsObser
     private void updateMainWidgetResources(LaunchableFAB efab, boolean active) {
         if (efab == null) return;
         efab.setElevation(0);
-        if (mDozing) {
-            int bgRes = (mThemeStyle == 1 || mThemeStyle == 2)
-                    ? R.drawable.lockscreen_widget_background_square_aod
-                    : R.drawable.lockscreen_widget_background_circle_aod;
+        if (isBlurStyle() && !mDozing) {
             efab.setBackgroundTintList(null);
-            efab.setBackgroundDrawable(mContext.getDrawable(bgRes));
+            efab.setBackgroundDrawable(obtainBlurDrawable(efab, mThemeStyle == STYLE_SQUARE_BLUR));
         } else {
-            int bgRes = (mThemeStyle == 1 || mThemeStyle == 2)
-                    ? R.drawable.lockscreen_widget_background_square
-                    : R.drawable.lockscreen_widget_background_circle;
-            efab.setBackgroundDrawable(mContext.getDrawable(bgRes));
+            releaseBlurDrawable(efab);
+            if (mDozing) {
+                int bgRes = (mThemeStyle == 1 || mThemeStyle == 2 || mThemeStyle == STYLE_SQUARE_BLUR)
+                        ? R.drawable.lockscreen_widget_background_square_aod
+                        : R.drawable.lockscreen_widget_background_circle_aod;
+                efab.setBackgroundTintList(null);
+                efab.setBackgroundDrawable(mContext.getDrawable(bgRes));
+            } else {
+                int bgRes = (mThemeStyle == 1 || mThemeStyle == 2)
+                        ? R.drawable.lockscreen_widget_background_square
+                        : R.drawable.lockscreen_widget_background_circle;
+                efab.setBackgroundDrawable(mContext.getDrawable(bgRes));
+            }
         }
         setButtonActiveState(null, efab, false);
         long visibleWidgetCount = mMainWidgetsList.stream().filter(w -> !"none".equals(w)).count();
@@ -482,17 +501,23 @@ public class LockScreenWidgetsController implements OmniJawsClient.OmniJawsObser
 
     private void updateWidgetsResources(LaunchableImageView iv) {
         if (iv == null) return;
-        int bgRes;
-        if (mDozing) {
-            bgRes = (mThemeStyle == 1 || mThemeStyle == 2)
-                    ? R.drawable.lockscreen_widget_background_square_aod
-                    : R.drawable.lockscreen_widget_background_circle_aod;
+        if (isBlurStyle() && !mDozing) {
+            iv.setBackgroundTintList(null);
+            iv.setBackground(obtainBlurDrawable(iv, mThemeStyle == STYLE_SQUARE_BLUR));
         } else {
-            bgRes = (mThemeStyle == 1 || mThemeStyle == 2)
-                    ? R.drawable.lockscreen_widget_background_square
-                    : R.drawable.lockscreen_widget_background_circle;
+            releaseBlurDrawable(iv);
+            int bgRes;
+            if (mDozing) {
+                bgRes = (mThemeStyle == 1 || mThemeStyle == 2 || mThemeStyle == STYLE_SQUARE_BLUR)
+                        ? R.drawable.lockscreen_widget_background_square_aod
+                        : R.drawable.lockscreen_widget_background_circle_aod;
+            } else {
+                bgRes = (mThemeStyle == 1 || mThemeStyle == 2)
+                        ? R.drawable.lockscreen_widget_background_square
+                        : R.drawable.lockscreen_widget_background_circle;
+            }
+            iv.setBackgroundResource(bgRes);
         }
-        iv.setBackgroundResource(bgRes);
         setButtonActiveState(iv, null, false);
     }
 
@@ -674,6 +699,19 @@ public class LockScreenWidgetsController implements OmniJawsClient.OmniJawsObser
             }
             return;
         }
+        if (isBlurStyle()) {
+            int tint = isNightMode() ? Color.WHITE : Color.BLACK;
+            if (iv != null) {
+                iv.setBackgroundTintList(null);
+                iv.setImageTintList(iv == weatherButton ? null : ColorStateList.valueOf(tint));
+            }
+            if (efab != null) {
+                efab.setBackgroundTintList(null);
+                efab.setIconTint(efab == weatherButtonFab ? null : ColorStateList.valueOf(tint));
+                efab.setTextColor(tint);
+            }
+            return;
+        }
         int bgTint, tintColor;
         if (mThemeStyle == 2 || mThemeStyle == 3) {
             bgTint = active ? Utils.applyAlpha(mTransparency, mDarkColorActive) : Utils.applyAlpha(mTransparency, Color.WHITE);
@@ -690,6 +728,105 @@ public class LockScreenWidgetsController implements OmniJawsClient.OmniJawsObser
             efab.setBackgroundTintList(ColorStateList.valueOf(bgTint));
             efab.setIconTint(efab == weatherButtonFab ? null : ColorStateList.valueOf(tintColor));
             efab.setTextColor(tintColor);
+        }
+    }
+
+    private boolean isBlurStyle() {
+        return mThemeStyle == STYLE_SQUARE_BLUR || mThemeStyle == STYLE_CIRCLE_BLUR;
+    }
+
+    private Drawable obtainBlurDrawable(View target, boolean squareCorners) {
+        BlurBackgroundDrawable d = mBlurDrawables.get(target);
+        if (d == null) {
+            d = new BlurBackgroundDrawable(mContext, target, squareCorners);
+            mBlurDrawables.put(target, d);
+        } else {
+            d.setSquareCorners(squareCorners);
+        }
+        return d;
+    }
+
+    private void releaseBlurDrawable(View target) {
+        BlurBackgroundDrawable d = mBlurDrawables.remove(target);
+        if (d != null) d.release();
+    }
+
+    private void releaseAllBlurDrawables() {
+        for (View target : new ArrayList<>(mBlurDrawables.keySet())) {
+            releaseBlurDrawable(target);
+        }
+    }
+
+    private static final class BlurBackgroundDrawable extends Drawable {
+        private final AxBlurBackgroundRenderer mBlur;
+        private final int mOverlayColor;
+        private final GradientDrawable mBgDrawable = new GradientDrawable();
+        private final View mTarget;
+        private final Context mContext;
+        private final View.OnAttachStateChangeListener mAttachListener =
+                new View.OnAttachStateChangeListener() {
+                    @Override
+                    public void onViewAttachedToWindow(@NonNull View v) {
+                        mBlur.onAttachedToWindow();
+                    }
+                    @Override
+                    public void onViewDetachedFromWindow(@NonNull View v) {
+                        mBlur.onDetachedFromWindow();
+                    }
+                };
+
+        BlurBackgroundDrawable(Context context, View target, boolean squareCorners) {
+            mContext = context;
+            mTarget = target;
+            mBlur = new AxBlurBackgroundRenderer(target);
+            mOverlayColor = AxBlurColors.surfaceLightTint(context);
+            mBgDrawable.setColor(0x00000000);
+            setSquareCorners(squareCorners);
+            target.addOnAttachStateChangeListener(mAttachListener);
+            if (target.isAttachedToWindow()) {
+                mBlur.onAttachedToWindow();
+            }
+        }
+
+        void setSquareCorners(boolean square) {
+            float radius = square
+                    ? mContext.getResources().getDimension(R.dimen.lockscreen_widget_blur_square_radius)
+                    : mContext.getResources().getDimension(R.dimen.lockscreen_widget_blur_circle_radius);
+            mBgDrawable.setCornerRadius(radius);
+            invalidateSelf();
+        }
+
+        void release() {
+            mTarget.removeOnAttachStateChangeListener(mAttachListener);
+            if (mTarget.isAttachedToWindow()) {
+                mBlur.onDetachedFromWindow();
+            }
+        }
+
+        @Override
+        public void draw(@NonNull Canvas canvas) {
+            final android.graphics.Rect bounds = getBounds();
+            if (bounds.width() <= 0 || bounds.height() <= 0) return;
+            mBgDrawable.setBounds(0, 0, bounds.width(), bounds.height());
+            canvas.save();
+            canvas.translate(bounds.left, bounds.top);
+            if (!mBlur.drawBackgroundWithOverlayColor(canvas, mBgDrawable, mOverlayColor)) {
+                mBgDrawable.setColor(mOverlayColor & 0x00FFFFFF | (0xCC << 24));
+                mBgDrawable.draw(canvas);
+                mBgDrawable.setColor(0x00000000);
+            }
+            canvas.restore();
+        }
+
+        @Override
+        public void setAlpha(int alpha) { }
+
+        @Override
+        public void setColorFilter(@Nullable android.graphics.ColorFilter colorFilter) { }
+
+        @Override
+        public int getOpacity() {
+            return android.graphics.PixelFormat.TRANSLUCENT;
         }
     }
 

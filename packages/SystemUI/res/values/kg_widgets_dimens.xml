@@ -25,4 +25,6 @@
     <dimen name="kg_main_widgets_icon_padding">20dp</dimen>
     <dimen name="kg_widget_main_height">88dp</dimen>
     <dimen name="kg_widget_main_width">175dp</dimen>
+    <dimen name="lockscreen_widget_blur_square_radius">22dp</dimen>
+    <dimen name="lockscreen_widget_blur_circle_radius">100dp</dimen>
 </resources>
