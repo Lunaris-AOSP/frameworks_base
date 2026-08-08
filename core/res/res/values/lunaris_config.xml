@@ -117,4 +117,9 @@
 
     <!-- Smart 5G -->
     <bool name="config_supportSmart5G">true</bool>
+
+    <!-- Battery percentage at/below which system_server compaction and
+        screen-on memory reclaim in PhoneWindowManager are skipped, to
+        avoid extra CPU/wakeup cost while battery is low. -->
+    <integer name="config_lowBatteryReclaimSkipThreshold">10</integer>
 </resources>
