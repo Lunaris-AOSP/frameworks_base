@@ -81,6 +81,8 @@ public class ScrimView extends View {
     @Nullable
     private Rect mDrawableBounds;
 
+    private boolean mHasMediaArtApplied = false;
+
     private boolean mIsNotificationScrim = false;
     @Nullable
     private ContentObserver mSettingsObserver;
@@ -173,7 +175,24 @@ public class ScrimView extends View {
 
     @Override
     public void setVisibility(int visibility) {
-        super.setVisibility(mIsNotificationScrim ? View.GONE : visibility);
+         if (mIsNotificationScrim && !mHasMediaArtApplied) {
+            super.setVisibility(View.GONE);
+        } else {
+            super.setVisibility(visibility);
+        }
+    }
+
+    public void setMediaArtApplied(boolean applied) {
+        if (mHasMediaArtApplied != applied) {
+            mHasMediaArtApplied = applied;
+            if (mIsNotificationScrim && !mHasMediaArtApplied) {
+                if (applied) {
+                    super.setVisibility(View.VISIBLE);
+                } else {
+                    setVisibility(View.GONE);
+                }
+            }
+        }
     }
 
     /**
@@ -411,7 +430,7 @@ public class ScrimView extends View {
      * Blur the view with the specific blur radius or clear any blurs if the radius is 0
      */
     public void setBlurRadius(float blurRadius) {
-        if (mIsNotificationScrim) {
+        if (mIsNotificationScrim && !mHasMediaArtApplied) {
             setRenderEffect(null);
             return;
         }

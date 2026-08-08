@@ -7623,6 +7623,18 @@ public final class Settings {
         public static final String LS_MEDIA_ART_AOD_DIM_LEVEL = "ls_media_art_aod_dim_level";
 
         /**
+         * Whether to use media artwork as QS scrim background
+         * @hide
+         */
+        public static final String QS_MEDIA_ART_SCRIM_ENABLED = "qs_media_art_scrim_enabled";
+
+        /**
+         * Dim amount for media artwork scrim
+         * @hide
+         */
+        public static final String QS_MEDIA_ART_DIM_AMOUNT = "qs_media_art_dim_amount";
+
+        /**
          * @hide
          */
         public static final String LOCK_GLYMPS_CHANGE_ON = "lock_glymps_change_on";
