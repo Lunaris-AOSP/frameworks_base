@@ -1041,6 +1041,9 @@ public final class NotificationPanelViewController implements
             // start fading the shade.
             mIsBrightnessMirrorShowing.setValue(isShowing);
         }
+        if (mScrimController != null) {
+            mScrimController.notifyBrightnessMirrorChanged(isShowing);
+        }
         setAlpha(isShowing ? 0 : 255, true);
     }
 
@@ -2050,6 +2053,7 @@ public final class NotificationPanelViewController implements
         updateHeader();
         updatePanelExpanded();
         updateGestureExclusionRect();
+        mScrimController.setPanelExpansion(mExpandedFraction);
 
         if (mQsController.isExpandImmediate() && !mQsController.getFullyExpanded()) {
             mNotificationStackScrollLayoutController.getView().setAlpha(0f);
