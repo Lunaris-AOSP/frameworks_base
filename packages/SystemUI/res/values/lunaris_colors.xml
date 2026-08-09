@@ -13,4 +13,6 @@
      <color name="key_text_shadow_color">#89000000</color>
      <color name="smartspace_button_background">@android:color/system_accent2_200</color>
      <color name="smartspace_button_text">@android:color/system_accent2_700</color>
+
+     <color name="dialog_bg_color">@android:color/system_neutral1_50</color>
 </resources>
