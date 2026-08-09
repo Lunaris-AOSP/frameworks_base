@@ -29,6 +29,8 @@ import android.provider.Settings
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
+import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
@@ -84,6 +86,8 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
@@ -96,8 +100,8 @@ import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.LayoutDirection
 import com.android.app.tracing.coroutines.launchTraced as launch
 import com.android.compose.PlatformSlider
 import com.android.compose.PlatformSliderDefaults
@@ -108,6 +112,8 @@ import kotlin.math.floor
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
+import platform.test.motion.compose.values.MotionTestValueKey
+import platform.test.motion.compose.values.motionTestValues
 
 private const val RINGER_NORMAL = AudioManager.RINGER_MODE_NORMAL
 private const val RINGER_VIBRATE = AudioManager.RINGER_MODE_VIBRATE
@@ -118,6 +124,10 @@ private fun ringerModeNext(current: Int, canUseSilent: Boolean): Int = when (cur
     RINGER_VIBRATE -> if (canUseSilent) RINGER_SILENT else RINGER_NORMAL
     else -> RINGER_NORMAL
 }
+
+private const val QS_VOLUME_STYLE_DEFAULT = 0
+private const val QS_VOLUME_STYLE_THUMB = 1
+private const val QS_VOLUME_STYLE_MINIMAL = 2
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -145,8 +155,8 @@ fun VolumeSliderQS(modifier: Modifier = Modifier) {
     var hapticsEnabled by remember {
         mutableStateOf(readQsVolumeHapticsEnabled(cr))
     }
-    var useAxStyle by remember {
-        mutableStateOf(readQsVolumeUseAxStyle(cr))
+    var sliderStyle by remember {
+        mutableIntStateOf(readQsVolumeSliderStyle(cr))
     }
     var showRingerButton by remember {
         mutableStateOf(readShowRingerButton(cr))
@@ -220,7 +230,7 @@ fun VolumeSliderQS(modifier: Modifier = Modifier) {
             override fun onChange(selfChange: Boolean) {
                 context.mainExecutor.execute {
                     hapticsEnabled = readQsVolumeHapticsEnabled(cr)
-                    useAxStyle = readQsVolumeUseAxStyle(cr)
+                    sliderStyle = readQsVolumeSliderStyle(cr)
                     showRingerButton = readShowRingerButton(cr)
                 }
             }
@@ -274,7 +284,7 @@ fun VolumeSliderQS(modifier: Modifier = Modifier) {
         }
     }
 
-    if (useAxStyle) {
+    if (sliderStyle == QS_VOLUME_STYLE_MINIMAL) {
         val axIconSize = 56.dp
         val axTrackColor = gradient?.brush?.let { null } ?: CustomColorScheme.current.qsTileColor
         val sliderColors = PlatformSliderDefaults.defaultPlatformSliderColors().copy(
@@ -445,6 +455,26 @@ fun VolumeSliderQS(modifier: Modifier = Modifier) {
 
     val activeIconColor  = MaterialTheme.colorScheme.onPrimary
     val inactiveIconColor = MaterialTheme.colorScheme.onSurface
+    val trackIcon: DrawScope.(Offset, Color, Float) -> Unit = remember {
+        { offset, color, alpha ->
+            val rtl = layoutDirection == LayoutDirection.Rtl
+            scale(if (rtl) -1f else 1f, 1f) {
+                translate(
+                    offset.x - QsVolumeSliderDimensions.IconPadding.toPx() -
+                        QsVolumeSliderDimensions.IconSize.toSize().width,
+                    offset.y,
+                ) {
+                    with(musicIconPainter) {
+                        draw(
+                            QsVolumeSliderDimensions.IconSize.toSize(),
+                            colorFilter = ColorFilter.tint(color),
+                            alpha = alpha,
+                        )
+                    }
+                }
+            }
+        }
+    }
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -469,9 +499,103 @@ fun VolumeSliderQS(modifier: Modifier = Modifier) {
                 },
             interactionSource = interactionSource,
             thumb = {
-                Box(modifier = Modifier.size(0.dp))
+                if (sliderStyle == QS_VOLUME_STYLE_THUMB) {
+                    SliderDefaults.Thumb(
+                        interactionSource = interactionSource,
+                        enabled = true,
+                        thumbSize = DpSize(
+                            QsVolumeSliderDimensions.ThumbWidth,
+                            QsVolumeSliderDimensions.ThumbHeight,
+                        ),
+                        colors = colors,
+                    )
+                } else {
+                    Box(modifier = Modifier.size(0.dp))
+                }
             },
-            track = { _ ->
+            track = { sliderState ->
+                if (sliderStyle == QS_VOLUME_STYLE_THUMB) {
+                    var showThumbIconActive by remember { mutableStateOf(true) }
+                    val iconActiveAlphaAnimatable = remember {
+                        Animatable(1f, Float.VectorConverter, label = "qsVolumeThumbIconActiveAlpha")
+                    }
+                    val iconInactiveAlphaAnimatable = remember {
+                        Animatable(0f, Float.VectorConverter, label = "qsVolumeThumbIconInactiveAlpha")
+                    }
+
+                    LaunchedEffect(iconActiveAlphaAnimatable, iconInactiveAlphaAnimatable, showThumbIconActive) {
+                        if (showThumbIconActive) {
+                            launch { iconActiveAlphaAnimatable.animateTo(1f, QsVolumeIconAppearSpec) }
+                            launch { iconInactiveAlphaAnimatable.animateTo(0f, QsVolumeIconDisappearSpec) }
+                        } else {
+                            launch { iconActiveAlphaAnimatable.animateTo(0f, QsVolumeIconDisappearSpec) }
+                            launch { iconInactiveAlphaAnimatable.animateTo(1f, QsVolumeIconAppearSpec) }
+                        }
+                    }
+
+                    SliderDefaults.Track(
+                        sliderState = sliderState,
+                        modifier = Modifier
+                            .motionTestValues {
+                                iconActiveAlphaAnimatable.value exportAs
+                                    QsVolumeSliderMotionTestKeys.ActiveIconAlpha
+                                iconInactiveAlphaAnimatable.value exportAs
+                                    QsVolumeSliderMotionTestKeys.InactiveIconAlpha
+                            }
+                            .height(QsVolumeSliderDimensions.ThumbStyleTrackHeight)
+                            .drawWithContent {
+                                drawContent()
+
+                                val activeFraction = sliderState.coercedValueAsFraction
+                                val activeTrackEnd = size.width * activeFraction
+
+                                if (gradient != null && activeTrackEnd > 0f) {
+                                    val outline = trackShape.createOutline(
+                                        Size(activeTrackEnd.coerceAtMost(size.width), size.height),
+                                        layoutDirection,
+                                        this,
+                                    )
+                                    clipPath(outline.asQsVolumePath()) {
+                                        drawRect(
+                                            brush = gradient.brush,
+                                            topLeft = Offset.Zero,
+                                            size = Size(activeTrackEnd.coerceAtMost(size.width), size.height),
+                                        )
+                                    }
+                                }
+
+                                val yOffset = size.height / 2 - QsVolumeSliderDimensions.IconSize.toSize().height / 2
+                                val gap = QsVolumeSliderDimensions.ThumbStyleGapSize.toPx()
+                                val realActiveEnd = activeTrackEnd - gap
+                                val inactiveTrackEnd = size.width
+                                val activeTrackWidth = realActiveEnd
+                                val inactiveTrackWidth = inactiveTrackEnd - (realActiveEnd + gap * 2)
+                                val iconPad = QsVolumeSliderDimensions.IconPadding.toPx()
+
+                                if (QsVolumeSliderDimensions.IconSize.toSize().width < inactiveTrackWidth - iconPad * 2) {
+                                    showThumbIconActive = false
+                                    trackIcon(
+                                        Offset(inactiveTrackEnd, yOffset),
+                                        inactiveIconColor,
+                                        iconInactiveAlphaAnimatable.value,
+                                    )
+                                } else if (QsVolumeSliderDimensions.IconSize.toSize().width < activeTrackWidth - iconPad * 2) {
+                                    showThumbIconActive = true
+                                    trackIcon(
+                                        Offset(realActiveEnd, yOffset),
+                                        activeIconColor,
+                                        iconActiveAlphaAnimatable.value,
+                                    )
+                                }
+                            },
+                        trackCornerSize = trackCornerDp,
+                        trackInsideCornerSize = 2.dp,
+                        drawStopIndicator = null,
+                        thumbTrackGapSize = QsVolumeSliderDimensions.ThumbStyleGapSize,
+                        colors = colors,
+                    )
+                    return@Slider
+                }
                 Box(
                     modifier = Modifier
                         .height(QsVolumeSliderDimensions.TrackHeight)
@@ -549,16 +673,113 @@ fun VolumeSliderQS(modifier: Modifier = Modifier) {
 
         if (showRingerButton) {
             Spacer(modifier = Modifier.width(10.dp))
-            RingerModeButton(
-                ringerMode = ringerMode,
-                toggleCount = ringerToggleCount,
-                hapticsEnabled = hapticsEnabled,
-                shapeMode = shapeMode,
-                gradient = gradient,
-                buttonSize = QsVolumeSliderDimensions.TrackHeight,
-                onClick = onRingerClick,
-            )
+            if (sliderStyle == QS_VOLUME_STYLE_THUMB) {
+                RingerModeButtonClassic(
+                    ringerMode = ringerMode,
+                    hapticsEnabled = hapticsEnabled,
+                    onClick = onRingerClick,
+                )
+            } else {
+                RingerModeButton(
+                    ringerMode = ringerMode,
+                    toggleCount = ringerToggleCount,
+                    hapticsEnabled = hapticsEnabled,
+                    shapeMode = shapeMode,
+                    gradient = gradient,
+                    buttonSize = QsVolumeSliderDimensions.TrackHeight,
+                    onClick = onRingerClick,
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun RingerModeButtonClassic(
+    ringerMode: Int,
+    hapticsEnabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val view = LocalView.current
+    val isActive = ringerMode != RINGER_SILENT
+
+    val shapeMode = rememberQsVolumeSliderShapeMode()
+    val animatedCornerRadius by androidx.compose.animation.core.animateDpAsState(
+        targetValue = if (isActive) {
+            when (shapeMode) {
+                1 -> 28.dp
+                2 -> 18.dp
+                3 -> 0.dp
+                else -> QsVolumeSliderDimensions.SliderTrackRoundedCorner
+            }
+        } else {
+            22.5.dp
+        },
+        label = "RingerClassicCornerRadius",
+    )
+    val ringerShape = when (shapeMode) {
+        1 -> CircleShape
+        2 -> RoundedCornerShape(12.dp)
+        3 -> RoundedCornerShape(0.dp)
+        else -> RoundedCornerShape(animatedCornerRadius)
+    }
+
+    val backgroundColor by animateColorAsState(
+        targetValue = if (isActive) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            CustomColorScheme.current.qsTileColor
+        },
+        label = "RingerClassicBgColor",
+    )
+    val iconTint by animateColorAsState(
+        targetValue = if (isActive) {
+            MaterialTheme.colorScheme.onPrimary
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        },
+        label = "RingerClassicIconTint",
+    )
+    val iconRes = when (ringerMode) {
+        RINGER_NORMAL -> R.drawable.ic_volume_ringer
+        RINGER_VIBRATE -> R.drawable.ic_volume_ringer_vibrate
+        else -> R.drawable.ic_volume_ringer_mute
+    }
+
+    Box(
+        modifier = Modifier
+            .size(QsVolumeSliderDimensions.ThumbStyleTrackHeight)
+            .clip(ringerShape)
+            .background(backgroundColor)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = {
+                    if (hapticsEnabled) {
+                        val hapticConstant = when {
+                            ringerMode == RINGER_SILENT -> HapticFeedbackConstants.TOGGLE_OFF
+                            else -> HapticFeedbackConstants.TOGGLE_ON
+                        }
+                        view.performHapticFeedback(hapticConstant)
+                    }
+                    onClick()
+                },
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painter = painterResource(iconRes),
+            contentDescription = when (ringerMode) {
+                RINGER_NORMAL -> "Ringer normal"
+                RINGER_VIBRATE -> "Ringer vibrate"
+                else -> "Ringer silent"
+            },
+            tint = iconTint,
+            modifier = Modifier.size(
+                QsVolumeSliderDimensions.IconSize.width,
+                QsVolumeSliderDimensions.IconSize.height,
+            ),
+        )
     }
 }
 
@@ -877,14 +1098,14 @@ private fun readQsVolumeHapticsEnabled(cr: ContentResolver): Boolean = try {
     ) != 0
 } catch (_: Throwable) { false }
 
-private fun readQsVolumeUseAxStyle(cr: ContentResolver): Boolean = try {
+private fun readQsVolumeSliderStyle(cr: ContentResolver): Int = try {
     Settings.System.getIntForUser(
         cr,
         Settings.System.QS_VOLUME_SLIDER_STYLE,
-        0,
+        QS_VOLUME_STYLE_DEFAULT,
         UserHandle.USER_CURRENT
-    ) != 0
-} catch (_: Throwable) { false }
+    )
+} catch (_: Throwable) { QS_VOLUME_STYLE_DEFAULT }
 
 private fun readShowRingerButton(cr: ContentResolver): Boolean = try {
     Settings.System.getIntForUser(
@@ -917,9 +1138,25 @@ private object QsVolumeSliderDimensions {
     val IconSize = DpSize(28.dp, 28.dp)
     val IconPadding = 10.dp
 
+    val ThumbStyleTrackHeight = 40.dp
+    val ThumbStyleGapSize = 6.dp
+
+    val ThumbHeight: Dp
+        @Composable @ReadOnlyComposable get() =
+            dimensionResource(id = R.dimen.overlay_qs_layout_brightness_thumb_height)
+
+    val ThumbWidth: Dp
+        @Composable @ReadOnlyComposable get() =
+            dimensionResource(id = R.dimen.overlay_qs_layout_brightness_thumb_width)
+
     val TrackHeight: Dp
         @Composable @ReadOnlyComposable get() =
             dimensionResource(id = R.dimen.overlay_qs_layout_brightness_track_height)
+}
+
+private object QsVolumeSliderMotionTestKeys {
+    val ActiveIconAlpha = MotionTestValueKey<Float>("qsVolumeActiveIconAlpha")
+    val InactiveIconAlpha = MotionTestValueKey<Float>("qsVolumeInactiveIconAlpha")
 }
 
 private val QsVolumeSliderSpringSpec = spring<Float>(
