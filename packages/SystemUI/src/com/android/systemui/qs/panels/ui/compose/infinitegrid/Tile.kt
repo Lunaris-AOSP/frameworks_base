@@ -22,8 +22,6 @@ import android.content.Context
 import android.content.res.Resources
 import android.database.ContentObserver
 import android.os.Trace
-import android.os.Handler
-import android.os.Looper
 import android.os.UserHandle
 import android.provider.Settings
 import android.service.quicksettings.Tile.STATE_ACTIVE
@@ -678,280 +676,94 @@ data class TileColors(
 
 @Composable
 fun rememberAxTileStyle(): Boolean {
-    val context = LocalContext.current
-    val contentResolver = context.contentResolver
-
-    fun readAxStyle(): Boolean {
-        return try {
-            Settings.System.getIntForUser(
-                contentResolver, Settings.System.QS_TILE_STYLE_MINIMAL, 0,
-                UserHandle.USER_CURRENT
-            ) != 0
-        } catch (_: Throwable) {
-            false
-        }
+    return rememberObservedSetting(Settings.System.QS_TILE_STYLE_MINIMAL, false) { ctx ->
+        Settings.System.getIntForUser(
+            ctx.contentResolver, 
+            Settings.System.QS_TILE_STYLE_MINIMAL,
+            0,
+            UserHandle.USER_CURRENT
+        ) != 0
     }
-
-    var axStyle by remember { mutableStateOf(readAxStyle()) }
-
-    DisposableEffect(contentResolver) {
-        val observer = object : ContentObserver(null) {
-            override fun onChange(selfChange: Boolean) {
-                context.mainExecutor.execute {
-                    axStyle = readAxStyle()
-                }
-            }
-        }
-
-        contentResolver.registerContentObserver(
-            Settings.System.getUriFor(Settings.System.QS_TILE_STYLE_MINIMAL),
-            false, observer, UserHandle.USER_ALL
-        )
-
-        onDispose {
-            contentResolver.unregisterContentObserver(observer)
-        }
-    }
-
-    return axStyle
 }
 
 @Composable
 fun rememberTileShapeMode(): Int {
-    val context = LocalContext.current
-    val contentResolver = context.contentResolver
-
-    fun readShapeMode(): Int {
-        return try {
-            Settings.System.getIntForUser(
-                contentResolver, Settings.System.QS_TILE_SHAPE, 0,
-                UserHandle.USER_CURRENT
-            )
-        } catch (_: Throwable) {
-            0
-        }
-    }
-
-    var shapeMode by remember { mutableIntStateOf(readShapeMode()) }
-
-    DisposableEffect(contentResolver) {
-        val observer = object : ContentObserver(null) {
-            override fun onChange(selfChange: Boolean) {
-                context.mainExecutor.execute {
-                    shapeMode = readShapeMode()
-                }
-            }
-        }
-
-        contentResolver.registerContentObserver(
-            Settings.System.getUriFor(Settings.System.QS_TILE_SHAPE),
-            false, observer, UserHandle.USER_ALL
+    return rememberObservedSetting(Settings.System.QS_TILE_SHAPE, 0) { ctx ->
+        Settings.System.getIntForUser(
+            ctx.contentResolver,
+            Settings.System.QS_TILE_SHAPE,
+            0,
+            UserHandle.USER_CURRENT
         )
-
-        onDispose {
-            contentResolver.unregisterContentObserver(observer)
-        }
     }
-
-    return shapeMode
 }
 
 @Composable
 fun rememberAxMinimalInvert(): Boolean {
-    val context = LocalContext.current
-    val contentResolver = context.contentResolver
-
-    fun readMinimalInvert(): Boolean {
-        return try {
-            Settings.System.getIntForUser(
-                contentResolver, Settings.System.QS_TILE_STYLE_MINIMAL_INVERT, 0,
-                UserHandle.USER_CURRENT
-            ) != 0
-        } catch (_: Throwable) {
-            false
-        }
+    return rememberObservedSetting(Settings.System.QS_TILE_STYLE_MINIMAL_INVERT, false) { ctx ->
+        Settings.System.getIntForUser(
+            ctx.contentResolver,
+            Settings.System.QS_TILE_STYLE_MINIMAL_INVERT,
+            0,
+            UserHandle.USER_CURRENT
+        ) != 0
     }
-
-    var minimalInvert by remember { mutableStateOf(readMinimalInvert()) }
-
-    DisposableEffect(contentResolver) {
-        val observer = object : ContentObserver(null) {
-            override fun onChange(selfChange: Boolean) {
-                context.mainExecutor.execute {
-                    minimalInvert = readMinimalInvert()
-                }
-            }
-        }
-
-        contentResolver.registerContentObserver(
-            Settings.System.getUriFor(Settings.System.QS_TILE_STYLE_MINIMAL_INVERT),
-            false, observer, UserHandle.USER_ALL
-        )
-
-        onDispose {
-            contentResolver.unregisterContentObserver(observer)
-        }
-    }
-
-    return minimalInvert
 }
 
 @Composable
 fun rememberTileHaptic(): Boolean {
-    val context = LocalContext.current
-    val contentResolver = context.contentResolver
-
-    fun readHapticEnabled(): Boolean {
-        return try {
-            Settings.System.getIntForUser(
-                contentResolver, Settings.System.QS_TILE_HAPTIC, 1,
-                UserHandle.USER_CURRENT
-            ) != 0
-        } catch (_: Throwable) {
-            false
-        }
+    return rememberObservedSetting(Settings.System.QS_TILE_HAPTIC, true) { ctx ->
+        Settings.System.getIntForUser(
+            ctx.contentResolver,
+            Settings.System.QS_TILE_HAPTIC,
+            1,
+            UserHandle.USER_CURRENT
+        ) != 0
     }
-
-    var hapticEnabled by remember { mutableStateOf(readHapticEnabled()) }
-
-    DisposableEffect(contentResolver) {
-        val observer = object : ContentObserver(null) {
-            override fun onChange(selfChange: Boolean) {
-                context.mainExecutor.execute {
-                    hapticEnabled = readHapticEnabled()
-                }
-            }
-        }
-
-        contentResolver.registerContentObserver(
-            Settings.System.getUriFor(Settings.System.QS_TILE_HAPTIC),
-            false, observer, UserHandle.USER_ALL
-        )
-
-        onDispose {
-            contentResolver.unregisterContentObserver(observer)
-        }
-    }
-
-    return hapticEnabled
 }
 
 @Composable
 fun rememberQsGradient(): Boolean {
-    val context = LocalContext.current
-    val contentResolver = context.contentResolver
-
-    fun readEnabled(): Boolean {
-        return try {
-            Settings.System.getIntForUser(
-                contentResolver, Settings.System.QS_TILE_GRADIENT, 0,
-                UserHandle.USER_CURRENT
-            ) != 0
-        } catch (_: Throwable) {
-            false
-        }
+    return rememberObservedSetting(Settings.System.QS_TILE_GRADIENT, false) { ctx ->
+        Settings.System.getIntForUser(
+            ctx.contentResolver,
+            Settings.System.QS_TILE_GRADIENT,
+            0,
+            UserHandle.USER_CURRENT
+        ) != 0
     }
-
-    var enabled by remember { mutableStateOf(readEnabled()) }
-
-    DisposableEffect(contentResolver) {
-        val observer = object : ContentObserver(null) {
-            override fun onChange(selfChange: Boolean) {
-                enabled = readEnabled()
-            }
-        }
-        contentResolver.registerContentObserver(
-            Settings.System.getUriFor(Settings.System.QS_TILE_GRADIENT),
-            false, observer, UserHandle.USER_ALL
-        )
-        onDispose { contentResolver.unregisterContentObserver(observer) }
-    }
-
-    return enabled
 }
 
 @Composable
 private fun rememberGradientColorMode(): Int {
-    val contentResolver = LocalContext.current.contentResolver
-
-    fun readMode(): Int = try {
+    return rememberObservedSetting(Settings.System.CUSTOM_GRADIENT_COLOR_MODE, 0) { ctx ->
         Settings.System.getIntForUser(
-            contentResolver, Settings.System.CUSTOM_GRADIENT_COLOR_MODE, 0,
+            ctx.contentResolver,
+            Settings.System.CUSTOM_GRADIENT_COLOR_MODE,
+            0,
             UserHandle.USER_CURRENT
         )
-    } catch (_: Throwable) {
-        0
     }
-
-    var mode by remember { mutableIntStateOf(readMode()) }
-
-    DisposableEffect(contentResolver) {
-        val observer = object : ContentObserver(null) {
-            override fun onChange(selfChange: Boolean) {
-                mode = readMode()
-            }
-        }
-
-        contentResolver.registerContentObserver(
-            Settings.System.getUriFor(Settings.System.CUSTOM_GRADIENT_COLOR_MODE),
-            false, observer, UserHandle.USER_ALL
-        )
-
-        onDispose {
-            contentResolver.unregisterContentObserver(observer)
-        }
-    }
-
-    return mode
 }
 
 @Composable
 private fun rememberGradientCustomColors(): Pair<Color, Color> {
-    val contentResolver = LocalContext.current.contentResolver
-
-    fun readStart(): Int = try {
+    val startInt = rememberObservedSetting(Settings.System.CUSTOM_GRADIENT_START_COLOR, 0) { ctx ->
         Settings.System.getIntForUser(
-            contentResolver, Settings.System.CUSTOM_GRADIENT_START_COLOR, 0,
+            ctx.contentResolver,
+            Settings.System.CUSTOM_GRADIENT_START_COLOR,
+            0,
             UserHandle.USER_CURRENT
         )
-    } catch (_: Throwable) {
-        0
     }
-
-    fun readEnd(): Int = try {
+    val endInt = rememberObservedSetting(Settings.System.CUSTOM_GRADIENT_END_COLOR, 0) { ctx ->
         Settings.System.getIntForUser(
-            contentResolver, Settings.System.CUSTOM_GRADIENT_END_COLOR, 0,
+            ctx.contentResolver,
+            Settings.System.CUSTOM_GRADIENT_END_COLOR,
+            0,
             UserHandle.USER_CURRENT
         )
-    } catch (_: Throwable) {
-        0
     }
-
-    var startInt by remember { mutableIntStateOf(readStart()) }
-    var endInt by remember { mutableIntStateOf(readEnd()) }
-
-    DisposableEffect(contentResolver) {
-        val observer = object : ContentObserver(null) {
-            override fun onChange(selfChange: Boolean) {
-                startInt = readStart()
-                endInt = readEnd()
-            }
-        }
-
-        contentResolver.registerContentObserver(
-            Settings.System.getUriFor(Settings.System.CUSTOM_GRADIENT_START_COLOR),
-            false, observer, UserHandle.USER_ALL
-        )
-        contentResolver.registerContentObserver(
-            Settings.System.getUriFor(Settings.System.CUSTOM_GRADIENT_END_COLOR),
-            false, observer, UserHandle.USER_ALL
-        )
-
-        onDispose {
-            contentResolver.unregisterContentObserver(observer)
-        }
-    }
-
     val start = if (startInt != 0) Color(startInt) else MaterialTheme.colorScheme.primary
     val end = if (endInt != 0) Color(endInt) else MaterialTheme.colorScheme.secondary
     return start to end
@@ -959,120 +771,37 @@ private fun rememberGradientCustomColors(): Pair<Color, Color> {
 
 @Composable
 fun rememberQSPanelStyle(): Boolean {
-    val context = LocalContext.current
-    val contentResolver = context.contentResolver
-
-    fun readPanelStyleEnabled(): Boolean {
-        return try {
-            Settings.System.getIntForUser(
-                contentResolver, Settings.System.QS_PANEL_STYLE, 0,
-                UserHandle.USER_CURRENT
-            ) != 0
-        } catch (_: Throwable) {
-            false
-        }
+    return rememberObservedSetting(Settings.System.QS_PANEL_STYLE, false) { ctx ->
+        Settings.System.getIntForUser(
+            ctx.contentResolver,
+            Settings.System.QS_PANEL_STYLE,
+            0,
+            UserHandle.USER_CURRENT
+        ) != 0
     }
-
-    var classicStyleEnabled by remember { mutableStateOf(readPanelStyleEnabled()) }
-
-    DisposableEffect(contentResolver) {
-        val observer = object : ContentObserver(null) {
-            override fun onChange(selfChange: Boolean) {
-                classicStyleEnabled = readPanelStyleEnabled()
-            }
-        }
-
-        contentResolver.registerContentObserver(
-            Settings.System.getUriFor(Settings.System.QS_PANEL_STYLE),
-            false, observer, UserHandle.USER_ALL
-        )
-
-        onDispose {
-            contentResolver.unregisterContentObserver(observer)
-        }
-    }
-
-    return classicStyleEnabled
 }
 
 @Composable
 fun rememberQSTileLabelHide(): Boolean {
-    val context = LocalContext.current
-    val contentResolver = context.contentResolver
-
-    fun readLabelHideEnabled(): Boolean {
-        return try {
-            Settings.System.getIntForUser(
-                contentResolver, Settings.System.QS_TILE_LABEL_HIDE, 0,
-                UserHandle.USER_CURRENT
-            ) != 0
-        } catch (_: Throwable) {
-            false
-        }
+    return rememberObservedSetting(Settings.System.QS_TILE_LABEL_HIDE, false) { ctx ->
+        Settings.System.getIntForUser(
+            ctx.contentResolver,
+            Settings.System.QS_TILE_LABEL_HIDE,
+            0,
+            UserHandle.USER_CURRENT
+        ) != 0
     }
-
-    var labelHideEnabled by remember { mutableStateOf(readLabelHideEnabled()) }
-
-    DisposableEffect(contentResolver) {
-        val observer = object : ContentObserver(null) {
-            override fun onChange(selfChange: Boolean) {
-                context.mainExecutor.execute {
-                    labelHideEnabled = readLabelHideEnabled()
-                }
-            }
-        }
-
-        contentResolver.registerContentObserver(
-            Settings.System.getUriFor(Settings.System.QS_TILE_LABEL_HIDE),
-            false, observer, UserHandle.USER_ALL
-        )
-
-        onDispose {
-            contentResolver.unregisterContentObserver(observer)
-        }
-    }
-
-    return labelHideEnabled
 }
 
 @Composable
 fun rememberQSTileIconShapeKey(): String {
-    val context = LocalContext.current
-    val contentResolver = context.contentResolver
-
-    fun readValue(): String {
-        return try {
-            Settings.System.getStringForUser(
-                contentResolver, Settings.System.QS_TILE_ICON_SHAPE,
-                UserHandle.USER_CURRENT
-            ) ?: "circle"
-        } catch (_: Throwable) {
-            "circle"
-        }
+    return rememberObservedSetting(Settings.System.QS_TILE_ICON_SHAPE, "circle") { ctx ->
+        Settings.System.getStringForUser(
+            ctx.contentResolver,
+            Settings.System.QS_TILE_ICON_SHAPE,
+            UserHandle.USER_CURRENT
+        ) ?: "circle"
     }
-
-    var value by remember { mutableStateOf(readValue()) }
-
-    DisposableEffect(contentResolver) {
-        val observer = object : ContentObserver(null) {
-            override fun onChange(selfChange: Boolean) {
-                context.mainExecutor.execute {
-                    value = readValue()
-                }
-            }
-        }
-
-        contentResolver.registerContentObserver(
-            Settings.System.getUriFor(Settings.System.QS_TILE_ICON_SHAPE),
-            false, observer, UserHandle.USER_ALL
-        )
-
-        onDispose {
-            contentResolver.unregisterContentObserver(observer)
-        }
-    }
-
-    return value
 }
 
 @Composable
@@ -1104,8 +833,7 @@ private object TileDefaults {
     /** An active tile with dual target only show the active color on the icon */
     @Composable
     fun activeDualTargetTileColors(): TileColors {
-        val context = LocalContext.current
-        val isSingleToneStyle = DualTargetTileStyleProvider.isSingleToneStyle(context)
+        val isSingleToneStyle = rememberIsSingleToneStyle()
         val gradientEnabled = rememberQsGradient()
         val gradient = qsTileBackgroundBrush(gradientEnabled)
 
@@ -1132,10 +860,8 @@ private object TileDefaults {
     }
 
     @Composable
-    @ReadOnlyComposable
     fun inactiveDualTargetTileColors(): TileColors {
-        val context = LocalContext.current
-        val isSingleToneStyle = DualTargetTileStyleProvider.isSingleToneStyle(context)
+        val isSingleToneStyle = rememberIsSingleToneStyle()
 
         return if (isSingleToneStyle) {
             TileColors(
@@ -1159,7 +885,6 @@ private object TileDefaults {
     }
 
     @Composable
-    @ReadOnlyComposable
     fun inactiveTileColors(): TileColors =
         TileColors(
             background = CustomColorScheme.current.qsTileColor,
@@ -1198,7 +923,6 @@ private object TileDefaults {
         )
 
     @Composable
-    @ReadOnlyComposable
     fun inactiveDualTargetMonochromeTileColors(): TileColors =
         TileColors(
             background = CustomColorScheme.current.qsTileColor,
@@ -1356,55 +1080,44 @@ object DualTargetTileStyleProvider {
 }
 
 @Composable
-internal fun rememberClassicTileIconSize(): Dp {
-    val context = LocalContext.current.applicationContext
-    val state = remember { mutableStateOf(64) }
-    DisposableEffect(context) {
-        val contentResolver = context.contentResolver
-        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
-            override fun onChange(selfChange: Boolean) {
-                state.value = Settings.System.getIntForUser(
-                    contentResolver, Settings.System.QS_CLASSIC_TILE_ICON_SIZE, 64,
-                    UserHandle.USER_CURRENT
-                )
-            }
-        }
-        contentResolver.registerContentObserver(
-            Settings.System.getUriFor(Settings.System.QS_CLASSIC_TILE_ICON_SIZE),
-            false, observer, UserHandle.USER_ALL
-        )
-        state.value = Settings.System.getIntForUser(
-            contentResolver, Settings.System.QS_CLASSIC_TILE_ICON_SIZE, 64,
+internal fun rememberDualTargetTileStyle(): DualTargetTileStyle {
+    val value = rememberObservedSetting(Settings.System.DUAL_TARGET_TILE_STYLE, 0) { ctx ->
+        Settings.System.getIntForUser(
+            ctx.contentResolver,
+            Settings.System.DUAL_TARGET_TILE_STYLE,
+            0,
             UserHandle.USER_CURRENT
         )
-        onDispose { contentResolver.unregisterContentObserver(observer) }
     }
-    return state.value.dp
+    return if (value == 1) DualTargetTileStyle.SINGLE else DualTargetTileStyle.DUAL
+}
+
+@Composable
+internal fun rememberIsSingleToneStyle(): Boolean =
+    rememberDualTargetTileStyle() == DualTargetTileStyle.SINGLE
+
+@Composable
+internal fun rememberClassicTileIconSize(): Dp {
+    val size = rememberObservedSetting(Settings.System.QS_CLASSIC_TILE_ICON_SIZE, 64) { ctx ->
+        Settings.System.getIntForUser(
+            ctx.contentResolver,
+            Settings.System.QS_CLASSIC_TILE_ICON_SIZE,
+            64,
+            UserHandle.USER_CURRENT
+        )
+    }
+    return size.dp
 }
 
 @Composable
 internal fun rememberClassicTileRowSpacing(): Dp {
-    val context = LocalContext.current.applicationContext
-    val state = remember { mutableStateOf(8) }
-    DisposableEffect(context) {
-        val contentResolver = context.contentResolver
-        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
-            override fun onChange(selfChange: Boolean) {
-                state.value = Settings.System.getIntForUser(
-                    contentResolver, Settings.System.QS_CLASSIC_TILE_ROW_SPACING, 8,
-                    UserHandle.USER_CURRENT
-                )
-            }
-        }
-        contentResolver.registerContentObserver(
-            Settings.System.getUriFor(Settings.System.QS_CLASSIC_TILE_ROW_SPACING),
-            false, observer, UserHandle.USER_ALL
-        )
-        state.value = Settings.System.getIntForUser(
-            contentResolver, Settings.System.QS_CLASSIC_TILE_ROW_SPACING, 8,
+    val spacing = rememberObservedSetting(Settings.System.QS_CLASSIC_TILE_ROW_SPACING, 8) { ctx ->
+        Settings.System.getIntForUser(
+            ctx.contentResolver,
+            Settings.System.QS_CLASSIC_TILE_ROW_SPACING,
+            8,
             UserHandle.USER_CURRENT
         )
-        onDispose { contentResolver.unregisterContentObserver(observer) }
     }
-    return state.value.dp
+    return spacing.dp
 }
