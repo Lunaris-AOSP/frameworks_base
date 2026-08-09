@@ -128,13 +128,6 @@ public class FileHeaderProvider implements
                 }
             }
             
-            if (mImage instanceof BitmapDrawable) {
-                Bitmap bitmap = ((BitmapDrawable) mImage).getBitmap();
-                if (bitmap != null && !bitmap.isRecycled()) {
-                    bitmap.recycle();
-                }
-            }
-            
             mImage = null;
         }
     }
