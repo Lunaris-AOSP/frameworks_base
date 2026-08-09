@@ -14939,6 +14939,11 @@ public final class Settings {
 	public static final String PULSE_BASS_HAPTICS = "pulse_bass_haptics";
 
         /**
+         * @hide
+         */
+        public static final String PULSE_CAPTURE_MODE = "pulse_capture_mode";
+
+        /**
          * Whether to show or hide the arrow for back gesture
          * @hide
          */
