@@ -47,7 +47,7 @@ class NowPlayingSettingsRepository(context: Context) {
 
     private val resolver: ContentResolver = context.contentResolver
 
-    private val DEFAULT_VERTICAL_POSITION = 98
+    private val DEFAULT_VERTICAL_POSITION = 88
     private val DEFAULT_TRACK_SIZE = 14
     private val DEFAULT_ARTIST_SIZE = 12
     private val DEFAULT_ICON_STYLE = 0
