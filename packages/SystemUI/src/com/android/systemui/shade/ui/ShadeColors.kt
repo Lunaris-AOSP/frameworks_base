@@ -57,16 +57,21 @@ object ShadeColors {
                 shadePanelStandard(context, allowCustomColor)
             }
         } else {
-            shadePanelFallback(context)
+            shadePanelFallback(context, allowCustomColor)
         }
     }
 
     @JvmStatic
-    fun notificationScrim(context: Context, blurSupported: Boolean): Int {
+    @JvmOverloads
+    fun notificationScrim(
+        context: Context,
+        blurSupported: Boolean,
+        allowCustomColor: Boolean = true,
+    ): Int {
         return if (blurSupported) {
-            notificationScrimStandard(context)
+            notificationScrimStandard(context, allowCustomColor)
         } else {
-            notificationScrimFallback(context)
+            notificationScrimFallback(context, allowCustomColor)
         }
     }
 
@@ -92,8 +97,8 @@ object ShadeColors {
     }
 
     @JvmStatic
-    private fun shadePanelFallback(context: Context): Int {
-        val customColor = getCustomShadeColor(context)
+    private fun shadePanelFallback(context: Context, allowCustomColor: Boolean = true): Int {
+        val customColor = if (allowCustomColor) getCustomShadeColor(context) else null
         if (customColor != null) {
             return customColor
         }
@@ -105,8 +110,8 @@ object ShadeColors {
     }
 
     @JvmStatic
-    private fun notificationScrimStandard(context: Context): Int {
-        val customColor = getCustomNotifScrimColor(context)
+    private fun notificationScrimStandard(context: Context, allowCustomColor: Boolean = true): Int {
+        val customColor = if (allowCustomColor) getCustomNotifScrimColor(context) else null
         if (customColor != null) {
             return ColorUtils.setAlphaComponent(customColor, (0.5f * 255).toInt())
         }
@@ -117,8 +122,8 @@ object ShadeColors {
     }
 
     @JvmStatic
-    private fun notificationScrimFallback(context: Context): Int {
-        val customColor = getCustomNotifScrimColor(context)
+    private fun notificationScrimFallback(context: Context, allowCustomColor: Boolean = true): Int {
+        val customColor = if (allowCustomColor) getCustomNotifScrimColor(context) else null
         if (customColor != null) {
             return ColorUtils.setAlphaComponent(customColor, (0.2f * 255).toInt())
         }
