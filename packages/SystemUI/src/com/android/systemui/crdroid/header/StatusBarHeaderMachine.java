@@ -101,11 +101,17 @@ public class StatusBarHeaderMachine {
     };
 
     private class SettingsObserver extends ContentObserver {
+        private boolean mRegistered = false;
+
         SettingsObserver(Handler handler) {
             super(handler);
         }
 
         void observe() {
+            if (mRegistered) {
+                return;
+            }
+            mRegistered = true;
             mContext.getContentResolver().registerContentObserver(Settings.System.getUriFor(
                     Settings.System.STATUS_BAR_CUSTOM_HEADER),
                     false, this, UserHandle.USER_ALL);
@@ -127,6 +133,10 @@ public class StatusBarHeaderMachine {
         }
 
         void unobserve() {
+            if (!mRegistered) {
+                return;
+            }
+            mRegistered = false;
             mContext.getContentResolver().unregisterContentObserver(this);
         }
 
@@ -189,6 +199,10 @@ public class StatusBarHeaderMachine {
     public void addObserver(IStatusBarHeaderMachineObserver observer) {
         if (DEBUG) Log.i(TAG, "addObserver " + observer);
 
+        if (mObservers.isEmpty()) {
+            mSettingsObserver.observe();
+        }
+
         if (!mObservers.contains(observer)) {
             mObservers.add(observer);
         }
@@ -196,7 +210,9 @@ public class StatusBarHeaderMachine {
 
     public void removeObserver(IStatusBarHeaderMachineObserver observer) {
         mObservers.remove(observer);
-        mSettingsObserver.unobserve();
+        if (mObservers.isEmpty()) {
+            mSettingsObserver.unobserve();
+        }
     }
 
     private void doUpdateStatusHeaderObservers(final boolean force) {
