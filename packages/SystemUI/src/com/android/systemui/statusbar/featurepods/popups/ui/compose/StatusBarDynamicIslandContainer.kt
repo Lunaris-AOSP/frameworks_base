@@ -36,13 +36,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
@@ -54,6 +52,7 @@ import kotlin.math.abs
 fun StatusBarDynamicIslandContainer(
     chips: List<PopupChipModel.Shown>,
     onMediaControlPopupVisibilityChanged: (Boolean) -> Unit,
+    onIslandBoundsChanged: (android.graphics.Rect) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val cutoutSpec = rememberDynamicIslandCutoutSpec()
@@ -62,7 +61,6 @@ fun StatusBarDynamicIslandContainer(
     var popupVisible by remember { mutableStateOf(false) }
     var knownChipIds by remember { mutableStateOf<List<PopupChipId>>(emptyList()) }
     var anchorBounds by remember { mutableStateOf<Rect?>(null) }
-    val view = LocalView.current
 
     LaunchedEffect(chips) {
         val currentChipIds = chips.map { it.chipId }
@@ -103,10 +101,6 @@ fun StatusBarDynamicIslandContainer(
         )
     }
 
-    if (selectedChip == null) {
-        return
-    }
-
     fun selectRelative(direction: Int) {
         if (chips.size <= 1) return
         val newIndex = (selectedIndex + direction).mod(chips.size)
@@ -121,9 +115,19 @@ fun StatusBarDynamicIslandContainer(
         modifier =
             modifier
                 .padding(horizontal = 8.dp)
-                .offset(x = cutoutSpec.horizontalOffset),
+                .offset(x = cutoutSpec.horizontalOffset)
+                .onGloballyPositioned { coordinates ->
+                    val b = coordinates.boundsInWindow()
+                    onIslandBoundsChanged(
+                        android.graphics.Rect(
+                            b.left.toInt(), b.top.toInt(), b.right.toInt(), b.bottom.toInt(),
+                        )
+                    )
+                },
         contentAlignment = Alignment.Center,
     ) {
+        if (selectedChip == null) return@Box
+
         AnimatedContent(
             targetState = selectedChip.chipId,
             transitionSpec = {
@@ -194,12 +198,4 @@ fun StatusBarDynamicIslandContainer(
             )
         }
     }
-}
-
-private fun androidx.compose.ui.layout.LayoutCoordinates.boundsInScreen(
-    view: android.view.View
-): Rect {
-    val location = IntArray(2)
-    view.getLocationOnScreen(location)
-    return boundsInRoot().translate(Offset(location[0].toFloat(), location[1].toFloat()))
 }
