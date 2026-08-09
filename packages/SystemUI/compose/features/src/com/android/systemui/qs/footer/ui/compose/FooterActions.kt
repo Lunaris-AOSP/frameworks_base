@@ -680,7 +680,6 @@ private fun Modifier.animatedScaledHeight(scale: () -> Float): Modifier {
 }
 
 @Composable
-@ReadOnlyComposable
 private fun textButtonColors(): TextButtonColors {
     return if (notificationShadeBlur()) {
         FooterActionsDefaults.blurTextButtonColors()
@@ -690,7 +689,6 @@ private fun textButtonColors(): TextButtonColors {
 }
 
 @Composable
-@ReadOnlyComposable
 private fun numberButtonColors(): TextButtonColors {
     return if (notificationShadeBlur()) {
         FooterActionsDefaults.blurTextButtonColors()
@@ -700,7 +698,6 @@ private fun numberButtonColors(): TextButtonColors {
 }
 
 @Composable
-@ReadOnlyComposable
 private fun buttonColorsForModel(footerAction: FooterActionsButtonViewModel): ButtonColors {
     return if (notificationShadeBlur()) {
         when (footerAction) {
@@ -741,7 +738,6 @@ private object FooterActionsDefaults {
         )
 
     @Composable
-    @ReadOnlyComposable
     fun inactiveButtonColors(): ButtonColors =
         ButtonColors(
             icon = MaterialTheme.colorScheme.onSurface,
@@ -749,7 +745,6 @@ private object FooterActionsDefaults {
         )
 
     @Composable
-    @ReadOnlyComposable
     fun userSwitcherButtonColors(): ButtonColors =
         ButtonColors(
             icon = Color.Unspecified,
@@ -757,7 +752,6 @@ private object FooterActionsDefaults {
         )
 
     @Composable
-    @ReadOnlyComposable
     fun blurTextButtonColors(): TextButtonColors =
         TextButtonColors(
             content = MaterialTheme.colorScheme.onSurface,
