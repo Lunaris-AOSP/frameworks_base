@@ -560,6 +560,9 @@ public final class NotificationPanelViewController implements
     private Drawable mCurrentBackground;
     private StatusBarHeaderMachine mStatusBarHeaderMachine;
 
+    private final Runnable mUpdateHeaderImageRunnable = this::updateHeaderImage;
+    private float mLastPostedShadeHeaderExpansion = -1f;
+
     private boolean mBrightnessControl;
     private boolean mBrightnessControlLockscreen;
 
@@ -1996,6 +1999,19 @@ public final class NotificationPanelViewController implements
                 || (0 < lockscreenExpansionProgress && lockscreenExpansionProgress < 1);
     }
 
+    private void postUpdateHeaderImageIfNeeded() {
+        if (!mHeaderImageEnabled) {
+            return;
+        }
+        float frac = mShadeHeaderController.getShadeExpandedFraction();
+        if (frac == mLastPostedShadeHeaderExpansion) {
+            return;
+        }
+        mLastPostedShadeHeaderExpansion = frac;
+        mView.removeCallbacks(mUpdateHeaderImageRunnable);
+        mView.post(mUpdateHeaderImageRunnable);
+    }
+
     private void onHeightUpdated(float expandedHeight) {
         if (expandedHeight <= 0) {
             mShadeLog.logExpansionChanged("onHeightUpdated: fully collapsed.",
@@ -2061,9 +2077,7 @@ public final class NotificationPanelViewController implements
             mNotificationStackScrollLayoutController.getView().setAlpha(1f);
         }
 
-        if (mHeaderImageEnabled) {
-            mView.post(() -> updateHeaderImage());
-        }
+        postUpdateHeaderImageIfNeeded();
         if (DEBUG_DRAWABLE) {
             mView.invalidate();
         }
@@ -3996,9 +4010,7 @@ public final class NotificationPanelViewController implements
             mQsController.handleShadeLayoutChanged(oldMaxHeight);
             updateExpandedHeight(getExpandedHeight());
             updateHeader();
-            if (mHeaderImageEnabled) {
-                mView.post(() -> updateHeaderImage());
-            }
+            postUpdateHeaderImageIfNeeded();
 
             // If we are running a size change animation, the animation takes care of the height
             // of the container. However, if we are not animating, we always need to make the QS
@@ -4707,6 +4719,7 @@ public final class NotificationPanelViewController implements
             }
         } else {
             mQsHeaderLayout.setVisibility(View.GONE);
+            mLastPostedShadeHeaderExpansion = -1f;
             stopHeaderAnimIfRunning();
         }
     }
