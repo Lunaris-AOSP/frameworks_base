@@ -48,6 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -207,7 +208,8 @@ class GlobalActionsComposeUI(
     private val onActionLongClick: ((GlobalActionsDialogLite.Action) -> Boolean)? = null,
     private val onUserInteraction: () -> Unit,
     private val onDismissed: () -> Unit,
-    private val blurUtils: BlurUtils
+    private val blurUtils: BlurUtils,
+    private val sliderStyle: Boolean = false
 ) : Dialog(context, com.android.systemui.res.R.style.Theme_SystemUI_Dialog_GlobalActionsLite),
     LifecycleOwner,
     SavedStateRegistryOwner {
@@ -261,6 +263,7 @@ class GlobalActionsComposeUI(
                     GlobalActionsScreen(
                         actions = actions,
                         restartActions = restartActions,
+                        sliderStyle = sliderStyle,
                         onActionClick = onActionClick,
                         onActionLongClick = onActionLongClick,
                         blurUtils = blurUtils,
@@ -363,6 +366,7 @@ private fun MaterialExpressiveTheme(content: @Composable () -> Unit) {
 fun GlobalActionsScreen(
     actions: List<GlobalActionsDialogLite.Action>,
     restartActions: List<GlobalActionsDialogLite.Action> = emptyList(),
+    sliderStyle: Boolean = false,
     onActionClick: (GlobalActionsDialogLite.Action) -> Unit,
     onActionLongClick: ((GlobalActionsDialogLite.Action) -> Boolean)?,
     blurUtils: BlurUtils,
@@ -523,6 +527,61 @@ fun GlobalActionsScreen(
             GlobalActionsView.RESTART_CHOICE -> currentView = GlobalActionsView.GRID
             GlobalActionsView.GRID -> startExit()
         }
+    }
+
+    if (sliderStyle) {
+        val restartAction = actions.firstOrNull { it is GlobalActionsDialogLite.RestartAction }
+        val shutdownAction = actions.firstOrNull { it is GlobalActionsDialogLite.ShutDownAction }
+        val sysuiAction = restartActions.firstOrNull {
+            it is GlobalActionsDialogLite.RestartSystemUIAction
+        }
+        val recoveryAction = restartActions.firstOrNull {
+            it is GlobalActionsDialogLite.RestartRecoveryAction
+        }
+        val emergencyAction = actions.firstOrNull {
+            it.javaClass.simpleName.contains("Emergency")
+        }
+
+        Box(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTapGestures {
+                            startExit()
+                        }
+                    }
+            )
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                AnimatedVisibility(
+                    visibleState = visibleState,
+                    enter = fadeIn(animationSpec = tween(300)) + scaleIn(
+                        initialScale = 0.95f,
+                        animationSpec = tween(300)
+                    ),
+                    exit = fadeOut(animationSpec = tween(250)) + scaleOut(
+                        targetScale = 0.95f,
+                        animationSpec = tween(250)
+                    )
+                ) {
+                    SliderPowerMenu(
+                        onRestart = { restartAction?.let { onActionClick(it) } },
+                        onShutdown = { shutdownAction?.let { onActionClick(it) } },
+                        onRestartSystemUi = { sysuiAction?.let { onActionClick(it) } },
+                        onRestartRecovery = { recoveryAction?.let { onActionClick(it) } },
+                        onEmergency = emergencyAction?.let { action ->
+                            { onActionClick(action) }
+                        }
+                    )
+                }
+            }
+        }
+        return
     }
 
     Box(
@@ -1223,6 +1282,227 @@ private fun ConfirmationSliderView(
                 color = MaterialTheme.colorScheme.onSurface,
                 style = MaterialTheme.typography.labelLarge
             )
+        }
+    }
+}
+
+@Composable
+private fun TwoWaySlider(
+    upLabel: String,
+    downLabel: String,
+    upColor: Color,
+    icon: ImageVector,
+    onUp: () -> Unit,
+    onDown: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val view = LocalView.current
+    val density = LocalDensity.current
+    val thumbSizeDp = 72.dp
+    val trackHeightDp = 280.dp
+    var offsetY by remember { mutableFloatStateOf(0f) }
+    var maxOffsetPx by remember { mutableFloatStateOf(0f) }
+    var hasFiredThreshold by remember { mutableStateOf(false) }
+    var fired by remember { mutableStateOf(false) }
+    val threshold = 0.7f
+
+    val animatedOffsetY by animateFloatAsState(
+        targetValue = offsetY,
+        animationSpec = if (fired) tween(0) else spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "slider_thumb_offset"
+    )
+
+    Column(
+        modifier = modifier.width(140.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 36.dp),
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            Text(
+                text = "Slide up: $upLabel",
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.labelMedium,
+                color = Color.White.copy(alpha = 0.7f)
+            )
+        }
+        Box(
+            modifier = Modifier
+                .width(thumbSizeDp + 7.dp)
+                .height(trackHeightDp)
+                .clip(RoundedCornerShape(48.dp))
+                .background(upColor.copy(alpha = 0.22f))
+                .border(
+                    width = 1.dp,
+                    color = upColor.copy(alpha = 0.48f),
+                    shape = RoundedCornerShape(48.dp)
+                )
+                .onGloballyPositioned { coordinates ->
+                    maxOffsetPx = coordinates.size.height / 2f -
+                        with(density) { (thumbSizeDp / 2).toPx() } -
+                        with(density) { 8.dp.toPx() }
+                }
+                .pointerInput(Unit) {
+                    detectDragGestures(
+                        onDragEnd = {
+                            val progress = if (maxOffsetPx > 0) -offsetY / maxOffsetPx else 0f
+                            when {
+                                progress > threshold -> {
+                                    view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                                    fired = true
+                                    offsetY = -maxOffsetPx
+                                    onUp()
+                                }
+                                progress < -threshold -> {
+                                    view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                                    fired = true
+                                    offsetY = maxOffsetPx
+                                    onDown()
+                                }
+                                else -> {
+                                    fired = false
+                                    offsetY = 0f
+                                }
+                            }
+                            hasFiredThreshold = false
+                        },
+                        onDrag = { change, drag ->
+                            if (fired) return@detectDragGestures
+                            change.consume()
+                            offsetY = (offsetY + drag.y).coerceIn(-maxOffsetPx, maxOffsetPx)
+                            val past = maxOffsetPx > 0 &&
+                                kotlin.math.abs(offsetY) / maxOffsetPx > threshold
+                            if (past && !hasFiredThreshold) {
+                                hasFiredThreshold = true
+                                view.performHapticFeedback(
+                                    HapticFeedbackConstants.GESTURE_THRESHOLD_ACTIVATE
+                                )
+                            } else if (!past && hasFiredThreshold) {
+                                hasFiredThreshold = false
+                                view.performHapticFeedback(
+                                    HapticFeedbackConstants.GESTURE_THRESHOLD_DEACTIVATE
+                                )
+                            }
+                        }
+                    )
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.KeyboardDoubleArrowUp,
+                contentDescription = null,
+                tint = upColor.copy(alpha = 0.7f),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 12.dp)
+                    .size(18.dp)
+            )
+
+            Icon(
+                imageVector = Icons.Rounded.KeyboardDoubleArrowDown,
+                contentDescription = null,
+                tint = upColor.copy(alpha = 0.7f),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 12.dp)
+                    .size(18.dp)
+            )
+            Box(
+                modifier = Modifier
+                    .offset { IntOffset(0, animatedOffsetY.roundToInt()) }
+                    .size(thumbSizeDp)
+                    .shadow(elevation = 10.dp, shape = CircleShape, clip = false)
+                    .clip(CircleShape)
+                    .background(upColor),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 36.dp),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            Text(
+                text = "Slide down: $downLabel",
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.labelMedium,
+                color = Color.White.copy(alpha = 0.7f)
+            )
+        }
+    }
+}
+
+@Composable
+fun SliderPowerMenu(
+    onRestart: () -> Unit,
+    onShutdown: () -> Unit,
+    onRestartSystemUi: () -> Unit,
+    onRestartRecovery: () -> Unit,
+    onEmergency: (() -> Unit)?,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "Power Options",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = Color.White
+        )
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            TwoWaySlider(
+                upLabel = "Restart",
+                downLabel = "Shutdown",
+                upColor = VividRed,
+                icon = Icons.Rounded.PowerSettingsNew,
+                onUp = onRestart,
+                onDown = onShutdown
+            )
+            TwoWaySlider(
+                upLabel = "SystemUI",
+                downLabel = "Recovery",
+                upColor = Color(0xFF4285F4),
+                icon = Icons.Rounded.Android,
+                onUp = onRestartSystemUi,
+                onDown = onRestartRecovery
+            )
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        if (onEmergency != null) {
+            TextButton(
+                onClick = onEmergency,
+                shape = RoundedCornerShape(50),
+                colors = ButtonDefaults.textButtonColors(
+                    containerColor = VividRed,
+                    contentColor = Color.White
+                ),
+                modifier = Modifier.height(44.dp)
+            ) {
+                Text("Emergency")
+            }
         }
     }
 }
