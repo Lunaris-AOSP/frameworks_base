@@ -73,6 +73,12 @@ fun MaterialControlPanel(
         ) == 1
     } catch (_: Exception) { false }
 
+    fun readWidgetOrder(): Boolean = try {
+        Settings.System.getIntForUser(
+            cr, Settings.System.QS_WIDGET_PANEL_ORDER, 0, UserHandle.USER_CURRENT
+        ) == 1
+    } catch (_: Exception) { false }
+
     fun readSliderStyle(): Int = try {
         Settings.System.getIntForUser(
             cr, Settings.System.QS_WIDGET_SLIDER_CORNER, 0, UserHandle.USER_CURRENT
@@ -93,6 +99,9 @@ fun MaterialControlPanel(
     }
     var sliderStyle by remember {
         mutableIntStateOf(readSliderStyle())
+    }
+    var slidersFirst by remember {
+        mutableStateOf(readWidgetOrder())
     }
     var savedMediaPlayerValue by remember {
         mutableIntStateOf(
@@ -132,6 +141,7 @@ fun MaterialControlPanel(
                 enabled = nowEnabled
                 iosMusicStyle = readIosMusicStyle()
                 sliderStyle = readSliderStyle()
+                slidersFirst = readWidgetOrder()
                 if (nowEnabled != wasEnabled) {
                     syncMediaPlayerSetting(nowEnabled)
                 }
@@ -148,6 +158,10 @@ fun MaterialControlPanel(
             )
             cr.registerContentObserver(
                 Settings.System.getUriFor(Settings.System.QS_WIDGET_SLIDER_CORNER),
+                false, observer, UserHandle.USER_ALL,
+            )
+            cr.registerContentObserver(
+                Settings.System.getUriFor(Settings.System.QS_WIDGET_PANEL_ORDER),
                 false, observer, UserHandle.USER_ALL,
             )
         } catch (_: Exception) {}
@@ -183,6 +197,7 @@ fun MaterialControlPanel(
             verticalPadding = verticalPadding,
             iosMusicStyle = iosMusicStyle,
             sliderStyle = sliderStyle,
+            slidersFirst = slidersFirst,
         )
     }
 }
@@ -192,6 +207,7 @@ private fun MaterialControlPanelContent(
     verticalPadding: Dp,
     iosMusicStyle: Boolean,
     sliderStyle: Int,
+    slidersFirst: Boolean,
 ) {
     Row(
         modifier = Modifier
@@ -201,32 +217,44 @@ private fun MaterialControlPanelContent(
         horizontalArrangement = Arrangement.spacedBy(24.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .weight(1.75f)
-                .fillMaxHeight(),
-        ) {
-            if (iosMusicStyle) {
-                IosMusicPlayer(modifier = Modifier.fillMaxWidth().fillMaxHeight())
-            } else {
-                MaterialMusicPlayer(modifier = Modifier.fillMaxWidth().fillMaxHeight())
+        val mediaPlayer = @Composable {
+            Box(
+                modifier = Modifier
+                    .weight(1.75f)
+                    .fillMaxHeight(),
+            ) {
+                if (iosMusicStyle) {
+                    IosMusicPlayer(modifier = Modifier.fillMaxWidth().fillMaxHeight())
+                } else {
+                    MaterialMusicPlayer(modifier = Modifier.fillMaxWidth().fillMaxHeight())
+                }
             }
         }
 
-        MaterialVerticalBrightnessSlider(
-            modifier = Modifier
-                .weight(0.69f)
-                .fillMaxHeight()
-                .widthIn(max = 64.dp),
-            sliderStyle = sliderStyle,
-        )
+        val sliders = @Composable {
+            MaterialVerticalBrightnessSlider(
+                modifier = Modifier
+                    .weight(0.69f)
+                    .fillMaxHeight()
+                    .widthIn(max = 64.dp),
+                sliderStyle = sliderStyle,
+            )
 
-        MaterialVerticalVolumeSlider(
-            modifier = Modifier
-                .weight(0.69f)
-                .fillMaxHeight()
-                .widthIn(max = 64.dp),
-            sliderStyle = sliderStyle,
-        )
+            MaterialVerticalVolumeSlider(
+                modifier = Modifier
+                    .weight(0.69f)
+                    .fillMaxHeight()
+                    .widthIn(max = 64.dp),
+                sliderStyle = sliderStyle,
+            )
+        }
+
+        if (slidersFirst) {
+            sliders()
+            mediaPlayer()
+        } else {
+            mediaPlayer()
+            sliders()
+        }
     }
 }
