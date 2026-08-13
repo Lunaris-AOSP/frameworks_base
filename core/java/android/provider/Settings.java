@@ -7052,6 +7052,11 @@ public final class Settings {
         /**
          * @hide
          */
+        public static final String QS_WIDGET_PANEL_ORDER = "qs_widget_panel_order";
+
+        /**
+         * @hide
+         */
         public static final String SINGLE_QS_TONE_ENABLED = "single_qs_tone_enabled";
 
         /**
