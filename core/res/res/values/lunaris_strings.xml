@@ -37,4 +37,14 @@
     <string name="sleep_mode_notification_content">Tap to turn off sleep mode</string>
     <string name="sleep_mode_enabled_toast">Sleep mode turned on</string>
     <string name="sleep_mode_disabled_toast">Sleep mode turned off</string>
+
+    <!-- PowerInsight Notification -->
+    <string name="power_insight_notif_active">Active: %1$s%%/h</string>
+    <string name="power_insight_notif_idle">Idle: %1$s%%/h</string>
+    <string name="power_insight_notif_screen_on">Screen on: %1$s • %2$s%%</string>
+    <string name="power_insight_notif_screen_off">Screen off: %1$s • %2$s%%</string>
+    <string name="power_insight_notif_awake">Awake: %1$s (%2$s%%)</string>
+    <string name="power_insight_notif_deep_sleep">Deep sleep: %1$s (%2$s%%)</string>
+    <string name="power_insight_notif_charging">Charging</string>
+    <string name="power_insight_notif_discharging">Discharging</string>
 </resources>

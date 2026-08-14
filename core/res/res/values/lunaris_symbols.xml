@@ -117,4 +117,7 @@
     <java-symbol type="bool" name="config_supportSmart5G" />
 
     <java-symbol type="integer" name="config_lowBatteryReclaimSkipThreshold" />
+ 
+    <!-- PowerInsight -->
+    <java-symbol type="drawable" name="ic_power_insight_notify" />
 </resources>
