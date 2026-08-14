@@ -110,6 +110,24 @@ public class PowerInsightService extends IPowerInsightService.Stub {
     private long mBootDeepSleepAtLastCheck = 0;
     private long mLastDiskSaveTime = 0;
 
+    // Charging session trackers
+    private long mChargingStartTime = 0;
+    private long mChargingEndTime = 0;
+    private int mChargingStartLevel = -1;
+    private int mChargingEndLevel = -1;
+    private int mChargingStartCapacity = 0;
+    private int mChargingEndCapacity = 0;
+    
+    private long mChargingScreenOnTime = 0;
+    private int mChargingScreenOnLevelCharged = 0;
+    private int mChargingScreenOnMahCharged = 0;
+    
+    private long mChargingScreenOffTime = 0;
+    private int mChargingScreenOffLevelCharged = 0;
+    private int mChargingScreenOffMahCharged = 0;
+    
+    private long mLastChargingScreenToggleTime = 0;
+
     private String mBatteryBasePath;
     private String mCycleCountPath;
     private boolean mIsCharging = false;
@@ -211,15 +229,59 @@ public class PowerInsightService extends IPowerInsightService.Stub {
                         mScreenOffTime += delta;
                     }
                 }
-                mLastScreenToggleTime = now;
                 
                 // Flush deep sleep delta under the OLD charging state before transition
                 updateDeepSleepDelta();
                 
+                if (isCharging) {
+                    mChargingStartTime = System.currentTimeMillis();
+                    mChargingEndTime = 0;
+                    mChargingStartLevel = level;
+                    mChargingEndLevel = level;
+                    mChargingStartCapacity = getCurrentCapacityMah();
+                    mChargingEndCapacity = mChargingStartCapacity;
+                    mChargingScreenOnTime = 0;
+                    mChargingScreenOffTime = 0;
+                    mChargingScreenOnLevelCharged = 0;
+                    mChargingScreenOnMahCharged = 0;
+                    mChargingScreenOffLevelCharged = 0;
+                    mChargingScreenOffMahCharged = 0;
+                    mLastChargingScreenToggleTime = now;
+                } else {
+                    long chgDelta = now - mLastChargingScreenToggleTime;
+                    if (chgDelta > 0) {
+                        if (mPowerManager.isInteractive()) {
+                            mChargingScreenOnTime += chgDelta;
+                        } else {
+                            mChargingScreenOffTime += chgDelta;
+                        }
+                    }
+                    mChargingEndTime = System.currentTimeMillis();
+                    mChargingEndLevel = level;
+                    mChargingEndCapacity = getCurrentCapacityMah();
+                }
+                
+                mLastScreenToggleTime = now;
                 mIsCharging = isCharging;
             }
 
-            if (mLastBatteryLevel != -1 && level < mLastBatteryLevel && !mIsCharging) {
+            if (mIsCharging) {
+                mChargingEndLevel = level;
+                mChargingEndTime = System.currentTimeMillis();
+                
+                if (mLastBatteryLevel != -1 && level > mLastBatteryLevel) {
+                    int levelDiff = level - mLastBatteryLevel;
+                    int totalCap = getTotalCapacityMah();
+                    int mahDiff = levelDiff * totalCap / 100;
+                    if (mPowerManager.isInteractive()) {
+                        mChargingScreenOnLevelCharged += levelDiff;
+                        mChargingScreenOnMahCharged += mahDiff;
+                    } else {
+                        mChargingScreenOffLevelCharged += levelDiff;
+                        mChargingScreenOffMahCharged += mahDiff;
+                    }
+                }
+            } else if (mLastBatteryLevel != -1 && level < mLastBatteryLevel) {
                 int drain = mLastBatteryLevel - level;
                 if (mPowerManager.isInteractive()) mBatteryDrainOn += drain;
                 else mBatteryDrainOff += drain;
@@ -248,6 +310,11 @@ public class PowerInsightService extends IPowerInsightService.Stub {
             if (delta > 0 && !mIsCharging) {
                 mScreenOffTime += delta;
             }
+            if (mIsCharging) {
+                long chgDelta = now - mLastChargingScreenToggleTime;
+                if (chgDelta > 0) mChargingScreenOffTime += chgDelta;
+                mLastChargingScreenToggleTime = now;
+            }
             mLastScreenToggleTime = now;
             mLastHistoryUpdate = now;
             updateDeepSleepDelta();
@@ -262,6 +329,11 @@ public class PowerInsightService extends IPowerInsightService.Stub {
             if (delta > 0 && !mIsCharging) {
                 mScreenOnTime += delta;
             }
+            if (mIsCharging) {
+                long chgDelta = now - mLastChargingScreenToggleTime;
+                if (chgDelta > 0) mChargingScreenOnTime += chgDelta;
+                mLastChargingScreenToggleTime = now;
+            }
             mLastScreenToggleTime = now;
             updateHistorySot(now);
             updateDeepSleepDelta();
@@ -272,6 +344,19 @@ public class PowerInsightService extends IPowerInsightService.Stub {
         } else if (Intent.ACTION_REBOOT.equals(action) || Intent.ACTION_SHUTDOWN.equals(action)) {
             updateScreenTimeDeltas(now);
             updateDeepSleepDelta();
+            if (mIsCharging) {
+                long chgDelta = now - mLastChargingScreenToggleTime;
+                if (chgDelta > 0) {
+                    if (mPowerManager.isInteractive()) {
+                        mChargingScreenOnTime += chgDelta;
+                    } else {
+                        mChargingScreenOffTime += chgDelta;
+                    }
+                }
+                mChargingEndLevel = getBatteryLevelInternal();
+                mChargingEndCapacity = getCurrentCapacityMah();
+                mChargingEndTime = System.currentTimeMillis();
+            }
             saveStats();
         }
     }
@@ -403,6 +488,36 @@ public class PowerInsightService extends IPowerInsightService.Stub {
         stats.isFullChargeAlarmEnabled = isFullChargeAlarmEnabled();
         stats.batteryAlarmSound = getBatteryAlarmSound();
         stats.isBatteryAlarmVibrate = isBatteryAlarmVibrate();
+
+        // Populate charging session details
+        long wallNow = System.currentTimeMillis();
+        long elapsedNow = SystemClock.elapsedRealtime();
+        
+        long chargingDelta = elapsedNow - mLastChargingScreenToggleTime;
+        long curChargingScreenOn = mChargingScreenOnTime + (mIsCharging && screenOn ? chargingDelta : 0);
+        long curChargingScreenOff = mChargingScreenOffTime + (mIsCharging && !screenOn ? chargingDelta : 0);
+        
+        stats.chargingStartTime = mChargingStartTime;
+        stats.chargingEndTime = mChargingEndTime == 0 && mIsCharging ? wallNow : mChargingEndTime;
+        stats.chargingScreenOnTime = curChargingScreenOn;
+        stats.chargingScreenOffTime = curChargingScreenOff;
+        stats.chargingDurationTime = curChargingScreenOn + curChargingScreenOff;
+        
+        stats.chargingScreenOnLevelCharged = mChargingScreenOnLevelCharged;
+        stats.chargingScreenOnMahCharged = mChargingScreenOnMahCharged;
+        stats.chargingScreenOffLevelCharged = mChargingScreenOffLevelCharged;
+        stats.chargingScreenOffMahCharged = mChargingScreenOffMahCharged;
+        
+        stats.chargingLevelCharged = mChargingScreenOnLevelCharged + mChargingScreenOffLevelCharged;
+        stats.chargingMahCharged = mChargingScreenOnMahCharged + mChargingScreenOffMahCharged;
+        
+        float chargingHours = stats.chargingDurationTime / 3600000f;
+        float chargingOnHours = stats.chargingScreenOnTime / 3600000f;
+        float chargingOffHours = stats.chargingScreenOffTime / 3600000f;
+        
+        stats.chargingRatePercentPerHour = chargingHours > 0.01f ? stats.chargingLevelCharged / chargingHours : 0f;
+        stats.chargingScreenOnRatePercentPerHour = chargingOnHours > 0.01f ? stats.chargingScreenOnLevelCharged / chargingOnHours : 0f;
+        stats.chargingScreenOffRatePercentPerHour = chargingOffHours > 0.01f ? stats.chargingScreenOffLevelCharged / chargingOffHours : 0f;
 
         // Analytics
         int current = stats.currentNow;
@@ -824,6 +939,21 @@ public class PowerInsightService extends IPowerInsightService.Stub {
         mLastScreenToggleTime = now;
         mBootDeepSleepAtLastCheck = getSystemDeepSleepTimeSafe();
         mLastHistoryUpdate = now;
+        
+        mChargingStartTime = 0;
+        mChargingEndTime = 0;
+        mChargingStartLevel = -1;
+        mChargingEndLevel = -1;
+        mChargingStartCapacity = 0;
+        mChargingEndCapacity = 0;
+        mChargingScreenOnTime = 0;
+        mChargingScreenOnLevelCharged = 0;
+        mChargingScreenOnMahCharged = 0;
+        mChargingScreenOffTime = 0;
+        mChargingScreenOffLevelCharged = 0;
+        mChargingScreenOffMahCharged = 0;
+        mLastChargingScreenToggleTime = now;
+
         mFlowSamples.clear();
         mHistoryBuckets.clear();
         mMinCurrent = Integer.MAX_VALUE;
@@ -833,6 +963,41 @@ public class PowerInsightService extends IPowerInsightService.Stub {
         mLastDiskSaveTime = System.currentTimeMillis();
         saveStats();
         if (isNotificationEnabled()) updateNotification();
+    }
+
+    private int getCurrentCapacityMah() {
+        int chargeCounter = readIntFromFile(mBatteryBasePath + "/charge_counter");
+        if (chargeCounter == 0) chargeCounter = readIntFromFile(mBatteryBasePath + "/charge_now");
+        if (chargeCounter == 0) chargeCounter = readIntFromFile("/sys/class/power_supply/bms/charge_counter");
+        if (chargeCounter > 20000) chargeCounter /= 1000;
+        if (chargeCounter <= 0) {
+            int level = getBatteryLevelInternal();
+            int total = getTotalCapacityMah();
+            return level * total / 100;
+        }
+        return chargeCounter;
+    }
+
+    private int getTotalCapacityMah() {
+        int chargeDesign = readIntFromFile(mBatteryBasePath + "/charge_full_design");
+        if (chargeDesign == 0) chargeDesign = readIntFromFile("/sys/class/power_supply/bms/charge_full_design");
+        if (chargeDesign > 20000) chargeDesign /= 1000;
+        if (chargeDesign > 0) return chargeDesign;
+
+        int capacityFull = readIntFromFile(mBatteryBasePath + "/capacity_full");
+        if (capacityFull == 0) capacityFull = readIntFromFile("/sys/class/power_supply/bms/capacity_full");
+        if (capacityFull > 20000) capacityFull /= 1000;
+        if (capacityFull > 0) return capacityFull;
+
+        return 5000;
+    }
+
+    private int getBatteryLevelInternal() {
+        Intent batteryStatus = mContext.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        if (batteryStatus != null) {
+            return batteryStatus.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+        }
+        return mLastBatteryLevel != -1 ? mLastBatteryLevel : 100;
     }
 
     private void loadStats() {
@@ -852,6 +1017,19 @@ public class PowerInsightService extends IPowerInsightService.Stub {
                         mBatteryDrainOn = parseIntAttr(parser, "don", 0);
                         mBatteryDrainOff = parseIntAttr(parser, "doff", 0);
                         mDeepSleepTime = parseLongAttr(parser, "deep_sleep", 0L);
+                    } else if ("charging-stats".equals(tag)) {
+                        mChargingStartTime = parseLongAttr(parser, "start_time", 0L);
+                        mChargingEndTime = parseLongAttr(parser, "end_time", 0L);
+                        mChargingStartLevel = parseIntAttr(parser, "start_level", -1);
+                        mChargingEndLevel = parseIntAttr(parser, "end_level", -1);
+                        mChargingStartCapacity = parseIntAttr(parser, "start_cap", 0);
+                        mChargingEndCapacity = parseIntAttr(parser, "end_cap", 0);
+                        mChargingScreenOnTime = parseLongAttr(parser, "sot", 0L);
+                        mChargingScreenOnLevelCharged = parseIntAttr(parser, "son_lvl", 0);
+                        mChargingScreenOnMahCharged = parseIntAttr(parser, "son_mah", 0);
+                        mChargingScreenOffTime = parseLongAttr(parser, "soft", 0L);
+                        mChargingScreenOffLevelCharged = parseIntAttr(parser, "soff_lvl", 0);
+                        mChargingScreenOffMahCharged = parseIntAttr(parser, "soff_mah", 0);
                     } else if ("flow-sample".equals(tag)) {
                         addFlowSample(new PowerInsightFlowSample(
                                 parseLongAttr(parser, "t", 0L),
@@ -909,6 +1087,21 @@ public class PowerInsightService extends IPowerInsightService.Stub {
             s.attribute(null, "doff", String.valueOf(mBatteryDrainOff));
             s.attribute(null, "deep_sleep", String.valueOf(mDeepSleepTime));
             s.endTag(null, "current-stats");
+
+            s.startTag(null, "charging-stats");
+            s.attribute(null, "start_time", String.valueOf(mChargingStartTime));
+            s.attribute(null, "end_time", String.valueOf(mChargingEndTime));
+            s.attribute(null, "start_level", String.valueOf(mChargingStartLevel));
+            s.attribute(null, "end_level", String.valueOf(mChargingEndLevel));
+            s.attribute(null, "start_cap", String.valueOf(mChargingStartCapacity));
+            s.attribute(null, "end_cap", String.valueOf(mChargingEndCapacity));
+            s.attribute(null, "sot", String.valueOf(mChargingScreenOnTime));
+            s.attribute(null, "son_lvl", String.valueOf(mChargingScreenOnLevelCharged));
+            s.attribute(null, "son_mah", String.valueOf(mChargingScreenOnMahCharged));
+            s.attribute(null, "soft", String.valueOf(mChargingScreenOffTime));
+            s.attribute(null, "soff_lvl", String.valueOf(mChargingScreenOffLevelCharged));
+            s.attribute(null, "soff_mah", String.valueOf(mChargingScreenOffMahCharged));
+            s.endTag(null, "charging-stats");
             synchronized (mFlowSamples) {
                 for (PowerInsightFlowSample f : mFlowSamples) {
                     s.startTag(null, "flow-sample");

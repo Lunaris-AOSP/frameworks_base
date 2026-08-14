@@ -119,5 +119,21 @@
     <java-symbol type="integer" name="config_lowBatteryReclaimSkipThreshold" />
  
     <!-- PowerInsight -->
+    <java-symbol type="string" name="power_insight_notif_active" />
+    <java-symbol type="string" name="power_insight_notif_idle" />
+    <java-symbol type="string" name="power_insight_notif_screen_on" />
+    <java-symbol type="string" name="power_insight_notif_screen_off" />
+    <java-symbol type="string" name="power_insight_notif_awake" />
+    <java-symbol type="string" name="power_insight_notif_deep_sleep" />
+    <java-symbol type="string" name="power_insight_notif_charging" />
+    <java-symbol type="string" name="power_insight_notif_discharging" />
+    <java-symbol type="string" name="power_insight_notif_active" />
+    <java-symbol type="string" name="power_insight_notif_idle" />
+    <java-symbol type="string" name="power_insight_notif_screen_on" />
+    <java-symbol type="string" name="power_insight_notif_screen_off" />
+    <java-symbol type="string" name="power_insight_notif_awake" />
+    <java-symbol type="string" name="power_insight_notif_deep_sleep" />
+    <java-symbol type="string" name="power_insight_notif_charging" />
+    <java-symbol type="string" name="power_insight_notif_discharging" />
     <java-symbol type="drawable" name="ic_power_insight_notify" />
 </resources>

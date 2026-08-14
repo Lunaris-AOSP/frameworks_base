@@ -51,6 +51,22 @@ public class PowerInsightStats implements Parcelable {
     public String batteryAlarmSound;
     public boolean isBatteryAlarmVibrate;
 
+    // Charging stats
+    public long chargingStartTime;
+    public long chargingEndTime;
+    public long chargingDurationTime;
+    public int chargingLevelCharged;
+    public int chargingMahCharged;
+    public float chargingRatePercentPerHour;
+    public long chargingScreenOnTime;
+    public int chargingScreenOnLevelCharged;
+    public int chargingScreenOnMahCharged;
+    public float chargingScreenOnRatePercentPerHour;
+    public long chargingScreenOffTime;
+    public int chargingScreenOffLevelCharged;
+    public int chargingScreenOffMahCharged;
+    public float chargingScreenOffRatePercentPerHour;
+
     public PowerInsightStats() {}
 
     protected PowerInsightStats(Parcel in) {
@@ -93,6 +109,20 @@ public class PowerInsightStats implements Parcelable {
         isFullChargeAlarmEnabled = in.readByte() != 0;
         batteryAlarmSound = in.readString();
         isBatteryAlarmVibrate = in.readByte() != 0;
+        chargingStartTime = in.readLong();
+        chargingEndTime = in.readLong();
+        chargingDurationTime = in.readLong();
+        chargingLevelCharged = in.readInt();
+        chargingMahCharged = in.readInt();
+        chargingRatePercentPerHour = in.readFloat();
+        chargingScreenOnTime = in.readLong();
+        chargingScreenOnLevelCharged = in.readInt();
+        chargingScreenOnMahCharged = in.readInt();
+        chargingScreenOnRatePercentPerHour = in.readFloat();
+        chargingScreenOffTime = in.readLong();
+        chargingScreenOffLevelCharged = in.readInt();
+        chargingScreenOffMahCharged = in.readInt();
+        chargingScreenOffRatePercentPerHour = in.readFloat();
     }
 
     public static final Creator<PowerInsightStats> CREATOR = new Creator<PowerInsightStats>() {
@@ -153,5 +183,19 @@ public class PowerInsightStats implements Parcelable {
         dest.writeByte((byte) (isFullChargeAlarmEnabled ? 1 : 0));
         dest.writeString(batteryAlarmSound);
         dest.writeByte((byte) (isBatteryAlarmVibrate ? 1 : 0));
+        dest.writeLong(chargingStartTime);
+        dest.writeLong(chargingEndTime);
+        dest.writeLong(chargingDurationTime);
+        dest.writeInt(chargingLevelCharged);
+        dest.writeInt(chargingMahCharged);
+        dest.writeFloat(chargingRatePercentPerHour);
+        dest.writeLong(chargingScreenOnTime);
+        dest.writeInt(chargingScreenOnLevelCharged);
+        dest.writeInt(chargingScreenOnMahCharged);
+        dest.writeFloat(chargingScreenOnRatePercentPerHour);
+        dest.writeLong(chargingScreenOffTime);
+        dest.writeInt(chargingScreenOffLevelCharged);
+        dest.writeInt(chargingScreenOffMahCharged);
+        dest.writeFloat(chargingScreenOffRatePercentPerHour);
     }
 }
