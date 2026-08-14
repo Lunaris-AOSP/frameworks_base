@@ -30,6 +30,11 @@ import android.provider.Settings;
 import android.util.AtomicFile;
 import android.util.Slog;
 import android.util.Xml;
+import android.media.Ringtone;
+import android.media.RingtoneManager;
+import android.net.Uri;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 
 import com.android.internal.os.IPowerInsightService;
 import com.android.internal.os.PowerInsightFlowSample;
@@ -71,6 +76,13 @@ public class PowerInsightService extends IPowerInsightService.Stub {
     private static final String KEY_RESET_ON_PLUGGED = "power_insight_reset_on_plugged";
     private static final String KEY_RESET_ON_REBOOT = "power_insight_reset_on_reboot";
     private static final String KEY_MONITOR_INTERVAL = "power_insight_monitor_interval";
+    private static final String KEY_BATTERY_ALARM_ENABLED = "power_insight_battery_alarm_enabled";
+    private static final String KEY_BATTERY_LOW_THRESHOLD = "power_insight_battery_low_threshold";
+    private static final String KEY_BATTERY_HIGH_THRESHOLD = "power_insight_battery_high_threshold";
+    private static final String KEY_ALARM_FREQUENCY = "power_insight_alarm_frequency";
+    private static final String KEY_FULL_CHARGE_ALARM_ENABLED = "power_insight_full_charge_alarm_enabled";
+    private static final String KEY_BATTERY_ALARM_SOUND = "power_insight_battery_alarm_sound";
+    private static final String KEY_BATTERY_ALARM_VIBRATE = "power_insight_battery_alarm_vibrate";
     private static final int DEFAULT_MONITOR_INTERVAL = 10000;
 
     private final Context mContext;
@@ -106,6 +118,10 @@ public class PowerInsightService extends IPowerInsightService.Stub {
     private int mMaxCurrent = Integer.MIN_VALUE;
     private long mTotalCurrent = 0;
     private int mSampleCount = 0;
+
+    private int mLastAlarmNotifiedLevel = -1;
+    private long mLastAlarmNotifiedTime = 0;
+    private boolean mFullChargeAlarmTriggered = false;
 
     public PowerInsightService(Context context) {
         mContext = context;
@@ -179,6 +195,8 @@ public class PowerInsightService extends IPowerInsightService.Stub {
                     resetStatsInternal("Battery level reset (" + target + "%)");
                 }
             }
+
+            checkBatteryAlarms(level);
 
             mLastBatteryLevel = level;
             updateRealtimeMetrics(intent);
@@ -314,6 +332,13 @@ public class PowerInsightService extends IPowerInsightService.Stub {
         stats.autoResetLevel = getAutoResetLevel();
         stats.isResetOnPlugged = getResetOnPlugged();
         stats.isResetOnReboot = getResetOnReboot();
+        stats.isBatteryAlarmEnabled = isBatteryAlarmEnabled();
+        stats.batteryLowThreshold = getBatteryLowThreshold();
+        stats.batteryHighThreshold = getBatteryHighThreshold();
+        stats.alarmFrequency = getAlarmFrequency();
+        stats.isFullChargeAlarmEnabled = isFullChargeAlarmEnabled();
+        stats.batteryAlarmSound = getBatteryAlarmSound();
+        stats.isBatteryAlarmVibrate = isBatteryAlarmVibrate();
 
         // Analytics
         int current = stats.currentNow;
@@ -508,6 +533,96 @@ public class PowerInsightService extends IPowerInsightService.Stub {
         return Math.max(0, SystemClock.elapsedRealtime() - SystemClock.uptimeMillis());
     }
 
+    private void checkBatteryAlarms(int level) {
+        if (level == 100 && isFullChargeAlarmEnabled() && !mFullChargeAlarmTriggered) {
+            sendAlarmNotification("Battery fully charged", "Your device is 100% charged");
+            mFullChargeAlarmTriggered = true;
+            return;
+        } else if (level < 100) {
+            mFullChargeAlarmTriggered = false;
+        }
+
+        if (!isBatteryAlarmEnabled()) return;
+
+        int low = getBatteryLowThreshold();
+        int high = getBatteryHighThreshold();
+        boolean isThresholdHit = level <= low || level >= high;
+
+        if (!isThresholdHit) {
+            mLastAlarmNotifiedLevel = -1;
+            return;
+        }
+
+        int freq = getAlarmFrequency();
+        long now = SystemClock.elapsedRealtime();
+
+        boolean shouldNotify = false;
+        switch (freq) {
+            case 0: // Only once
+                if (mLastAlarmNotifiedLevel == -1) shouldNotify = true;
+                break;
+            case 1: // Every 1% change
+                if (level != mLastAlarmNotifiedLevel) shouldNotify = true;
+                break;
+            case 2: // Every 5% change
+                if (mLastAlarmNotifiedLevel == -1 || Math.abs(level - mLastAlarmNotifiedLevel) >= 5) shouldNotify = true;
+                break;
+            case 3: // Every 10% change
+                if (mLastAlarmNotifiedLevel == -1 || Math.abs(level - mLastAlarmNotifiedLevel) >= 10) shouldNotify = true;
+                break;
+            case 4: // Every 5 minutes
+                if (now - mLastAlarmNotifiedTime >= 5 * 60 * 1000) shouldNotify = true;
+                break;
+        }
+
+        if (shouldNotify) {
+            String title = level <= low ? "Low Battery Alarm" : "Battery Level Alert";
+            String text = "Battery reached " + level + "%";
+            sendAlarmNotification(title, text);
+            mLastAlarmNotifiedLevel = level;
+            mLastAlarmNotifiedTime = now;
+        }
+    }
+
+    private void sendAlarmNotification(String title, String text) {
+        NotificationManager nm = getNotificationManager();
+        if (nm == null) return;
+        ensureNotificationReady(nm);
+
+        Notification.Builder builder = new Notification.Builder(mContext, NOTIF_CHANNEL_ID)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setSmallIcon(com.android.internal.R.drawable.ic_lock_idle_low_battery)
+            .setAutoCancel(true)
+            .setPriority(Notification.PRIORITY_HIGH)
+            .setDefaults(Notification.DEFAULT_ALL);
+
+        nm.notify(NOTIF_ID + 1, builder.build());
+
+        // Custom Sound
+        String soundUri = getBatteryAlarmSound();
+        if (soundUri != null && !soundUri.isEmpty()) {
+            try {
+                Uri uri = Uri.parse(soundUri);
+                Ringtone r = RingtoneManager.getRingtone(mContext, uri);
+                if (r != null) {
+                    r.play();
+                }
+            } catch (Exception e) {
+                Slog.e(TAG, "Failed to play alarm sound", e);
+            }
+        }
+
+        // Custom Vibration
+        if (isBatteryAlarmVibrate()) {
+            Vibrator v = mContext.getSystemService(Vibrator.class);
+            if (v != null && v.hasVibrator()) {
+                long[] pattern = {0, 500, 200, 500, 200, 500}; // Long triple buzz
+                v.vibrate(VibrationEffect.createWaveform(pattern, -1));
+            }
+        }
+    }
+
     // AIDL Implementation
     @Override public boolean isEnabled() { return Settings.System.getInt(mContext.getContentResolver(), KEY_ENABLED, 0) != 0; }
     @Override public void setEnabled(boolean enabled) { 
@@ -541,6 +656,22 @@ public class PowerInsightService extends IPowerInsightService.Stub {
         mHandler.removeMessages(MSG_MONITOR);
         if (isEnabled()) mHandler.sendEmptyMessage(MSG_MONITOR);
     }
+
+    @Override public void setBatteryAlarmEnabled(boolean enabled) { Settings.System.putInt(mContext.getContentResolver(), KEY_BATTERY_ALARM_ENABLED, enabled ? 1 : 0); }
+    @Override public void setBatteryLowThreshold(int threshold) { Settings.System.putInt(mContext.getContentResolver(), KEY_BATTERY_LOW_THRESHOLD, threshold); }
+    @Override public void setBatteryHighThreshold(int threshold) { Settings.System.putInt(mContext.getContentResolver(), KEY_BATTERY_HIGH_THRESHOLD, threshold); }
+    @Override public void setAlarmFrequency(int frequency) { Settings.System.putInt(mContext.getContentResolver(), KEY_ALARM_FREQUENCY, frequency); }
+    @Override public void setFullChargeAlarmEnabled(boolean enabled) { Settings.System.putInt(mContext.getContentResolver(), KEY_FULL_CHARGE_ALARM_ENABLED, enabled ? 1 : 0); }
+    @Override public void setBatteryAlarmSound(String uri) { Settings.System.putString(mContext.getContentResolver(), KEY_BATTERY_ALARM_SOUND, uri); }
+    @Override public void setBatteryAlarmVibrate(boolean enabled) { Settings.System.putInt(mContext.getContentResolver(), KEY_BATTERY_ALARM_VIBRATE, enabled ? 1 : 0); }
+
+    private boolean isBatteryAlarmEnabled() { return Settings.System.getInt(mContext.getContentResolver(), KEY_BATTERY_ALARM_ENABLED, 0) != 0; }
+    private int getBatteryLowThreshold() { return Settings.System.getInt(mContext.getContentResolver(), KEY_BATTERY_LOW_THRESHOLD, 20); }
+    private int getBatteryHighThreshold() { return Settings.System.getInt(mContext.getContentResolver(), KEY_BATTERY_HIGH_THRESHOLD, 80); }
+    private int getAlarmFrequency() { return Settings.System.getInt(mContext.getContentResolver(), KEY_ALARM_FREQUENCY, 0); }
+    private boolean isFullChargeAlarmEnabled() { return Settings.System.getInt(mContext.getContentResolver(), KEY_FULL_CHARGE_ALARM_ENABLED, 0) != 0; }
+    private String getBatteryAlarmSound() { return Settings.System.getString(mContext.getContentResolver(), KEY_BATTERY_ALARM_SOUND); }
+    private boolean isBatteryAlarmVibrate() { return Settings.System.getInt(mContext.getContentResolver(), KEY_BATTERY_ALARM_VIBRATE, 0) != 0; }
 
     @Override
     public PowerInsightFlowSample[] getCurrentFlow(int minutes) {

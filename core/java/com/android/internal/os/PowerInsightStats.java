@@ -43,6 +43,13 @@ public class PowerInsightStats implements Parcelable {
     public int autoResetLevel;
     public boolean isResetOnPlugged;
     public boolean isResetOnReboot;
+    public boolean isBatteryAlarmEnabled;
+    public int batteryLowThreshold;
+    public int batteryHighThreshold;
+    public int alarmFrequency;
+    public boolean isFullChargeAlarmEnabled;
+    public String batteryAlarmSound;
+    public boolean isBatteryAlarmVibrate;
 
     public PowerInsightStats() {}
 
@@ -79,6 +86,13 @@ public class PowerInsightStats implements Parcelable {
         autoResetLevel = in.readInt();
         isResetOnPlugged = in.readByte() != 0;
         isResetOnReboot = in.readByte() != 0;
+        isBatteryAlarmEnabled = in.readByte() != 0;
+        batteryLowThreshold = in.readInt();
+        batteryHighThreshold = in.readInt();
+        alarmFrequency = in.readInt();
+        isFullChargeAlarmEnabled = in.readByte() != 0;
+        batteryAlarmSound = in.readString();
+        isBatteryAlarmVibrate = in.readByte() != 0;
     }
 
     public static final Creator<PowerInsightStats> CREATOR = new Creator<PowerInsightStats>() {
@@ -132,5 +146,12 @@ public class PowerInsightStats implements Parcelable {
         dest.writeInt(autoResetLevel);
         dest.writeByte((byte) (isResetOnPlugged ? 1 : 0));
         dest.writeByte((byte) (isResetOnReboot ? 1 : 0));
+        dest.writeByte((byte) (isBatteryAlarmEnabled ? 1 : 0));
+        dest.writeInt(batteryLowThreshold);
+        dest.writeInt(batteryHighThreshold);
+        dest.writeInt(alarmFrequency);
+        dest.writeByte((byte) (isFullChargeAlarmEnabled ? 1 : 0));
+        dest.writeString(batteryAlarmSound);
+        dest.writeByte((byte) (isBatteryAlarmVibrate ? 1 : 0));
     }
 }

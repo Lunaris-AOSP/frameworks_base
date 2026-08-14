@@ -31,4 +31,12 @@ interface IPowerInsightService {
     
     int getMonitorInterval();
     void setMonitorInterval(int intervalMs);
+
+    void setBatteryAlarmEnabled(boolean enabled);
+    void setBatteryLowThreshold(int threshold);
+    void setBatteryHighThreshold(int threshold);
+    void setAlarmFrequency(int frequency);
+    void setFullChargeAlarmEnabled(boolean enabled);
+    void setBatteryAlarmSound(String uri);
+    void setBatteryAlarmVibrate(boolean enabled);
 }
