@@ -32,8 +32,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -91,6 +94,12 @@ fun MaterialControlPanel(
         )
     } catch (_: Exception) { 2 }
 
+    fun readUtilityPanelMode(): Int = try {
+        Settings.System.getIntForUser(
+            cr, Settings.System.QS_WIDGET_UTILITY_PANEL, 0, UserHandle.USER_CURRENT
+        )
+    } catch (_: Exception) { 0 }
+
     var enabled by remember {
         mutableStateOf(readEnabled())
     }
@@ -107,6 +116,10 @@ fun MaterialControlPanel(
         mutableIntStateOf(
             if (readEnabled()) 0 else readMediaPlayerSetting()
         )
+    }
+
+    var utilityPanelMode by remember {
+        mutableIntStateOf(readUtilityPanelMode())
     }
 
     fun syncMediaPlayerSetting(widgetEnabled: Boolean) {
@@ -142,6 +155,7 @@ fun MaterialControlPanel(
                 iosMusicStyle = readIosMusicStyle()
                 sliderStyle = readSliderStyle()
                 slidersFirst = readWidgetOrder()
+                utilityPanelMode = readUtilityPanelMode()
                 if (nowEnabled != wasEnabled) {
                     syncMediaPlayerSetting(nowEnabled)
                 }
@@ -162,6 +176,10 @@ fun MaterialControlPanel(
             )
             cr.registerContentObserver(
                 Settings.System.getUriFor(Settings.System.QS_WIDGET_PANEL_ORDER),
+                false, observer, UserHandle.USER_ALL,
+            )
+            cr.registerContentObserver(
+                Settings.System.getUriFor(Settings.System.QS_WIDGET_UTILITY_PANEL),
                 false, observer, UserHandle.USER_ALL,
             )
         } catch (_: Exception) {}
@@ -198,6 +216,7 @@ fun MaterialControlPanel(
             iosMusicStyle = iosMusicStyle,
             sliderStyle = sliderStyle,
             slidersFirst = slidersFirst,
+            utilityPanelMode = utilityPanelMode,
         )
     }
 }
@@ -208,6 +227,7 @@ private fun MaterialControlPanelContent(
     iosMusicStyle: Boolean,
     sliderStyle: Int,
     slidersFirst: Boolean,
+    utilityPanelMode: Int,
 ) {
     Row(
         modifier = Modifier
@@ -218,17 +238,13 @@ private fun MaterialControlPanelContent(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val mediaPlayer = @Composable {
-            Box(
+            MediaOrUtilitySlot(
                 modifier = Modifier
                     .weight(1.75f)
                     .fillMaxHeight(),
-            ) {
-                if (iosMusicStyle) {
-                    IosMusicPlayer(modifier = Modifier.fillMaxWidth().fillMaxHeight())
-                } else {
-                    MaterialMusicPlayer(modifier = Modifier.fillMaxWidth().fillMaxHeight())
-                }
-            }
+                iosMusicStyle = iosMusicStyle,
+                utilityPanelMode = utilityPanelMode,
+            )
         }
 
         val sliders = @Composable {
@@ -255,6 +271,68 @@ private fun MaterialControlPanelContent(
         } else {
             mediaPlayer()
             sliders()
+        }
+    }
+}
+
+private const val UTILITY_MODE_DISABLED = 0
+private const val UTILITY_MODE_DUAL = 1
+private const val UTILITY_MODE_ONLY = 2
+
+@Composable
+private fun MediaOrUtilitySlot(
+    modifier: Modifier = Modifier,
+    iosMusicStyle: Boolean,
+    utilityPanelMode: Int,
+) {
+    if (utilityPanelMode == UTILITY_MODE_DISABLED) {
+        Box(modifier = modifier) {
+            if (iosMusicStyle) {
+                IosMusicPlayer(modifier = Modifier.fillMaxWidth().fillMaxHeight())
+            } else {
+                MaterialMusicPlayer(modifier = Modifier.fillMaxWidth().fillMaxHeight())
+            }
+        }
+        return
+    }
+
+    if (utilityPanelMode == UTILITY_MODE_ONLY) {
+        Box(modifier = modifier) {
+            MaterialUtilityPanel(modifier = Modifier.fillMaxWidth().fillMaxHeight())
+        }
+        return
+    }
+
+    val mediaState = rememberMediaState()
+    val hasMediaSession = mediaState.controller != null
+
+    val pagerState = rememberPagerState(initialPage = 0) { 2 }
+
+    var wasMediaSession by remember { mutableStateOf(hasMediaSession) }
+    LaunchedEffect(hasMediaSession) {
+        when {
+            !hasMediaSession && pagerState.currentPage != 0 -> {
+                pagerState.animateScrollToPage(0)
+            }
+            hasMediaSession && !wasMediaSession -> {
+                pagerState.animateScrollToPage(1)
+            }
+        }
+        wasMediaSession = hasMediaSession
+    }
+
+    HorizontalPager(
+        state = pagerState,
+        userScrollEnabled = hasMediaSession,
+        modifier = modifier,
+    ) { page ->
+        when (page) {
+            0 -> MaterialUtilityPanel(modifier = Modifier.fillMaxWidth().fillMaxHeight())
+            else -> if (iosMusicStyle) {
+                IosMusicPlayer(modifier = Modifier.fillMaxWidth().fillMaxHeight())
+            } else {
+                MaterialMusicPlayer(modifier = Modifier.fillMaxWidth().fillMaxHeight())
+            }
         }
     }
 }
