@@ -107,7 +107,8 @@ public class PowerInsightService extends IPowerInsightService.Stub {
     private int mBatteryDrainOn = 0;
     private int mBatteryDrainOff = 0;
     private long mLastScreenToggleTime = 0;
-    private long mInitialDeepSleep = 0;
+    private long mBootDeepSleepAtLastCheck = 0;
+    private long mLastDiskSaveTime = 0;
 
     private String mBatteryBasePath;
     private String mCycleCountPath;
@@ -158,10 +159,32 @@ public class PowerInsightService extends IPowerInsightService.Stub {
             Settings.System.getUriFor(KEY_MONITOR_INTERVAL), false, new SettingsObserver(mHandler));
 
         mLastScreenToggleTime = SystemClock.elapsedRealtime();
-        mInitialDeepSleep = getSystemDeepSleepTimeSafe();
+        mBootDeepSleepAtLastCheck = getSystemDeepSleepTimeSafe();
+        mLastDiskSaveTime = System.currentTimeMillis();
         
         // Defer heavy initialization to avoid blocking system server boot
         mHandler.sendEmptyMessage(MSG_INIT);
+    }
+
+    private void updateScreenTimeDeltas(long now) {
+        long delta = now - mLastScreenToggleTime;
+        if (delta > 0 && !mIsCharging) {
+            if (mPowerManager.isInteractive()) {
+                mScreenOnTime += delta;
+            } else {
+                mScreenOffTime += delta;
+            }
+        }
+        mLastScreenToggleTime = now;
+    }
+
+    private void updateDeepSleepDelta() {
+        long currentBootDeepSleep = getSystemDeepSleepTimeSafe();
+        long deltaDeepSleep = currentBootDeepSleep - mBootDeepSleepAtLastCheck;
+        if (deltaDeepSleep > 0 && !mIsCharging) {
+            mDeepSleepTime += deltaDeepSleep;
+        }
+        mBootDeepSleepAtLastCheck = currentBootDeepSleep;
     }
 
     private void handleBroadcast(Intent intent) {
@@ -175,8 +198,26 @@ public class PowerInsightService extends IPowerInsightService.Stub {
             
             boolean wasPlugged = mIsPlugged;
             mIsPlugged = plugged != 0;
-            mIsCharging = status == BatteryManager.BATTERY_STATUS_CHARGING 
+            boolean isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING 
                         || status == BatteryManager.BATTERY_STATUS_FULL;
+
+            if (isCharging != mIsCharging) {
+                // Flush the screen time delta accumulated under the OLD charging state before transition
+                long delta = now - mLastScreenToggleTime;
+                if (delta > 0 && !mIsCharging) {
+                    if (mPowerManager.isInteractive()) {
+                        mScreenOnTime += delta;
+                    } else {
+                        mScreenOffTime += delta;
+                    }
+                }
+                mLastScreenToggleTime = now;
+                
+                // Flush deep sleep delta under the OLD charging state before transition
+                updateDeepSleepDelta();
+                
+                mIsCharging = isCharging;
+            }
 
             if (mLastBatteryLevel != -1 && level < mLastBatteryLevel && !mIsCharging) {
                 int drain = mLastBatteryLevel - level;
@@ -203,14 +244,34 @@ public class PowerInsightService extends IPowerInsightService.Stub {
             if (isNotificationEnabled()) updateNotification();
             
         } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
-            mScreenOffTime += (now - mLastScreenToggleTime);
+            long delta = now - mLastScreenToggleTime;
+            if (delta > 0 && !mIsCharging) {
+                mScreenOffTime += delta;
+            }
             mLastScreenToggleTime = now;
             mLastHistoryUpdate = now;
+            updateDeepSleepDelta();
+            
+            // Resume polling when screen is interactive
+            mHandler.removeMessages(MSG_MONITOR);
+            if (isEnabled()) {
+                mHandler.sendEmptyMessage(MSG_MONITOR);
+            }
         } else if (Intent.ACTION_SCREEN_OFF.equals(action)) {
-            mScreenOnTime += (now - mLastScreenToggleTime);
+            long delta = now - mLastScreenToggleTime;
+            if (delta > 0 && !mIsCharging) {
+                mScreenOnTime += delta;
+            }
             mLastScreenToggleTime = now;
             updateHistorySot(now);
+            updateDeepSleepDelta();
+            
+            // Save immediately on screen off and stop background CPU polling
+            saveStats();
+            mHandler.removeMessages(MSG_MONITOR);
         } else if (Intent.ACTION_REBOOT.equals(action) || Intent.ACTION_SHUTDOWN.equals(action)) {
+            updateScreenTimeDeltas(now);
+            updateDeepSleepDelta();
             saveStats();
         }
     }
@@ -257,9 +318,12 @@ public class PowerInsightService extends IPowerInsightService.Stub {
         long delta = now - mLastScreenToggleTime;
         boolean screenOn = mPowerManager.isInteractive();
         
-        stats.screenOnTime = mScreenOnTime + (screenOn ? delta : 0);
-        stats.screenOffTime = mScreenOffTime + (!screenOn ? delta : 0);
-        stats.deepSleepTime = (getSystemDeepSleepTimeSafe() - mInitialDeepSleep);
+        stats.screenOnTime = mScreenOnTime + (screenOn && !mIsCharging ? delta : 0);
+        stats.screenOffTime = mScreenOffTime + (!screenOn && !mIsCharging ? delta : 0);
+        
+        updateDeepSleepDelta();
+        
+        stats.deepSleepTime = mDeepSleepTime;
         stats.awakeTime = Math.max(0, stats.screenOffTime - stats.deepSleepTime);
         
         stats.batteryDrainScreenOn = mBatteryDrainOn;
@@ -367,7 +431,7 @@ public class PowerInsightService extends IPowerInsightService.Stub {
     }
 
     private void monitor() {
-        if (!isEnabled()) return;
+        if (!isEnabled() || !mPowerManager.isInteractive()) return;
         
         long wallNow = System.currentTimeMillis();
         if (wallNow - mLastFlowSampleTime >= FLOW_SAMPLE_INTERVAL_MS) {
@@ -375,7 +439,12 @@ public class PowerInsightService extends IPowerInsightService.Stub {
             addFlowSample(new PowerInsightFlowSample(wallNow, mCurrentStats.currentNow, mIsCharging));
             mLastFlowSampleTime = wallNow;
             updateHistoryBuckets(wallNow);
-            saveStats();
+            
+            // Save to disk periodically
+            if (wallNow - mLastDiskSaveTime >= 5 * 60 * 1000) {
+                saveStats();
+                mLastDiskSaveTime = wallNow;
+            }
         }
 
         if (isNotificationEnabled()) updateNotification();
@@ -628,8 +697,11 @@ public class PowerInsightService extends IPowerInsightService.Stub {
     @Override public void setEnabled(boolean enabled) { 
         Slog.i(TAG, "setEnabled: " + enabled);
         Settings.System.putInt(mContext.getContentResolver(), KEY_ENABLED, enabled ? 1 : 0);
-        if (enabled) { mHandler.sendEmptyMessage(MSG_MONITOR); }
-        else {
+        if (enabled) { 
+            if (mPowerManager.isInteractive()) {
+                mHandler.sendEmptyMessage(MSG_MONITOR); 
+            }
+        } else {
             mHandler.removeMessages(MSG_MONITOR);
             NotificationManager nm = getNotificationManager();
             if (nm != null) nm.cancel(NOTIF_ID);
@@ -649,12 +721,14 @@ public class PowerInsightService extends IPowerInsightService.Stub {
     @Override public void setAutoResetLevelEnabled(boolean enabled) { Settings.System.putInt(mContext.getContentResolver(), KEY_AUTO_RESET_LEVEL_ENABLED, enabled ? 1 : 0); }
     @Override public void setResetOnPlugged(boolean enabled) { Settings.System.putInt(mContext.getContentResolver(), KEY_RESET_ON_PLUGGED, enabled ? 1 : 0); }
     @Override public void setResetOnReboot(boolean enabled) { Settings.System.putInt(mContext.getContentResolver(), KEY_RESET_ON_REBOOT, enabled ? 1 : 0); }
-
+ 
     @Override public int getMonitorInterval() { return Settings.System.getInt(mContext.getContentResolver(), KEY_MONITOR_INTERVAL, DEFAULT_MONITOR_INTERVAL); }
     @Override public void setMonitorInterval(int intervalMs) { 
         Settings.System.putInt(mContext.getContentResolver(), KEY_MONITOR_INTERVAL, intervalMs);
         mHandler.removeMessages(MSG_MONITOR);
-        if (isEnabled()) mHandler.sendEmptyMessage(MSG_MONITOR);
+        if (isEnabled() && mPowerManager.isInteractive()) {
+            mHandler.sendEmptyMessage(MSG_MONITOR);
+        }
     }
 
     @Override public void setBatteryAlarmEnabled(boolean enabled) { Settings.System.putInt(mContext.getContentResolver(), KEY_BATTERY_ALARM_ENABLED, enabled ? 1 : 0); }
@@ -748,7 +822,7 @@ public class PowerInsightService extends IPowerInsightService.Stub {
         mScreenOnTime = 0; mScreenOffTime = 0; mDeepSleepTime = 0;
         mBatteryDrainOn = 0; mBatteryDrainOff = 0;
         mLastScreenToggleTime = now;
-        mInitialDeepSleep = getSystemDeepSleepTimeSafe();
+        mBootDeepSleepAtLastCheck = getSystemDeepSleepTimeSafe();
         mLastHistoryUpdate = now;
         mFlowSamples.clear();
         mHistoryBuckets.clear();
@@ -756,11 +830,13 @@ public class PowerInsightService extends IPowerInsightService.Stub {
         mMaxCurrent = Integer.MIN_VALUE;
         mTotalCurrent = 0;
         mSampleCount = 0;
+        mLastDiskSaveTime = System.currentTimeMillis();
         saveStats();
         if (isNotificationEnabled()) updateNotification();
     }
 
     private void loadStats() {
+        mLastDiskSaveTime = System.currentTimeMillis();
         File file = mAtomicFile.getBaseFile();
         if (!file.exists()) return;
         try (FileInputStream fis = mAtomicFile.openRead()) {
@@ -775,6 +851,7 @@ public class PowerInsightService extends IPowerInsightService.Stub {
                         mScreenOffTime = parseLongAttr(parser, "soft", 0L);
                         mBatteryDrainOn = parseIntAttr(parser, "don", 0);
                         mBatteryDrainOff = parseIntAttr(parser, "doff", 0);
+                        mDeepSleepTime = parseLongAttr(parser, "deep_sleep", 0L);
                     } else if ("flow-sample".equals(tag)) {
                         addFlowSample(new PowerInsightFlowSample(
                                 parseLongAttr(parser, "t", 0L),
@@ -830,6 +907,7 @@ public class PowerInsightService extends IPowerInsightService.Stub {
             s.attribute(null, "soft", String.valueOf(mScreenOffTime));
             s.attribute(null, "don", String.valueOf(mBatteryDrainOn));
             s.attribute(null, "doff", String.valueOf(mBatteryDrainOff));
+            s.attribute(null, "deep_sleep", String.valueOf(mDeepSleepTime));
             s.endTag(null, "current-stats");
             synchronized (mFlowSamples) {
                 for (PowerInsightFlowSample f : mFlowSamples) {
@@ -872,7 +950,7 @@ public class PowerInsightService extends IPowerInsightService.Stub {
                     if (getResetOnReboot()) {
                         resetStatsInternal("Reboot reset");
                     }
-                    if (isEnabled()) {
+                    if (isEnabled() && mPowerManager.isInteractive()) {
                         sendEmptyMessage(MSG_MONITOR);
                     }
                     Slog.i(TAG, "PowerInsight init done. enabled=" + isEnabled() + " notif=" + isNotificationEnabled());
@@ -884,8 +962,11 @@ public class PowerInsightService extends IPowerInsightService.Stub {
     private class SettingsObserver extends ContentObserver {
         public SettingsObserver(Handler h) { super(h); }
         @Override public void onChange(boolean selfChange) {
-            if (isEnabled()) { if (!mHandler.hasMessages(MSG_MONITOR)) mHandler.sendEmptyMessage(MSG_MONITOR); }
-            else {
+            if (isEnabled()) { 
+                if (mPowerManager.isInteractive() && !mHandler.hasMessages(MSG_MONITOR)) {
+                    mHandler.sendEmptyMessage(MSG_MONITOR); 
+                }
+            } else {
                 mHandler.removeMessages(MSG_MONITOR);
                 NotificationManager nm = getNotificationManager();
                 if (nm != null) nm.cancel(NOTIF_ID);
