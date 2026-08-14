@@ -7057,6 +7057,16 @@ public final class Settings {
         /**
          * @hide
          */
+        public static final String QS_WIDGET_UTILITY_PANEL = "qs_widget_utility_panel";
+
+        /**
+         * @hide
+         */
+        public static final String QS_WIDGET_UTILITY_TILE_ROUNDED = "qs_widget_utility_tile_rounded";
+
+        /**
+         * @hide
+         */
         public static final String SINGLE_QS_TONE_ENABLED = "single_qs_tone_enabled";
 
         /**
