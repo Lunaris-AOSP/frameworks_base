@@ -61,6 +61,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.MaterialShapes
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.runtime.*
 import androidx.compose.runtime.mutableStateOf
@@ -75,7 +77,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.asAndroidPath
+import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -90,6 +95,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.graphics.shapes.toPath
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -98,6 +104,9 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import android.graphics.Matrix as AndroidMatrix
+import android.graphics.Path as AndroidPath
+import android.graphics.RectF
 import com.android.systemui.res.R
 import com.android.systemui.qs.panels.ui.compose.SharedMediaState
 import com.android.systemui.qs.panels.ui.compose.rememberMediaState
@@ -1180,6 +1189,7 @@ class SystemIconsPopupController(
         }
     }
 
+    @OptIn(ExperimentalMaterial3ExpressiveApi::class)
     @Composable
     private fun CircleBattery(percentage: Int, isCharging: Boolean) {
         val infiniteTransition = rememberInfiniteTransition(label = "battery")
@@ -1191,6 +1201,16 @@ class SystemIconsPopupController(
                 repeatMode = RepeatMode.Restart
             ),
             label = "wave"
+        )
+
+        val cookieRotation by infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(if (isCharging) 12000 else 20000, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "cookieRotation"
         )
 
         val strokeColor = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.3f)
@@ -1212,7 +1232,10 @@ class SystemIconsPopupController(
             label = "batteryFillColor"
         )
         val wavePath = remember { Path() }
-        val circlePath = remember { Path() }
+        val cookieAndroidPath = remember {
+            MaterialShapes.Cookie9Sided.toPath().asComposePath().asAndroidPath()
+        }
+        val cookieBounds = remember { RectF().also { cookieAndroidPath.computeBounds(it, true) } }
 
         Box(
             modifier = Modifier.size(60.dp),
@@ -1220,14 +1243,20 @@ class SystemIconsPopupController(
         ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val center = Offset(size.width / 2, size.height / 2)
-                val radius = size.minDimension * 0.42f
+                val diameter = size.minDimension * 0.84f
 
-                drawCircle(
-                    color = if (isLowBattery) strokeColor.copy(alpha = strokeColor.alpha * lowBatteryPulse)
-                        else strokeColor,
-                    radius = radius,
-                    style = Stroke(width = 2.dp.toPx())
-                )
+                val cookieDiameter = maxOf(cookieBounds.width(), cookieBounds.height())
+                if (cookieDiameter <= 0f) return@Canvas
+                val scale = diameter / cookieDiameter
+
+                val matrix = AndroidMatrix().apply {
+                    postTranslate(-cookieBounds.centerX(), -cookieBounds.centerY())
+                    postScale(scale, scale)
+                    postRotate(cookieRotation, 0f, 0f)
+                    postTranslate(center.x, center.y)
+                }
+                val scaledCookiePath = AndroidPath(cookieAndroidPath).apply { transform(matrix) }
+                val cookieComposePath = scaledCookiePath.asComposePath()
 
                 val fillHeight = size.height * (percentage / 100f)
                 wavePath.reset()
@@ -1249,23 +1278,40 @@ class SystemIconsPopupController(
                     close()
                 }
 
-                circlePath.reset()
-                circlePath.addOval(
-                    androidx.compose.ui.geometry.Rect(
-                        left = center.x - radius,
-                        top = center.y - radius,
-                        right = center.x + radius,
-                        bottom = center.y + radius
-                    )
-                )
-
-                clipPath(circlePath) {
+                clipPath(cookieComposePath) {
                     drawPath(
                         path = wavePath,
                         color = if (isLowBattery) fillColor.copy(alpha = fillColor.alpha * lowBatteryPulse)
                             else fillColor
                     )
                 }
+            }
+
+            Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { rotationZ = cookieRotation }
+            ) {
+                val center = Offset(size.width / 2, size.height / 2)
+                val diameter = size.minDimension * 0.84f
+
+                val cookieDiameter = maxOf(cookieBounds.width(), cookieBounds.height())
+                if (cookieDiameter <= 0f) return@Canvas
+                val scale = diameter / cookieDiameter
+
+                val matrix = AndroidMatrix().apply {
+                    postTranslate(-cookieBounds.centerX(), -cookieBounds.centerY())
+                    postScale(scale, scale)
+                    postTranslate(center.x, center.y)
+                }
+                val scaledCookiePath = AndroidPath(cookieAndroidPath).apply { transform(matrix) }
+
+                drawPath(
+                    path = scaledCookiePath.asComposePath(),
+                    color = if (isLowBattery) strokeColor.copy(alpha = strokeColor.alpha * lowBatteryPulse)
+                        else strokeColor,
+                    style = Stroke(width = 2.dp.toPx())
+                )
             }
         }
     }
