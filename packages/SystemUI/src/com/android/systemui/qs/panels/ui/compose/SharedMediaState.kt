@@ -18,17 +18,31 @@ package com.android.systemui.qs.panels.ui.compose
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.drawable.Drawable
+import android.graphics.Color as AndroidColor
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import com.android.systemui.media.MediaSessionManager as newMediaSessionManager
+
+private fun boostSaturation(color: Int, amount: Float = 0.20f): Int {
+    val hsv = FloatArray(3)
+    AndroidColor.colorToHSV(color, hsv)
+    hsv[1] = (hsv[1] + amount).coerceAtMost(1.0f)
+    return AndroidColor.HSVToColor(hsv)
+}
 
 internal data class SharedMediaState(
     val title: String? = null,
@@ -37,6 +51,11 @@ internal data class SharedMediaState(
     val isPlaying: Boolean = false,
     val controller: MediaController? = null,
     val packageName: String? = null,
+    val durationMs: Long = 0L,
+    val positionMs: Long = 0L,
+    val positionAnchorMs: Long = 0L,
+    val playbackSpeed: Float = 1f,
+    val albumArtTint: Color? = null,
 )
 
 // Playback states considered "active" for session priority ordering.
@@ -56,6 +75,20 @@ internal fun rememberMediaState(): SharedMediaState {
     }
 
     var mediaState by remember { mutableStateOf(SharedMediaState()) }
+
+    DisposableEffect(Unit) {
+        val newManager = newMediaSessionManager.get()
+        val colorListener = object : newMediaSessionManager.MediaDataListener {
+            override fun onMediaColorsChanged(color: Int) {
+                val boosted = boostSaturation(color)
+                Handler(Looper.getMainLooper()).post {
+                    mediaState = mediaState.copy(albumArtTint = Color(boosted))
+                }
+            }
+        }
+        newManager.addListener(colorListener)
+        onDispose { newManager.removeListener(colorListener) }
+    }
 
     DisposableEffect(Unit) {
         var controllerCallback: MediaController.Callback? = null
@@ -98,15 +131,23 @@ internal fun rememberMediaState(): SharedMediaState {
             }
 
             val meta = active.metadata
+            val playbackState = active.playbackState?.state
+            val stopped = playbackState == PlaybackState.STATE_STOPPED ||
+                playbackState == PlaybackState.STATE_NONE
             mediaState = SharedMediaState(
                 title = meta?.getString(MediaMetadata.METADATA_KEY_TITLE),
                 artist = meta?.getString(MediaMetadata.METADATA_KEY_ARTIST)
                     ?: meta?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST),
                 albumArt = meta?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
                     ?: meta?.getBitmap(MediaMetadata.METADATA_KEY_ART),
-                isPlaying = active.playbackState?.state == PlaybackState.STATE_PLAYING,
+                isPlaying = playbackState == PlaybackState.STATE_PLAYING,
                 controller = active,
                 packageName = active.packageName,
+                durationMs = meta?.getLong(MediaMetadata.METADATA_KEY_DURATION)?.coerceAtLeast(0L) ?: 0L,
+                positionMs = active.playbackState?.position?.coerceAtLeast(0L) ?: 0L,
+                positionAnchorMs = SystemClock.elapsedRealtime(),
+                playbackSpeed = active.playbackState?.playbackSpeed?.takeIf { it > 0f } ?: 1f,
+                albumArtTint = if (stopped) null else mediaState.albumArtTint,
             )
         }
 
