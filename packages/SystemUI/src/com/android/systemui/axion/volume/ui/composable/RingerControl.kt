@@ -27,6 +27,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -97,7 +98,7 @@ fun RingerButton(
         modifier = modifier.size(size),
         shape = RoundedCornerShape(cornerRadius),
         colors = IconButtonDefaults.filledTonalIconButtonColors(
-            containerColor = MaterialTheme.colorScheme.surfaceBright,
+            containerColor = Color.Transparent,
             contentColor = MaterialTheme.colorScheme.onSurface
         )
     ) {
