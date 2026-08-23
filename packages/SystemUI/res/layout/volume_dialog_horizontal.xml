@@ -24,7 +24,7 @@
     android:clipChildren="false"
     android:minHeight="@dimen/volume_dialog_window_width">
 
-    <View
+    <com.android.systemui.volume.dialog.ui.view.VolumeDialogBackgroundView
         android:id="@+id/volume_dialog_background"
         android:layout_width="0dp"
         android:layout_height="@dimen/volume_dialog_width"

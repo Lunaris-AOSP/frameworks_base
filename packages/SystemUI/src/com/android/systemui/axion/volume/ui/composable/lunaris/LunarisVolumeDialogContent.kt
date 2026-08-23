@@ -28,7 +28,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.ClosedCaptionDisabled
 import androidx.compose.material.icons.filled.Settings
@@ -46,6 +45,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.ui.unit.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.android.axion.blur.AxBlurSurface
+import com.android.axion.blur.AxBlurSurfaceDefaults
 import com.android.systemui.axion.volume.domain.model.AxionStreamInfo
 import com.android.systemui.axion.volume.domain.model.AxionVolumeDialogState
 import com.android.systemui.axion.volume.domain.model.VolumeSliderItem
@@ -143,13 +144,13 @@ private fun LunarisCollapsedPanel(viewModel: AxionVolumeDialogViewModel) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Box(
+        AxBlurSurface(
             modifier = Modifier
-                .size(LunarisPanelWidth)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceBright)
-                .padding(8.dp),
-            contentAlignment = Alignment.Center
+                .size(LunarisPanelWidth),
+            shape = CircleShape,
+            cornerRadius = LunarisPanelWidth / 2,
+            surfaceColor = AxBlurSurfaceDefaults.surfaceColor(),
+            contentAlignment = Alignment.Center,
         ) {
             LunarisCollapsedRingerButton(
                 ringerMode = dialogState.ringerMode,
@@ -162,13 +163,14 @@ private fun LunarisCollapsedPanel(viewModel: AxionVolumeDialogViewModel) {
         }
 
         if (streamModel != null) {
-            Box(
+            AxBlurSurface(
                 modifier = Modifier
                     .width(LunarisPanelWidth)
-                    .wrapContentHeight()
-                    .clip(RoundedCornerShape(LunarisPanelCornerRadius))
-                    .background(MaterialTheme.colorScheme.surfaceBright),
-                contentAlignment = Alignment.Center
+                    .wrapContentHeight(),
+                shape = RoundedCornerShape(LunarisPanelCornerRadius),
+                cornerRadius = LunarisPanelCornerRadius,
+                surfaceColor = AxBlurSurfaceDefaults.surfaceColor(),
+                contentAlignment = Alignment.Center,
             ) {
                 Column(
                     modifier = Modifier.padding(vertical = LunarisPanelPaddingV),
@@ -186,26 +188,33 @@ private fun LunarisCollapsedPanel(viewModel: AxionVolumeDialogViewModel) {
             }
         }
 
-        Box(
+        AxBlurSurface(
             modifier = Modifier
-                .size(LunarisPanelWidth)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceBright)
-                .padding(8.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary)
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
-                    viewModel.rescheduleTimeout()
-                    viewModel.toggleExpanded()
-                },
-            contentAlignment = Alignment.Center
+                .size(LunarisPanelWidth),
+            shape = CircleShape,
+            cornerRadius = LunarisPanelWidth / 2,
+            surfaceColor = AxBlurSurfaceDefaults.surfaceColor(),
+            contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = Icons.Filled.Settings,
-                contentDescription = "Expand",
-                tint = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.size(22.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .padding(8.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary)
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                        viewModel.rescheduleTimeout()
+                        viewModel.toggleExpanded()
+                    }
+                    .padding(8.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Settings,
+                    contentDescription = "Expand",
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
         }
     }
 }
@@ -228,13 +237,14 @@ private fun LunarisExpandedPanel(viewModel: AxionVolumeDialogViewModel) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Box(
+        AxBlurSurface(
             modifier = Modifier
                 .width(panelWidth)
-                .clip(RoundedCornerShape(LunarisExpandedCornerRadius))
-                .background(MaterialTheme.colorScheme.surfaceBright)
                 .padding(horizontal = LunarisPanelPaddingH, vertical = 10.dp),
-            contentAlignment = Alignment.Center
+            shape = RoundedCornerShape(LunarisExpandedCornerRadius),
+            cornerRadius = LunarisExpandedCornerRadius,
+            surfaceColor = AxBlurSurfaceDefaults.surfaceColor(),
+            contentAlignment = Alignment.Center,
         ) {
             LunarisRingerControl(
                 viewModel = viewModel,
@@ -243,11 +253,12 @@ private fun LunarisExpandedPanel(viewModel: AxionVolumeDialogViewModel) {
             )
         }
 
-        Box(
+        AxBlurSurface(
             modifier = Modifier
-                .width(panelWidth)
-                .clip(RoundedCornerShape(LunarisExpandedCornerRadius))
-                .background(MaterialTheme.colorScheme.surfaceBright)
+                .width(panelWidth),
+            shape = RoundedCornerShape(LunarisExpandedCornerRadius),
+            cornerRadius = LunarisExpandedCornerRadius,
+            surfaceColor = AxBlurSurfaceDefaults.surfaceColor(),
         ) {
             LunarisExpandedSlidersSection(
                 viewModel = viewModel,
@@ -257,47 +268,18 @@ private fun LunarisExpandedPanel(viewModel: AxionVolumeDialogViewModel) {
             )
         }
 
-        Box(
+        AxBlurSurface(
             modifier = Modifier
-                .width(panelWidth)
-                .clip(RoundedCornerShape(LunarisExpandedCornerRadius))
-                .background(MaterialTheme.colorScheme.surfaceBright)
+                .width(panelWidth),
+            shape = RoundedCornerShape(LunarisExpandedCornerRadius),
+            cornerRadius = LunarisExpandedCornerRadius,
+            surfaceColor = AxBlurSurfaceDefaults.surfaceColor(),
         ) {
             LunarisExpandedHeader(
                 viewModel = viewModel,
                 dialogState = dialogState,
                 modifier = Modifier.padding(horizontal = LunarisPanelPaddingH, vertical = 10.dp)
             )
-        }
-
-        Box(
-            modifier = Modifier
-                .width(panelWidth)
-                .clip(RoundedCornerShape(LunarisExpandedCornerRadius))
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
-                    viewModel.rescheduleTimeout()
-                    viewModel.toggleExpanded()
-                }
-                .padding(vertical = 12.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Close,
-                    contentDescription = "Collapse",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp)
-                )
-                Text(
-                    text = "Close",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
         }
     }
 }

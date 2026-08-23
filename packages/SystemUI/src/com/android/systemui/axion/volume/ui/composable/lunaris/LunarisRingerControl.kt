@@ -37,7 +37,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -60,7 +59,7 @@ fun LunarisRingerControl(
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(50),
-        color = lerp(MaterialTheme.colorScheme.surfaceVariant, Color.Black, 0.2f),
+        color = Color.Transparent,
         tonalElevation = 0.dp
     ) {
         Row(
@@ -136,10 +135,18 @@ fun LunarisCollapsedRingerButton(
         modifier = modifier
             .size(size)
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.primary)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Icon(imageVector = icon, contentDescription = "Ringer: ${ringerMode.name}", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(LunarisIconSize))
+        Box(
+            modifier = Modifier
+                .padding(8.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary)
+                .padding(8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(imageVector = icon, contentDescription = "Ringer: ${ringerMode.name}", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(22.dp))
+        }
     }
 }
