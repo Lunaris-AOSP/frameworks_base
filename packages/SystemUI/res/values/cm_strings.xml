@@ -70,8 +70,10 @@
 
     <!-- Heads up QS tile -->
     <string name="quick_settings_heads_up_label">Heads up</string>
+    <string name="quick_settings_heads_up_less_boring_label">Less boring</string>
     <string name="accessibility_quick_settings_heads_up_off">Heads up off.</string>
     <string name="accessibility_quick_settings_heads_up_on">Heads up on.</string>
+    <string name="accessibility_quick_settings_heads_up_less_boring">Less boring heads up enabled.</string>
 
     <!-- PowerShare QS tile -->
     <string name="quick_settings_powershare_label">Wireless PowerShare</string>

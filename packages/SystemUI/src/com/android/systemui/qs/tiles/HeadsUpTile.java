@@ -22,6 +22,7 @@ import static com.android.internal.logging.MetricsLogger.VIEW_UNKNOWN;
 import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.UserHandle;
 import android.provider.Settings;
 import android.provider.Settings.Global;
 import android.service.quicksettings.Tile;
@@ -43,6 +44,7 @@ import com.android.systemui.qs.tileimpl.QSTileImpl;
 import com.android.systemui.res.R;
 import com.android.systemui.settings.UserTracker;
 import com.android.systemui.util.settings.GlobalSettings;
+import com.android.systemui.util.settings.SystemSettings;
 import com.android.systemui.util.settings.SettingObserver;
 
 import javax.inject.Inject;
@@ -59,6 +61,7 @@ public class HeadsUpTile extends QSTileImpl<BooleanState> {
             new Intent("android.settings.NOTIFICATION_SETTINGS");
 
     private final SettingObserver mSetting;
+    private final SettingObserver mLessBoringSetting;
 
     @Inject
     public HeadsUpTile(
@@ -72,6 +75,7 @@ public class HeadsUpTile extends QSTileImpl<BooleanState> {
             ActivityStarter activityStarter,
             QSLogger qsLogger,
             GlobalSettings globalSettings,
+            SystemSettings systemSettings,
             UserTracker userTracker
     ) {
         super(host, uiEventLogger, backgroundLooper, mainHandler, falsingManager, metricsLogger,
@@ -79,6 +83,14 @@ public class HeadsUpTile extends QSTileImpl<BooleanState> {
 
         mSetting = new SettingObserver(globalSettings, mHandler,
                 Global.HEADS_UP_NOTIFICATIONS_ENABLED, userTracker.getUserId()) {
+            @Override
+            protected void handleValueChanged(int value, boolean observedChange) {
+                handleRefreshState(value);
+            }
+        };
+
+        mLessBoringSetting = new SettingObserver(systemSettings, mHandler,
+                Settings.System.LESS_BORING_HEADS_UP, userTracker.getUserId()) {
             @Override
             protected void handleValueChanged(int value, boolean observedChange) {
                 handleRefreshState(value);
@@ -93,7 +105,19 @@ public class HeadsUpTile extends QSTileImpl<BooleanState> {
 
     @Override
     protected void handleClick(@Nullable Expandable expandable) {
-        setEnabled(!mState.value);
+        final boolean headsUpEnabled = mSetting.getValue() != 0;
+        final boolean lessBoring = mLessBoringSetting.getValue() != 0;
+
+        if (!headsUpEnabled) {
+            setEnabled(true);
+            setLessBoring(false);
+        } else if (!lessBoring) {
+            setEnabled(true);
+            setLessBoring(true);
+        } else {
+            setEnabled(false);
+            setLessBoring(false);
+        }
         refreshState();
     }
 
@@ -108,23 +132,37 @@ public class HeadsUpTile extends QSTileImpl<BooleanState> {
                 enabled ? 1 : 0);
     }
 
+    private void setLessBoring(boolean enabled) {
+        Settings.System.putIntForUser(mContext.getContentResolver(),
+                Settings.System.LESS_BORING_HEADS_UP,
+                enabled ? 1 : 0, UserHandle.USER_CURRENT);
+    }
+
     @Override
     protected void handleUpdateState(BooleanState state, Object arg) {
-        final int value = arg instanceof Integer ? (Integer) arg : mSetting.getValue();
-        final boolean headsUp = value != 0;
+        final boolean headsUp = mSetting.getValue() != 0;
+        final boolean lessBoring = mLessBoringSetting.getValue() != 0;
         state.value = headsUp;
         state.label = mContext.getString(R.string.quick_settings_heads_up_label);
         if (mIcon == null) {
             mIcon = maybeLoadResourceIcon(R.drawable.ic_qs_heads_up);
         }
         state.icon = mIcon;
-        if (headsUp) {
+        if (headsUp && lessBoring) {
+            state.contentDescription = mContext.getString(
+                    R.string.accessibility_quick_settings_heads_up_less_boring);
+            state.secondaryLabel = mContext.getString(
+                    R.string.quick_settings_heads_up_less_boring_label);
+            state.state = Tile.STATE_ACTIVE;
+        } else if (headsUp) {
             state.contentDescription =  mContext.getString(
                     R.string.accessibility_quick_settings_heads_up_on);
+            state.secondaryLabel = null;
             state.state = Tile.STATE_ACTIVE;
         } else {
             state.contentDescription =  mContext.getString(
                     R.string.accessibility_quick_settings_heads_up_off);
+            state.secondaryLabel = null;
             state.state = Tile.STATE_INACTIVE;
         }
     }
