@@ -34,6 +34,9 @@ data class ChargingAnimationSettings(
     val rippleOpacity: Float,
     val glowIntensity: Float,
     val arcCount: Int,
+    val imageFlowOpacity: Float,
+    val imageFlowStrength: Int,
+    val imageFlowDrawableIndex: Int,
     val showOnAod: Boolean,
     val showOnLockscreen: Boolean
 )
@@ -47,16 +50,52 @@ class ChargingAnimationSettingsRepository(context: Context) {
     private val DEFAULT_RIPPLE_OPACITY = 100
     private val DEFAULT_GLOW_INTENSITY = 80
     private val DEFAULT_ARC_COUNT = 3
+    private val DEFAULT_IMAGE_FLOW_OPACITY = 80
+    private val DEFAULT_IMAGE_FLOW_STRENGTH = 5
+    private val DEFAULT_IMAGE_FLOW_DRAWABLE_INDEX = 0
 
     val settingsFlow: Flow<ChargingAnimationSettings> = combine(
-        observeSettingInt(SETTING_ENABLED, 0),
-        observeSettingInt(SETTING_ANIMATION_STYLE, DEFAULT_ANIMATION_STYLE),
-        observeSettingInt(SETTING_COLOR_MODE, DEFAULT_COLOR_MODE),
-        observeSettingInt(SETTING_RIPPLE_OPACITY, DEFAULT_RIPPLE_OPACITY),
-        observeSettingInt(SETTING_GLOW_INTENSITY, DEFAULT_GLOW_INTENSITY),
-        observeSettingInt(SETTING_ARC_COUNT, DEFAULT_ARC_COUNT),
-        observeSettingInt(SETTING_SHOW_ON_AOD, 1),
-        observeSettingInt(SETTING_SHOW_ON_LOCKSCREEN, 1)
+        observeSettingInt(Settings.System.CHARGING_ANIMATION_ENABLED, 0),
+        observeSettingInt(
+            Settings.System.CHARGING_ANIMATION_STYLE,
+            DEFAULT_ANIMATION_STYLE
+        ),
+        observeSettingInt(
+            Settings.System.CHARGING_COLOR_MODE,
+            DEFAULT_COLOR_MODE
+        ),
+        observeSettingInt(
+            Settings.System.CHARGING_RIPPLE_OPACITY,
+            DEFAULT_RIPPLE_OPACITY
+        ),
+        observeSettingInt(
+            Settings.System.CHARGING_GLOW_INTENSITY,
+            DEFAULT_GLOW_INTENSITY
+        ),
+        observeSettingInt(
+            Settings.System.CHARGING_ARC_COUNT,
+            DEFAULT_ARC_COUNT
+        ),
+        observeSettingInt(
+            Settings.System.CHARGING_IMAGE_FLOW_OPACITY,
+            DEFAULT_IMAGE_FLOW_OPACITY
+        ),
+        observeSettingInt(
+            Settings.System.CHARGING_IMAGE_FLOW_STRENGTH,
+            DEFAULT_IMAGE_FLOW_STRENGTH
+        ),
+        observeSettingInt(
+            Settings.System.CHARGING_IMAGE_FLOW_STYLE,
+            DEFAULT_IMAGE_FLOW_DRAWABLE_INDEX
+        ),
+        observeSettingInt(
+            Settings.System.CHARGING_SHOW_ON_AOD,
+            1
+        ),
+        observeSettingInt(
+            Settings.System.CHARGING_SHOW_ON_LOCKSCREEN,
+            1
+        )
     ) { flows: Array<Any?> ->
         val enabled = flows[0] as Int
         val style = flows[1] as Int
@@ -64,14 +103,23 @@ class ChargingAnimationSettingsRepository(context: Context) {
         val rippleOpacity = flows[3] as Int
         val glowIntensity = flows[4] as Int
         val arcCount = flows[5] as Int
-        val showAod = flows[6] as Int
-        val showLock = flows[7] as Int
+        val imageFlowOpacity = flows[6] as Int
+        val imageFlowStrength = flows[7] as Int
+        val imageFlowDrawableIndex = flows[8] as Int
+        val showAod = flows[9] as Int
+        val showLock = flows[10] as Int
         
-        val styleClamped = style.coerceIn(0, 7)
+        val styleClamped = style.coerceIn(0, 9)
         val colorModeClamped = colorMode.coerceIn(0, 2)
         val opacityClamped = (rippleOpacity / 100f).coerceIn(0f, 1f)
         val intensityClamped = (glowIntensity / 100f).coerceIn(0f, 1f)
         val arcCountClamped = arcCount.coerceIn(1, 6)
+        val imageFlowOpacityClamped =
+            (imageFlowOpacity / 100f).coerceIn(0f, 1f)
+        val imageFlowStrengthClamped =
+            imageFlowStrength.coerceIn(1, 10)
+        val imageFlowDrawableIndexClamped =
+            imageFlowDrawableIndex.coerceIn(0, 8)
         
         ChargingAnimationSettings(
             isEnabled = enabled == 1,
@@ -80,6 +128,9 @@ class ChargingAnimationSettingsRepository(context: Context) {
             rippleOpacity = opacityClamped,
             glowIntensity = intensityClamped,
             arcCount = arcCountClamped,
+            imageFlowOpacity = imageFlowOpacityClamped,
+            imageFlowStrength = imageFlowStrengthClamped,
+            imageFlowDrawableIndex = imageFlowDrawableIndexClamped,
             showOnAod = showAod == 1,
             showOnLockscreen = showLock == 1
         )
@@ -87,50 +138,81 @@ class ChargingAnimationSettingsRepository(context: Context) {
 
     fun currentSettings(): ChargingAnimationSettings {
         val style = Settings.System.getIntForUser(
-            resolver, 
-            SETTING_ANIMATION_STYLE, 
-            DEFAULT_ANIMATION_STYLE, 
+            resolver,
+            Settings.System.CHARGING_ANIMATION_STYLE,
+            DEFAULT_ANIMATION_STYLE,
             UserHandle.USER_CURRENT
         )
         val colorMode = Settings.System.getIntForUser(
             resolver,
-            SETTING_COLOR_MODE,
+            Settings.System.CHARGING_COLOR_MODE,
             DEFAULT_COLOR_MODE,
             UserHandle.USER_CURRENT
         )
         val rippleOpacity = Settings.System.getIntForUser(
-            resolver, 
-            SETTING_RIPPLE_OPACITY, 
-            DEFAULT_RIPPLE_OPACITY, 
+            resolver,
+            Settings.System.CHARGING_RIPPLE_OPACITY,
+            DEFAULT_RIPPLE_OPACITY,
             UserHandle.USER_CURRENT
         )
         val glowIntensity = Settings.System.getIntForUser(
-            resolver, 
-            SETTING_GLOW_INTENSITY, 
-            DEFAULT_GLOW_INTENSITY, 
+            resolver,
+            Settings.System.CHARGING_GLOW_INTENSITY,
+            DEFAULT_GLOW_INTENSITY,
             UserHandle.USER_CURRENT
         )
         val arcCount = Settings.System.getIntForUser(
-            resolver, 
-            SETTING_ARC_COUNT, 
-            DEFAULT_ARC_COUNT, 
+            resolver,
+            Settings.System.CHARGING_ARC_COUNT,
+            DEFAULT_ARC_COUNT,
+            UserHandle.USER_CURRENT
+        )
+
+        val imageFlowOpacity = Settings.System.getIntForUser(
+            resolver,
+            Settings.System.CHARGING_IMAGE_FLOW_OPACITY,
+            DEFAULT_IMAGE_FLOW_OPACITY,
+            UserHandle.USER_CURRENT
+        )
+        val imageFlowStrength = Settings.System.getIntForUser(
+            resolver,
+            Settings.System.CHARGING_IMAGE_FLOW_STRENGTH,
+            DEFAULT_IMAGE_FLOW_STRENGTH,
+            UserHandle.USER_CURRENT
+        )
+        val imageFlowDrawableIndex = Settings.System.getIntForUser(
+            resolver,
+            Settings.System.CHARGING_IMAGE_FLOW_STYLE,
+            DEFAULT_IMAGE_FLOW_DRAWABLE_INDEX,
             UserHandle.USER_CURRENT
         )
         
         return ChargingAnimationSettings(
             isEnabled = Settings.System.getIntForUser(
-                resolver, SETTING_ENABLED, 0, UserHandle.USER_CURRENT
+                resolver,
+                Settings.System.CHARGING_ANIMATION_ENABLED,
+                0,
+                UserHandle.USER_CURRENT
             ) == 1,
-            animationStyle = style.coerceIn(0, 7),
+            animationStyle = style.coerceIn(0, 9),
             colorMode = colorMode.coerceIn(0, 2),
             rippleOpacity = (rippleOpacity / 100f).coerceIn(0f, 1f),
             glowIntensity = (glowIntensity / 100f).coerceIn(0f, 1f),
             arcCount = arcCount.coerceIn(1, 6),
+            imageFlowOpacity = (imageFlowOpacity / 100f).coerceIn(0f, 1f),
+            imageFlowStrength = imageFlowStrength.coerceIn(1, 10),
+            imageFlowDrawableIndex = imageFlowDrawableIndex.coerceIn(0, 8),
             showOnAod = Settings.System.getIntForUser(
-                resolver, SETTING_SHOW_ON_AOD, 1, UserHandle.USER_CURRENT
+                resolver,
+                Settings.System.CHARGING_SHOW_ON_AOD,
+                1,
+                UserHandle.USER_CURRENT
             ) == 1,
             showOnLockscreen = Settings.System.getIntForUser(
-                resolver, SETTING_SHOW_ON_LOCKSCREEN, 1, UserHandle.USER_CURRENT
+                resolver,
+                Settings.System.CHARGING_SHOW_ON_LOCKSCREEN,
+                1,
+                UserHandle.USER_CURRENT
             ) == 1
         )
     }
@@ -139,14 +221,24 @@ class ChargingAnimationSettingsRepository(context: Context) {
         val uri = Settings.System.getUriFor(key)
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean, uri: Uri?) {
-                val value = Settings.System.getIntForUser(resolver, key, default, UserHandle.USER_CURRENT)
+                val value = Settings.System.getIntForUser(
+                    resolver,
+                    key,
+                    default,
+                    UserHandle.USER_CURRENT
+                )
                 trySend(value)
             }
         }
         
         try {
             resolver.registerContentObserver(uri, false, observer)
-            val initialValue = Settings.System.getIntForUser(resolver, key, default, UserHandle.USER_CURRENT)
+            val initialValue = Settings.System.getIntForUser(
+                resolver,
+                key,
+                default,
+                UserHandle.USER_CURRENT
+            )
             trySend(initialValue)
         } catch (e: Exception) {
             Log.e(TAG, "Error observing setting: $key", e)
@@ -164,13 +256,5 @@ class ChargingAnimationSettingsRepository(context: Context) {
 
     companion object {
         private const val TAG = "ChargingAnimSettings"
-        private const val SETTING_ENABLED = "charging_animation_enabled"
-        private const val SETTING_ANIMATION_STYLE = "charging_animation_style"
-        private const val SETTING_COLOR_MODE = "charging_color_mode"
-        private const val SETTING_RIPPLE_OPACITY = "charging_ripple_opacity"
-        private const val SETTING_GLOW_INTENSITY = "charging_glow_intensity"
-        private const val SETTING_ARC_COUNT = "charging_arc_count"
-        private const val SETTING_SHOW_ON_AOD = "charging_show_on_aod"
-        private const val SETTING_SHOW_ON_LOCKSCREEN = "charging_show_on_lockscreen"
     }
 }

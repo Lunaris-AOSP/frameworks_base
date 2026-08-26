@@ -19,12 +19,15 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.Resources
+import android.graphics.drawable.Drawable
 import android.os.BatteryManager
 import android.util.Log
 import android.widget.FrameLayout
 import com.android.settingslib.Utils
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.util.ScrimUtils
+import com.android.systemui.res.R
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
@@ -86,6 +89,7 @@ constructor(
         observeSettings()
         registerBatteryReceiver()
         queryInitialBatteryState()
+        loadImageFlowDrawables()
     }
 
     fun getChargingView(): FrameLayout = chargingView
@@ -115,9 +119,25 @@ constructor(
             rippleOpacity = settings.rippleOpacity
             glowIntensity = settings.glowIntensity
             arcCount = settings.arcCount
+            imageFlowOpacity = settings.imageFlowOpacity
+            imageFlowStrength = settings.imageFlowStrength
+            imageFlowDrawableIndex = settings.imageFlowDrawableIndex
         }
         
         updateVisibility()
+    }
+
+    private fun loadImageFlowDrawables() {
+        val drawables: Array<Drawable?> = IMAGE_FLOW_DRAWABLE_RES_IDS.map { resId ->
+            try {
+                context.getDrawable(resId)
+            } catch (e: Resources.NotFoundException) {
+                Log.e(TAG, "Missing image flow drawable resource: $resId", e)
+                null
+            }
+        }.toTypedArray()
+
+        chargingView.setImageFlowDrawables(drawables)
     }
 
     private fun registerBatteryReceiver() {
@@ -260,6 +280,18 @@ constructor(
 
     companion object {
         private const val TAG = "ChargingAnimViewController"
+
+        private val IMAGE_FLOW_DRAWABLE_RES_IDS = intArrayOf(
+            R.drawable.charging_flow_1,
+            R.drawable.charging_flow_2,
+            R.drawable.charging_flow_3,
+            R.drawable.charging_flow_4,
+            R.drawable.charging_flow_5,
+            R.drawable.charging_flow_6,
+            R.drawable.charging_flow_7,
+            R.drawable.charging_flow_8,
+            R.drawable.charging_flow_9
+        )
         
         @Volatile
         private var INSTANCE: ChargingAnimationViewController? = null

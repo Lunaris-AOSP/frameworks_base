@@ -7112,6 +7112,21 @@ public final class Settings {
         /**
          * @hide
          */
+        public static final String CHARGING_IMAGE_FLOW_OPACITY = "charging_image_flow_opacity";
+
+        /**
+         * @hide
+         */
+        public static final String CHARGING_IMAGE_FLOW_STRENGTH = "charging_image_flow_strength";
+
+        /**
+         * @hide
+         */
+        public static final String CHARGING_IMAGE_FLOW_STYLE = "charging_image_flow_style";
+
+        /**
+         * @hide
+         */
         public static final String CHARGING_SHOW_ON_LOCKSCREEN = "charging_show_on_lockscreen";
 
         /**

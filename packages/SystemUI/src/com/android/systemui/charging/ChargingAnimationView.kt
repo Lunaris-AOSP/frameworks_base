@@ -20,6 +20,8 @@ import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.*
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
 import android.util.Log
 import android.view.animation.*
 import android.widget.FrameLayout
@@ -39,6 +41,8 @@ class ChargingAnimationView(context: Context) : FrameLayout(context) {
         const val STYLE_NEBULA = 5
         const val STYLE_DIGITAL_MATRIX = 6
         const val STYLE_GEOFLOW = 7
+        const val STYLE_IMAGE_FLOW = 8
+        const val STYLE_IMAGE_LINEAR = 9
         
         const val COLOR_MODE_DEFAULT = 0
         const val COLOR_MODE_ACCENT = 1
@@ -52,6 +56,8 @@ class ChargingAnimationView(context: Context) : FrameLayout(context) {
         private const val NEBULA_DURATION = 2200L
         private const val MATRIX_DURATION = 2000L
         private const val GEOFLOW_DURATION = 2500L
+        private const val IMAGE_FLOW_DURATION = 2400L
+        private const val IMAGE_LINEAR_DURATION = 2200L
         
         private const val MAX_BUBBLES = 30
         private const val MAX_PARTICLES = 40
@@ -60,7 +66,13 @@ class ChargingAnimationView(context: Context) : FrameLayout(context) {
         private const val MAX_NEBULA_CLOUDS = 20
         private const val MAX_MATRIX_CHARS = 30
         private const val MAX_GEO_SHAPES = 25
+        private const val MAX_IMAGE_FLOW_PARTICLES = 40
+        private const val MAX_IMAGE_LINEAR_PARTICLES = 30
         private const val MAX_TRAIL_SIZE = 10
+
+        private const val IMAGE_FLOW_SIDE_BOTTOM = 0
+        private const val IMAGE_FLOW_SIDE_LEFT = 1
+        private const val IMAGE_FLOW_SIDE_RIGHT = 2
     }
 
     private val bubblePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -102,6 +114,10 @@ class ChargingAnimationView(context: Context) : FrameLayout(context) {
         style = Paint.Style.FILL
     }
 
+    private val imageFlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        isFilterBitmap = true
+    }
+
     private val shapePath = Path()
 
     var batteryLevel: Int = 0
@@ -112,7 +128,7 @@ class ChargingAnimationView(context: Context) : FrameLayout(context) {
 
     var animationStyle: Int = STYLE_BUBBLE_STREAM
         set(value) {
-            field = value.coerceIn(STYLE_BUBBLE_STREAM, STYLE_GEOFLOW)
+            field = value.coerceIn(STYLE_BUBBLE_STREAM, STYLE_IMAGE_LINEAR)
             invalidate()
         }
 
@@ -142,6 +158,24 @@ class ChargingAnimationView(context: Context) : FrameLayout(context) {
             invalidate()
         }
 
+    var imageFlowOpacity: Float = 0.8f
+        set(value) {
+            field = value.coerceIn(0f, 1f)
+            invalidate()
+        }
+
+    var imageFlowStrength: Int = 5
+        set(value) {
+            field = value.coerceIn(1, 10)
+            invalidate()
+        }
+
+    var imageFlowDrawableIndex: Int = 0
+        set(value) {
+            field = value.coerceIn(0, 8)
+            invalidate()
+        }
+
     var defaultChargingColor: Int = 0xFF4CAF50.toInt()
         set(value) {
             field = value
@@ -162,6 +196,8 @@ class ChargingAnimationView(context: Context) : FrameLayout(context) {
     private var nebulaAnimator: ValueAnimator? = null
     private var matrixAnimator: ValueAnimator? = null
     private var geoflowAnimator: ValueAnimator? = null
+    private var imageFlowAnimator: ValueAnimator? = null
+    private var imageLinearAnimator: ValueAnimator? = null
     private var fadeAnimator: ValueAnimator? = null
     private var rainbowAnimator: ValueAnimator? = null
 
@@ -174,6 +210,8 @@ class ChargingAnimationView(context: Context) : FrameLayout(context) {
     private var nebulaProgress: Float = 0f
     private var matrixProgress: Float = 0f
     private var geoflowProgress: Float = 0f
+    private var imageFlowProgress: Float = 0f
+    private var imageLinearProgress: Float = 0f
     private var rainbowHue: Float = 0f
 
     private data class Bubble(
@@ -268,6 +306,20 @@ class ChargingAnimationView(context: Context) : FrameLayout(context) {
         var active: Boolean = false
     )
 
+    private data class ImageFlowParticle(
+        var x: Float = 0f,
+        var y: Float = 0f,
+        var velocityX: Float = 0f,
+        var velocityY: Float = 0f,
+        var life: Float = 0f,
+        var size: Float = 0f,
+        var rotation: Float = 0f,
+        var rotationSpeed: Float = 0f,
+        var drawableIndex: Int = 0,
+        var spawnSide: Int = IMAGE_FLOW_SIDE_BOTTOM,
+        var active: Boolean = false
+    )
+
     private val bubblePool = Array(MAX_BUBBLES) { Bubble() }
     private val particlePool = Array(MAX_PARTICLES) { Particle() }
     private val beamParticlePool = Array(MAX_BEAM_PARTICLES) { BeamParticle() }
@@ -275,6 +327,8 @@ class ChargingAnimationView(context: Context) : FrameLayout(context) {
     private val nebulaCloudPool = Array(MAX_NEBULA_CLOUDS) { NebulaCloud() }
     private val matrixCharPool = Array(MAX_MATRIX_CHARS) { MatrixChar() }
     private val geoShapePool = Array(MAX_GEO_SHAPES) { GeoShape() }
+    private val imageFlowParticlePool = Array(MAX_IMAGE_FLOW_PARTICLES) { ImageFlowParticle() }
+    private val imageLinearParticlePool = Array(MAX_IMAGE_LINEAR_PARTICLES) { ImageFlowParticle() }
     private val bubbles = mutableListOf<Bubble>()
     private val particles = mutableListOf<Particle>()
     private val beamParticles = mutableListOf<BeamParticle>()
@@ -283,6 +337,9 @@ class ChargingAnimationView(context: Context) : FrameLayout(context) {
     private val nebulaClouds = mutableListOf<NebulaCloud>()
     private val matrixChars = mutableListOf<MatrixChar>()
     private val geoShapes = mutableListOf<GeoShape>()
+    private val imageFlowParticles = mutableListOf<ImageFlowParticle>()
+    private val imageLinearParticles = mutableListOf<ImageFlowParticle>()
+    private var imageFlowBitmaps: Array<Bitmap?> = arrayOf()
     
     private val usbPortY: Float get() = height.toFloat()
     private val usbPortX: Float get() = width / 2f
@@ -313,6 +370,30 @@ class ChargingAnimationView(context: Context) : FrameLayout(context) {
     private fun hsvToColor(hue: Float): Int {
         val hsv = floatArrayOf(hue, 0.8f, 0.9f)
         return Color.HSVToColor(hsv)
+    }
+
+    fun setImageFlowDrawables(drawables: Array<Drawable?>) {
+        imageFlowBitmaps = Array(drawables.size) { i -> drawableToBitmap(drawables[i]) }
+        invalidate()
+    }
+
+    private fun drawableToBitmap(drawable: Drawable?): Bitmap? {
+        if (drawable == null) return null
+        if (drawable is BitmapDrawable && drawable.bitmap != null) {
+            return drawable.bitmap
+        }
+        val w = drawable.intrinsicWidth.coerceAtLeast(1)
+        val h = drawable.intrinsicHeight.coerceAtLeast(1)
+        return try {
+            val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            drawable.setBounds(0, 0, w, h)
+            drawable.draw(canvas)
+            bitmap
+        } catch (e: Exception) {
+            Log.e(TAG, "Error rasterizing image flow drawable", e)
+            null
+        }
     }
 
     private fun acquireBubble(): Bubble? {
@@ -381,6 +462,22 @@ class ChargingAnimationView(context: Context) : FrameLayout(context) {
 
     private fun releaseGeoShape(shape: GeoShape) {
         shape.active = false
+    }
+
+    private fun acquireImageFlowParticle(): ImageFlowParticle? {
+        return imageFlowParticlePool.firstOrNull { !it.active }?.apply { active = true }
+    }
+
+    private fun releaseImageFlowParticle(particle: ImageFlowParticle) {
+        particle.active = false
+    }
+
+    private fun acquireImageLinearParticle(): ImageFlowParticle? {
+        return imageLinearParticlePool.firstOrNull { !it.active }?.apply { active = true }
+    }
+
+    private fun releaseImageLinearParticle(particle: ImageFlowParticle) {
+        particle.active = false
     }
 
     private fun resetBeams() {
@@ -536,6 +633,72 @@ class ChargingAnimationView(context: Context) : FrameLayout(context) {
         geoShapes.add(shape)
     }
 
+    private fun resetImageFlowParticles() {
+        imageFlowParticles.forEach { releaseImageFlowParticle(it) }
+        imageFlowParticles.clear()
+    }
+
+    private fun resetImageLinearParticles() {
+        imageLinearParticles.forEach { releaseImageLinearParticle(it) }
+        imageLinearParticles.clear()
+    }
+
+    private fun spawnImageFlowParticle() {
+        if (imageFlowBitmaps.isEmpty()) return
+        val selectedIndex = imageFlowDrawableIndex.coerceIn(0, imageFlowBitmaps.size - 1)
+        if (imageFlowBitmaps[selectedIndex] == null) return
+        val particle = acquireImageFlowParticle() ?: return
+
+        val side = Random.nextInt(3)
+        when (side) {
+            IMAGE_FLOW_SIDE_LEFT -> {
+                particle.x = -40f
+                particle.y = height * (0.35f + Random.nextFloat() * 0.55f)
+                particle.velocityX = 2.5f + Random.nextFloat() * 3.5f
+                particle.velocityY = -1.5f - Random.nextFloat() * 2.5f
+            }
+            IMAGE_FLOW_SIDE_RIGHT -> {
+                particle.x = width + 40f
+                particle.y = height * (0.35f + Random.nextFloat() * 0.55f)
+                particle.velocityX = -(2.5f + Random.nextFloat() * 3.5f)
+                particle.velocityY = -1.5f - Random.nextFloat() * 2.5f
+            }
+            else -> {
+                particle.x = usbPortX + (Random.nextFloat() - 0.5f) * width * 0.6f
+                particle.y = usbPortY
+                particle.velocityX = (Random.nextFloat() - 0.5f) * 2.5f
+                particle.velocityY = -3f - Random.nextFloat() * 4f
+            }
+        }
+
+        particle.spawnSide = side
+        particle.drawableIndex = selectedIndex
+        particle.size = 40f + Random.nextFloat() * 50f
+        particle.rotation = Random.nextFloat() * 360f
+        particle.rotationSpeed = (Random.nextFloat() - 0.5f) * 4f
+        particle.life = 1f
+        imageFlowParticles.add(particle)
+    }
+
+    private fun spawnImageLinearParticle() {
+        if (imageFlowBitmaps.isEmpty()) return
+        val selectedIndex = imageFlowDrawableIndex.coerceIn(0, imageFlowBitmaps.size - 1)
+        if (imageFlowBitmaps[selectedIndex] == null) return
+        val particle = acquireImageLinearParticle() ?: return
+
+        particle.x = usbPortX + (Random.nextFloat() - 0.5f) * 60f
+        particle.y = usbPortY
+        particle.velocityX = 0f
+        particle.velocityY = -3f - Random.nextFloat() * 4f
+        particle.spawnSide = IMAGE_FLOW_SIDE_BOTTOM
+        particle.drawableIndex = selectedIndex
+        particle.size = 40f + Random.nextFloat() * 50f
+        particle.rotation = 0f
+        particle.rotationSpeed = 0f
+        particle.life = 1f
+        imageLinearParticles.add(particle)
+    }
+
     fun show() {
         post {
             visible = true
@@ -598,6 +761,8 @@ class ChargingAnimationView(context: Context) : FrameLayout(context) {
             STYLE_NEBULA -> startNebulaAnimation()
             STYLE_DIGITAL_MATRIX -> startDigitalMatrixAnimation()
             STYLE_GEOFLOW -> startGeoFlowAnimation()
+            STYLE_IMAGE_FLOW -> startImageFlowAnimation()
+            STYLE_IMAGE_LINEAR -> startImageLinearAnimation()
         }
     }
 
@@ -946,6 +1111,89 @@ class ChargingAnimationView(context: Context) : FrameLayout(context) {
         }
     }
 
+    private fun startImageFlowAnimation() {
+        imageFlowAnimator?.cancel()
+        resetImageFlowParticles()
+
+        imageFlowAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = IMAGE_FLOW_DURATION
+            repeatCount = ValueAnimator.INFINITE
+            repeatMode = ValueAnimator.RESTART
+            interpolator = LinearInterpolator()
+
+            addUpdateListener { animator ->
+                imageFlowProgress = animator.animatedValue as Float
+
+                // imageFlowStrength (1-10) controls flow strength: how many drawables are
+                // in flight at once, independent of colorMode/animation color.
+                val spawnChance = 0.04f * imageFlowStrength
+                if (Random.nextFloat() < spawnChance) {
+                    spawnImageFlowParticle()
+                }
+
+                val iterator = imageFlowParticles.iterator()
+                while (iterator.hasNext()) {
+                    val particle = iterator.next()
+                    particle.x += particle.velocityX
+                    particle.y += particle.velocityY
+                    particle.rotation += particle.rotationSpeed
+                    particle.life -= 0.01f
+
+                    if (particle.life <= 0f ||
+                        particle.y < -100f ||
+                        particle.x < -150f ||
+                        particle.x > width + 150f
+                    ) {
+                        releaseImageFlowParticle(particle)
+                        iterator.remove()
+                    }
+                }
+
+                invalidate()
+            }
+
+            start()
+        }
+    }
+
+    private fun startImageLinearAnimation() {
+        imageLinearAnimator?.cancel()
+        resetImageLinearParticles()
+
+        imageLinearAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = IMAGE_LINEAR_DURATION
+            repeatCount = ValueAnimator.INFINITE
+            repeatMode = ValueAnimator.RESTART
+            interpolator = LinearInterpolator()
+
+            addUpdateListener { animator ->
+                imageLinearProgress = animator.animatedValue as Float
+
+                // Same strength scaling as image flow: 1-10 controls spawn rate.
+                val spawnChance = 0.04f * imageFlowStrength
+                if (Random.nextFloat() < spawnChance) {
+                    spawnImageLinearParticle()
+                }
+
+                val iterator = imageLinearParticles.iterator()
+                while (iterator.hasNext()) {
+                    val particle = iterator.next()
+                    particle.y += particle.velocityY
+                    particle.life -= 0.01f
+
+                    if (particle.life <= 0f || particle.y < -100f) {
+                        releaseImageLinearParticle(particle)
+                        iterator.remove()
+                    }
+                }
+
+                invalidate()
+            }
+
+            start()
+        }
+    }
+
     private fun stopAllAnimations() {
         bubbleAnimator?.cancel()
         bubbleAnimator = null
@@ -963,6 +1211,10 @@ class ChargingAnimationView(context: Context) : FrameLayout(context) {
         matrixAnimator = null
         geoflowAnimator?.cancel()
         geoflowAnimator = null
+        imageFlowAnimator?.cancel()
+        imageFlowAnimator = null
+        imageLinearAnimator?.cancel()
+        imageLinearAnimator = null
         rainbowAnimator?.cancel()
         rainbowAnimator = null
     }
@@ -986,6 +1238,10 @@ class ChargingAnimationView(context: Context) : FrameLayout(context) {
         matrixChars.clear()
         geoShapes.forEach { releaseGeoShape(it) }
         geoShapes.clear()
+        imageFlowParticles.forEach { releaseImageFlowParticle(it) }
+        imageFlowParticles.clear()
+        imageLinearParticles.forEach { releaseImageLinearParticle(it) }
+        imageLinearParticles.clear()
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -1005,6 +1261,8 @@ class ChargingAnimationView(context: Context) : FrameLayout(context) {
             STYLE_NEBULA -> drawNebula(canvas, currentColor, usbY, maxHeight)
             STYLE_DIGITAL_MATRIX -> drawDigitalMatrix(canvas, currentColor, usbY, maxHeight)
             STYLE_GEOFLOW -> drawGeoFlow(canvas, currentColor, usbY, maxHeight)
+            STYLE_IMAGE_FLOW -> drawImageFlow(canvas)
+            STYLE_IMAGE_LINEAR -> drawImageLinear(canvas, usbY, maxHeight)
         }
     }
 
@@ -1263,6 +1521,57 @@ class ChargingAnimationView(context: Context) : FrameLayout(context) {
             drawShape(canvas, currentShape, size, geoPaint)
             geoPaint.clearShadowLayer()
             
+            canvas.restore()
+        }
+    }
+
+    private fun drawImageFlow(canvas: Canvas) {
+        if (imageFlowAnimator?.isRunning != true) return
+        if (imageFlowBitmaps.isEmpty()) return
+
+        imageFlowParticles.forEach { particle ->
+            val bitmap = imageFlowBitmaps.getOrNull(particle.drawableIndex) ?: return@forEach
+            val alpha = (255 * particle.life * imageFlowOpacity).toInt().coerceIn(0, 255)
+            if (alpha <= 0) return@forEach
+
+            val scale = particle.size / maxOf(bitmap.width, bitmap.height).toFloat()
+            val halfW = bitmap.width * scale / 2f
+            val halfH = bitmap.height * scale / 2f
+
+            canvas.save()
+            canvas.translate(particle.x, particle.y)
+            canvas.rotate(particle.rotation)
+
+            imageFlowPaint.alpha = alpha
+            val destRect = RectF(-halfW, -halfH, halfW, halfH)
+            canvas.drawBitmap(bitmap, null, destRect, imageFlowPaint)
+
+            canvas.restore()
+        }
+    }
+
+    private fun drawImageLinear(canvas: Canvas, usbY: Float, maxHeight: Float) {
+        if (imageLinearAnimator?.isRunning != true) return
+        if (imageFlowBitmaps.isEmpty()) return
+
+        imageLinearParticles.forEach { particle ->
+            val bitmap = imageFlowBitmaps.getOrNull(particle.drawableIndex) ?: return@forEach
+            val heightProgress = (usbY - particle.y) / maxHeight
+            val heightFade = (1f - heightProgress.coerceIn(0f, 1f))
+            val alpha = (255 * particle.life * heightFade * imageFlowOpacity).toInt().coerceIn(0, 255)
+            if (alpha <= 0) return@forEach
+
+            val scale = particle.size / maxOf(bitmap.width, bitmap.height).toFloat()
+            val halfW = bitmap.width * scale / 2f
+            val halfH = bitmap.height * scale / 2f
+
+            canvas.save()
+            canvas.translate(particle.x, particle.y)
+
+            imageFlowPaint.alpha = alpha
+            val destRect = RectF(-halfW, -halfH, halfW, halfH)
+            canvas.drawBitmap(bitmap, null, destRect, imageFlowPaint)
+
             canvas.restore()
         }
     }
