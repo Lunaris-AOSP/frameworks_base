@@ -15214,6 +15214,17 @@ public final class Settings {
          */
         public static final String LOCK_SCREEN_CUSTOM_CLOCK_GRADIENT_RADIUS = "lock_screen_custom_clock_gradient_radius";
 
+        /**
+         * Custom clock tilt around the horizontal axis (top-down lean), in degrees.
+         * @hide
+         */
+        public static final String LOCK_SCREEN_CUSTOM_CLOCK_TILT_X = "lock_screen_custom_clock_tilt_x";
+
+        /**
+         * Custom clock tilt around the vertical axis (left-right lean), in degrees.
+         * @hide
+         */
+        public static final String LOCK_SCREEN_CUSTOM_CLOCK_TILT_Y = "lock_screen_custom_clock_tilt_y";
 
         /**
          * Timeout length for clipboard auto clear

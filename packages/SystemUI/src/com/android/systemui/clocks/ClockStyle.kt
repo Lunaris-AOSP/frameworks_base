@@ -71,6 +71,8 @@ class ClockStyle @JvmOverloads constructor(
     private var clockFrameMarginTop = DEFAULT_MARGIN_TOP
     private var clockSizeScale = DEFAULT_CLOCK_SIZE
     private var clockFrameMarginStart = DEFAULT_MARGIN_START
+    private var clockTiltX = DEFAULT_TILT
+    private var clockTiltY = DEFAULT_TILT
 
     private var gradientEnabled = false
     private var gradientColorStart = DEFAULT_GRADIENT_COLOR_START
@@ -191,6 +193,8 @@ class ClockStyle @JvmOverloads constructor(
             CLOCK_GRADIENT_COLOR_END_KEY,
             CLOCK_GRADIENT_ANCHOR_Y_KEY,
             CLOCK_GRADIENT_RADIUS_KEY,
+            CLOCK_TILT_X_KEY,
+            CLOCK_TILT_Y_KEY,
         )
         statusBarStateController.addCallback(statusBarStateListener)
         if (albumArtColorEnabled) {
@@ -316,6 +320,16 @@ class ClockStyle @JvmOverloads constructor(
                 gradientRadius = TunerService.parseInteger(newValue, DEFAULT_GRADIENT_RADIUS)
                     .coerceIn(MIN_GRADIENT_RADIUS, MAX_GRADIENT_RADIUS)
                 if (gradientEnabled) applyClockColors()
+            }
+            CLOCK_TILT_X_KEY -> {
+                clockTiltX = TunerService.parseInteger(newValue, DEFAULT_TILT)
+                    .coerceIn(MIN_TILT, MAX_TILT)
+                applyClockTilt()
+            }
+            CLOCK_TILT_Y_KEY -> {
+                clockTiltY = TunerService.parseInteger(newValue, DEFAULT_TILT)
+                    .coerceIn(MIN_TILT, MAX_TILT)
+                applyClockTilt()
             }
         }
     }
@@ -595,6 +609,7 @@ class ClockStyle @JvmOverloads constructor(
         val listener = View.OnLayoutChangeListener { v, l, t, r, b, ol, ot, oR, ob ->
             if (r - l != oR - ol || b - t != ob - ot) {
                 if (gradientEnabled) applyClockColors()
+                applyClockTilt()
             }
         }
         clockSizeListener = listener
@@ -667,6 +682,7 @@ class ClockStyle @JvmOverloads constructor(
         view.pivotX = view.width / 2f
         view.pivotY = view.height / 2f
         disableClippingOnParents(view)
+        applyClockTilt()
         if (naturalClockHeight == 0 && view.height > 0) {
             naturalClockHeight = view.height
         }
@@ -691,6 +707,25 @@ class ClockStyle @JvmOverloads constructor(
             }
             container.requestLayout()
         }
+    }
+
+    private fun applyClockTilt() {
+        val view = currentClockView ?: return
+        if (clockTiltX == 0 && clockTiltY == 0) {
+            view.rotationX = 0f
+            view.rotationY = 0f
+            return
+        }
+        if (view.width > 0 && view.height > 0) {
+            view.pivotX = view.width / 2f
+            view.pivotY = view.height / 2f
+            val extent = maxOf(view.width, view.height).toFloat()
+            view.cameraDistance = (extent * TILT_CAMERA_DISTANCE_FACTOR)
+                .coerceAtLeast(TILT_MIN_CAMERA_DISTANCE_DP * resources.displayMetrics.density)
+        }
+        view.rotationX = clockTiltX.toFloat()
+        view.rotationY = clockTiltY.toFloat()
+        disableClippingOnParents(view)
     }
 
     private fun applyClockScaleAfterLayout(view: View) {
@@ -995,6 +1030,8 @@ class ClockStyle @JvmOverloads constructor(
         @JvmField val CLOCK_GRADIENT_COLOR_END_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_GRADIENT_COLOR_END
         @JvmField val CLOCK_GRADIENT_ANCHOR_Y_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_GRADIENT_ANCHOR_Y
         @JvmField val CLOCK_GRADIENT_RADIUS_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_GRADIENT_RADIUS
+        @JvmField val CLOCK_TILT_X_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_TILT_X
+        @JvmField val CLOCK_TILT_Y_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_TILT_Y
 
         const val COLOR_MODE_DEFAULT = "default"
         const val COLOR_MODE_ACCENT = "accent"
@@ -1011,6 +1048,12 @@ class ClockStyle @JvmOverloads constructor(
         private const val MIN_CLOCK_SIZE = 50
         private const val MAX_CLOCK_SIZE = 150
         private const val DEFAULT_MARGIN_START = 0
+
+        private const val DEFAULT_TILT = 0
+        private const val MIN_TILT = -45
+        private const val MAX_TILT = 45
+        private const val TILT_CAMERA_DISTANCE_FACTOR = 4f
+        private const val TILT_MIN_CAMERA_DISTANCE_DP = 1280f
 
         private val DEFAULT_GRADIENT_COLOR_START = 0xFF00E5FF.toInt()
         private val DEFAULT_GRADIENT_COLOR_END = 0xFFFF2DAA.toInt()
