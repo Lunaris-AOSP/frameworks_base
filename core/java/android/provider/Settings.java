@@ -14956,6 +14956,11 @@ public final class Settings {
         /**
          * @hide
          */
+        public static final String PULSE_SHOW_ON_MEDIA_PLAYER = "media_player_pulse_enabled";
+
+        /**
+         * @hide
+         */
         public static final String PULSE_HEIGHT_MULTIPLIER = "pulse_height_multiplier";
 
         /**
