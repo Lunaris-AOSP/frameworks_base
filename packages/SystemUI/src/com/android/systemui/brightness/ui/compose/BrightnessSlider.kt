@@ -191,7 +191,15 @@ fun BrightnessSlider(
     }
 
     val brightnessGradient = brightnessSliderGradient()
-
+    val thumbColorOverride: Color? =
+        if (!rememberSliderGradient()) {
+            null
+        } else if (rememberGradientColorMode() == 1) {
+            val (customStart, _) = rememberGradientCustomColors()
+            customStart
+        } else {
+            MaterialTheme.colorScheme.primary
+        }
     var value by remember(gammaValue) { mutableIntStateOf(gammaValue) }
     val animatedValue by
         animateFloatAsState(
@@ -501,7 +509,9 @@ fun BrightnessSlider(
                         interactionSource = interactionSource,
                         enabled = enabled,
                         thumbSize = DpSize(ThumbWidth, ThumbHeight),
-                        colors = colors,
+                        colors = SliderDefaults.colors(
+                            thumbColor = thumbColorOverride ?: colors.thumbColor
+                        ),
                     )
                 } else {
                     Box(modifier = Modifier.size(0.dp))
@@ -537,50 +547,53 @@ fun BrightnessSlider(
                                     BrightnessSliderMotionTestKeys.InactiveIconAlpha
                             }
                             .height(Dimensions.ThumbStyleTrackHeight)
-                            .drawWithContent {
-                                drawContent()
+                            .drawWithCache {
+                                val outline = trackShape.createOutline(size, layoutDirection, this)
+                                val clipPath = outline.asPath()
 
-                                val activeFraction = sliderState.coercedValueAsFraction
-                                val activeTrackEnd = size.width * activeFraction
+                                onDrawWithContent {
+                                    drawContent()
 
-                                if (brightnessGradient != null && activeTrackEnd > 0f) {
-                                    val outline = trackShape.createOutline(
-                                        Size(activeTrackEnd.coerceAtMost(size.width), size.height),
-                                        layoutDirection,
-                                        this,
-                                    )
-                                    clipPath(outline.asPath()) {
-                                        drawRect(
-                                            brush = brightnessGradient.brush,
-                                            topLeft = Offset.Zero,
-                                            size = Size(activeTrackEnd.coerceAtMost(size.width), size.height),
+                                    val activeFraction = sliderState.coercedValueAsFraction
+                                    val gap = Dimensions.ThumbStyleGapSize.toPx()
+                                    val activeTrackEnd = size.width * activeFraction
+                                    val realActiveEnd = (activeTrackEnd - gap).coerceAtLeast(0f)
+
+                                    if (brightnessGradient != null && realActiveEnd > 0f) {
+                                        clipPath(clipPath) {
+                                            drawRect(
+                                                brush = brightnessGradient.brush,
+                                                topLeft = Offset.Zero,
+                                                size = Size(
+                                                    realActiveEnd.coerceAtMost(size.width),
+                                                    size.height,
+                                                )
+                                            )
+                                        }
+                                    }
+
+                                    val yOffset = size.height / 2 - IconSize.toSize().height / 2
+                                    val activeTrackStart = 0f
+                                    val inactiveTrackStart = realActiveEnd + gap * 2
+                                    val inactiveTrackEnd = size.width
+                                    val activeTrackWidth = realActiveEnd - activeTrackStart
+                                    val inactiveTrackWidth = inactiveTrackEnd - inactiveTrackStart
+
+                                    if (IconSize.toSize().width < inactiveTrackWidth - IconPadding.toPx() * 2) {
+                                        showIconActive = false
+                                        trackIcon(
+                                            Offset(inactiveTrackEnd, yOffset),
+                                            inactiveIconColor,
+                                            iconInactiveAlphaAnimatable.value,
+                                        )
+                                    } else if (IconSize.toSize().width < activeTrackWidth - IconPadding.toPx() * 2) {
+                                        showIconActive = true
+                                        trackIcon(
+                                            Offset(realActiveEnd, yOffset),
+                                            activeIconColor,
+                                            iconActiveAlphaAnimatable.value,
                                         )
                                     }
-                                }
-
-                                val yOffset = size.height / 2 - IconSize.toSize().height / 2
-                                val gap = Dimensions.ThumbStyleGapSize.toPx()
-                                val activeTrackStart = 0f
-                                val realActiveEnd = activeTrackEnd - gap
-                                val inactiveTrackStart = realActiveEnd + gap * 2
-                                val inactiveTrackEnd = size.width
-                                val activeTrackWidth = realActiveEnd - activeTrackStart
-                                val inactiveTrackWidth = inactiveTrackEnd - inactiveTrackStart
-
-                                if (IconSize.toSize().width < inactiveTrackWidth - IconPadding.toPx() * 2) {
-                                    showIconActive = false
-                                    trackIcon(
-                                        Offset(inactiveTrackEnd, yOffset),
-                                        inactiveIconColor,
-                                        iconInactiveAlphaAnimatable.value,
-                                    )
-                                } else if (IconSize.toSize().width < activeTrackWidth - IconPadding.toPx() * 2) {
-                                    showIconActive = true
-                                    trackIcon(
-                                        Offset(realActiveEnd, yOffset),
-                                        activeIconColor,
-                                        iconActiveAlphaAnimatable.value,
-                                    )
                                 }
                             },
                         trackCornerSize = trackCornerDp,
