@@ -73,6 +73,7 @@ class ClockStyle @JvmOverloads constructor(
     private var clockFrameMarginStart = DEFAULT_MARGIN_START
     private var clockTiltX = DEFAULT_TILT
     private var clockTiltY = DEFAULT_TILT
+    private var clockRotation = DEFAULT_ROTATION
 
     private var gradientEnabled = false
     private var gradientColorStart = DEFAULT_GRADIENT_COLOR_START
@@ -195,6 +196,7 @@ class ClockStyle @JvmOverloads constructor(
             CLOCK_GRADIENT_RADIUS_KEY,
             CLOCK_TILT_X_KEY,
             CLOCK_TILT_Y_KEY,
+            CLOCK_ROTATION_KEY,
         )
         statusBarStateController.addCallback(statusBarStateListener)
         if (albumArtColorEnabled) {
@@ -324,12 +326,17 @@ class ClockStyle @JvmOverloads constructor(
             CLOCK_TILT_X_KEY -> {
                 clockTiltX = TunerService.parseInteger(newValue, DEFAULT_TILT)
                     .coerceIn(MIN_TILT, MAX_TILT)
-                applyClockTilt()
+                applyClockTransform()
             }
             CLOCK_TILT_Y_KEY -> {
                 clockTiltY = TunerService.parseInteger(newValue, DEFAULT_TILT)
                     .coerceIn(MIN_TILT, MAX_TILT)
-                applyClockTilt()
+                applyClockTransform()
+            }
+            CLOCK_ROTATION_KEY -> {
+                clockRotation = TunerService.parseInteger(newValue, DEFAULT_ROTATION)
+                    .coerceIn(MIN_ROTATION, MAX_ROTATION)
+                applyClockTransform()
             }
         }
     }
@@ -609,7 +616,7 @@ class ClockStyle @JvmOverloads constructor(
         val listener = View.OnLayoutChangeListener { v, l, t, r, b, ol, ot, oR, ob ->
             if (r - l != oR - ol || b - t != ob - ot) {
                 if (gradientEnabled) applyClockColors()
-                applyClockTilt()
+                applyClockTransform()
             }
         }
         clockSizeListener = listener
@@ -682,7 +689,7 @@ class ClockStyle @JvmOverloads constructor(
         view.pivotX = view.width / 2f
         view.pivotY = view.height / 2f
         disableClippingOnParents(view)
-        applyClockTilt()
+        applyClockTransform()
         if (naturalClockHeight == 0 && view.height > 0) {
             naturalClockHeight = view.height
         }
@@ -709,11 +716,12 @@ class ClockStyle @JvmOverloads constructor(
         }
     }
 
-    private fun applyClockTilt() {
+    private fun applyClockTransform() {
         val view = currentClockView ?: return
-        if (clockTiltX == 0 && clockTiltY == 0) {
+        if (clockTiltX == 0 && clockTiltY == 0 && clockRotation == 0) {
             view.rotationX = 0f
             view.rotationY = 0f
+            view.rotation = 0f
             return
         }
         if (view.width > 0 && view.height > 0) {
@@ -725,6 +733,7 @@ class ClockStyle @JvmOverloads constructor(
         }
         view.rotationX = clockTiltX.toFloat()
         view.rotationY = clockTiltY.toFloat()
+        view.rotation = clockRotation.toFloat()
         disableClippingOnParents(view)
     }
 
@@ -1032,6 +1041,7 @@ class ClockStyle @JvmOverloads constructor(
         @JvmField val CLOCK_GRADIENT_RADIUS_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_GRADIENT_RADIUS
         @JvmField val CLOCK_TILT_X_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_TILT_X
         @JvmField val CLOCK_TILT_Y_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_TILT_Y
+        @JvmField val CLOCK_ROTATION_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_ROTATION
 
         const val COLOR_MODE_DEFAULT = "default"
         const val COLOR_MODE_ACCENT = "accent"
@@ -1054,6 +1064,10 @@ class ClockStyle @JvmOverloads constructor(
         private const val MAX_TILT = 45
         private const val TILT_CAMERA_DISTANCE_FACTOR = 4f
         private const val TILT_MIN_CAMERA_DISTANCE_DP = 1280f
+
+        private const val DEFAULT_ROTATION = 0
+        private const val MIN_ROTATION = -180
+        private const val MAX_ROTATION = 180
 
         private val DEFAULT_GRADIENT_COLOR_START = 0xFF00E5FF.toInt()
         private val DEFAULT_GRADIENT_COLOR_END = 0xFFFF2DAA.toInt()

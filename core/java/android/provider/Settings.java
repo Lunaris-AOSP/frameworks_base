@@ -15227,6 +15227,12 @@ public final class Settings {
         public static final String LOCK_SCREEN_CUSTOM_CLOCK_TILT_Y = "lock_screen_custom_clock_tilt_y";
 
         /**
+         * Custom clock rotation
+         * @hide
+         */
+        public static final String LOCK_SCREEN_CUSTOM_CLOCK_ROTATION = "lock_screen_custom_clock_rotation";
+
+        /**
          * Timeout length for clipboard auto clear
          * @hide
          */
