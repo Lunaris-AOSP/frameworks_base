@@ -85,6 +85,10 @@ public class PowerInsightService extends IPowerInsightService.Stub {
     private static final String KEY_BATTERY_ALARM_VIBRATE = "power_insight_battery_alarm_vibrate";
     private static final int DEFAULT_MONITOR_INTERVAL = 10000;
 
+    private static final String BATTERY_PATH = "/sys/class/power_supply/battery/";
+    private static final String BMS_PATH = "/sys/class/power_supply/bms/";
+    private static final String BAT0_PATH = "/sys/class/power_supply/BAT0/";
+
     private final Context mContext;
     private final Handler mHandler;
     private final PowerManager mPowerManager;
@@ -128,8 +132,6 @@ public class PowerInsightService extends IPowerInsightService.Stub {
     
     private long mLastChargingScreenToggleTime = 0;
 
-    private String mBatteryBasePath;
-    private String mCycleCountPath;
     private boolean mIsCharging = false;
     private boolean mIsPlugged = false;
 
@@ -151,8 +153,6 @@ public class PowerInsightService extends IPowerInsightService.Stub {
         HandlerThread thread = new HandlerThread(TAG);
         thread.start();
         mHandler = new PowerInsightHandler(thread.getLooper());
-
-        detectHardwarePaths();
 
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_BATTERY_CHANGED);
@@ -361,35 +361,6 @@ public class PowerInsightService extends IPowerInsightService.Stub {
         }
     }
 
-    private void detectHardwarePaths() {
-        String[] possibleBatteryPaths = {"/sys/class/power_supply/battery", "/sys/class/power_supply/bms", "/sys/class/power_supply/BAT0"};
-        for (String path : possibleBatteryPaths) {
-            if (new File(path).isDirectory()) { 
-                mBatteryBasePath = path; 
-                Slog.i(TAG, "Found battery base path: " + path);
-                break; 
-            }
-        }
-        if (mBatteryBasePath == null) {
-            mBatteryBasePath = "/sys/class/power_supply/battery";
-            Slog.w(TAG, "No battery base path found, defaulting to: " + mBatteryBasePath);
-        }
-
-        String[] cyclePaths = {
-            mBatteryBasePath + "/cycle_count", 
-            mBatteryBasePath + "/battery_cycle_count", 
-            "/sys/class/power_supply/bms/cycle_count",
-            "/sys/class/power_supply/battery/cycle_count"
-        };
-        for (String path : cyclePaths) {
-            if (new File(path).exists()) { 
-                mCycleCountPath = path; 
-                Slog.i(TAG, "Found cycle count path: " + path);
-                break; 
-            }
-        }
-    }
-
     @Override
     public PowerInsightStats getBatteryState() {
         synchronized (mCurrentStats) {
@@ -420,38 +391,38 @@ public class PowerInsightService extends IPowerInsightService.Stub {
         stats.idleDrainRate = hoursOff > 0.01f ? mBatteryDrainOff / hoursOff : 0;
 
         // HW metrics
-        stats.currentNow = readIntFromFile(mBatteryBasePath + "/current_now");
-        if (stats.currentNow == 0) stats.currentNow = readIntFromFile("/sys/class/power_supply/bms/current_now");
+        stats.currentNow = readBatteryInt("current_now");
         stats.currentNow /= 1000;
 
-        stats.voltage = readIntFromFile(mBatteryBasePath + "/voltage_now");
-        if (stats.voltage == 0) stats.voltage = readIntFromFile(mBatteryBasePath + "/voltage_avg");
-        if (stats.voltage == 0) stats.voltage = readIntFromFile("/sys/class/power_supply/bms/voltage_now");
+        stats.voltage = readBatteryInt("voltage_now");
+        if (stats.voltage == 0) stats.voltage = readBatteryInt("voltage_avg");
         stats.voltage /= 1000;
 
-        stats.temp = readIntFromFile(mBatteryBasePath + "/temp");
-        if (stats.temp == 0) stats.temp = readIntFromFile("/sys/class/power_supply/bms/temp");
+        stats.temp = readBatteryInt("temp");
 
-        stats.cycleCount = mCycleCountPath != null ? readIntFromFile(mCycleCountPath) : 0;
-        
-        int chargeFull = readIntFromFile(mBatteryBasePath + "/charge_full");
-        if (chargeFull == 0) chargeFull = readIntFromFile("/sys/class/power_supply/bms/charge_full");
-        
-        int chargeDesign = readIntFromFile(mBatteryBasePath + "/charge_full_design");
-        if (chargeDesign == 0) chargeDesign = readIntFromFile("/sys/class/power_supply/bms/charge_full_design");
-        
-        int chargeCounter = readIntFromFile(mBatteryBasePath + "/charge_counter");
-        if (chargeCounter == 0) chargeCounter = readIntFromFile(mBatteryBasePath + "/charge_now");
-        if (chargeCounter == 0) chargeCounter = readIntFromFile("/sys/class/power_supply/bms/charge_counter");
-        
-        int capacityFull = readIntFromFile(mBatteryBasePath + "/capacity_full");
-        if (capacityFull == 0) capacityFull = readIntFromFile("/sys/class/power_supply/bms/capacity_full");
+        stats.cycleCount = readBatteryInt("cycle_count");
+        if (stats.cycleCount == 0) stats.cycleCount = readBatteryInt("battery_cycle_count");
 
+        int chargeFull = readBatteryInt("charge_full");
+
+        int chargeDesign = readBatteryInt("charge_full_design");
+
+        int chargeCounter = readBatteryInt("charge_counter");
+        if (chargeCounter == 0) chargeCounter = readBatteryInt("charge_now");
+
+        int capacityFull = readBatteryInt("capacity_full");
         // Handle both mAh and uAh (some kernels use uAh)
         if (chargeFull > 20000) chargeFull /= 1000;
         if (chargeDesign > 20000) chargeDesign /= 1000;
         if (chargeCounter > 20000) chargeCounter /= 1000;
         if (capacityFull > 20000) capacityFull /= 1000;
+
+        if (chargeFull <= 0 && capacityFull > 0) {
+        chargeFull = capacityFull;
+        }
+        if (capacityFull <= 0 && chargeFull > 0) {
+            capacityFull = chargeFull;
+        }
 
         if (chargeDesign > 0) {
             stats.totalCapacity = chargeDesign;
@@ -699,6 +670,17 @@ public class PowerInsightService extends IPowerInsightService.Stub {
             if (DEBUG) Slog.w(TAG, "Failed to read " + path + ": " + e.getMessage());
             return 0;
         }
+    }
+
+    private int readBatteryInt(String filename) {
+        int value = readIntFromFile(BATTERY_PATH + filename);
+        if (value == 0) {
+            value = readIntFromFile(BMS_PATH + filename);
+        }
+        if (value == 0) {
+            value = readIntFromFile(BAT0_PATH + filename);
+        }
+        return value;
     }
 
     private String readBatteryHealth(int health) {
@@ -966,9 +948,8 @@ public class PowerInsightService extends IPowerInsightService.Stub {
     }
 
     private int getCurrentCapacityMah() {
-        int chargeCounter = readIntFromFile(mBatteryBasePath + "/charge_counter");
-        if (chargeCounter == 0) chargeCounter = readIntFromFile(mBatteryBasePath + "/charge_now");
-        if (chargeCounter == 0) chargeCounter = readIntFromFile("/sys/class/power_supply/bms/charge_counter");
+        int chargeCounter = readBatteryInt("charge_counter");
+        if (chargeCounter == 0) chargeCounter = readBatteryInt("charge_now");
         if (chargeCounter > 20000) chargeCounter /= 1000;
         if (chargeCounter <= 0) {
             int level = getBatteryLevelInternal();
@@ -979,13 +960,11 @@ public class PowerInsightService extends IPowerInsightService.Stub {
     }
 
     private int getTotalCapacityMah() {
-        int chargeDesign = readIntFromFile(mBatteryBasePath + "/charge_full_design");
-        if (chargeDesign == 0) chargeDesign = readIntFromFile("/sys/class/power_supply/bms/charge_full_design");
+        int chargeDesign = readBatteryInt("charge_full_design");
         if (chargeDesign > 20000) chargeDesign /= 1000;
         if (chargeDesign > 0) return chargeDesign;
 
-        int capacityFull = readIntFromFile(mBatteryBasePath + "/capacity_full");
-        if (capacityFull == 0) capacityFull = readIntFromFile("/sys/class/power_supply/bms/capacity_full");
+        int capacityFull = readBatteryInt("capacity_full");
         if (capacityFull > 20000) capacityFull /= 1000;
         if (capacityFull > 0) return capacityFull;
 
