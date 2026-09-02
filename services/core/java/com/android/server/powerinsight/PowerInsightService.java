@@ -882,12 +882,23 @@ public class PowerInsightService extends IPowerInsightService.Stub {
                 String packageName = packages[0];
                 if (packageName == null || packageName.startsWith("android.") || "android".equals(packageName)) continue;
 
+                double powerMah = c.getConsumedPower();
+                long fgTime = c.getTimeInProcessStateMs(UidBatteryConsumer.PROCESS_STATE_FOREGROUND)
+                            + c.getTimeInProcessStateMs(UidBatteryConsumer.PROCESS_STATE_FOREGROUND_SERVICE);
+                long bgTime = c.getTimeInProcessStateMs(UidBatteryConsumer.PROCESS_STATE_BACKGROUND)
+                            + c.getTimeInProcessStateMs(UidBatteryConsumer.PROCESS_STATE_CACHED);
+
+                // Ignore ghost entries
+                if (powerMah < 0.01 && fgTime <= 0 && bgTime <= 0) {
+                    continue;
+                }
+
                 PowerInsightAppUsage app = new PowerInsightAppUsage();
                 app.uid = uid;
                 app.packageName = packageName;
-                app.consumedPowerMah = c.getConsumedPower();
-                app.foregroundTimeMs = c.getTimeInStateMs(UidBatteryConsumer.STATE_FOREGROUND);
-                app.backgroundTimeMs = c.getTimeInStateMs(UidBatteryConsumer.STATE_BACKGROUND);
+                app.consumedPowerMah = powerMah;
+                app.foregroundTimeMs = fgTime;
+                app.backgroundTimeMs = bgTime;
 
                 try {
                     ApplicationInfo info = pm.getApplicationInfo(packageName, 0);
