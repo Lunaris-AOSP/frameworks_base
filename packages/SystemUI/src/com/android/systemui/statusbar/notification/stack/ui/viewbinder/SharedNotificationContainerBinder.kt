@@ -38,6 +38,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.DisposableHandle
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 /** Binds the shared notification container to its view-model. */
@@ -186,7 +187,7 @@ constructor(
                     }
 
                     if (Flags.bouncerUiRevamp()) {
-                        launch { viewModel.blurRadius.collect { controller.setBlurRadius(it) } }
+                        launch { viewModel.blurRadius.distinctUntilChanged().collect { controller.setBlurRadius(it) } }
                     }
 
                     if (communalSettingsInteractor.isCommunalFlagEnabled()) {

@@ -1483,7 +1483,13 @@ public class NotificationStackScrollLayoutController implements Dumpable {
      *
      * @param blurRadius Radius of blur
      */
+    private float mLastAppliedBlurRadius = -1f;
+
     public void setBlurRadius(float blurRadius) {
+        if (Math.abs(blurRadius - mLastAppliedBlurRadius) < 1f) {
+            return;
+        }
+        mLastAppliedBlurRadius = blurRadius;
         if (blurRadius > 0.0f) {
             debugLog(
                     "Setting blur RenderEffect for NotificationStackScrollLayoutController with "
