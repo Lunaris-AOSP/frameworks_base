@@ -1060,8 +1060,8 @@ class ClockStyle @JvmOverloads constructor(
         private const val DEFAULT_MARGIN_START = 0
 
         private const val DEFAULT_TILT = 0
-        private const val MIN_TILT = -45
-        private const val MAX_TILT = 45
+        private const val MIN_TILT = -75
+        private const val MAX_TILT = 75
         private const val TILT_CAMERA_DISTANCE_FACTOR = 4f
         private const val TILT_MIN_CAMERA_DISTANCE_DP = 1280f
 
