@@ -85,6 +85,10 @@
     <string name="quick_settings_reading_mode">Reading mode</string>
     <string name="accessibility_quick_settings_reading_mode_on">Reading mode on.</string>
     <string name="accessibility_quick_settings_reading_mode_off">Reading mode off.</string>
+    <string name="quick_settings_reading_mode_per_app">Selected apps</string>
+    <string name="quick_settings_reading_mode_all_apps">All apps</string>
+    <string name="accessibility_quick_settings_reading_mode_per_app">Reading mode on for selected apps</string>
+    <string name="accessibility_quick_settings_reading_mode_all_apps">Reading mode on for all apps</string>
 
     <!-- Sync QS tile -->
     <string name="quick_settings_sync_label">Sync</string>
