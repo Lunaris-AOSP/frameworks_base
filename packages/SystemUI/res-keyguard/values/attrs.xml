@@ -41,4 +41,35 @@
     <attr name="passwordStyle" format="reference" />
 
     <attr name="numPadKeyStyle" format="reference" />
+
+    <declare-styleable name="HyperClockView">
+        <attr name="hyperMode">
+            <enum name="art" value="0" />
+            <enum name="row" value="1" />
+            <enum name="stack" value="2" />
+            <enum name="duo" value="3" />
+        </attr>
+        <attr name="hyperFamily" format="string" />
+        <attr name="hyperMinuteFamily" format="string" />
+        <attr name="hyperEmSize" format="dimension" />
+        <attr name="hyperShowColon" format="boolean" />
+        <attr name="hyperDigitColor" format="color" />
+        <attr name="hyperColonColor" format="color" />
+        <attr name="hyperColonFollowsDigits" format="boolean" />
+        <attr name="hyperColonFamily" format="string" />
+        <attr name="hyperColonScale" format="float" />
+        <attr name="hyperColonDx" format="float" />
+        <attr name="hyperColonDy" format="float" />
+        <attr name="hyperColonOnTop" format="boolean" />
+        <attr name="hyperMinuteAlpha" format="float" />
+        <attr name="hyperDigitGap" format="float" />
+        <attr name="hyperPairGap" format="float" />
+        <attr name="hyperArtGapX" format="float" />
+        <attr name="hyperArtDropY" format="float" />
+        <attr name="hyperArtRowDx" format="float" />
+        <attr name="hyperArtRowDy" format="float" />
+        <attr name="hyperStackDy" format="float" />
+        <attr name="hyperDuoDy" format="float" />
+        <attr name="hyperPreviewTime" format="string" />
+    </declare-styleable>
 </resources>
