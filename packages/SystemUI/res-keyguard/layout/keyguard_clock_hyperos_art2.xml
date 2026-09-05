@@ -65,6 +65,8 @@
         app:hyperColonDx="-0.03"
         app:hyperColonDy="0.07"
         app:hyperColonOnTop="true"
+        app:hyperBlurRadius="40dp"
+        app:hyperBlurTintAlpha="0.4"
         app:hyperColonColor="#FFFA2A2A" />
 
 </LinearLayout>

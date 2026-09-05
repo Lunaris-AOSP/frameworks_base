@@ -70,6 +70,8 @@
         <attr name="hyperArtRowDy" format="float" />
         <attr name="hyperStackDy" format="float" />
         <attr name="hyperDuoDy" format="float" />
+        <attr name="hyperBlurRadius" format="dimension" />
+        <attr name="hyperBlurTintAlpha" format="float" />
         <attr name="hyperPreviewTime" format="string" />
     </declare-styleable>
 </resources>

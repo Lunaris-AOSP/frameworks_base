@@ -78,6 +78,7 @@ class ClockStyle @JvmOverloads constructor(
     private var clockRotation = DEFAULT_ROTATION
 
     private var gradientEnabled = false
+    private var hyperBlurEnabled = false
     private var gradientColorStart = DEFAULT_GRADIENT_COLOR_START
     private var gradientColorEnd = DEFAULT_GRADIENT_COLOR_END
     private var gradientAnchorY = DEFAULT_GRADIENT_ANCHOR_Y
@@ -199,6 +200,7 @@ class ClockStyle @JvmOverloads constructor(
             CLOCK_TILT_X_KEY,
             CLOCK_TILT_Y_KEY,
             CLOCK_ROTATION_KEY,
+            CLOCK_HYPER_BLUR_KEY,
         )
         statusBarStateController.addCallback(statusBarStateListener)
         if (albumArtColorEnabled) {
@@ -305,6 +307,10 @@ class ClockStyle @JvmOverloads constructor(
             }
             CLOCK_GRADIENT_ENABLED_KEY -> {
                 gradientEnabled = TunerService.parseInteger(newValue, 0) != 0
+                applyClockColors()
+            }
+            CLOCK_HYPER_BLUR_KEY -> {
+                hyperBlurEnabled = TunerService.parseInteger(newValue, 0) != 0
                 applyClockColors()
             }
             CLOCK_GRADIENT_COLOR_START_KEY -> {
@@ -701,12 +707,14 @@ class ClockStyle @JvmOverloads constructor(
             val hv = hyperClocks[i]
             when {
                 isDozing -> {
+                    hv.setBlurEnabled(false)
                     hv.setGradientShader(null)
                     hv.setColonFollowsDigits(false)
                     hv.setDigitColor(whiteColor)
                     hv.setColonColor(whiteColor)
                 }
                 useGradient -> {
+                    hv.setBlurEnabled(false)
                     hv.restoreColonColor()
                     hv.setColonFollowsDigits(true)
                     hv.setDigitColor(whiteColor)
@@ -729,6 +737,7 @@ class ClockStyle @JvmOverloads constructor(
                     hv.restoreColonColor()
                     hv.setColonFollowsDigits(colorPicked)
                     hv.setDigitColor(clockColor)
+                    hv.setBlurEnabled(hyperBlurEnabled)
                 }
             }
         }
@@ -1115,6 +1124,7 @@ class ClockStyle @JvmOverloads constructor(
         @JvmField val CLOCK_TILT_X_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_TILT_X
         @JvmField val CLOCK_TILT_Y_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_TILT_Y
         @JvmField val CLOCK_ROTATION_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_ROTATION
+        @JvmField val CLOCK_HYPER_BLUR_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_HYPER_BLUR
 
         const val COLOR_MODE_DEFAULT = "default"
         const val COLOR_MODE_ACCENT = "accent"

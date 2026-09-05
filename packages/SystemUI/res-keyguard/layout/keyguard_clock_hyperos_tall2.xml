@@ -20,7 +20,9 @@
         app:hyperShowColon="false"
         app:hyperMinuteAlpha="0.55"
         app:hyperDigitGap="0.02"
-        app:hyperPairGap="0.1" />
+        app:hyperPairGap="0.1"
+        app:hyperBlurRadius="40dp"
+        app:hyperBlurTintAlpha="0.4" />
 
     <LinearLayout
         android:layout_width="wrap_content"

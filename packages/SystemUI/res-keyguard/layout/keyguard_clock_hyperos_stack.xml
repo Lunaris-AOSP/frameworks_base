@@ -20,7 +20,9 @@
         app:hyperMinuteFamily="hnmo"
         app:hyperMinuteAlpha="0.45"
         app:hyperDigitGap="0.02"
-        app:hyperStackDy="1.05" />
+        app:hyperStackDy="1.05"
+        app:hyperBlurRadius="40dp"
+        app:hyperBlurTintAlpha="0.4" />
 
     <LinearLayout
         android:layout_width="wrap_content"

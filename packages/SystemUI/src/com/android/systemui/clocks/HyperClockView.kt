@@ -8,8 +8,10 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
@@ -57,10 +59,24 @@ class HyperClockView @JvmOverloads constructor(
     private var duoDy = DUO_DY
     private var previewTime: String? = null
 
+    private var blurEnabled = false
+    private var blurRadius = 0f
+    private var blurTintAlpha = DEFAULT_BLUR_TINT_ALPHA
+
     private var gradientShader: Shader? = null
     private val gradientPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
     }
+
+    private val backdropPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply {
+        xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
+    }
+    private val tintPaint = Paint().apply {
+        xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_ATOP)
+    }
+    private val screenLoc = IntArray(2)
+    private val backdropMatrix = Matrix()
+    private val backdropChanged = Runnable { invalidate() }
 
     private val drawables = HashMap<String, Drawable?>()
     private val placements = ArrayList<Placement>(5)
@@ -123,6 +139,14 @@ class HyperClockView @JvmOverloads constructor(
             artRowDy = a.getFloat(R.styleable.HyperClockView_hyperArtRowDy, ART_ROW_DY)
             stackDy = a.getFloat(R.styleable.HyperClockView_hyperStackDy, STACK_DY)
             duoDy = a.getFloat(R.styleable.HyperClockView_hyperDuoDy, DUO_DY)
+            val blurPx = a.getDimension(R.styleable.HyperClockView_hyperBlurRadius, -1f)
+            blurRadius =
+                if (blurPx > 0f) blurPx
+                else DEFAULT_BLUR_RADIUS_DP * resources.displayMetrics.density
+            blurTintAlpha = a.getFloat(
+                R.styleable.HyperClockView_hyperBlurTintAlpha,
+                DEFAULT_BLUR_TINT_ALPHA,
+            ).coerceIn(0f, 1f)
             previewTime = a.getString(R.styleable.HyperClockView_hyperPreviewTime)
         } finally {
             a.recycle()
@@ -142,12 +166,14 @@ class HyperClockView @JvmOverloads constructor(
             },
             Context.RECEIVER_NOT_EXPORTED,
         )
+        HyperBackdrop.addListener(context, backdropChanged)
         refreshTime()
     }
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         runCatching { context.unregisterReceiver(timeReceiver) }
+        HyperBackdrop.removeListener(backdropChanged)
     }
 
     fun refreshTime() {
@@ -187,6 +213,12 @@ class HyperClockView @JvmOverloads constructor(
     fun setGradientShader(shader: Shader?) {
         if (gradientShader === shader) return
         gradientShader = shader
+        invalidate()
+    }
+
+    fun setBlurEnabled(enabled: Boolean) {
+        if (blurEnabled == enabled) return
+        blurEnabled = enabled
         invalidate()
     }
 
@@ -231,37 +263,75 @@ class HyperClockView @JvmOverloads constructor(
         val dx = paddingLeft - originX
         val dy = paddingTop - originY
 
+        val shader = gradientShader
+        val backdrop = if (blurEnabled && shader == null) {
+            HyperBackdrop.bitmap(context, blurRadius)
+        } else {
+            null
+        }
+
+        val fillAlpha = if (blurEnabled && backdrop == null) blurTintAlpha else 1f
+
         val ownColour = !colonFollowsDigits
         if (ownColour && !colonOnTop) drawPass(canvas, dx, dy, true, colonColor)
 
-        val shader = gradientShader
-        val layer = if (shader != null) {
+        val layer = if (shader != null || backdrop != null) {
             canvas.saveLayer(0f, 0f, width.toFloat(), height.toFloat(), null)
         } else {
             -1
         }
-        if (!ownColour && !colonOnTop) drawPass(canvas, dx, dy, true, digitColor)
-        drawPass(canvas, dx, dy, false, digitColor)
-        if (!ownColour && colonOnTop) drawPass(canvas, dx, dy, true, digitColor)
+        if (!ownColour && !colonOnTop) drawPass(canvas, dx, dy, true, digitColor, fillAlpha)
+        drawPass(canvas, dx, dy, false, digitColor, fillAlpha)
+        if (!ownColour && colonOnTop) drawPass(canvas, dx, dy, true, digitColor, fillAlpha)
         if (shader != null) {
             gradientPaint.shader = shader
             canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), gradientPaint)
-            canvas.restoreToCount(layer)
+        } else if (backdrop != null) {
+            drawBackdrop(canvas, backdrop)
         }
+        if (layer != -1) canvas.restoreToCount(layer)
         if (ownColour && colonOnTop) drawPass(canvas, dx, dy, true, colonColor)
     }
 
-    private fun drawPass(canvas: Canvas, dx: Float, dy: Float, colon: Boolean, color: Int) {
+    private fun drawBackdrop(canvas: Canvas, backdrop: Bitmap) {
+        getLocationOnScreen(screenLoc)
+        var sx = 1f
+        var sy = 1f
+        var v: View? = this
+        while (v != null) {
+            sx *= v.scaleX
+            sy *= v.scaleY
+            v = v.parent as? View
+        }
+        if (sx == 0f || sy == 0f) return
+        val s = HyperBackdrop.SAMPLE.toFloat()
+        backdropMatrix.setScale(s / sx, s / sy)
+        backdropMatrix.postTranslate(-screenLoc[0] / sx, -screenLoc[1] / sy)
+        canvas.drawBitmap(backdrop, backdropMatrix, backdropPaint)
+        tintPaint.color = digitColor
+        tintPaint.alpha =
+            (Color.alpha(digitColor) * blurTintAlpha).roundToInt().coerceIn(0, 255)
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), tintPaint)
+    }
+
+    private fun drawPass(
+        canvas: Canvas,
+        dx: Float,
+        dy: Float,
+        colon: Boolean,
+        color: Int,
+        alphaScale: Float = 1f,
+    ) {
         canvas.save()
         canvas.translate(dx, dy)
         for (i in placements.indices) {
             val p = placements[i]
-            if (p.isColon == colon) draw(canvas, p, color)
+            if (p.isColon == colon) draw(canvas, p, color, alphaScale)
         }
         canvas.restore()
     }
 
-    private fun draw(canvas: Canvas, p: Placement, color: Int) {
+    private fun draw(canvas: Canvas, p: Placement, color: Int, alphaScale: Float) {
         val d = drawable(p.name) ?: return
         d.setBounds(
             p.x.roundToInt(),
@@ -270,7 +340,8 @@ class HyperClockView @JvmOverloads constructor(
             (p.y + p.h).roundToInt(),
         )
         d.setTint(color)
-        d.alpha = (p.alpha * 255f).roundToInt().coerceIn(0, 255)
+        val digitAlpha = if (blurEnabled) 1f else p.alpha
+        d.alpha = (digitAlpha * alphaScale * 255f).roundToInt().coerceIn(0, 255)
         d.draw(canvas)
     }
 
@@ -435,6 +506,7 @@ class HyperClockView @JvmOverloads constructor(
     }
 
     private fun layoutDuo() {
+        // the hour layers only cover 00..12, so 24h afternoons fold back onto them
         val hourIndex = (if (hour > 12) hour - 12 else hour).coerceIn(0, 12)
         val dy = duoDy * em
         val bottom = duoLayer(
@@ -457,6 +529,7 @@ class HyperClockView @JvmOverloads constructor(
             1f,
         )
         placements.add(top)
+        // where the two pairs cross, which is where the art clocks put their colon
         placeColon(
             (max(top.inkLeft, bottom.inkLeft) + min(top.inkRight, bottom.inkRight)) / 2f,
             (bottom.inkTop + top.inkBottom) / 2f,
@@ -524,15 +597,24 @@ class HyperClockView @JvmOverloads constructor(
         private const val DEFAULT_EM_DP = 104f
         private val DEFAULT_COLON_COLOR = 0xFFFA2A2A.toInt()
 
-        private const val ART_GAP_X = 0.05f
-        private const val ART_DROP_Y = 0.58f
-        private const val ART_ROW_DX = -0.36f
-        private const val ART_ROW_DY = 1.04f
-        private const val COLON_NUDGE_X = 0.02f
+        // Art cluster geometry in em, measured off the HyperOS screenshots with
+        // tools/measure_ref.py; every one is also a layout attribute, and
+        // tools/hyper_sim.py renders the same numbers.
+        private const val ART_GAP_X = 0.05f      // ink gap inside a pair, negative overlaps
+        private const val ART_DROP_Y = 0.58f     // second digit of a pair drops
+        private const val ART_ROW_DX = -0.36f    // minute pair steps left
+        private const val ART_ROW_DY = 1.04f     // minute pair drops
+        private const val COLON_NUDGE_X = 0.02f  // colon sits right of the midpoint
 
         private const val ROW_DIGIT_GAP = 0.02f
         private const val ROW_PAIR_GAP = 0.10f
         private const val STACK_DY = 0.80f
-        private const val DUO_DY = 0.50f
+        private const val DUO_DY = 0.50f    // minute pair drops, in canvas heights
+
+        // Frosted mode. The radius is generous on purpose: the wallpaper is only ever seen
+        // through digit-width slots, so anything softer still reads as detail rather than
+        // as the flat wash of colour HyperOS's blend mode gives.
+        private const val DEFAULT_BLUR_RADIUS_DP = 40f
+        private const val DEFAULT_BLUR_TINT_ALPHA = 0.4f
     }
 }
