@@ -13,14 +13,17 @@ import com.android.systemui.statusbar.pipeline.battery.domain.interactor.Battery
 import com.android.systemui.statusbar.policy.BatteryController
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -143,9 +146,20 @@ constructor(
         }
     }
 
+    private val batteryIndicationTick: kotlinx.coroutines.flow.Flow<Unit> = callbackFlow {
+        val listener = KeyguardIndicationController.IndicationListener { type, _ ->
+            if (type == KeyguardIndicationController.AX_TYPE_BATTERY) trySend(Unit)
+        }
+        keyguardIndicationController.addIndicationListener(listener)
+        awaitClose { keyguardIndicationController.removeIndicationListener(listener) }
+    }
+
     // Re-compute charging string whenever battery info changes
     val batteryString: StateFlow<String> =
-        keyguardBatteryInfo
+        combine(
+            keyguardBatteryInfo,
+            batteryIndicationTick.onStart { emit(Unit) },
+        ) { info, _ -> info }
             .map {
                 if (it.isCharging) {
                     formatChargingString(keyguardIndicationController.powerChargingString)

@@ -335,6 +335,7 @@ public class KeyguardIndicationController {
     public static final int AX_TYPE_OWNER_INFO = 4;
     public static final int AX_TYPE_ALIGNMENT = 5;
     public static final int AX_TYPE_PERSISTENT_UNLOCK = 6;
+    public static final int AX_TYPE_BATTERY = 7;
     private final java.util.List<IndicationListener> mIndicationListeners =
             new java.util.ArrayList<>();
     public void addIndicationListener(IndicationListener listener) {
@@ -744,10 +745,12 @@ public class KeyguardIndicationController {
                             .setTextColor(getInitialTextColorState())
                             .build(),
                     animate);
+            notifyIndicationListeners(AX_TYPE_BATTERY, powerIndication);
         } else {
             mKeyguardLogger.log(TAG, LogLevel.DEBUG, "hide battery indication");
             // don't show the charging information
             mRotateTextViewController.hideIndication(INDICATION_TYPE_BATTERY);
+            notifyIndicationListeners(AX_TYPE_BATTERY, null);
         }
     }
 
