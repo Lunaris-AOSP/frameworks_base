@@ -17,7 +17,12 @@
 package com.android.systemui.statusbar.pipeline.shared.ui.composable
 
 import android.content.Context
+import android.database.ContentObserver
 import android.graphics.Rect
+import android.os.Handler
+import android.os.Looper
+import android.os.UserHandle
+import android.provider.Settings
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
@@ -267,6 +272,38 @@ fun StatusBarRoot(
                     inflater.inflate(R.layout.status_bar, parent, false) as PhoneStatusBarView
 
                 val islandBoundsState = mutableStateOf(android.graphics.Rect())
+                var statusIconContainerRef: StatusIconContainer? = null
+                var overlapDotParentRef: ViewGroup? = null
+
+                dynamicIslandSettingEnabled = isDynamicIslandSettingEnabled(context)
+                val dynamicIslandSettingObserver =
+                    object : ContentObserver(Handler(Looper.getMainLooper())) {
+                        override fun onChange(selfChange: Boolean) {
+                            dynamicIslandSettingEnabled = isDynamicIslandSettingEnabled(context)
+                            if (!dynamicIslandSettingEnabled) {
+                                overlapDotParentRef?.let { dotParent ->
+                                    resetOverlapState(statusIconContainerRef, dotParent)
+                                }
+                            }
+                        }
+                    }
+                context.contentResolver.registerContentObserver(
+                    Settings.System.getUriFor(Settings.System.STATUS_BAR_SHOW_DYNAMIC_ISLAND),
+                    false,
+                    dynamicIslandSettingObserver,
+                    UserHandle.USER_ALL,
+                )
+                phoneStatusBarView.addOnAttachStateChangeListener(
+                    object : View.OnAttachStateChangeListener {
+                        override fun onViewAttachedToWindow(v: View) {}
+
+                        override fun onViewDetachedFromWindow(v: View) {
+                            context.contentResolver.unregisterContentObserver(
+                                dynamicIslandSettingObserver
+                            )
+                        }
+                    }
+                )
 
                 if (StatusBarChipsModernization.isEnabled) {
                     addStartSideComposable(
@@ -316,8 +353,6 @@ fun StatusBarRoot(
                         R.id.centered_area
                     )
 
-                var statusIconContainerRef: StatusIconContainer? = null
-                var overlapDotParentRef: ViewGroup? = null
                 val composeView =
                     ComposeView(context).apply {
                         layoutParams =
@@ -816,18 +851,22 @@ private var overlapDotView: View? = null
 private var pendingOverlapCheck: Runnable? = null
 
 private var lastIslandBounds = android.graphics.Rect()
+private var dynamicIslandSettingEnabled = false
+
+private fun isDynamicIslandSettingEnabled(context: Context): Boolean =
+    Settings.System.getInt(
+        context.contentResolver,
+        Settings.System.STATUS_BAR_SHOW_DYNAMIC_ISLAND,
+        0,
+    ) != 0
 
 private fun collapseOverlappingStatusIcons(
     statusIconContainer: StatusIconContainer?,
     dotParent: ViewGroup?,
     islandBounds: android.graphics.Rect,
 ) {
-    if (statusIconContainer == null || dotParent == null) return
+    if (statusIconContainer == null || dotParent == null || !dynamicIslandSettingEnabled) return
     lastIslandBounds = islandBounds
-    android.util.Log.d(
-        "IslandOverlap",
-        "collapseOverlappingStatusIcons called, islandBounds=$islandBounds",
-    )
     pendingOverlapCheck?.let { statusIconContainer.removeCallbacks(it) }
     val runnable = Runnable {
         applyOverlapState(statusIconContainer, dotParent, islandBounds)
@@ -841,6 +880,7 @@ private fun applyOverlapState(
     dotParent: ViewGroup,
     islandBounds: android.graphics.Rect,
 ) {
+    if (!dynamicIslandSettingEnabled) return
     val childRect = android.graphics.Rect()
     val loc = IntArray(2)
     var anyOverlap = false
@@ -851,11 +891,6 @@ private fun applyOverlapState(
         child.getLocationInWindow(loc)
         childRect.set(loc[0], loc[1], loc[0] + child.width, loc[1] + child.height)
         val overlaps = android.graphics.Rect.intersects(childRect, islandBounds)
-        android.util.Log.d(
-            "IslandOverlap",
-            "child[$i]=${child.javaClass.simpleName} rect=$childRect overlaps=$overlaps " +
-                "wasVisible=${child.visibility == View.VISIBLE}",
-        )
         val newVisibility = if (overlaps) View.INVISIBLE else View.VISIBLE
         if (child.visibility != newVisibility) {
             child.visibility = newVisibility
@@ -880,4 +915,16 @@ private fun applyOverlapState(
     if (dot.visibility != dotVisibility) {
         dot.visibility = dotVisibility
     }
+}
+
+private fun resetOverlapState(
+    statusIconContainer: StatusIconContainer?,
+    dotParent: ViewGroup,
+) {
+    statusIconContainer?.let {
+        for (i in 0 until it.childCount) {
+            it.getChildAt(i).visibility = View.VISIBLE
+        }
+    }
+    overlapDotView?.visibility = View.GONE
 }
