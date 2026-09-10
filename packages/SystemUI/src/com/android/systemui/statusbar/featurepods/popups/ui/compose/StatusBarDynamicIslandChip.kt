@@ -20,14 +20,21 @@ import android.view.DisplayCutout
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.keyframes
-import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -164,6 +171,14 @@ fun StatusBarDynamicIslandChip(
             .coerceAtLeast(56.dp)
 
     val collapseState = rememberDynamicIslandCollapseState(viewModel.isPopupShown)
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val pressScale by
+        animateFloatAsState(
+            targetValue = if (isPressed) 0.95f else 1f,
+            animationSpec = spring(dampingRatio = 0.55f, stiffness = 900f),
+            label = "chipPressScale",
+        )
 
     Row(
         modifier =
@@ -174,16 +189,21 @@ fun StatusBarDynamicIslandChip(
                     min = compactWidth ?: 0.dp,
                     max = compactWidth ?: (CompactIslandMaxWidth * widthScale),
                 )
-                .graphicsLayer { scaleX = collapseState.scale }
+                .graphicsLayer {
+                    scaleX = collapseState.scaleX * pressScale
+                    scaleY = collapseState.scaleY * pressScale
+                }
                 .clip(chipShape)
                 .background(Color.Black)
                 .border(width = 1.dp, color = chipOutline, shape = chipShape)
                 .combinedClickable(
+                    interactionSource = interactionSource,
+                    indication = null,
                     onClick = hapticOnTap,
                     onLongClick = mediaOpenApp?.let { { hapticOnLongPress() } },
                 )
                 .padding(
-                    start = 10.dp * widthScale,
+                    start = 8.dp * widthScale,
                     end = 12.dp * widthScale,
                     top = 7.dp * heightScale,
                     bottom = 7.dp * heightScale,
@@ -239,7 +259,7 @@ fun StatusBarDynamicIslandChip(
                 if (popupContent.model.isPlaying) {
                     AudioReactiveBars(
                         isPlaying = true,
-                        color = chipContentColor,
+                        color = IslandAccents.Music,
                         artworkDrawable = artworkDrawable,
                     )
                 } else if (pageCount > 1) {
@@ -292,6 +312,14 @@ private fun UtilityStatusIslandChip(
     modifier: Modifier = Modifier,
 ) {
     val collapseState = rememberDynamicIslandCollapseState(viewModel.isPopupShown)
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val pressScale by
+        animateFloatAsState(
+            targetValue = if (isPressed) 0.95f else 1f,
+            animationSpec = spring(dampingRatio = 0.55f, stiffness = 900f),
+            label = "utilityChipPressScale",
+        )
     val rightSegmentWidth =
         when (viewModel.popupContent) {
             is PopupContentModel.Flashlight -> 52.dp
@@ -325,22 +353,31 @@ private fun UtilityStatusIslandChip(
     Row(
         modifier =
             modifier
-                .graphicsLayer { scaleX = collapseState.scale }
+                .graphicsLayer {
+                    scaleX = collapseState.scaleX * pressScale
+                    scaleY = collapseState.scaleY * pressScale
+                }
                 .defaultMinSize(minHeight = 32.dp * heightScale)
                 .width(connectedIslandWidth)
                 .clip(RoundedCornerShape(50))
                 .background(Color.Black)
                 .border(width = 1.dp, color = chipOutline, shape = RoundedCornerShape(50))
-                .clickable(onClick = onTap)
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = onTap,
+                )
                 .graphicsLayer { alpha = collapseState.contentAlpha },
         horizontalArrangement = Arrangement.spacedBy(0.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Spacer(modifier = Modifier.width(10.dp * widthScale))
-        Icon(
+        CollapsedGlyphBadge(
             icon = viewModel.icons.first().icon,
-            modifier = Modifier.size(16.dp),
-            tint = chipContentColor,
+            accent = islandChipAccentFor(viewModel.popupContent) ?: chipContentColor,
+            content = viewModel.popupContent,
+            badgeSize = 20.dp * widthScale,
+            iconSize = 13.dp * widthScale,
         )
         Spacer(modifier = Modifier.width(cutoutSpec.embeddedGapWidth))
         Box(
@@ -418,6 +455,8 @@ private val DynamicIslandEmbeddedGapFallbackWidth = 38.dp
 private val DynamicIslandEmbeddedGapMinWidth = 34.dp
 private val DynamicIslandEmbeddedGapMaxWidth = 88.dp
 private val DynamicIslandEmbeddedGapSidePadding = 10.dp
+internal val DynamicIslandCompanionDiameter = 34.dp
+internal val DynamicIslandCompanionGap = 8.dp
 
 data class DynamicIslandCutoutSpec(
     val embeddedGapWidth: Dp,
@@ -484,8 +523,183 @@ private fun compactIslandWidthFor(content: PopupContentModel): Dp? {
     }
 }
 
+/** Per-feature glyph accent for the collapsed pill — SmartIsland's colored-glyph motif. */
+private fun islandChipAccentFor(content: PopupContentModel): Color? =
+    when (content) {
+        is PopupContentModel.Flashlight -> IslandAccents.Flashlight
+        is PopupContentModel.Alarm -> IslandAccents.Alarm
+        is PopupContentModel.Stopwatch -> IslandAccents.Stopwatch
+        is PopupContentModel.ScreenRecord -> IslandAccents.Recording
+        else -> null
+    }
+
+/**
+ * Collapsed-pill leading glyph wrapped in SmartIsland's circular accent badge, carrying the
+ * per-feature motion SmartIsland shows in its collapsed island: a pulsing recording indicator, a
+ * slowly spinning stopwatch, and a gently breathing alarm. Features without a motif (flashlight)
+ * render a still glyph. Sizes are passed pre-scaled by the island's width scale so the badge stays
+ * within the cutout-split chrome at every scale.
+ */
 @Composable
-private fun rememberDynamicIslandSizeScale(): Pair<Float, Float> {
+private fun CollapsedGlyphBadge(
+    icon: IconModel,
+    accent: Color,
+    content: PopupContentModel,
+    modifier: Modifier = Modifier,
+    badgeSize: Dp = 20.dp,
+    iconSize: Dp = 13.dp,
+) {
+    val transition = rememberInfiniteTransition(label = "collapsed_glyph")
+    val breathe by
+        transition.animateFloat(
+            initialValue = 0.92f,
+            targetValue = 1.08f,
+            animationSpec =
+                infiniteRepeatable(tween(1000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+            label = "breathe",
+        )
+    val recScale by
+        transition.animateFloat(
+            initialValue = 0.9f,
+            targetValue = 1.12f,
+            animationSpec =
+                infiniteRepeatable(tween(800, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+            label = "rec_scale",
+        )
+    val recAlpha by
+        transition.animateFloat(
+            initialValue = 0.45f,
+            targetValue = 1f,
+            animationSpec =
+                infiniteRepeatable(tween(800, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+            label = "rec_alpha",
+        )
+    val spin by
+        transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(tween(4000, easing = LinearEasing), RepeatMode.Restart),
+            label = "spin",
+        )
+
+    Box(
+        modifier =
+            modifier
+                .size(badgeSize)
+                .clip(CircleShape)
+                .background(IslandAccents.badgeFill(accent)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            icon = icon,
+            modifier =
+                Modifier.size(iconSize).graphicsLayer {
+                    when (content) {
+                        is PopupContentModel.ScreenRecord -> {
+                            scaleX = recScale
+                            scaleY = recScale
+                            alpha = recAlpha
+                        }
+                        is PopupContentModel.Stopwatch -> rotationZ = spin
+                        is PopupContentModel.Alarm -> {
+                            scaleX = breathe
+                            scaleY = breathe
+                        }
+                        else -> Unit
+                    }
+                },
+            tint = accent,
+        )
+    }
+}
+
+/**
+ * Small icon-only "peek" chip shown beside the main island when several tasks are active, ported
+ * from SmartIsland's secondary bubble. It shows album art for media or the feature's accent-tinted
+ * glyph otherwise, pops in with a bouncy scale, and squishes on press. It is an independent popup
+ * trigger: tapping it opens that task's popup anchored to the peek's own position and folds the peek
+ * away in place, without moving it to the centre or disturbing the main chip.
+ */
+@Composable
+internal fun CompanionChip(
+    viewModel: PopupChipModel.Shown,
+    diameter: Dp,
+    onTap: () -> Unit,
+    modifier: Modifier = Modifier,
+    onBoundsChanged: (Rect) -> Unit = {},
+) {
+    val colors = viewModel.colors
+    val chipContentColor =
+        colors.chipContent(isPopupShown = false, colorScheme = MaterialTheme.colorScheme)
+    val chipOutline =
+        colors.chipOutline(isPopupShown = false, colorScheme = MaterialTheme.colorScheme)
+    val view = LocalView.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val pressScale by
+        animateFloatAsState(
+            targetValue = if (isPressed) 0.9f else 1f,
+            animationSpec = spring(dampingRatio = 0.55f, stiffness = 900f),
+            label = "companionPressScale",
+        )
+    val appear = remember { Animatable(0.3f) }
+    LaunchedEffect(Unit) { appear.animateTo(1f, spring(dampingRatio = 0.68f, stiffness = 480f)) }
+    val popupOpen = viewModel.isPopupShown
+    val collapse by
+        animateFloatAsState(
+            targetValue = if (popupOpen) 0f else 1f,
+            animationSpec =
+                if (popupOpen) {
+                    spring(dampingRatio = 0.9f, stiffness = 500f)
+                } else {
+                    spring(dampingRatio = 0.65f, stiffness = 520f)
+                },
+            label = "companionCollapse",
+        )
+
+    Box(
+        modifier =
+            modifier
+                .graphicsLayer {
+                    val s = pressScale * appear.value * collapse
+                    scaleX = s
+                    scaleY = s
+                    alpha = appear.value * collapse
+                }
+                .size(diameter)
+                .onGloballyPositioned { onBoundsChanged(it.boundsInScreen(view)) }
+                .clip(CircleShape)
+                .background(Color.Black)
+                .border(width = 1.dp, color = chipOutline, shape = CircleShape)
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = onTap,
+                ),
+        contentAlignment = Alignment.Center,
+    ) {
+        val icon = viewModel.icons.firstOrNull()?.icon
+        val content = viewModel.popupContent
+        if (icon != null) {
+            if (content is PopupContentModel.Media) {
+                Icon(
+                    icon = icon,
+                    modifier = Modifier.size(diameter * 0.72f).clip(CircleShape),
+                    tint = Color.Unspecified,
+                )
+            } else {
+                Icon(
+                    icon = icon,
+                    modifier = Modifier.size(diameter * 0.46f),
+                    tint = islandChipAccentFor(content) ?: chipContentColor,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun rememberDynamicIslandSizeScale(): Pair<Float, Float> {
     val context = LocalContext.current
     val widthScale by
         remember { observeDynamicIslandScale(context, DynamicIslandFeatureSettings.WIDTH_SCALE) }
@@ -496,11 +710,16 @@ private fun rememberDynamicIslandSizeScale(): Pair<Float, Float> {
     return widthScale to heightScale
 }
 
-private data class DynamicIslandCollapseState(val scale: Float, val contentAlpha: Float)
+private data class DynamicIslandCollapseState(
+    val scaleX: Float,
+    val scaleY: Float,
+    val contentAlpha: Float,
+)
 
 @Composable
 private fun rememberDynamicIslandCollapseState(isOpen: Boolean): DynamicIslandCollapseState {
-    val scaleX = remember { Animatable(1f, visibilityThreshold = 0.0005f) }
+    // 0f = fully expanded pill, 1f = folded away into the popup.
+    val progress = remember { Animatable(if (isOpen) 1f else 0f, visibilityThreshold = 0.0005f) }
     val currentIsOpen by rememberUpdatedState(isOpen)
 
     LaunchedEffect(Unit) {
@@ -508,32 +727,25 @@ private fun rememberDynamicIslandCollapseState(isOpen: Boolean): DynamicIslandCo
             .drop(1)
             .collectLatest { open ->
                 if (open) {
-                    scaleX.animateTo(
-                        targetValue = 0f,
-                        animationSpec =
-                            spring(
-                                dampingRatio = 0.9f,
-                                stiffness = Spring.StiffnessMediumLow,
-                            ),
+                    progress.animateTo(
+                        targetValue = 1f,
+                        animationSpec = spring(dampingRatio = 0.9f, stiffness = 500f),
                     )
                 } else {
-                    scaleX.animateTo(
-                        targetValue = 1f,
-                        animationSpec =
-                            keyframes {
-                                durationMillis = 380
-                                0f at 0
-                                1.08f at 240 using FastOutSlowInEasing
-                                0.96f at 320
-                                1f at 380
-                            },
+                    progress.animateTo(
+                        targetValue = 0f,
+                        animationSpec = spring(dampingRatio = 0.65f, stiffness = 520f),
                     )
                 }
             }
     }
-    val fadeThreshold = 0.7f
-    val alpha = (scaleX.value / fadeThreshold).coerceIn(0f, 1f)
-    return DynamicIslandCollapseState(scale = scaleX.value, contentAlpha = alpha)
+
+    val p = progress.value
+    val squash = p.coerceIn(0f, 1f)
+    val scaleX = (1f - p).coerceAtLeast(0f)
+    val scaleY = 1f - 0.18f * squash
+    val contentAlpha = ((1f - p) / 0.62f).coerceIn(0f, 1f)
+    return DynamicIslandCollapseState(scaleX = scaleX, scaleY = scaleY, contentAlpha = contentAlpha)
 }
 
 private fun LayoutCoordinates.boundsInScreen(view: android.view.View): Rect {

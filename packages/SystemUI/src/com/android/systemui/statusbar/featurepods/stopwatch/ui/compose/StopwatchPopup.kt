@@ -16,8 +16,11 @@
 
 package com.android.systemui.statusbar.featurepods.stopwatch.ui.compose
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,15 +33,20 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.android.systemui.common.ui.compose.Icon
+import com.android.systemui.statusbar.featurepods.popups.ui.compose.IslandAccents
+import com.android.systemui.statusbar.featurepods.popups.ui.compose.IslandGlyphBadge
 import com.android.systemui.statusbar.featurepods.popups.ui.compose.PopupActionChips
 import com.android.systemui.statusbar.featurepods.popups.ui.compose.PopupSurface
+import com.android.systemui.statusbar.featurepods.popups.ui.compose.pressScale
 import com.android.systemui.statusbar.featurepods.popups.ui.compose.rememberElapsedDurationText
 import com.android.systemui.statusbar.featurepods.stopwatch.shared.model.StopwatchPopupModel
 
@@ -50,12 +58,27 @@ fun StopwatchPopup(
     model: StopwatchPopupModel,
     modifier: Modifier = Modifier,
 ) {
-    val accent = MaterialTheme.colorScheme.primary
+    val accent = IslandAccents.Stopwatch
+
+    val rotation = remember { Animatable(0f) }
+    LaunchedEffect(model.isRunning) {
+        if (model.isRunning) {
+            rotation.animateTo(
+                targetValue = rotation.value + 360f,
+                animationSpec =
+                    infiniteRepeatable(tween(4000, easing = LinearEasing), RepeatMode.Restart),
+            )
+        }
+    }
+
     PopupSurface(
         shape = PopupShape,
-        modifier = modifier
-            .widthIn(min = 300.dp, max = 360.dp)
-            .clickable(enabled = model.onOpen != null) { model.onOpen?.invoke() },
+        modifier =
+            modifier
+                .widthIn(min = 300.dp, max = 360.dp)
+                .pressScale(enabled = model.onOpen != null, pressedScale = 0.97f) {
+                    model.onOpen?.invoke()
+                },
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp),
@@ -65,12 +88,15 @@ fun StopwatchPopup(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                model.icon?.let {
-                    Icon(
-                        icon = it,
-                        modifier = Modifier.size(24.dp),
-                        tint = Color.Unspecified,
-                    )
+                model.icon?.let { icon ->
+                    IslandGlyphBadge(accent = accent) {
+                        Icon(
+                            icon = icon,
+                            modifier =
+                                Modifier.size(22.dp).graphicsLayer { rotationZ = rotation.value },
+                            tint = accent,
+                        )
+                    }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(

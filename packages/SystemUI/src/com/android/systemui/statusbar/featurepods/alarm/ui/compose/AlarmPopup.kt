@@ -16,8 +16,12 @@
 
 package com.android.systemui.statusbar.featurepods.alarm.ui.compose
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,13 +30,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
@@ -42,7 +47,11 @@ import com.android.systemui.common.ui.compose.Icon as StatusBarIcon
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.featurepods.alarm.shared.model.AlarmPopupModel
 import com.android.systemui.statusbar.featurepods.popups.shared.model.PopupActionModel
+import com.android.systemui.statusbar.featurepods.popups.ui.compose.IslandAccents
+import com.android.systemui.statusbar.featurepods.popups.ui.compose.IslandGlyphBadge
 import com.android.systemui.statusbar.featurepods.popups.ui.compose.PopupActionChips
+import com.android.systemui.statusbar.featurepods.popups.ui.compose.PopupSurface
+import com.android.systemui.statusbar.featurepods.popups.ui.compose.pressScale
 
 private val PopupShape = RoundedCornerShape(32.dp)
 
@@ -52,16 +61,24 @@ fun AlarmPopup(
     model: AlarmPopupModel,
     modifier: Modifier = Modifier,
 ) {
-    val accent = MaterialTheme.colorScheme.primary
-    Surface(
-        color = Color(0xF21A1A1A),
-        contentColor = Color.White,
+    val accent = IslandAccents.Alarm
+
+    val pulse = rememberInfiniteTransition(label = "alarm_pulse")
+    val pulseScale by pulse.animateFloat(
+        initialValue = 0.95f,
+        targetValue = 1.06f,
+        animationSpec = infiniteRepeatable(tween(1000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "alarm_scale",
+    )
+
+    PopupSurface(
         shape = PopupShape,
-        shadowElevation = 12.dp,
         modifier =
             modifier
                 .widthIn(min = 300.dp, max = 360.dp)
-                .clickable(enabled = model.onOpen != null) { model.onOpen?.invoke() },
+                .pressScale(enabled = model.onOpen != null, pressedScale = 0.97f) {
+                    model.onOpen?.invoke()
+                },
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp),
@@ -71,15 +88,22 @@ fun AlarmPopup(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                StatusBarIcon(
-                    icon =
-                        Icon.Resource(
-                            resId = R.drawable.ic_dynamic_island_alarm,
-                            contentDescription = ContentDescription.Resource(R.string.status_bar_alarm),
-                        ),
-                    modifier = Modifier.size(24.dp),
-                    tint = accent,
-                )
+                IslandGlyphBadge(accent = accent) {
+                    StatusBarIcon(
+                        icon =
+                            Icon.Resource(
+                                resId = R.drawable.ic_dynamic_island_alarm,
+                                contentDescription =
+                                    ContentDescription.Resource(R.string.status_bar_alarm),
+                            ),
+                        modifier =
+                            Modifier.size(22.dp).graphicsLayer {
+                                scaleX = pulseScale
+                                scaleY = pulseScale
+                            },
+                        tint = accent,
+                    )
+                }
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
                         text = model.title,
@@ -89,7 +113,7 @@ fun AlarmPopup(
                     Text(
                         text = model.dayText,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.72f),
+                        color = LocalContentColor.current.copy(alpha = 0.72f),
                     )
                 }
             }

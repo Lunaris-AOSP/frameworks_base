@@ -17,18 +17,23 @@
 package com.android.systemui.statusbar.featurepods.popups.ui.compose
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.android.systemui.statusbar.featurepods.popups.shared.model.PopupActionModel
+
+private val ChipShape = RoundedCornerShape(18.dp)
 
 @Composable
 fun PopupActionChips(
@@ -50,18 +55,21 @@ fun PopupActionChips(
             val contentColor =
                 if (action.emphasized) MaterialTheme.colorScheme.onPrimary else Color.White
 
-            Text(
-                text = action.label,
-                style = MaterialTheme.typography.labelLarge,
-                color = contentColor,
+            Box(
                 modifier =
-                    Modifier.background(
-                            color = backgroundColor,
-                            shape = RoundedCornerShape(22.dp),
-                        )
-                        .clickable(onClick = action.onClick)
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-            )
+                    Modifier.pressScale(onClick = action.onClick)
+                        .defaultMinSize(minHeight = 36.dp)
+                        .background(color = backgroundColor, shape = ChipShape)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = action.label,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = contentColor,
+                )
+            }
         }
     }
 }

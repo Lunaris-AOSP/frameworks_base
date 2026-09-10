@@ -17,13 +17,20 @@
 package com.android.systemui.statusbar.featurepods.popups.ui.compose
 
 import android.view.ViewTreeObserver
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentSize
@@ -32,8 +39,11 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,6 +51,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -80,6 +91,9 @@ fun StatusBarPopup(
     viewModel: PopupChipModel.Shown,
     isVisible: Boolean,
     chipBoundsInScreen: Rect? = null,
+    canPage: Boolean = false,
+    pageDirection: Int = 1,
+    onPage: (Int) -> Unit = {},
 ) {
     val density = Density(LocalContext.current)
     Popup(
@@ -154,8 +168,8 @@ fun StatusBarPopup(
                             targetValue = 1f,
                             animationSpec =
                                 spring(
-                                    dampingRatio = 0.6f,
-                                    stiffness = Spring.StiffnessLow,
+                                    dampingRatio = 0.72f,
+                                    stiffness = 520f,
                                 ),
                         )
                     }
@@ -164,8 +178,8 @@ fun StatusBarPopup(
                             targetValue = 1f,
                             animationSpec =
                                 spring(
-                                    dampingRatio = 0.65f,
-                                    stiffness = Spring.StiffnessLow,
+                                    dampingRatio = 0.76f,
+                                    stiffness = 520f,
                                 ),
                         )
                     }
@@ -174,12 +188,17 @@ fun StatusBarPopup(
                             targetValue = 0f,
                             animationSpec =
                                 spring(
-                                    dampingRatio = 0.7f,
-                                    stiffness = Spring.StiffnessMediumLow,
+                                    dampingRatio = 0.72f,
+                                    stiffness = 520f,
                                 ),
                         )
                     }
-                    launch { alpha.animateTo(1f, animationSpec = tween(180)) }
+                    launch {
+                        alpha.animateTo(
+                            1f,
+                            animationSpec = tween(190, easing = FastOutSlowInEasing),
+                        )
+                    }
                 }
             } else if (!isVisible) {
                 if (skipMotionOnDismiss) {
@@ -246,6 +265,13 @@ fun StatusBarPopup(
             enter = fadeIn(animationSpec = tween(60)),
             exit = fadeOut(animationSpec = tween(160)),
         ) {
+            val pagerScope = rememberCoroutineScope()
+            val pageFollow = remember { Animatable(0f) }
+            var pageAccumulator by remember { mutableFloatStateOf(0f) }
+            val pageThresholdPx = with(density) { 56.dp.toPx() }
+            val maxFollowPx = with(density) { 40.dp.toPx() }
+            val currentOnPage by rememberUpdatedState(onPage)
+
             Box(
                 modifier =
                     Modifier.padding(8.dp)
@@ -261,35 +287,81 @@ fun StatusBarPopup(
                             this.transformOrigin = transformOrigin
                         }
             ) {
-                when (val popupContent = viewModel.popupContent) {
-                    is PopupContentModel.Media -> {
-                        val model = popupContent.model
-                        val useWaveform = popupContent.useWaveform
-                        val hasLyrics = !model.lyrics.isNullOrBlank() || !model.syncedLyrics.isNullOrBlank()
-                        if (hasLyrics) {
-                            androidx.compose.foundation.layout.Column(
-                                horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
-                                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
-                            ) {
-                                MediaControlPopup(model = model, useWaveform = useWaveform)
-                                LyricsCard(model = model)
-                            }
-                        } else {
-                            MediaControlPopup(model = model, useWaveform = useWaveform)
-                        }
+                Box(
+                    modifier =
+                        Modifier.then(
+                                if (canPage) {
+                                    Modifier.pointerInput(canPage) {
+                                        detectHorizontalDragGestures(
+                                            onDragEnd = {
+                                                val direction =
+                                                    when {
+                                                        pageAccumulator <= -pageThresholdPx -> 1
+                                                        pageAccumulator >= pageThresholdPx -> -1
+                                                        else -> 0
+                                                    }
+                                                pageAccumulator = 0f
+                                                pagerScope.launch {
+                                                    pageFollow.animateTo(
+                                                        0f,
+                                                        spring(
+                                                            dampingRatio =
+                                                                Spring.DampingRatioNoBouncy,
+                                                            stiffness = Spring.StiffnessMedium,
+                                                        ),
+                                                    )
+                                                }
+                                                if (direction != 0) {
+                                                    currentOnPage(direction)
+                                                }
+                                            },
+                                            onDragCancel = {
+                                                pageAccumulator = 0f
+                                                pagerScope.launch {
+                                                    pageFollow.animateTo(
+                                                        0f,
+                                                        spring(
+                                                            dampingRatio =
+                                                                Spring.DampingRatioMediumBouncy,
+                                                            stiffness = Spring.StiffnessMedium,
+                                                        ),
+                                                    )
+                                                }
+                                            },
+                                            onHorizontalDrag = { change, dragAmount ->
+                                                pageAccumulator += dragAmount
+                                                val target =
+                                                    (pageAccumulator * 0.5f)
+                                                        .coerceIn(-maxFollowPx, maxFollowPx)
+                                                pagerScope.launch { pageFollow.snapTo(target) }
+                                                change.consume()
+                                            },
+                                        )
+                                    }
+                                } else {
+                                    Modifier
+                                }
+                            )
+                            .graphicsLayer { translationX = pageFollow.value }
+                ) {
+                    AnimatedContent(
+                        targetState = viewModel,
+                        contentAlignment = Alignment.TopCenter,
+                        contentKey = { it.chipId },
+                        transitionSpec = {
+                            val dir = if (pageDirection >= 0) 1 else -1
+                            (slideInHorizontally(animationSpec = tween(280)) { w -> dir * w } +
+                                fadeIn(animationSpec = tween(200))) togetherWith
+                                (slideOutHorizontally(animationSpec = tween(240)) { w -> -dir * w } +
+                                    fadeOut(animationSpec = tween(140))) using
+                                SizeTransform(clip = false) { _, _ ->
+                                    spring(dampingRatio = 0.9f, stiffness = 380f)
+                                }
+                        },
+                        label = "island_popup_pager",
+                    ) { chip ->
+                        IslandPopupContent(chip)
                     }
-                    is PopupContentModel.ScreenRecord -> ScreenRecordPopup(model = popupContent.model)
-                    is PopupContentModel.LiveScore -> LiveScorePopup(model = popupContent.model)
-                    is PopupContentModel.Flashlight -> FlashlightPopup(model = popupContent.model)
-                    is PopupContentModel.Stopwatch -> StopwatchPopup(model = popupContent.model)
-                    is PopupContentModel.Alarm -> AlarmPopup(model = popupContent.model)
-                    PopupContentModel.None ->
-                        when (viewModel.chipId) {
-                            is PopupChipId.AvControlsIndicator -> AvControlsChipPopup()
-                            is PopupChipId.ShareScreenPrivacyIndicator ->
-                                ShareScreenPrivacyIndicatorPopup()
-                            else -> Unit
-                        }
                 }
             }
         }
@@ -300,4 +372,37 @@ private fun LayoutCoordinates.boundsInScreen(view: android.view.View): Rect {
     val location = IntArray(2)
     view.getLocationOnScreen(location)
     return boundsInRoot().translate(Offset(location[0].toFloat(), location[1].toFloat()))
+}
+
+@Composable
+private fun IslandPopupContent(viewModel: PopupChipModel.Shown) {
+    when (val popupContent = viewModel.popupContent) {
+        is PopupContentModel.Media -> {
+            val model = popupContent.model
+            val useWaveform = popupContent.useWaveform
+            val hasLyrics = !model.lyrics.isNullOrBlank() || !model.syncedLyrics.isNullOrBlank()
+            if (hasLyrics) {
+                androidx.compose.foundation.layout.Column(
+                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                ) {
+                    MediaControlPopup(model = model, useWaveform = useWaveform)
+                    LyricsCard(model = model)
+                }
+            } else {
+                MediaControlPopup(model = model, useWaveform = useWaveform)
+            }
+        }
+        is PopupContentModel.ScreenRecord -> ScreenRecordPopup(model = popupContent.model)
+        is PopupContentModel.LiveScore -> LiveScorePopup(model = popupContent.model)
+        is PopupContentModel.Flashlight -> FlashlightPopup(model = popupContent.model)
+        is PopupContentModel.Stopwatch -> StopwatchPopup(model = popupContent.model)
+        is PopupContentModel.Alarm -> AlarmPopup(model = popupContent.model)
+        PopupContentModel.None ->
+            when (viewModel.chipId) {
+                is PopupChipId.AvControlsIndicator -> AvControlsChipPopup()
+                is PopupChipId.ShareScreenPrivacyIndicator -> ShareScreenPrivacyIndicatorPopup()
+                else -> Unit
+            }
+    }
 }

@@ -20,6 +20,7 @@ import android.graphics.drawable.Drawable
 import android.media.audiofx.Visualizer
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -62,6 +63,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 private const val BAR_COUNT = 4
+
+private const val STALE_SIGNAL_TIMEOUT_MS = 400L
 
 private val PausedRestLevels = floatArrayOf(0.20f, 0.35f, 0.35f, 0.20f)
 
@@ -142,6 +145,9 @@ fun AudioReactiveBars(
 
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
+    var lastCaptureUptimeMs by remember { mutableStateOf(0L) }
+    var reactiveActive by remember { mutableStateOf(false) }
+
     DisposableEffect(isPlaying) {
         if (!isPlaying) {
             PausedRestLevels.forEachIndexed { i, v -> rawLevels[i] = v }
@@ -172,6 +178,7 @@ fun AudioReactiveBars(
                     )
 
                     mainHandler.post {
+                        lastCaptureUptimeMs = SystemClock.uptimeMillis()
                         for (i in mirrored.indices) {
                             rawLevels[i] = (rawLevels[i] * 0.55f + mirrored[i] * 0.45f)
                                 .coerceIn(0.08f, 1f)
@@ -254,6 +261,18 @@ fun AudioReactiveBars(
         }
     }
 
+    LaunchedEffect(isPlaying) {
+        if (!isPlaying) {
+            reactiveActive = false
+            return@LaunchedEffect
+        }
+        while (true) {
+            reactiveActive =
+                (SystemClock.uptimeMillis() - lastCaptureUptimeMs) < STALE_SIGNAL_TIMEOUT_MS
+            kotlinx.coroutines.delay(120L)
+        }
+    }
+
     val totalWidth = barWidth * BAR_COUNT + spacing * (BAR_COUNT - 1)
 
     Canvas(
@@ -270,7 +289,9 @@ fun AudioReactiveBars(
             val springLevel = animatedLevels[index].value
             val idleLevel = idleFloats[index].value
 
-            val level = (if (isPlaying) springLevel else idleLevel).coerceIn(0.08f, 1f)
+            val level =
+                (if (isPlaying && reactiveActive) springLevel else idleLevel)
+                    .coerceIn(0.08f, 1f)
 
             val barH = maxH * level
             val left = index * (barPx + spacingPx)

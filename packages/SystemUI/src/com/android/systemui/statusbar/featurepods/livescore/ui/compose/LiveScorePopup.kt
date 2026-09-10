@@ -16,9 +16,7 @@
 
 package com.android.systemui.statusbar.featurepods.livescore.ui.compose
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -37,7 +35,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.android.systemui.common.ui.compose.Icon
+import com.android.systemui.statusbar.featurepods.popups.ui.compose.IslandAccents
+import com.android.systemui.statusbar.featurepods.popups.ui.compose.IslandGlyphBadge
 import com.android.systemui.statusbar.featurepods.popups.ui.compose.PopupSurface
+import com.android.systemui.statusbar.featurepods.popups.ui.compose.pressScale
 import com.android.systemui.statusbar.featurepods.livescore.shared.model.LiveScoreChipModel
 
 private val PopupShape = RoundedCornerShape(32.dp)
@@ -48,24 +49,27 @@ fun LiveScorePopup(
     model: LiveScoreChipModel,
     modifier: Modifier = Modifier,
 ) {
-    val accent = MaterialTheme.colorScheme.primary
+    val accent = IslandAccents.Score
     PopupSurface(
         shape = PopupShape,
-        modifier = modifier.widthIn(min = 320.dp, max = 400.dp)
-            .clickable(enabled = model.onOpen != null) { model.onOpen?.invoke() },
+        modifier =
+            modifier
+                .widthIn(min = 320.dp, max = 400.dp)
+                .pressScale(enabled = model.onOpen != null, pressedScale = 0.97f) {
+                    model.onOpen?.invoke()
+                },
     ) {
         Row(
-            modifier =
-                Modifier.fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 18.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(contentAlignment = Alignment.Center) {
-                model.icon?.let {
+            // App/team logo framed by the emerald badge ring; the logo keeps its own colors.
+            model.icon?.let { icon ->
+                IslandGlyphBadge(accent = accent, size = 52.dp) {
                     Icon(
-                        icon = it,
-                        modifier = Modifier.size(48.dp),
+                        icon = icon,
+                        modifier = Modifier.size(30.dp),
                         tint = Color.Unspecified,
                     )
                 }

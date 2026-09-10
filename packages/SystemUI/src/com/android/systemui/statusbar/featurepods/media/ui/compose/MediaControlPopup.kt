@@ -21,9 +21,6 @@ import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
 import android.text.format.DateUtils
 import android.widget.SeekBar
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.keyframes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -47,18 +44,16 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
@@ -68,10 +63,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.viewinterop.AndroidView
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.launch
 import com.android.systemui.common.shared.model.ContentDescription
 import com.android.systemui.common.shared.model.Icon as UiIcon
 import com.android.systemui.common.ui.compose.Icon as UiIconView
@@ -81,10 +72,12 @@ import com.android.systemui.media.controls.ui.view.WaveformSeekBar
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.featurepods.media.shared.model.MediaControlChipModel
 import com.android.systemui.statusbar.featurepods.popups.ui.compose.PopupSurface
+import com.android.systemui.statusbar.featurepods.popups.ui.compose.pressScale
+import com.android.systemui.statusbar.featurepods.popups.ui.compose.rememberAlbumArtAccent
 import kotlinx.coroutines.delay
 
 private val PopupShape = RoundedCornerShape(34.dp)
-private val ArtworkShape = RoundedCornerShape(24.dp)
+private val ArtworkShape = RoundedCornerShape(16.dp)
 
 /** Expanded media controls for the centered dynamic island. */
 @Composable
@@ -93,14 +86,17 @@ fun MediaControlPopup(
     useWaveform: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    val accent = MaterialTheme.colorScheme.primary
+    val artworkDrawable =
+        remember(model.artworkIcon) { (model.artworkIcon as? UiIcon.Loaded)?.drawable }
+    val accent = rememberAlbumArtAccent(artworkDrawable, fallback = MaterialTheme.colorScheme.primary)
+    val onAccent = if (accent.luminance() > 0.5f) Color.Black else Color.White
     PopupSurface(
         shape = PopupShape,
         modifier = modifier.widthIn(min = 320.dp, max = 400.dp),
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Row(
                 modifier =
@@ -117,7 +113,7 @@ fun MediaControlPopup(
                 MediaArtwork(model = model)
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     model.appName?.takeIf { it.isNotBlank() }?.let { appName ->
                         Text(
@@ -131,7 +127,7 @@ fun MediaControlPopup(
                     }
                     Text(
                         text = model.songName?.toString().orEmpty(),
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = LocalContentColor.current,
                         maxLines = 1,
@@ -140,7 +136,7 @@ fun MediaControlPopup(
                     model.artistName?.takeIf { it.isNotBlank() }?.let { artist ->
                         Text(
                             text = artist.toString(),
-                            style = MaterialTheme.typography.bodyLarge,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = LocalContentColor.current.copy(alpha = 0.8f),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -171,12 +167,13 @@ fun MediaControlPopup(
                     iconOverrideId = R.drawable.ic_skip_previous_filled,
                     containerColor = LocalContentColor.current.copy(alpha = 0.11f),
                     iconTint = LocalContentColor.current,
+                    buttonSize = 52.dp,
                 )
                 MediaActionButton(
                     action = model.playOrPause,
                     containerColor = accent,
-                    iconTint = MaterialTheme.colorScheme.onPrimary,
-                    buttonSize = 72.dp,
+                    iconTint = onAccent,
+                    buttonSize = 64.dp,
                     iconSize = 28.dp,
                     emphasized = true,
                 )
@@ -185,6 +182,7 @@ fun MediaControlPopup(
                     iconOverrideId = R.drawable.ic_skip_next_filled,
                     containerColor = LocalContentColor.current.copy(alpha = 0.11f),
                     iconTint = LocalContentColor.current,
+                    buttonSize = 52.dp,
                 )
             }
         }
@@ -203,14 +201,14 @@ private fun MediaArtwork(model: MediaControlChipModel) {
             )
     Box(
         modifier =
-            Modifier.size(76.dp)
+            Modifier.size(52.dp)
                 .clip(ArtworkShape)
                 .background(Color.White.copy(alpha = 0.08f)),
         contentAlignment = Alignment.Center,
     ) {
         UiIconView(
             icon = artwork,
-            modifier = Modifier.size(76.dp),
+            modifier = Modifier.size(52.dp),
             tint = Color.Unspecified,
         )
     }
@@ -423,21 +421,18 @@ private fun MediaActionButton(
         return
     }
 
-    var toggleCount by remember { mutableIntStateOf(0) }
     val haptics = LocalHapticFeedback.current
     val contentDescription =
         action.contentDescription?.toString()?.let { ContentDescription.Loaded(it) }
     Box(
         modifier =
-            Modifier.squishAnimation(toggleCount)
-                .size(buttonSize)
-                .clip(CircleShape)
-                .background(containerColor)
-                .clickable(enabled = action.action != null) {
+            Modifier.pressScale(enabled = action.action != null) {
                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     action.action?.run()
-                    toggleCount++
-                },
+                }
+                .size(buttonSize)
+                .clip(CircleShape)
+                .background(containerColor),
         contentAlignment = Alignment.Center,
     ) {
         val actualIcon = if (iconOverrideId != null) {
@@ -473,47 +468,4 @@ private fun Long.toClampedInt(): Int {
 
 private fun formatElapsedTime(milliseconds: Long): String {
     return DateUtils.formatElapsedTime(milliseconds / DateUtils.SECOND_IN_MILLIS)
-}
-
-@Composable
-private fun Modifier.squishAnimation(toggleCount: Int): Modifier {
-    val scaleX = remember { Animatable(1f, visibilityThreshold = 0.01f) }
-    val scaleY = remember { Animatable(1f, visibilityThreshold = 0.01f) }
-    val currentToggleCount by rememberUpdatedState(toggleCount)
-    LaunchedEffect(Unit) {
-        snapshotFlow { currentToggleCount }
-            .drop(1)
-            .collectLatest {
-                scaleX.snapTo(1f)
-                scaleY.snapTo(1f)
-                coroutineScope {
-                    launch {
-                        scaleX.animateTo(
-                            targetValue = 1f,
-                            animationSpec = keyframes {
-                                durationMillis = 400
-                                1.066f at 120 using FastOutSlowInEasing
-                                0.967f at 260
-                                1f at 400
-                            },
-                        )
-                    }
-                    launch {
-                        scaleY.animateTo(
-                            targetValue = 1f,
-                            animationSpec = keyframes {
-                                durationMillis = 400
-                                0.945f at 120 using FastOutSlowInEasing
-                                1.033f at 260
-                                1f at 400
-                            },
-                        )
-                    }
-                }
-            }
-    }
-    return this.graphicsLayer {
-        this.scaleX = scaleX.value
-        this.scaleY = scaleY.value
-    }
 }
