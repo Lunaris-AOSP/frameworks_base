@@ -17,9 +17,12 @@
 package com.android.systemui.qs.panels.ui.compose
 
 import android.app.PendingIntent
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.Matrix as AndroidMatrix
+import android.graphics.Path as AndroidPath
+import android.graphics.PathMeasure as AndroidPathMeasure
+import android.graphics.RectF
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
@@ -36,9 +39,8 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -67,8 +69,8 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MaterialShapes
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -80,13 +82,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asAndroidPath
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.asComposePath
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.layout.ContentScale
@@ -95,29 +96,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import android.graphics.Matrix as AndroidMatrix
-import android.graphics.Path as AndroidPath
 import androidx.graphics.shapes.toPath
-import android.graphics.PathMeasure as AndroidPathMeasure
-import android.graphics.RectF
-
-import com.android.settingslib.media.MediaOutputConstants
-
-import com.android.systemui.ActivityIntentHelper
 import com.android.systemui.Dependency
-import com.android.systemui.media.dialog.MediaOutputDialogReceiver
 import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CustomColorScheme
 import com.android.systemui.statusbar.NotificationLockscreenUserManager
 import com.android.systemui.statusbar.policy.KeyguardStateController
-
 import kotlinx.coroutines.delay
 
 @Composable
 fun MaterialMusicPlayer(modifier: Modifier = Modifier) {
-    val context = LocalContext.current
     val keyguardStateController = remember { Dependency.get(KeyguardStateController::class.java) }
-    val activityIntentHelper = remember { ActivityIntentHelper(context) }
     val activityStarter = remember { Dependency.get(ActivityStarter::class.java) }
     val lockscreenUserManager = remember { Dependency.get(NotificationLockscreenUserManager::class.java) }
 
@@ -127,7 +116,6 @@ fun MaterialMusicPlayer(modifier: Modifier = Modifier) {
         mediaState = mediaState,
         keyguardStateController = keyguardStateController,
         activityStarter = activityStarter,
-        activityIntentHelper = activityIntentHelper,
         lockscreenUserManager = lockscreenUserManager,
         modifier = modifier,
     )
@@ -227,7 +215,6 @@ private fun MaterialMusicPlayerContent(
     mediaState: SharedMediaState,
     keyguardStateController: KeyguardStateController,
     activityStarter: ActivityStarter,
-    activityIntentHelper: ActivityIntentHelper,
     lockscreenUserManager: NotificationLockscreenUserManager,
     modifier: Modifier = Modifier,
 ) {
@@ -272,8 +259,6 @@ private fun MaterialMusicPlayerContent(
         else                                  -> Icons.Filled.Smartphone
     }
 
-    // Optimistic play/pause state so the UI responds immediately without waiting
-    // for the next MediaController callback round-trip.
     var localIsPlaying by remember(mediaState.controller, mediaState.isPlaying) {
         mutableStateOf(mediaState.isPlaying)
     }
@@ -303,9 +288,7 @@ private fun MaterialMusicPlayerContent(
     val onVariant = MaterialTheme.colorScheme.onSurfaceVariant
     val hasAlbumArt = mediaState.albumArt != null
     val hasController = mediaState.controller != null
-    val artTint = mediaState.albumArtTint ?: accentColor
 
-    // Helper: resolve or build a PendingIntent for the active session's app.
     fun resolveSessionPendingIntent(): PendingIntent? {
         val pkg = mediaState.packageName ?: return null
         return mediaState.controller?.sessionActivity
@@ -315,36 +298,17 @@ private fun MaterialMusicPlayerContent(
                 ?.let { PendingIntent.getActivity(context, 0, it, PendingIntent.FLAG_IMMUTABLE) }
     }
 
-    // Helper: launch the session's app, handling lock-screen correctly.
     fun launchSessionApp() {
         val pending = resolveSessionPendingIntent() ?: return
-        val showOverLockscreen = keyguardStateController.isShowing &&
-            activityIntentHelper.wouldPendingShowOverLockscreen(
-                pending,
-                lockscreenUserManager.currentUserId,
-            )
-        if (showOverLockscreen) {
-            activityStarter.startPendingIntentMaybeDismissingKeyguard(
-                pending,
-                /* dismissShade = */ true,
-                /* intentSentUiThreadCallback = */ null,
-                /* animationController = */ null,
-                /* fillIntent = */ null,
-                /* extraOptions = */ null,
-                /* customMessage = */ null,
-            )
-        } else {
-            activityStarter.postStartActivityDismissingKeyguard(pending, null)
-        }
+        activityStarter.postStartActivityDismissingKeyguard(pending, null)
     }
 
-    // Helper: send the broadcast to open the media output picker.
     fun launchMediaOutputDialog() {
         val pkg = mediaState.packageName ?: return
         context.sendBroadcast(
-            Intent(MediaOutputConstants.ACTION_LAUNCH_MEDIA_OUTPUT_DIALOG).apply {
-                putExtra(MediaOutputConstants.EXTRA_PACKAGE_NAME, pkg)
-                component = ComponentName("com.android.systemui", MediaOutputDialogReceiver::class.java.name)
+            Intent("com.android.systemui.action.LAUNCH_MEDIA_OUTPUT_DIALOG").apply {
+                putExtra("package_name", pkg)
+                setPackage("com.android.systemui")
             }
         )
     }
@@ -369,7 +333,8 @@ private fun MaterialMusicPlayerContent(
         modifier = modifier
             .fillMaxSize()
             .clip(RoundedCornerShape(28.dp))
-            .background(tileColor),
+            .background(tileColor)
+            .clickable(enabled = hasController, onClick = ::launchSessionApp),
     ) {
         // Album art background
         mediaState.albumArt?.let { bmp ->
@@ -397,8 +362,7 @@ private fun MaterialMusicPlayerContent(
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(enabled = hasController, onClick = ::launchSessionApp),
+                    .fillMaxWidth(),
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -454,24 +418,30 @@ private fun MaterialMusicPlayerContent(
             // ---- Bottom row: playback controls ----
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 val controlTint = if (hasAlbumArt) Color.White else onSurface
                 val controlTintDisabled = controlTint.copy(alpha = 0.38f)
 
-                SkipButton(
-                    icon = {
-                        Icon(
-                            Icons.Filled.SkipPrevious, "Previous",
-                            tint = if (hasController) controlTint else controlTintDisabled,
-                            modifier = Modifier.size(30.dp),
-                        )
-                    },
-                    enabled = hasController,
-                    onClick = { mediaState.controller?.transportControls?.skipToPrevious() },
-                )
+                // Left Slot (Previous Button)
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    SkipButton(
+                        icon = {
+                            Icon(
+                                Icons.Filled.SkipPrevious, "Previous",
+                                tint = if (hasController) controlTint else controlTintDisabled,
+                                modifier = Modifier.size(30.dp),
+                            )
+                        },
+                        enabled = hasController,
+                        onClick = { mediaState.controller?.transportControls?.skipToPrevious() },
+                    )
+                }
 
+                // Center Slot (Play / Pause Button)
                 val ringColor = if (hasAlbumArt) Color.White else MaterialTheme.colorScheme.primary
                 val ringProgress = if (mediaState.durationMs > 0) {
                     displayPositionMs.toFloat() / mediaState.durationMs.toFloat()
@@ -495,22 +465,30 @@ private fun MaterialMusicPlayerContent(
                             .clip(CircleShape)
                             .background(
                                 when {
-                                    !hasController -> Color.Transparent
+                                    !hasController -> MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f)
                                     hasAlbumArt -> Color.White.copy(alpha = 0.3f)
                                     else -> accentColor
                                 }
                             )
                             .clickable(playSrc, indication = null) {
-                                val ctrl = mediaState.controller ?: return@clickable
-                                if (localIsPlaying) {
-                                    localIsPlaying = false
-                                    ctrl.transportControls.pause()
+                                val ctrl = mediaState.controller
+                                val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+
+                                if (ctrl != null) {
+                                    if (localIsPlaying) {
+                                        localIsPlaying = false
+                                        ctrl.transportControls.pause()
+                                    } else {
+                                        localIsPlaying = true
+                                        ctrl.transportControls.play()
+                                    }
                                 } else {
-                                    localIsPlaying = true
-                                    ctrl.transportControls.play()
-                                    val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-                                    am?.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY))
-                                    am?.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY))
+                                    am?.dispatchMediaKeyEvent(
+                                        KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+                                    )
+                                    am?.dispatchMediaKeyEvent(
+                                        KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+                                    )
                                 }
                             },
                         contentAlignment = Alignment.Center,
@@ -535,19 +513,26 @@ private fun MaterialMusicPlayerContent(
                     }
                 }
 
-                SkipButton(
-                    icon = {
-                        Icon(
-                            Icons.Filled.SkipNext, "Next",
-                            tint = if (hasController) controlTint else controlTintDisabled,
-                            modifier = Modifier.size(30.dp),
-                        )
-                    },
-                    enabled = hasController,
-                    onClick = { mediaState.controller?.transportControls?.skipToNext() },
-                )
+                // Right Slot (Next Button)
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    SkipButton(
+                        icon = {
+                            Icon(
+                                Icons.Filled.SkipNext, "Next",
+                                tint = if (hasController) controlTint else controlTintDisabled,
+                                modifier = Modifier.size(30.dp),
+                            )
+                        },
+                        enabled = hasController,
+                        onClick = { mediaState.controller?.transportControls?.skipToNext() },
+                    )
+                }
             }
 
+            // ---- Time stamps ----
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -567,6 +552,10 @@ private fun MaterialMusicPlayerContent(
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Cookie Shape Progress Ring
+// ---------------------------------------------------------------------------
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -590,7 +579,6 @@ private fun ProgressRing(
     Canvas(modifier = modifier) {
         val stroke = strokeWidth.toPx()
         val diameter = size.minDimension - stroke
-        val radius = diameter / 2f
         val center = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
 
         val cookieDiameter = maxOf(cookieBounds.width(), cookieBounds.height())
