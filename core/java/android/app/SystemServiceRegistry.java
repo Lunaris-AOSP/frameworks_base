@@ -365,6 +365,16 @@ public final class SystemServiceRegistry {
 
     @RavenwoodRedirect
     private static void registerServices() {
+        registerService(Context.OPTIMIZATION_SERVICE, android.os.OptimizationManager.class,
+                new CachedServiceFetcher<android.os.OptimizationManager>() {
+                    @Override
+                    public android.os.OptimizationManager createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        IBinder binder = ServiceManager.getServiceOrThrow(Context.OPTIMIZATION_SERVICE);
+                        return new android.os.OptimizationManager(
+                                android.os.IOptimizationEngine.Stub.asInterface(binder));
+                    }
+                });
         //CHECKSTYLE:OFF IndentationCheck
         registerService(Context.ACCESSIBILITY_SERVICE, AccessibilityManager.class,
                 new CachedServiceFetcher<AccessibilityManager>() {

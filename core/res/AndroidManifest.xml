@@ -1453,6 +1453,12 @@
     <permission android:name="android.permission.LOCATION_BYPASS"
                 android:protectionLevel="signature|privileged"/>
 
+    <!-- Allows management of device optimization.
+       @hide
+    -->
+    <permission android:name="android.permission.MANAGE_DEVICE_OPTIMIZATION"
+                android:protectionLevel="signature|privileged" />
+
     <!-- ====================================================================== -->
     <!-- Permissions for accessing the call log                                 -->
     <!-- ====================================================================== -->

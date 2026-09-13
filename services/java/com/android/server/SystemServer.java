@@ -1471,6 +1471,10 @@ public final class SystemServer implements Dumpable {
         mSystemServiceManager.startService(resourcesService);
         t.traceEnd();
 
+        t.traceBegin("StartOptimizationManagerService");
+        mSystemServiceManager.startService(com.android.server.os.OptimizationManagerService.class);
+        t.traceEnd();
+
         t.traceBegin("StartSensorPrivacyService");
         mSystemServiceManager.startService(new SensorPrivacyService(mSystemContext));
         t.traceEnd();
