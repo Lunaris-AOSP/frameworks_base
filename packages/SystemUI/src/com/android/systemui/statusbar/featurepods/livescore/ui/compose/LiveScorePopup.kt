@@ -64,7 +64,6 @@ fun LiveScorePopup(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // App/team logo framed by the emerald badge ring; the logo keeps its own colors.
             model.icon?.let { icon ->
                 IslandGlyphBadge(accent = accent, size = 52.dp) {
                     Icon(

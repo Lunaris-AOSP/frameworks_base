@@ -42,7 +42,7 @@ fun ShareScreenPrivacyIndicatorPopup() {
     ) {
         Button(
             onClick = { /* TODO(b/440627312): End screen sharing session */ },
-            shape = RoundedCornerShape(20.dp), // Outer radius (28) - border (8)
+            shape = RoundedCornerShape(20.dp),
             modifier = Modifier.fillMaxSize().padding(8.dp),
             contentPadding = PaddingValues(0.dp),
             colors =

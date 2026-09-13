@@ -148,7 +148,7 @@ private fun parseLrc(lrcText: String): List<LyricLine> {
             val fracMs = if (match.groupValues[3].length == 3) frac else frac * 10L
             val timestampMs = (min * 60 + sec) * 1000L + fracMs
             val text = match.groupValues[4].trim()
-            if (text.isNotEmpty() || lines.isNotEmpty()) { // Skip initial empty lines
+            if (text.isNotEmpty() || lines.isNotEmpty()) {
                 lines.add(LyricLine(timestampMs, text))
             }
         }

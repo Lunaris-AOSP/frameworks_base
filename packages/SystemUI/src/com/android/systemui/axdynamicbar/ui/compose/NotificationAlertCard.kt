@@ -73,7 +73,7 @@ import com.android.compose.animation.scene.SceneTransitionLayout
 import com.android.compose.animation.scene.rememberMutableSceneTransitionLayoutState
 import com.android.compose.animation.scene.transitions
 import com.android.systemui.axdynamicbar.shared.IslandActions
-import com.android.systemui.axdynamicbar.model.IslandEvent
+import com.android.systemui.islandevents.model.IslandEvent
 import com.android.systemui.axdynamicbar.shared.AlphaIconBg
 import com.android.systemui.axdynamicbar.shared.AlphaSubtle
 import com.android.systemui.axdynamicbar.shared.CardBg

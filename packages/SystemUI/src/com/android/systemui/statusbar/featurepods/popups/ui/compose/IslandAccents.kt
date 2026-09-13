@@ -40,6 +40,13 @@ object IslandAccents {
     /** Live score. */
     val Score = Color(0xFF34D399)
 
+    /** Added system events share the same fixed, feature-specific palette. */
+    val Battery = Color(0xFF34D399)
+    val Connectivity = Color(0xFF60A5FA)
+    val Calls = Color(0xFF34D399)
+    val Notifications = Color(0xFFA78BFA)
+    val System = Color(0xFF22C7D6)
+
     /** Translucent fill used behind a feature glyph inside [IslandGlyphBadge]. */
     fun badgeFill(accent: Color): Color = accent.copy(alpha = 0.20f)
 }

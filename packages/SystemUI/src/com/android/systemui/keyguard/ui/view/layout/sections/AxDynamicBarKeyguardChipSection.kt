@@ -10,7 +10,7 @@ import androidx.constraintlayout.widget.ConstraintSet
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.android.compose.theme.PlatformTheme
-import com.android.systemui.axdynamicbar.model.IslandEvent
+import com.android.systemui.islandevents.model.IslandEvent
 import com.android.systemui.axdynamicbar.ui.AxDynamicBarChipViewModel
 import com.android.systemui.axdynamicbar.ui.compose.AxDynamicBarKeyguardChip
 import com.android.systemui.keyguard.domain.interactor.KeyguardClockInteractor

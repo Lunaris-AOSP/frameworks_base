@@ -14,7 +14,7 @@ import android.media.session.PlaybackState
 import android.os.Handler
 import android.os.SystemClock
 import android.util.Log
-import com.android.systemui.axdynamicbar.model.IslandEvent
+import com.android.systemui.islandevents.model.IslandEvent
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Background

@@ -50,7 +50,7 @@ import androidx.compose.ui.unit.dp
 import com.android.systemui.axdynamicbar.shared.IslandActions
 import com.android.systemui.haptics.slider.compose.ui.SliderHapticsViewModel
 import kotlinx.coroutines.delay
-import com.android.systemui.axdynamicbar.model.IslandEvent
+import com.android.systemui.islandevents.model.IslandEvent
 import com.android.systemui.axdynamicbar.shared.*
 import com.android.systemui.res.R
 
@@ -262,7 +262,6 @@ internal fun CallExpanded(event: IslandEvent.Call, interactor: IslandActions) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(SpaceLg),
         ) {
-            // Caller photo or app icon
             val photo = event.callerPhoto ?: event.appIcon
             if (photo != null) {
                 Image(
@@ -293,13 +292,11 @@ internal fun CallExpanded(event: IslandEvent.Call, interactor: IslandActions) {
                 )
             }
 
-            // Call timer for active calls
             if (!isIncoming && event.callStartTimeMs > 0L) {
                 CallElapsedTimer(event.callStartTimeMs, accent)
             }
         }
 
-        // Number subtitle if caller name is present
         if (event.callerName != null && event.number != null) {
             Text(
                 event.number,
@@ -308,7 +305,6 @@ internal fun CallExpanded(event: IslandEvent.Call, interactor: IslandActions) {
             )
         }
 
-        // Action buttons
         if (event.actions.isNotEmpty()) {
             Row(
                 modifier = Modifier.fillMaxWidth(),

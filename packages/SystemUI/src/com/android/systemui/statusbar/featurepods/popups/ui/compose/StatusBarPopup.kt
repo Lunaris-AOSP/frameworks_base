@@ -374,6 +374,7 @@ private fun LayoutCoordinates.boundsInScreen(view: android.view.View): Rect {
     return boundsInRoot().translate(Offset(location[0].toFloat(), location[1].toFloat()))
 }
 
+/** Renders the per-feature card for [viewModel]; the swipe pager slides between these. */
 @Composable
 private fun IslandPopupContent(viewModel: PopupChipModel.Shown) {
     when (val popupContent = viewModel.popupContent) {
@@ -398,6 +399,7 @@ private fun IslandPopupContent(viewModel: PopupChipModel.Shown) {
         is PopupContentModel.Flashlight -> FlashlightPopup(model = popupContent.model)
         is PopupContentModel.Stopwatch -> StopwatchPopup(model = popupContent.model)
         is PopupContentModel.Alarm -> AlarmPopup(model = popupContent.model)
+        is PopupContentModel.SystemEvent -> SystemEventPopup(model = popupContent)
         PopupContentModel.None ->
             when (viewModel.chipId) {
                 is PopupChipId.AvControlsIndicator -> AvControlsChipPopup()

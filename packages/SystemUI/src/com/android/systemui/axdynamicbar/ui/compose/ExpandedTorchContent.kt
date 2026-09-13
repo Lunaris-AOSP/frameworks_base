@@ -32,7 +32,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.android.systemui.axdynamicbar.shared.IslandActions
 import com.android.systemui.haptics.slider.compose.ui.SliderHapticsViewModel
-import com.android.systemui.axdynamicbar.model.IslandEvent
+import com.android.systemui.islandevents.model.IslandEvent
 import com.android.systemui.axdynamicbar.shared.*
 import com.android.systemui.flashlight.ui.composable.VerticalFlashlightSlider
 import com.android.systemui.res.R

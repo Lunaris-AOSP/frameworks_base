@@ -1,5 +1,7 @@
 package com.android.systemui.axdynamicbar.model
 
+import com.android.systemui.islandevents.model.IslandEvent
+
 data class IslandUiState(
     val events: List<IslandEvent> = emptyList(),
     val islandState: IslandState = IslandState.HIDDEN,

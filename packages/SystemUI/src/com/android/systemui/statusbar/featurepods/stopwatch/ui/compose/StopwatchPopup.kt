@@ -42,12 +42,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.android.systemui.common.ui.compose.Icon
+import com.android.systemui.statusbar.featurepods.popups.ui.compose.rememberStopwatchText
 import com.android.systemui.statusbar.featurepods.popups.ui.compose.IslandAccents
 import com.android.systemui.statusbar.featurepods.popups.ui.compose.IslandGlyphBadge
 import com.android.systemui.statusbar.featurepods.popups.ui.compose.PopupActionChips
 import com.android.systemui.statusbar.featurepods.popups.ui.compose.PopupSurface
 import com.android.systemui.statusbar.featurepods.popups.ui.compose.pressScale
-import com.android.systemui.statusbar.featurepods.popups.ui.compose.rememberElapsedDurationText
 import com.android.systemui.statusbar.featurepods.stopwatch.shared.model.StopwatchPopupModel
 
 private val PopupShape = RoundedCornerShape(32.dp)
@@ -121,8 +121,7 @@ fun StopwatchPopup(
 
             Text(
                 text =
-                    model.elapsedTimeText
-                        ?: rememberElapsedDurationText(model.baseElapsedRealtimeMs),
+                    rememberStopwatchText(model),
                 style = MaterialTheme.typography.displaySmall,
                 fontWeight = FontWeight.Bold,
                 color = accent,

@@ -131,7 +131,7 @@ fun StatusBarPopupChip(
                     )
                 },
     ) {
-        val text = viewModel.chipText
+        val text = rememberChipText(viewModel)
         val startPadding = if (isMediaChip) 6.dp else 4.dp
         val endPadding = if (text != null) 8.dp else startPadding
         val chipHeight =
@@ -274,7 +274,7 @@ private fun ChipIcons(
                         Modifier.background(color = iconHoverBackgroundColor, shape = CircleShape)
                             .padding(2.dp)
                     },
-            tint = if (shouldUseArtworkStyle) Color.Unspecified else iconColor,
+            tint = if (shouldUseArtworkStyle || !chipIcon.tint) Color.Unspecified else iconColor,
         )
     }
 }

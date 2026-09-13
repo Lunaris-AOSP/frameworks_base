@@ -68,7 +68,6 @@ fun StatusBarPopupChipsContainer(
         }
     }
 
-    //    TODO(b/385353140): Add padding and spacing for this container according to UX specs.
     Box {
         Row(
             modifier = modifier.padding(horizontal = 8.dp),
@@ -84,7 +83,7 @@ fun StatusBarPopupChipsContainer(
             }
             popupAnchorChip?.let { anchoredChip ->
                 StatusBarPopup(
-                    viewModel = anchoredChip,
+                    viewModel = shownChip ?: anchoredChip,
                     isVisible = popupVisible,
                     chipBoundsInScreen = anchorBoundsByChip[anchoredChip.chipId],
                 )

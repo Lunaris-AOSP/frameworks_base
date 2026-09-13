@@ -34,7 +34,6 @@ private val PressDownSpring = spring<Float>(stiffness = Spring.StiffnessMediumLo
 private val ReleaseSpring =
     spring<Float>(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
 
-
 fun Modifier.pressScale(
     enabled: Boolean = true,
     pressedScale: Float = 0.90f,

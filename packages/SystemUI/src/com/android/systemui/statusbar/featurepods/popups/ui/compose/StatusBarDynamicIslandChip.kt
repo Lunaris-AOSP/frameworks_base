@@ -71,16 +71,21 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.android.systemui.common.shared.model.Icon as IconModel
 import com.android.systemui.common.ui.compose.Icon
+import com.android.systemui.res.R
 import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings
 import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.observeDynamicIslandScale
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentModel
+import com.android.systemui.statusbar.featurepods.popups.ui.model.SystemEventKind
 import com.android.systemui.statusbar.featurepods.screenrecord.shared.model.ScreenRecordPopupModel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
@@ -229,11 +234,11 @@ fun StatusBarDynamicIslandChip(
                             Modifier
                         }
                     ),
-                tint = if (isArtworkLike) Color.Unspecified else chipContentColor,
+                tint = if (isArtworkLike || !chipIcon.tint) Color.Unspecified else chipContentColor,
             )
         }
 
-        viewModel.chipText
+        rememberChipText(viewModel)
             ?.takeIf {
                 !isMediaChip &&
                     viewModel.popupContent !is PopupContentModel.ScreenRecord &&
@@ -284,10 +289,7 @@ fun StatusBarDynamicIslandChip(
             is PopupContentModel.Stopwatch ->
                 StatusContent(
                     text =
-                        popupContent.model.elapsedTimeText
-                            ?: rememberElapsedDurationText(
-                                popupContent.model.baseElapsedRealtimeMs
-                            ),
+                        rememberStopwatchText(popupContent.model),
                     color = chipContentColor,
                     showSwipeHint = pageCount > 1,
                 )
@@ -320,18 +322,42 @@ private fun UtilityStatusIslandChip(
             animationSpec = spring(dampingRatio = 0.55f, stiffness = 900f),
             label = "utilityChipPressScale",
         )
+    val isSystemEvent = viewModel.popupContent is PopupContentModel.SystemEvent
+    val omitCameraGap = when (val content = viewModel.popupContent) {
+        is PopupContentModel.ScreenRecord -> true
+        is PopupContentModel.Stopwatch -> true
+        is PopupContentModel.SystemEvent ->
+            content.kind == SystemEventKind.Bluetooth ||
+                content.kind == SystemEventKind.Charging ||
+                content.kind == SystemEventKind.Unlock ||
+                content.kind == SystemEventKind.Recording ||
+                content.kind == SystemEventKind.Timer
+        else -> false
+    }
+    val cameraGapWidth = if (omitCameraGap) 0.dp else cutoutSpec.embeddedGapWidth
+    val liveChipText = rememberChipText(viewModel).orEmpty()
+    val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val eventTextWidth = if (isSystemEvent) {
+        val measured = textMeasurer.measure(liveChipText,
+            style = MaterialTheme.typography.labelLarge, maxLines = 1)
+        with(density) { measured.size.width.toDp() } + 18.dp * widthScale
+    } else 0.dp
     val rightSegmentWidth =
-        when (viewModel.popupContent) {
+        (when (viewModel.popupContent) {
             is PopupContentModel.Flashlight -> 52.dp
             is PopupContentModel.Alarm -> 72.dp
+            is PopupContentModel.SystemEvent -> 60.dp
             else -> 80.dp
-        } * widthScale
-    val connectedIslandWidth =
+        } * widthScale).coerceAtLeast(eventTextWidth)
+    val connectedIslandWidth = if (isSystemEvent) {
+        rightSegmentWidth * 2 + cameraGapWidth
+    } else
         ((CompactUtilityConnectedIslandChromeWidth * widthScale) +
-                cutoutSpec.embeddedGapWidth +
+                cameraGapWidth +
                 rightSegmentWidth)
             .coerceIn(
-                CompactUtilityConnectedIslandMinWidth * widthScale,
+                (if (omitCameraGap) 0.dp else CompactUtilityConnectedIslandMinWidth) * widthScale,
                 CompactUtilityConnectedIslandMaxWidth * widthScale,
             )
     val utilityText =
@@ -343,10 +369,11 @@ private fun UtilityStatusIslandChip(
                         rememberElapsedDurationText(model.startElapsedRealtimeMs)
                 }
             is PopupContentModel.Stopwatch ->
-                popupContent.model.elapsedTimeText
-                    ?: rememberElapsedDurationText(popupContent.model.baseElapsedRealtimeMs)
+                rememberStopwatchText(popupContent.model)
             is PopupContentModel.Alarm -> viewModel.chipText.orEmpty()
             is PopupContentModel.Flashlight -> viewModel.chipText.orEmpty()
+            is PopupContentModel.SystemEvent -> if (popupContent.kind == SystemEventKind.Timer)
+                rememberTimerText(popupContent) else liveChipText
             else -> ""
         }
 
@@ -359,6 +386,9 @@ private fun UtilityStatusIslandChip(
                 }
                 .defaultMinSize(minHeight = 32.dp * heightScale)
                 .width(connectedIslandWidth)
+                .then(if (isSystemEvent) Modifier.semantics {
+                    contentDescription = viewModel.contentDescription.orEmpty()
+                } else Modifier)
                 .clip(RoundedCornerShape(50))
                 .background(Color.Black)
                 .border(width = 1.dp, color = chipOutline, shape = RoundedCornerShape(50))
@@ -371,15 +401,34 @@ private fun UtilityStatusIslandChip(
         horizontalArrangement = Arrangement.spacedBy(0.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Spacer(modifier = Modifier.width(10.dp * widthScale))
-        CollapsedGlyphBadge(
-            icon = viewModel.icons.first().icon,
-            accent = islandChipAccentFor(viewModel.popupContent) ?: chipContentColor,
-            content = viewModel.popupContent,
-            badgeSize = 20.dp * widthScale,
-            iconSize = 13.dp * widthScale,
-        )
-        Spacer(modifier = Modifier.width(cutoutSpec.embeddedGapWidth))
+        if (isSystemEvent) {
+            Box(
+                modifier = Modifier.width(rightSegmentWidth).padding(start = 12.dp * widthScale),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                val chipIcon = viewModel.icons.first()
+                val event = viewModel.popupContent as PopupContentModel.SystemEvent
+                if (event.kind == SystemEventKind.Charging) {
+                    ChargingChipGlyph(
+                        pulse = event.pulse,
+                        modifier = Modifier.size(18.dp * widthScale),
+                    )
+                } else {
+                    Icon(icon = chipIcon.icon, modifier = Modifier.size(18.dp * widthScale),
+                        tint = if (chipIcon.tint) chipContentColor else Color.Unspecified)
+                }
+            }
+        } else {
+            Spacer(modifier = Modifier.width(10.dp * widthScale))
+            CollapsedGlyphBadge(
+                icon = viewModel.icons.first().icon,
+                accent = islandChipAccentFor(viewModel.popupContent) ?: chipContentColor,
+                content = viewModel.popupContent,
+                badgeSize = 20.dp * widthScale,
+                iconSize = 13.dp * widthScale,
+            )
+        }
+        Spacer(modifier = Modifier.width(cameraGapWidth))
         Box(
             modifier =
                 Modifier.width(rightSegmentWidth)
@@ -387,7 +436,7 @@ private fun UtilityStatusIslandChip(
                         start = 6.dp * widthScale,
                         top = 7.dp * heightScale,
                         bottom = 7.dp * heightScale,
-                        end = 6.dp * widthScale,
+                        end = (if (isSystemEvent) 12.dp else 6.dp) * widthScale,
                     ),
             contentAlignment = Alignment.CenterEnd,
         ) {
@@ -401,8 +450,29 @@ private fun UtilityStatusIslandChip(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        Spacer(modifier = Modifier.width(10.dp * widthScale))
+        if (!isSystemEvent) Spacer(modifier = Modifier.width(10.dp * widthScale))
     }
+}
+
+@Composable
+private fun ChargingChipGlyph(pulse: Boolean, modifier: Modifier = Modifier) {
+    val alpha = if (pulse) {
+        val transition = rememberInfiniteTransition(label = "charging_chip")
+        val animatedAlpha by transition.animateFloat(
+            initialValue = 0.4f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                tween(800, easing = FastOutSlowInEasing), RepeatMode.Reverse,
+            ),
+            label = "charging_bolt_alpha",
+        )
+        animatedAlpha
+    } else 1f
+    Icon(
+        icon = IconModel.Resource(R.drawable.dynamic_island_charging, null),
+        tint = IslandAccents.Battery,
+        modifier = modifier.graphicsLayer { this.alpha = alpha },
+    )
 }
 
 @Composable
@@ -451,10 +521,8 @@ private val CompactUtilityIslandWidth = 74.dp
 private val CompactUtilityConnectedIslandChromeWidth = 42.dp
 private val CompactUtilityConnectedIslandMinWidth = 132.dp
 private val CompactUtilityConnectedIslandMaxWidth = 188.dp
-private val DynamicIslandEmbeddedGapFallbackWidth = 38.dp
-private val DynamicIslandEmbeddedGapMinWidth = 34.dp
-private val DynamicIslandEmbeddedGapMaxWidth = 88.dp
-private val DynamicIslandEmbeddedGapSidePadding = 10.dp
+private val DynamicIslandEmbeddedGapWidth = 16.dp
+
 internal val DynamicIslandCompanionDiameter = 34.dp
 internal val DynamicIslandCompanionGap = 8.dp
 
@@ -479,19 +547,13 @@ fun rememberDynamicIslandCutoutSpec(): DynamicIslandCutoutSpec {
     return with(density) {
         if (topCutout == null || rootWidthPx <= 0) {
             DynamicIslandCutoutSpec(
-                embeddedGapWidth = DynamicIslandEmbeddedGapFallbackWidth,
+                embeddedGapWidth = DynamicIslandEmbeddedGapWidth,
                 horizontalOffset = 0.dp,
             )
         } else {
-            val embeddedGapWidthDp =
-                (topCutout.width().toDp() + (DynamicIslandEmbeddedGapSidePadding * 2))
-                    .coerceIn(
-                        DynamicIslandEmbeddedGapMinWidth,
-                        DynamicIslandEmbeddedGapMaxWidth,
-                    )
             val horizontalOffsetDp = (topCutout.exactCenterX() - (rootWidthPx / 2f)).toDp()
             DynamicIslandCutoutSpec(
-                embeddedGapWidth = embeddedGapWidthDp,
+                embeddedGapWidth = topCutout.width().toDp() + DynamicIslandEmbeddedGapWidth,
                 horizontalOffset = horizontalOffsetDp,
             )
         }
@@ -505,7 +567,13 @@ private fun PopupContentModel.isUtilityStatusContent(): Boolean {
     return this is PopupContentModel.ScreenRecord ||
         this is PopupContentModel.Stopwatch ||
         this is PopupContentModel.Alarm ||
-        this is PopupContentModel.Flashlight
+        this is PopupContentModel.Flashlight ||
+        (this is PopupContentModel.SystemEvent && kind in setOf(
+            SystemEventKind.Notification, SystemEventKind.Ongoing, SystemEventKind.Unlock,
+            SystemEventKind.Call, SystemEventKind.Bluetooth, SystemEventKind.Ringer,
+            SystemEventKind.RecentApps, SystemEventKind.Hotspot,
+            SystemEventKind.Charging, SystemEventKind.Recording, SystemEventKind.Timer,
+        ))
 }
 
 private fun compactIslandWidthFor(content: PopupContentModel): Dp? {
@@ -678,7 +746,8 @@ internal fun CompanionChip(
                 ),
         contentAlignment = Alignment.Center,
     ) {
-        val icon = viewModel.icons.firstOrNull()?.icon
+        val chipIcon = viewModel.icons.firstOrNull()
+        val icon = chipIcon?.icon
         val content = viewModel.popupContent
         if (icon != null) {
             if (content is PopupContentModel.Media) {
@@ -691,7 +760,8 @@ internal fun CompanionChip(
                 Icon(
                     icon = icon,
                     modifier = Modifier.size(diameter * 0.46f),
-                    tint = islandChipAccentFor(content) ?: chipContentColor,
+                    tint = if (chipIcon?.tint == false) Color.Unspecified
+                        else islandChipAccentFor(content) ?: chipContentColor,
                 )
             }
         }
@@ -718,7 +788,6 @@ private data class DynamicIslandCollapseState(
 
 @Composable
 private fun rememberDynamicIslandCollapseState(isOpen: Boolean): DynamicIslandCollapseState {
-    // 0f = fully expanded pill, 1f = folded away into the popup.
     val progress = remember { Animatable(if (isOpen) 1f else 0f, visibilityThreshold = 0.0005f) }
     val currentIsOpen by rememberUpdatedState(isOpen)
 

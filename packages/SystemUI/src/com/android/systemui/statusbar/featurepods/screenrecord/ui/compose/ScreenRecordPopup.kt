@@ -64,7 +64,6 @@ fun ScreenRecordPopup(
 ) {
     val accent = IslandAccents.Recording
 
-    // SmartIsland-style live pulse on the recording dot.
     val pulse = rememberInfiniteTransition(label = "rec_pulse")
     val pulseScale by pulse.animateFloat(
         initialValue = 0.9f,
@@ -143,7 +142,6 @@ fun ScreenRecordPopup(
                         fontWeight = FontWeight.Bold,
                         color = accent,
                     )
-                    // Solid accent stop chip with a square glyph (SmartIsland motif).
                     Box(
                         modifier =
                             Modifier.pressScale(onClick = model.stopRecording)

@@ -26,6 +26,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInteractor
 import com.android.systemui.keyguard.shared.model.KeyguardState
@@ -43,6 +44,8 @@ import com.android.systemui.statusbar.featurepods.sharescreen.ui.viewmodel.Share
 import com.android.systemui.statusbar.featurepods.stopwatch.ui.viewmodel.StopwatchPopupChipViewModel
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
@@ -57,6 +60,7 @@ class StatusBarPopupChipsViewModel
 constructor(
     @Application private val context: Context,
     private val keyguardTransitionInteractor: KeyguardTransitionInteractor,
+    systemEventChipsFactory: SystemEventPopupChipsViewModel.Factory,
     mediaControlChipFactory: MediaControlChipViewModel.Factory,
     screenRecordChipFactory: ScreenRecordPopupChipViewModel.Factory,
     liveScoreChipFactory: LiveScorePopupChipViewModel.Factory,
@@ -67,6 +71,7 @@ constructor(
     shareScreenPrivacyIndicatorFactory: ShareScreenPrivacyIndicatorViewModel.Factory,
 ) : ExclusiveActivatable() {
 
+    private val systemEventChips by lazy { systemEventChipsFactory.create() }
     private val mediaControlChip by lazy { mediaControlChipFactory.create() }
     private val screenRecordChip by lazy { screenRecordChipFactory.create() }
     private val liveScoreChip by lazy { liveScoreChipFactory.create() }
@@ -87,6 +92,18 @@ constructor(
         }
 
     private var isOnLockscreen by mutableStateOf(false)
+    private var isReadyForAutoPopup by mutableStateOf(false)
+    private var autoPopupJob: Job? = null
+
+    private fun showPopup(id: PopupChipId?) {
+        autoPopupJob?.cancel()
+        autoPopupJob = null
+        if (currentShownPopupChipId != id) {
+            systemEventChips.chips.firstOrNull { it.chipId == currentShownPopupChipId }?.onPopupHidden?.invoke()
+        }
+        currentShownPopupChipId = id
+        systemEventChips.chips.firstOrNull { it.chipId == id }?.onPopupShown?.invoke()
+    }
     /** The ID of the current chip that is showing its popup, or `null` if no chip is shown. */
     private var currentShownPopupChipId by mutableStateOf<PopupChipId?>(null)
 
@@ -122,7 +139,6 @@ constructor(
                     bundle.shareScreen,
                 )
             } else {
-                // Keep media ticker available even when popup chips modernization is disabled.
                 listOfNotNull(
                     bundle.media,
                     bundle.screenRecord,
@@ -133,11 +149,13 @@ constructor(
                 )
             }
 
-        candidateChips.filterIsInstance<PopupChipModel.Shown>().map { chip ->
+        (systemEventChips.chips + candidateChips.filterIsInstance<PopupChipModel.Shown>()).map { chip ->
             chip.copy(
                 isPopupShown = chip.chipId == currentShownPopupChipId,
-                showPopup = { currentShownPopupChipId = chip.chipId },
-                hidePopup = { currentShownPopupChipId = null },
+                showPopup = { showPopup(chip.chipId) },
+                hidePopup = {
+                    if (currentShownPopupChipId == chip.chipId) showPopup(null)
+                },
             )
         }
     }
@@ -157,6 +175,43 @@ constructor(
                 keyguardTransitionInteractor.isFinishedIn(KeyguardState.LOCKSCREEN)
                     .collectLatest { isOnLockscreen = it }
             }
+            launch {
+                keyguardTransitionInteractor.isFinishedIn(KeyguardState.GONE)
+                    .collectLatest { isReadyForAutoPopup = it }
+            }
+            launch {
+                val consumedRequests = mutableMapOf<PopupChipId, Long>()
+                snapshotFlow {
+                    Triple(systemEventChips.chips, isDynamicIslandEnabled, isReadyForAutoPopup)
+                }.collect { (chips, enabled, unlocked) ->
+                    val ids = chips.map { it.chipId }.toSet()
+                    consumedRequests.keys.retainAll(ids)
+                    if (!enabled || !unlocked) {
+                        showPopup(null)
+                        return@collect
+                    }
+                    if (currentShownPopupChipId is PopupChipId.SystemEvent &&
+                        currentShownPopupChipId !in ids) {
+                        showPopup(null)
+                    }
+                    val requests = chips.filter { chip ->
+                        chip.autoPopupRequest != null &&
+                            consumedRequests[chip.chipId] != chip.autoPopupRequest
+                    }
+                    requests.forEach { consumedRequests[it.chipId] = it.autoPopupRequest!! }
+                    requests.firstOrNull()?.let { chip ->
+                        showPopup(chip.chipId)
+                        chip.onAutoPopupShown()
+                        if (chip.autoPopupDurationMs > 0L) autoPopupJob = launch {
+                            delay(chip.autoPopupDurationMs)
+                            if (currentShownPopupChipId == chip.chipId) {
+                                showPopup(null)
+                            }
+                        }
+                    }
+                }
+            }
+            launch { systemEventChips.activate() }
             launch { avControlsChip.activate() }
             launch { mediaControlChip.activate() }
             launch { screenRecordChip.activate() }
@@ -168,6 +223,7 @@ constructor(
             try {
                 awaitCancellation()
             } finally {
+                showPopup(null)
                 context.contentResolver.unregisterContentObserver(dynamicIslandObserver)
             }
         }

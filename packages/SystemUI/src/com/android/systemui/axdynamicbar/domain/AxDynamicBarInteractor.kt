@@ -3,12 +3,11 @@ package com.android.systemui.axdynamicbar.domain
 import android.app.Notification
 import android.media.AudioManager
 import android.net.Uri
-import android.provider.Settings.Global
 import com.android.systemui.axdynamicbar.data.IslandEventRepository
-import com.android.systemui.axdynamicbar.model.IslandEvent
+import com.android.systemui.islandevents.model.IslandEvent
 import com.android.systemui.axdynamicbar.model.IslandState
 import com.android.systemui.axdynamicbar.model.IslandUiState
-import com.android.systemui.axdynamicbar.model.RecordingState
+import com.android.systemui.islandevents.model.RecordingState
 import com.android.systemui.axdynamicbar.shared.IslandActions
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
@@ -33,7 +32,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 @SysUISingleton
@@ -463,17 +461,13 @@ constructor(
         }
     }
 
-    private fun shouldSuppressForDndOrRinger(notification: IslandEvent.Notification): Boolean {
-        if (notification.isActiveCall()) return false
-        if (!settings.isHeadsUpEnabled.value) return true
-        val category = notification.sbn.notification?.category
-        if (category == Notification.CATEGORY_CALL || category == Notification.CATEGORY_ALARM) return false
-        val zenMode = zenModeController.zen
-        if (zenMode == Global.ZEN_MODE_NO_INTERRUPTIONS ||
-            zenMode == Global.ZEN_MODE_ALARMS) return true
-        val ringerMode = audioManager.ringerMode
-        return ringerMode == AudioManager.RINGER_MODE_SILENT
-    }
+    private fun shouldSuppressForDndOrRinger(notification: IslandEvent.Notification): Boolean =
+        com.android.systemui.islandevents.domain.NotificationAlertPolicy.shouldSuppress(
+            notification,
+            enabled = settings.isHeadsUpEnabled.value,
+            zenMode = zenModeController.zen,
+            ringerMode = audioManager.ringerMode,
+        )
 
     private fun showNotificationAlert(
         notification: IslandEvent.Notification,

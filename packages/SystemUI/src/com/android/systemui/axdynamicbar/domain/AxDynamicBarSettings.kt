@@ -5,7 +5,7 @@ import android.os.Handler
 import android.os.UserHandle
 import android.provider.Settings
 import android.provider.Settings.Global
-import com.android.systemui.axdynamicbar.model.IslandEvent
+import com.android.systemui.islandevents.model.IslandEvent
 import com.android.systemui.axdynamicbar.shared.EVENT_TYPE_IDS
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Main

@@ -327,7 +327,7 @@ fun StatusBarDynamicIslandContainer(
 
         popupAnchorChip?.let { anchoredChip ->
             StatusBarPopup(
-                viewModel = anchoredChip,
+                viewModel = shownChip ?: anchoredChip,
                 isVisible = popupVisible,
                 chipBoundsInScreen = popupOriginBounds,
                 canPage = chips.size > 1,

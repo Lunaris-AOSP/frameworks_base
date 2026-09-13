@@ -324,4 +324,28 @@
 
     <!-- Toast shown when the memory clean quick tile is tapped -->
     <string name="quick_settings_memory_cleaned_toast">Memory cleaned</string>
+
+    <!-- Dynamic island -->
+    <string name="dynamic_island_event_open">Open</string>
+    <string name="dynamic_island_event_charging">Charging</string>
+    <string name="dynamic_island_event_wireless_charging">Wireless charging</string>
+    <string name="dynamic_island_event_battery_saver">Battery saver</string>
+    <string name="dynamic_island_event_unlocked">Unlocked</string>
+    <string name="dynamic_island_event_disconnect">Disconnect</string>
+    <string name="dynamic_island_event_hotspot">Hotspot</string>
+    <string name="dynamic_island_event_connected_devices">Connected devices: %1$d</string>
+    <string name="dynamic_island_event_vpn">VPN</string>
+    <string name="dynamic_island_event_connected">Connected</string>
+    <string name="dynamic_island_event_connecting">Connecting</string>
+    <string name="dynamic_island_event_sound">Sound mode</string>
+    <string name="dynamic_island_event_ring">Ring</string>
+    <string name="dynamic_island_event_vibrate">Vibrate</string>
+    <string name="dynamic_island_event_silent">Silent</string>
+    <string name="dynamic_island_event_clipboard">Clipboard</string>
+    <string name="dynamic_island_event_call">Call</string>
+    <string name="dynamic_island_event_timer">Timer</string>
+    <string name="dynamic_island_event_recording">Audio recording</string>
+    <string name="dynamic_island_event_recent_apps">Recent apps</string>
+    <string name="dynamic_island_event_paused">Paused</string>
+    <string name="dynamic_island_event_saved">Saved</string>
 </resources>

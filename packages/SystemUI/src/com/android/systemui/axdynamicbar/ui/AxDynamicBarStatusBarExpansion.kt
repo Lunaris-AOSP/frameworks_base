@@ -17,7 +17,7 @@
 package com.android.systemui.axdynamicbar.ui
 
 import com.android.systemui.axdynamicbar.domain.AxDynamicBarInteractor
-import com.android.systemui.axdynamicbar.model.IslandEvent
+import com.android.systemui.islandevents.model.IslandEvent
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import javax.inject.Inject

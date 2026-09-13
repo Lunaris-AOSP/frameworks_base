@@ -18,6 +18,7 @@ package com.android.systemui.statusbar.featurepods.alarm.ui.viewmodel
 
 import android.app.AlarmManager
 import android.app.Notification
+import com.android.systemui.statusbar.featurepods.stopwatch.ui.viewmodel.isStopwatchCandidate
 import android.content.Context
 import android.text.format.DateFormat
 import androidx.compose.runtime.getValue
@@ -81,7 +82,9 @@ constructor(
                                 AlarmPopupState(
                                     nextAlarm = nextAlarm,
                                     activeNotification =
-                                        notifCollection.allNotifs.firstOrNull { it.isAlarmCandidate() },
+                                        notifCollection.allNotifs.firstOrNull {
+                                            it.isAlarmCandidate() && !it.isStopwatchCandidate()
+                                        } ?: notifCollection.allNotifs.firstOrNull { it.isAlarmCandidate() },
                                 )
                             )
                         }
@@ -236,7 +239,8 @@ private fun NotificationEntry.isAlarmCandidate(): Boolean {
     val notification = sbn.notification
     return notification.contentIntent != null &&
         (
-            notification.category == Notification.CATEGORY_ALARM ||
+            isStopwatchCandidate() ||
+                notification.category == Notification.CATEGORY_ALARM ||
                 sbn.packageName.contains("clock", ignoreCase = true) ||
                 notification.actions.orEmpty().any { action ->
                     action.title?.toString()?.contains("snooze", ignoreCase = true) == true

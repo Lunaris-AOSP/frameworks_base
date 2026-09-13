@@ -1,6 +1,6 @@
 package com.android.systemui.axdynamicbar.data.source
 
-import com.android.systemui.axdynamicbar.model.IslandEvent
+import com.android.systemui.islandevents.model.IslandEvent
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.flashlight.domain.interactor.FlashlightInteractor
@@ -42,7 +42,6 @@ constructor(
                     startLevelObserver()
                 } else {
                     if (isRetainingOffFromSlider) {
-                        // Keep the event so the user can slide it back up
                     } else {
                         clear()
                     }
@@ -165,7 +164,6 @@ constructor(
 
     private fun shouldEnableTorchForCurrentLevel(level: Int): Boolean {
         if (flashlightController.isEnabled) return false
-        // setLevel() enables the torch unless this matches the disabled state's remembered level.
         val currentLevel =
             (flashlightInteractor.state.value as? FlashlightModel.Available.Level)?.level
                 ?: return false

@@ -28,6 +28,22 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 
 object DynamicIslandFeatureSettings {
+    /** Opt-in; independent of every AxDynamicBar setting. */
+    const val BATTERY = "status_bar_dynamic_island_battery"
+    const val UNLOCK = "status_bar_dynamic_island_unlock"
+    const val BLUETOOTH = "status_bar_dynamic_island_bluetooth"
+    const val CALLS = "status_bar_dynamic_island_calls"
+    const val NOTIFICATIONS = "status_bar_dynamic_island_notifications"
+    const val ONGOING_ACTIVITIES = "status_bar_dynamic_island_ongoing_activities"
+    const val HOTSPOT = "status_bar_dynamic_island_hotspot"
+    const val VPN = "status_bar_dynamic_island_vpn"
+    const val RINGER = "status_bar_dynamic_island_ringer"
+    const val CLIPBOARD = "status_bar_dynamic_island_clipboard"
+    const val TIMER = "status_bar_dynamic_island_timer"
+    const val AUDIO_RECORDING = "status_bar_dynamic_island_audio_recording"
+    const val NOW_PLAYING = "status_bar_dynamic_island_now_playing"
+    const val RECENT_APPS = "status_bar_dynamic_island_recent_apps"
+
     const val MEDIA_CONTROLS = "status_bar_dynamic_island_media_controls"
     const val SCREEN_RECORDING = "status_bar_dynamic_island_screen_recording"
     const val ALARMS = "status_bar_dynamic_island_alarms"

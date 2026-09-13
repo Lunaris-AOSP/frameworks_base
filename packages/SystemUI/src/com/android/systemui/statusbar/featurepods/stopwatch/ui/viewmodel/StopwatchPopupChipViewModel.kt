@@ -17,6 +17,8 @@
 package com.android.systemui.statusbar.featurepods.stopwatch.ui.viewmodel
 
 import android.app.Notification
+import android.os.SystemClock
+import android.text.format.DateUtils
 import android.content.Context
 import android.view.View
 import android.view.ViewGroup
@@ -51,12 +53,16 @@ import com.android.systemui.statusbar.policy.KeyguardStateController
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import java.util.Locale
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 
 /** ViewModel backing stopwatch notifications inside the dynamic island. */
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class StopwatchPopupChipViewModel
 @AssistedInject
 constructor(
@@ -112,11 +118,37 @@ constructor(
                             }
                             .firstOrNull()
                     }
-                    .map(::toPopupChipModel)
                     .combine(
                         observeDynamicIslandFeatureEnabled(context, STOPWATCH)
                     ) { model, enabled ->
-                        if (enabled) model else PopupChipModel.Hidden(PopupChipId.Stopwatch)
+                        model.takeIf { enabled }
+                    }
+                    .flatMapLatest { model ->
+                        flow<PopupChipModel> {
+                            if (model == null) {
+                                emit(PopupChipModel.Hidden(PopupChipId.Stopwatch))
+                            } else if (!model.isRunning) {
+                                val text = model.elapsedTimeText?.takeIf { it.isNotBlank() }
+                                    ?: DateUtils.formatElapsedTime(
+                                        (SystemClock.elapsedRealtime() - model.baseElapsedRealtimeMs)
+                                            .coerceAtLeast(0L) / 1_000L)
+                                emit(toPopupChipModel(model.copy(elapsedTimeText = text)))
+                            } else {
+                                while (true) {
+                                    val elapsedMs = (SystemClock.elapsedRealtime() -
+                                        model.baseElapsedRealtimeMs).coerceAtLeast(0L)
+                                    val elapsedSeconds = elapsedMs / 1_000L
+                                    emit(toPopupChipModel(model.copy(
+                                        elapsedTimeText = DateUtils.formatElapsedTime(elapsedSeconds),
+                                    )))
+                                    val afterEmitMs = (SystemClock.elapsedRealtime() -
+                                        model.baseElapsedRealtimeMs).coerceAtLeast(0L)
+                                    if (afterEmitMs / 1_000L == elapsedSeconds) {
+                                        delay(1_000L - afterEmitMs % 1_000L)
+                                    }
+                                }
+                            }
+                        }
                     },
         )
 
@@ -132,7 +164,7 @@ constructor(
         return PopupChipModel.Shown(
             chipId = PopupChipId.Stopwatch,
             icons = listOfNotNull(model.icon?.let { ChipIcon(icon = it, onClick = model.onOpen) }),
-            chipText = null,
+            chipText = model.elapsedTimeText,
             colors = ColorsModel.DynamicIsland,
             contentDescription = model.title,
             popupContent = PopupContentModel.Stopwatch(model),
@@ -190,14 +222,18 @@ private fun NotificationEntry.toStopwatchModel(
     )
 }
 
-private fun NotificationEntry.isStopwatchCandidate(): Boolean {
+internal fun NotificationEntry.isStopwatchCandidate(): Boolean {
     val notification = sbn.notification
     if (notification.contentIntent == null) {
         return false
     }
-    if (notification.contentView == null) {
+    if (notification.contentView == null && notification.bigContentView == null &&
+        notification.headsUpContentView == null &&
+        !notification.extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER)) {
         return false
     }
+    if (notification.extras.getBoolean(Notification.EXTRA_CHRONOMETER_COUNT_DOWN) ||
+        notification.channelId.orEmpty().contains("timer", ignoreCase = true)) return false
 
     val searchText =
         buildString {
@@ -228,7 +264,7 @@ private fun NotificationEntry.extractChronometerSnapshot(context: Context): Chro
         runCatching { context.createPackageContext(sbn.packageName, Context.CONTEXT_RESTRICTED) }
             .getOrDefault(context)
 
-    return sequenceOf(
+    val remoteSnapshot = sequenceOf(
             sbn.notification.contentView,
             sbn.notification.bigContentView,
             sbn.notification.headsUpContentView,
@@ -249,6 +285,17 @@ private fun NotificationEntry.extractChronometerSnapshot(context: Context): Chro
             )
         }
         .firstOrNull()
+    if (remoteSnapshot != null) return remoteSnapshot
+
+    val notification = sbn.notification
+    if (!notification.extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER) ||
+        notification.`when` <= 0L) return null
+    return ChronometerSnapshot(
+        baseElapsedRealtimeMs = SystemClock.elapsedRealtime() +
+            (notification.`when` - System.currentTimeMillis()),
+        isCountDown = notification.extras.getBoolean(Notification.EXTRA_CHRONOMETER_COUNT_DOWN),
+        elapsedText = "",
+    )
 }
 
 private fun View.findChronometer(): Chronometer? {
@@ -315,5 +362,14 @@ private fun Notification.toStopwatchActions(context: Context): List<PopupActionM
 }
 
 private fun isRunning(notification: Notification): Boolean {
+    val actionNames = notification.actions.orEmpty().map { action ->
+        runCatching { action.actionIntent?.intent?.action }.getOrNull().orEmpty()
+            .lowercase(Locale.ROOT)
+    }
+    if (actionNames.any { it.contains("pause_stopwatch") || it.contains("lap_stopwatch") }) return true
+    if (actionNames.any { it.contains("start_stopwatch") }) return false
+    val labels = notification.actions.orEmpty().map { it.title.toString().lowercase(Locale.ROOT) }
+    if (labels.any { it.contains("pause") || it.contains("lap") }) return true
+    if (labels.any { it.contains("resume") || it.contains("start") }) return false
     return notification.flags and Notification.FLAG_ONGOING_EVENT != 0
 }

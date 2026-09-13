@@ -111,8 +111,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.android.systemui.axdynamicbar.model.IslandEvent
-import com.android.systemui.axdynamicbar.model.RecordingState
+import com.android.systemui.islandevents.model.IslandEvent
+import com.android.systemui.islandevents.model.RecordingState
 import com.android.systemui.axdynamicbar.shared.*
 import com.android.systemui.axdynamicbar.ui.AxDynamicBarChipViewModel
 import com.android.systemui.axdynamicbar.ui.KeyguardBatteryInfo
@@ -271,11 +271,11 @@ fun AxDynamicBarKeyguardChip(
             val chipState = state
             if (chipState != null) {
                 val rawEvent = chipState.notificationAlert ?: chipState.event
-                val displayEvent: com.android.systemui.axdynamicbar.model.IslandEvent? =
+                val displayEvent: com.android.systemui.islandevents.model.IslandEvent? =
                     when {
                         isKeyguardMusicPillEnabled -> rawEvent
-                        rawEvent is com.android.systemui.axdynamicbar.model.IslandEvent.Media -> {
-                            chipState.allEvents.firstOrNull { it !is com.android.systemui.axdynamicbar.model.IslandEvent.Media }
+                        rawEvent is com.android.systemui.islandevents.model.IslandEvent.Media -> {
+                            chipState.allEvents.firstOrNull { it !is com.android.systemui.islandevents.model.IslandEvent.Media }
                         }
                         else -> rawEvent
                     }

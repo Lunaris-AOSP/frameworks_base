@@ -17,7 +17,7 @@
 package com.android.systemui.axdynamicbar.data.source
 
 import com.android.systemui.axdynamicbar.domain.AxDynamicBarChipsRefiner
-import com.android.systemui.axdynamicbar.model.IslandEvent
+import com.android.systemui.islandevents.model.IslandEvent
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.statusbar.chips.ui.model.OngoingActivityChipModel
 import javax.inject.Inject

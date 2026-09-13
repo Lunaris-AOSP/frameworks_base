@@ -68,8 +68,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
-import com.android.systemui.axdynamicbar.model.IslandEvent
-import com.android.systemui.axdynamicbar.model.RecordingState
+import com.android.systemui.islandevents.model.IslandEvent
+import com.android.systemui.islandevents.model.RecordingState
 import com.android.systemui.axdynamicbar.shared.*
 import androidx.compose.ui.graphics.graphicsLayer
 import com.android.systemui.res.R

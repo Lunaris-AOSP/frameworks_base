@@ -55,7 +55,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.android.systemui.axdynamicbar.model.IslandEvent
+import com.android.systemui.islandevents.model.IslandEvent
 import com.android.systemui.axdynamicbar.shared.AlphaHint
 import com.android.systemui.axdynamicbar.shared.AlphaTrack
 import com.android.systemui.axdynamicbar.shared.PillPrimary

@@ -11,7 +11,7 @@ import com.android.systemui.axdynamicbar.data.source.SmartspaceIslandManager
 import com.android.systemui.axdynamicbar.data.source.SystemIslandManager
 import com.android.systemui.axdynamicbar.data.source.TorchIslandManager
 import com.android.systemui.axdynamicbar.domain.AxDynamicBarSettings
-import com.android.systemui.axdynamicbar.model.IslandEvent
+import com.android.systemui.islandevents.model.IslandEvent
 import com.android.systemui.dagger.SysUISingleton
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow

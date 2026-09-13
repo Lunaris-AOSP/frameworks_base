@@ -28,8 +28,13 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -55,6 +60,9 @@ fun FlashlightPopup(
     modifier: Modifier = Modifier,
 ) {
     val accent = IslandAccents.Flashlight
+    var sliderLevel by remember(model.level) {
+        mutableFloatStateOf(model.level?.toFloat() ?: 0f)
+    }
     PopupSurface(
         shape = PopupShape,
         modifier = modifier.widthIn(min = 280.dp, max = 340.dp),
@@ -114,6 +122,20 @@ fun FlashlightPopup(
                 fontWeight = FontWeight.Bold,
                 color = accent,
             )
+
+            if (model.level != null && model.maxLevel != null && model.maxLevel > 0) {
+                Slider(
+                    value = sliderLevel,
+                    onValueChange = {
+                        sliderLevel = it
+                        model.setLevelTemporary(it.toInt())
+                    },
+                    onValueChangeFinished = {
+                        model.setLevel(sliderLevel.toInt())
+                    },
+                    valueRange = 1f..model.maxLevel.toFloat(),
+                )
+            }
 
             PopupActionChips(
                 actions =

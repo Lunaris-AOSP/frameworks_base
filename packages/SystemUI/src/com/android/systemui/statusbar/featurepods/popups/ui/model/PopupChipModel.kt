@@ -29,6 +29,8 @@ import com.android.systemui.statusbar.featurepods.stopwatch.shared.model.Stopwat
  * displaying its popup at a time.
  */
 sealed class PopupChipId(val value: String) {
+    data class SystemEvent(val eventId: String) : PopupChipId("SystemEvent:$eventId")
+
     data object MediaControl : PopupChipId("MediaControl")
 
     data object ScreenRecord : PopupChipId("ScreenRecord")
@@ -47,7 +49,11 @@ sealed class PopupChipId(val value: String) {
 }
 
 /** Model for an optionally clickable icon that is displayed on the chip. */
-data class ChipIcon(val icon: Icon, val onClick: (() -> Unit)? = null)
+data class ChipIcon(
+    val icon: Icon,
+    val onClick: (() -> Unit)? = null,
+    val tint: Boolean = true,
+)
 
 /** Defines the behavior of the chip when hovered over. */
 sealed interface HoverBehavior {
@@ -60,6 +66,26 @@ sealed interface HoverBehavior {
 
 /** Rich popup contents associated with a status bar chip. */
 sealed interface PopupContentModel {
+    data class SystemEvent(
+        val kind: SystemEventKind,
+        val title: String,
+        val text: String,
+        val actions: List<com.android.systemui.statusbar.featurepods.popups.shared.model.PopupActionModel>,
+        val progress: Float? = null,
+        val callStartTimeMs: Long? = null,
+        val timerEndTimeMs: Long? = null,
+        val timerEndElapsedRealtimeMs: Long? = null,
+        val timerRemainingMs: Long? = null,
+        val timerOriginalDurationMs: Long? = null,
+        val timerPaused: Boolean = false,
+        val indeterminate: Boolean = false,
+        val icon: Icon? = null,
+        val appName: String? = null,
+        val prominentText: String? = null,
+        val pulse: Boolean = false,
+        val image: Icon? = null,
+    ) : PopupContentModel
+
     data object None : PopupContentModel
 
     data class Media(
@@ -101,6 +127,14 @@ sealed class PopupChipModel {
         val hoverBehavior: HoverBehavior = HoverBehavior.None,
         val contentDescription: String? = null,
         val popupContent: PopupContentModel = PopupContentModel.None,
+        /** Wall-clock start of an active call; null for ringing calls and other chips. */
+        val callStartTimeMs: Long? = null,
+        /** A new event revision requests one automatic expansion once the device is unlocked. */
+        val autoPopupRequest: Long? = null,
+        val autoPopupDurationMs: Long = 0L,
+        val onAutoPopupShown: () -> Unit = {},
+        val onPopupShown: () -> Unit = {},
+        val onPopupHidden: () -> Unit = {},
     ) : PopupChipModel() {
         override val logName = "Shown(id=$chipId, toggled=$isPopupShown)"
     }

@@ -2,7 +2,7 @@ package com.android.systemui.axdynamicbar.ui
 
 import com.android.systemui.animation.Expandable
 import com.android.systemui.axdynamicbar.domain.AxDynamicBarInteractor
-import com.android.systemui.axdynamicbar.model.IslandEvent
+import com.android.systemui.islandevents.model.IslandEvent
 import com.android.systemui.statusbar.chips.ui.model.OngoingActivityChipModel
 import com.android.systemui.biometrics.AuthController
 import com.android.systemui.biometrics.domain.interactor.UdfpsOverlayInteractor
@@ -154,7 +154,6 @@ constructor(
         awaitClose { keyguardIndicationController.removeIndicationListener(listener) }
     }
 
-    // Re-compute charging string whenever battery info changes
     val batteryString: StateFlow<String> =
         combine(
             keyguardBatteryInfo,

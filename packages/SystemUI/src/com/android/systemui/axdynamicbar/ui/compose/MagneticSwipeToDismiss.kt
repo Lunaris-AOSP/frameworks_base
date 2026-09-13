@@ -149,7 +149,6 @@ internal fun MagneticSwipeToDismiss(
                                 if (axis == 0) {
                                     if (abs(dx) > touchSlop || abs(dy) > touchSlop) {
                                         val wouldBeHorizontal = abs(dx) >= abs(dy)
-                                        // If a child (seekbar) has locked horizontal swipe, skip.
                                         if (wouldBeHorizontal && swipeLock.value) {
                                             break
                                         }
