@@ -24,8 +24,30 @@ public class OptimizationManager {
         mService = service;
     }
 
-    /**  
-     @hide 
+    /**
+     @hide
+     */
+    public long startTool(@NonNull String kind, @NonNull String[] packages) {
+        try { return mService.startTool(kind, packages); }
+        catch (RemoteException e) { throw e.rethrowFromSystemServer(); }
+    }
+    /**
+     @hide
+     */
+    @NonNull public Bundle getToolSnapshot(@NonNull String kind, int offset) {
+        try { return mService.getToolSnapshot(kind, offset); }
+        catch (RemoteException e) { throw e.rethrowFromSystemServer(); }
+    }
+    /**
+     @hide
+     */
+    public void restartDevice() {
+        try { mService.restartDevice(); }
+        catch (RemoteException e) { throw e.rethrowFromSystemServer(); }
+    }
+
+    /**
+     @hide
      */
     @NonNull
     public Bundle getSnapshot() {

@@ -20,6 +20,10 @@ final class OptimizationResult {
         return new OptimizationResult("success", detail);
     }
 
+    static OptimizationResult partial(String detail) {
+        return new OptimizationResult("partial", detail);
+    }
+
     boolean hasErrors() { return !"success".equals(status); }
 
     static OptimizationResult compilation(int performed, int skipped, List<String> failures) {

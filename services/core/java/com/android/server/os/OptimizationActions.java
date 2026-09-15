@@ -5,19 +5,14 @@
 
 package com.android.server.os;
 
-import android.app.AppGlobals;
 import android.content.Context;
-import android.content.pm.IPackageDataObserver;
+import android.os.BatteryManager;
 import android.os.CancellationSignal;
 import android.os.PowerManager;
 import android.os.ServiceManager;
 import android.os.storage.IStorageManager;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 final class OptimizationActions {
@@ -32,19 +27,7 @@ final class OptimizationActions {
         }
         switch (id) {
             case "cache":
-                CountDownLatch done = new CountDownLatch(1);
-                AtomicBoolean success = new AtomicBoolean();
-                AppGlobals.getPackageManager().freeStorageAndNotify(null, plan.cacheTargetBytes, 0,
-                    new IPackageDataObserver.Stub() {
-                        @Override public void onRemoveCompleted(String name, boolean succeeded) {
-                            success.set(succeeded); done.countDown();
-                        }
-                    });
-                if (!done.await(120, TimeUnit.SECONDS)) {
-                    throw new IllegalStateException("Cache request timed out; Android may still finish it in the background");
-                }
-                if (!success.get()) throw new IllegalStateException("Android could not meet the free-space target");
-                return OptimizationResult.success("Free-space target processed. Cached files were removed only as needed; app data was preserved.");
+                return new OptimizationTools(context).cleanAppCaches(plan.cachePackages, cancel, progress);
             case "trim":
                 IStorageManager storage = IStorageManager.Stub.asInterface(ServiceManager.getService("mount"));
                 if (storage == null) throw new UnsupportedOperationException("Storage maintenance service unavailable");
@@ -59,8 +42,7 @@ final class OptimizationActions {
                 return OptimizationResult.success("zRAM compaction request accepted by the kernel.");
             case "dexopt":
                 if ("speed".equals(plan.filter)) {
-                    android.os.BatteryManager battery = context.getSystemService(android.os.BatteryManager.class);
-                    if (battery == null || !battery.isCharging()) throw new IllegalStateException("Connect a charger for full compilation");
+                    enforceFullCompilationPower(context);
                 }
                 try {
                     return new ArtOptimizationBackend(context).compile(plan.filter, cancel, progress, packageProgress);
@@ -68,6 +50,22 @@ final class OptimizationActions {
                     throw new UnsupportedOperationException("ART adapter does not match this ROM branch", e);
                 }
             default: throw new IllegalArgumentException("Unknown action");
+        }
+    }
+
+    static void enforceFullCompilationPower(Context context) {
+        BatteryManager battery = context.getSystemService(BatteryManager.class);
+        if (battery == null) {
+            throw new IllegalStateException("Full compilation stopped: battery status unavailable");
+        }
+        if (battery.isCharging()) return;
+        int percent = battery.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
+        if (percent < 0 || percent > 100) {
+            throw new IllegalStateException("Full compilation stopped: battery level unavailable. Connect a charger.");
+        }
+        if (percent <= 25) {
+            throw new IllegalStateException("Full compilation stopped: battery is " + percent
+                    + "%. Connect a charger or charge above 25%.");
         }
     }
 }

@@ -53,10 +53,7 @@ final class ArtOptimizationBackend {
                             stats == null ? 0 : stats.getLastTimeUsed(), now) : filter;
             DexoptParams params = new DexoptParams.Builder("cmdline").setCompilerFilter(selected).build();
             if ("speed".equals(selected)) {
-                android.os.BatteryManager battery = context.getSystemService(android.os.BatteryManager.class);
-                if (battery == null || !battery.isCharging()) {
-                    throw new IllegalStateException("Full compilation stopped: charger disconnected");
-                }
+                OptimizationActions.enforceFullCompilationPower(context);
             }
             PowerManager power = context.getSystemService(PowerManager.class);
             if (power != null && power.getCurrentThermalStatus() >= PowerManager.THERMAL_STATUS_SEVERE) {
@@ -72,7 +69,10 @@ final class ArtOptimizationBackend {
             progress.accept("App " + (++index) + " / " + packages.size() + ": " + pkg.packageName
                 + " · " + selected + " · compiled " + performed + " · skipped " + skipped + " · failed " + failures.size());
             try (PackageManagerLocal.FilteredSnapshot snapshot = pm.withFilteredSnapshot()) {
-                int status = art.dexoptPackage(snapshot, pkg.packageName, params, cancel).getFinalStatus();
+                int status = dexoptPackage(
+                        () -> art.dexoptPackage(snapshot, pkg.packageName, params, cancel).getFinalStatus(),
+                        cancel, e -> Slog.w("OptimizationManager", "ART rejected package="
+                                + pkg.packageName + ", filter=" + selected, e));
                 row.putString("status", status == DexoptResult.DEXOPT_PERFORMED ? "compiled"
                         : status == DexoptResult.DEXOPT_SKIPPED ? "skipped"
                         : status == DexoptResult.DEXOPT_CANCELLED ? "cancelled" : "failed");
@@ -94,5 +94,16 @@ final class ArtOptimizationBackend {
             }
         }
         return OptimizationResult.compilation(performed, skipped, failures);
+    }
+
+    static int dexoptPackage(java.util.function.IntSupplier operation, CancellationSignal cancel,
+            Consumer<IllegalArgumentException> rejected) {
+        try {
+            return operation.getAsInt();
+        } catch (IllegalArgumentException e) {
+            cancel.throwIfCanceled();
+            rejected.accept(e);
+            return DexoptResult.DEXOPT_FAILED;
+        }
     }
 }

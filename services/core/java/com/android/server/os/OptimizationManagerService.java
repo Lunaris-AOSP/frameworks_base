@@ -13,7 +13,12 @@ import com.android.server.SystemService;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
 public final class OptimizationManagerService extends SystemService {
     private static final String TAG = "OptimizationManager";
@@ -30,12 +35,22 @@ public final class OptimizationManagerService extends SystemService {
     private long lastNotification;
     private static final int MAX_PACKAGE_RESULTS = 300;
     private final ArrayList<Bundle> packageResults = new ArrayList<>();
+    private final Map<String, Bundle> toolSnapshots = new HashMap<>();
+    private final Set<String> activeTools = new HashSet<>();
+    private long nextToolId;
+    private OptimizationTools tools;
 
     public OptimizationManagerService(Context context) { super(context); }
     @Override public void onStart() {
         actions = new OptimizationActions(getContext());
+        tools = new OptimizationTools(getContext());
         thread.start(); worker = new Handler(thread.getLooper());
         snapshot.putString("status", "idle");
+        for (String kind : OptimizationTools.KINDS) {
+            Bundle tool = new Bundle();
+            tool.putString("status", "idle");
+            toolSnapshots.put(kind, tool);
+        }
         publishBinderService(Context.OPTIMIZATION_SERVICE, binder);
     }
     private void enforcePermission() {
@@ -49,6 +64,70 @@ public final class OptimizationManagerService extends SystemService {
         @Override public Bundle getSnapshot() {
             enforcePermission();
             synchronized (lock) { return snapshot.deepCopy(); }
+        }
+        @Override public long startTool(String kind, String[] requestedPackages) {
+            enforcePermission();
+            if (!OptimizationTools.KINDS.contains(kind)) throw new IllegalArgumentException("Unknown tool");
+            List<String> packages = OptimizationTools.validatePackages(requestedPackages);
+            synchronized (lock) {
+                if (activeTools.contains(kind)) throw new IllegalStateException("This tool is already running");
+                if ("rare_apps".equals(kind) && !packages.isEmpty()) {
+                    Bundle prior = toolSnapshots.get(kind);
+                    ArrayList<Bundle> rows = prior == null ? null
+                            : prior.getParcelableArrayList("rows", Bundle.class);
+                    HashSet<String> allowed = new HashSet<>();
+                    if (rows != null) for (Bundle row : rows) allowed.add(row.getString("id", ""));
+                    if (!allowed.containsAll(packages)) {
+                        throw new IllegalArgumentException("Stop requests must come from the latest rare-app scan");
+                    }
+                }
+                activeTools.add(kind);
+                Bundle tool = new Bundle();
+                tool.putLong("id", ++nextToolId);
+                tool.putString("status", "running");
+                tool.putString("detail", "Starting");
+                toolSnapshots.put(kind, tool);
+                worker.post(() -> executeTool(kind, packages));
+                return nextToolId;
+            }
+        }
+        @Override public Bundle getToolSnapshot(String kind, int offset) {
+            enforcePermission();
+            if (!OptimizationTools.KINDS.contains(kind)) throw new IllegalArgumentException("Unknown tool");
+            if (offset < 0) throw new IllegalArgumentException("Invalid result offset");
+            synchronized (lock) {
+                Bundle source = toolSnapshots.get(kind);
+                Bundle page = new Bundle();
+                if (source != null) {
+                    page.putLong("id", source.getLong("id"));
+                    page.putString("status", source.getString("status", "idle"));
+                    page.putString("detail", source.getString("detail", ""));
+                }
+                ArrayList<Bundle> all = source == null ? null
+                        : source.getParcelableArrayList("rows", Bundle.class);
+                int total = all == null ? 0 : all.size();
+                int end = offset >= total ? total : offset + Math.min(100, total - offset);
+                ArrayList<Bundle> rows = new ArrayList<>();
+                if (offset < total) for (int i = offset; i < end; i++) rows.add(new Bundle(all.get(i)));
+                page.putParcelableArrayList("rows", rows);
+                page.putInt("total", total);
+                return page;
+            }
+        }
+        @Override public void restartDevice() {
+            enforcePermission();
+            synchronized (lock) {
+                Bundle data = toolSnapshots.get("data_cache");
+                if (data == null || !"completed".equals(data.getString("status"))) {
+                    throw new IllegalStateException("Data cache cleanup has not completed");
+                }
+            }
+            long token = Binder.clearCallingIdentity();
+            try {
+                PowerManager power = getContext().getSystemService(PowerManager.class);
+                if (power == null) throw new IllegalStateException("Power manager unavailable");
+                power.reboot("optimization-data-cache");
+            } finally { Binder.restoreCallingIdentity(token); }
         }
         @Override public Bundle getMetrics() {
             enforcePermission();
@@ -102,9 +181,33 @@ public final class OptimizationManagerService extends SystemService {
             enforcePermission(); if (callback != null) callbacks.unregister(callback);
         }
     };
+    private void executeTool(String kind, List<String> packages) {
+        try {
+            Bundle result = tools.run(kind, packages, new CancellationSignal(),
+                    detail -> updateTool(kind, "running", detail, null));
+            updateTool(kind, "completed", result.getString("detail", "Completed"),
+                    result.getParcelableArrayList("rows", Bundle.class));
+        } catch (Exception e) {
+            Slog.w(TAG, "Optimization tool failed: " + kind, e);
+            updateTool(kind, "failed", e.getClass().getSimpleName() + ": " + e.getMessage(), null);
+        } finally {
+            synchronized (lock) { activeTools.remove(kind); }
+        }
+    }
+    private void updateTool(String kind, String status, String detail, ArrayList<Bundle> rows) {
+        synchronized (lock) {
+            Bundle current = toolSnapshots.get(kind);
+            if (current == null) current = new Bundle();
+            current.putString("status", status);
+            current.putString("detail", detail == null ? "" : detail.substring(0, Math.min(2000, detail.length())));
+            if (rows != null) current.putParcelableArrayList("rows", rows);
+            toolSnapshots.put(kind, current);
+        }
+    }
     private void execute(OptimizationPlan plan) {
         int completed = 0;
         boolean errors = false;
+        boolean cancelled = false;
         notifyState(true);
         updateNotification(true);
         try {
@@ -120,6 +223,7 @@ public final class OptimizationManagerService extends SystemService {
                         if (!plan.continueOnError) break;
                     }
                 } catch (OperationCanceledException e) {
+                    cancelled = true;
                     result(action, "cancelled", "Cancellation acknowledged"); break;
                 } catch (UnsupportedOperationException e) {
                     errors = true; result(action, "unavailable", e.getMessage());
@@ -140,7 +244,8 @@ public final class OptimizationManagerService extends SystemService {
                         snapshot.putString(action + ".detail", "Run stopped before this action");
                     }
                 }
-                snapshot.putString("status", cancellation.isCanceled() ? "cancelled" : errors ? "partial" : "completed");
+                snapshot.putString("status", cancelled || cancellation.isCanceled()
+                        ? "cancelled" : errors ? "partial" : "completed");
                 snapshot.putLong("finished", SystemClock.elapsedRealtime());
                 busy = false;
             }
