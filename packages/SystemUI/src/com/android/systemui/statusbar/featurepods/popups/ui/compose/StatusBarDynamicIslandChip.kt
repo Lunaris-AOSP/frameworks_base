@@ -521,7 +521,7 @@ private val CompactUtilityIslandWidth = 74.dp
 private val CompactUtilityConnectedIslandChromeWidth = 42.dp
 private val CompactUtilityConnectedIslandMinWidth = 132.dp
 private val CompactUtilityConnectedIslandMaxWidth = 188.dp
-private val DynamicIslandEmbeddedGapWidth = 16.dp
+private val DynamicIslandEmbeddedGapWidth = 20.dp
 
 internal val DynamicIslandCompanionDiameter = 34.dp
 internal val DynamicIslandCompanionGap = 8.dp
@@ -553,7 +553,7 @@ fun rememberDynamicIslandCutoutSpec(): DynamicIslandCutoutSpec {
         } else {
             val horizontalOffsetDp = (topCutout.exactCenterX() - (rootWidthPx / 2f)).toDp()
             DynamicIslandCutoutSpec(
-                embeddedGapWidth = topCutout.width().toDp() + DynamicIslandEmbeddedGapWidth,
+                embeddedGapWidth = DynamicIslandEmbeddedGapWidth,
                 horizontalOffset = horizontalOffsetDp,
             )
         }
