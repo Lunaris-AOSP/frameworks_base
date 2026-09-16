@@ -1,5 +1,6 @@
 package com.android.systemui.axdynamicbar.data.source
 
+import android.content.Context
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Background
@@ -18,7 +19,9 @@ class ConnectivityIslandManager @Inject constructor(
     bluetoothController: BluetoothController,
     hotspotController: HotspotController,
     vpnInteractor: VpnInteractor,
+    @Application context: Context,
 ) :
     com.android.systemui.islandevents.data.source.ConnectivityIslandManager(
-        applicationScope, backgroundDispatcher, bluetoothController, hotspotController, vpnInteractor
+        applicationScope, backgroundDispatcher, bluetoothController, hotspotController, vpnInteractor,
+        context,
     )

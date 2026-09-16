@@ -323,14 +323,16 @@ private fun UtilityStatusIslandChip(
             label = "utilityChipPressScale",
         )
     val isSystemEvent = viewModel.popupContent is PopupContentModel.SystemEvent
+    val deviceImage = (viewModel.popupContent as? PopupContentModel.SystemEvent)
+        ?.takeIf { it.kind == SystemEventKind.Bluetooth }?.image
+    val deviceImageSize = 20.dp * widthScale
+    val deviceImageSpace = if (deviceImage != null) deviceImageSize + 6.dp * widthScale else 0.dp
     val omitCameraGap = when (val content = viewModel.popupContent) {
-        is PopupContentModel.ScreenRecord -> true
         is PopupContentModel.Stopwatch -> true
         is PopupContentModel.SystemEvent ->
             content.kind == SystemEventKind.Bluetooth ||
                 content.kind == SystemEventKind.Charging ||
                 content.kind == SystemEventKind.Unlock ||
-                content.kind == SystemEventKind.Recording ||
                 content.kind == SystemEventKind.Timer
         else -> false
     }
@@ -341,7 +343,7 @@ private fun UtilityStatusIslandChip(
     val eventTextWidth = if (isSystemEvent) {
         val measured = textMeasurer.measure(liveChipText,
             style = MaterialTheme.typography.labelLarge, maxLines = 1)
-        with(density) { measured.size.width.toDp() } + 18.dp * widthScale
+        with(density) { measured.size.width.toDp() } + 18.dp * widthScale + deviceImageSpace
     } else 0.dp
     val rightSegmentWidth =
         (when (viewModel.popupContent) {
@@ -376,7 +378,6 @@ private fun UtilityStatusIslandChip(
                 rememberTimerText(popupContent) else liveChipText
             else -> ""
         }
-
     Row(
         modifier =
             modifier
@@ -440,15 +441,25 @@ private fun UtilityStatusIslandChip(
                     ),
             contentAlignment = Alignment.CenterEnd,
         ) {
-            Text(
-                text = utilityText,
-                style = MaterialTheme.typography.labelLarge,
-                color = chipContentColor,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.End,
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-            )
+                horizontalArrangement = Arrangement.spacedBy(6.dp * widthScale, Alignment.End),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = utilityText,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = chipContentColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.weight(1f),
+                )
+                deviceImage?.let { artwork ->
+                    Icon(icon = artwork, tint = Color.Unspecified,
+                        modifier = Modifier.size(deviceImageSize))
+                }
+            }
         }
         if (!isSystemEvent) Spacer(modifier = Modifier.width(10.dp * widthScale))
     }

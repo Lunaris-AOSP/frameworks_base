@@ -55,6 +55,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -114,6 +115,29 @@ fun SystemEventPopup(model: PopupContentModel.SystemEvent, modifier: Modifier = 
                 }
             }
 
+            if (model.kind == SystemEventKind.Bluetooth && model.bluetoothBatteries.isNotEmpty()) {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    model.bluetoothBatteries.forEach { battery ->
+                        Column(
+                            modifier = Modifier.widthIn(min = 88.dp, max = 140.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(accent.copy(alpha = 0.12f))
+                                .semantics(mergeDescendants = true) {}
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(battery.label, style = MaterialTheme.typography.labelMedium)
+                            Text("${battery.level}%", style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.SemiBold, color = accent)
+                        }
+                    }
+                }
+            }
+
             model.prominentText?.let { value -> ProminentEventValue(value, accent) }
             if (model.kind == SystemEventKind.Timer) {
                 ProminentEventValue(rememberTimerText(model), accent)
@@ -161,7 +185,12 @@ fun SystemEventPopup(model: PopupContentModel.SystemEvent, modifier: Modifier = 
 private fun EventHeader(model: PopupContentModel.SystemEvent, accent: Color, showSubtitle: Boolean) {
     val artwork = model.kind == SystemEventKind.NowPlaying
     Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-        EventGlyph(model, accent, size = if (artwork) 52.dp else 44.dp, artwork = artwork)
+        if (model.kind == SystemEventKind.Bluetooth && model.image != null) {
+            StatusBarIcon(icon = model.image, tint = Color.Unspecified,
+                modifier = Modifier.size(72.dp))
+        } else {
+            EventGlyph(model, accent, size = if (artwork) 52.dp else 44.dp, artwork = artwork)
+        }
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             model.appName?.takeIf { it.isNotBlank() }?.let { app ->
                 Text(app, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,
@@ -217,8 +246,10 @@ private fun EventGlyph(model: PopupContentModel.SystemEvent, accent: Color, size
             if (model.kind == SystemEventKind.Recording && model.pulse) {
                 Box(Modifier.size(16.dp).graphicsLayer { scaleX = pulseScale; scaleY = pulseScale }
                     .background(accent, CircleShape))
-            } else if (model.kind == SystemEventKind.Ringer && model.icon != null) {
-                StatusBarIcon(icon = model.icon, tint = accent,
+            } else if ((model.kind == SystemEventKind.Ringer || model.kind == SystemEventKind.Bluetooth) &&
+                model.icon != null) {
+                StatusBarIcon(icon = model.icon,
+                    tint = if (model.kind == SystemEventKind.Bluetooth) Color.Unspecified else accent,
                     modifier = Modifier.size(if (size > 52.dp) 30.dp else 22.dp))
             } else {
                 Icon(imageVector = model.kind.glyph, contentDescription = null, tint = accent,

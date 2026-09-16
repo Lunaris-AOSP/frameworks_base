@@ -64,6 +64,8 @@ sealed interface HoverBehavior {
     data class Buttons(val icons: List<ChipIcon>) : HoverBehavior
 }
 
+data class BluetoothBatteryModel(val label: String, val level: Int)
+
 /** Rich popup contents associated with a status bar chip. */
 sealed interface PopupContentModel {
     data class SystemEvent(
@@ -84,6 +86,7 @@ sealed interface PopupContentModel {
         val prominentText: String? = null,
         val pulse: Boolean = false,
         val image: Icon? = null,
+        val bluetoothBatteries: List<BluetoothBatteryModel> = emptyList(),
     ) : PopupContentModel
 
     data object None : PopupContentModel

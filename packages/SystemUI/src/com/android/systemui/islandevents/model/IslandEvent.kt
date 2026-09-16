@@ -75,8 +75,12 @@ sealed class IslandEvent(open val priority: Int, val id: String) : Comparable<Is
         val address: String = "",
         val deviceIcon: Drawable? = null,
         val deviceTypeLabel: String = "",
+        val deviceImage: Drawable? = null,
+        val leftBatteryLevel: Int? = null,
+        val rightBatteryLevel: Int? = null,
+        val caseBatteryLevel: Int? = null,
     ) : IslandEvent(priority = 60, id = "bluetooth") {
-        override fun withoutDrawables() = copy(deviceIcon = null)
+        override fun withoutDrawables() = copy(deviceIcon = null, deviceImage = null)
     }
 
     data class Hotspot(val numDevices: Int) : IslandEvent(priority = 55, id = "hotspot")
@@ -345,4 +349,3 @@ internal fun priorityForAospChipKey(key: String): Int = when {
     key == "CastToOtherDevice" -> 82
     else -> 70
 }
-

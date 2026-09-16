@@ -332,6 +332,9 @@
     <string name="dynamic_island_event_battery_saver">Battery saver</string>
     <string name="dynamic_island_event_unlocked">Unlocked</string>
     <string name="dynamic_island_event_disconnect">Disconnect</string>
+    <string name="dynamic_island_bluetooth_left_earbud">Left earbud</string>
+    <string name="dynamic_island_bluetooth_right_earbud">Right earbud</string>
+    <string name="dynamic_island_bluetooth_case">Case</string>
     <string name="dynamic_island_event_hotspot">Hotspot</string>
     <string name="dynamic_island_event_connected_devices">Connected devices: %1$d</string>
     <string name="dynamic_island_event_vpn">VPN</string>

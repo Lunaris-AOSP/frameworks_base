@@ -17,6 +17,7 @@ import com.android.systemui.statusbar.featurepods.popups.shared.model.PopupActio
 import com.android.systemui.statusbar.featurepods.popups.shared.toActivityLaunchAction
 import com.android.systemui.statusbar.featurepods.popups.shared.toSendAction
 import com.android.systemui.statusbar.featurepods.popups.ui.model.ChipIcon
+import com.android.systemui.statusbar.featurepods.popups.ui.model.BluetoothBatteryModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.ColorsModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
@@ -66,6 +67,7 @@ class SystemEventPopupMapper @Inject constructor(
             else -> return null
         }
         var prominentText: String? = null
+        var bluetoothBatteries = emptyList<BluetoothBatteryModel>()
         var appName: String? = null
         var pulse = false
         var image: Icon? = null
@@ -110,6 +112,18 @@ class SystemEventPopupMapper @Inject constructor(
                 prominentText = "${event.batteryLevel}%".takeIf { event.batteryLevel >= 0 }
                 progress = event.batteryLevel.takeIf { it >= 0 }?.div(100f)
                 icon = event.deviceIcon
+                image = event.deviceImage?.let { Icon.Loaded(it, null) }
+                bluetoothBatteries = listOfNotNull(
+                    event.leftBatteryLevel?.takeIf { it in 0..100 }?.let {
+                        BluetoothBatteryModel(context.getString(R.string.dynamic_island_bluetooth_left_earbud), it)
+                    },
+                    event.rightBatteryLevel?.takeIf { it in 0..100 }?.let {
+                        BluetoothBatteryModel(context.getString(R.string.dynamic_island_bluetooth_right_earbud), it)
+                    },
+                    event.caseBatteryLevel?.takeIf { it in 0..100 }?.let {
+                        BluetoothBatteryModel(context.getString(R.string.dynamic_island_bluetooth_case), it)
+                    },
+                )
                 iconRes = R.drawable.dynamic_island_headphones
                 if (event.address.isNotEmpty()) actions += PopupActionModel(
                     context.getString(R.string.dynamic_island_event_disconnect), { disconnect(event.address) })
@@ -211,6 +225,7 @@ class SystemEventPopupMapper @Inject constructor(
             else -> return null
         }
         val compactIcon = when (event) {
+            is IslandEvent.Bluetooth -> Icon.Resource(R.drawable.dynamic_island_bluetooth, null)
             is IslandEvent.BiometricUnlock, is IslandEvent.Call,
             is IslandEvent.Hotspot, is IslandEvent.RingerMode, is IslandEvent.AppSwitch ->
                 Icon.Resource(iconRes, null)
@@ -237,7 +252,7 @@ class SystemEventPopupMapper @Inject constructor(
                 }
                 is IslandEvent.PromotedOngoing -> if (indeterminate) null
                     else progress?.let { "${(it.coerceIn(0f, 1f) * 100).toInt()}%" }
-                is IslandEvent.Bluetooth -> prominentText
+                is IslandEvent.Bluetooth -> null
                 is IslandEvent.Hotspot -> event.numDevices.toString()
                 is IslandEvent.AppSwitch -> event.recentApps.size.toString()
                 else -> title
@@ -264,7 +279,7 @@ class SystemEventPopupMapper @Inject constructor(
                 title = title,
                 text = text,
                 actions = actions,
-                progress = progress?.coerceIn(0f, 1f),
+                progress = progress?.coerceIn(0f, 1f)?.takeIf { bluetoothBatteries.isEmpty() },
                 callStartTimeMs = (event as? IslandEvent.Call)?.takeIf {
                     it.callType == "Phone:active"
                 }?.callStartTimeMs,
@@ -277,9 +292,10 @@ class SystemEventPopupMapper @Inject constructor(
                 icon = if (event is IslandEvent.RingerMode) Icon.Resource(iconRes, null)
                     else icon?.let { Icon.Loaded(it, null) },
                 appName = appName,
-                prominentText = prominentText,
+                prominentText = prominentText.takeIf { bluetoothBatteries.isEmpty() },
                 pulse = pulse,
                 image = image,
+                bluetoothBatteries = bluetoothBatteries,
             ),
         )
     }
