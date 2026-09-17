@@ -37,6 +37,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
@@ -323,6 +324,8 @@ private fun UtilityStatusIslandChip(
             label = "utilityChipPressScale",
         )
     val isSystemEvent = viewModel.popupContent is PopupContentModel.SystemEvent
+    val isFlashlight = viewModel.popupContent is PopupContentModel.Flashlight
+    val hasBalancedSegments = isSystemEvent || isFlashlight
     val deviceImage = (viewModel.popupContent as? PopupContentModel.SystemEvent)
         ?.takeIf { it.kind == SystemEventKind.Bluetooth }?.image
     val deviceImageSize = 20.dp * widthScale
@@ -340,14 +343,20 @@ private fun UtilityStatusIslandChip(
     val liveChipText = rememberChipText(viewModel).orEmpty()
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
+    val textEndPadding =
+        (when {
+            isSystemEvent -> 12.dp
+            isFlashlight -> 10.dp
+            else -> 6.dp
+        }) * widthScale
     val eventTextWidth = if (isSystemEvent) {
         val measured = textMeasurer.measure(liveChipText,
             style = MaterialTheme.typography.labelLarge, maxLines = 1)
-        with(density) { measured.size.width.toDp() } + 18.dp * widthScale + deviceImageSpace
+        with(density) { measured.size.width.toDp() } +
+            6.dp * widthScale + textEndPadding + deviceImageSpace
     } else 0.dp
     val rightSegmentWidth =
         (when (viewModel.popupContent) {
-            is PopupContentModel.Flashlight -> 52.dp
             is PopupContentModel.Alarm -> 72.dp
             is PopupContentModel.SystemEvent -> 60.dp
             else -> 80.dp
@@ -386,7 +395,13 @@ private fun UtilityStatusIslandChip(
                     scaleY = collapseState.scaleY * pressScale
                 }
                 .defaultMinSize(minHeight = 32.dp * heightScale)
-                .width(connectedIslandWidth)
+                .then(
+                    if (isFlashlight) {
+                        Modifier.width(IntrinsicSize.Max)
+                    } else {
+                        Modifier.width(connectedIslandWidth)
+                    }
+                )
                 .then(if (isSystemEvent) Modifier.semantics {
                     contentDescription = viewModel.contentDescription.orEmpty()
                 } else Modifier)
@@ -402,12 +417,18 @@ private fun UtilityStatusIslandChip(
         horizontalArrangement = Arrangement.spacedBy(0.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (isSystemEvent) {
-            Box(
-                modifier = Modifier.width(rightSegmentWidth).padding(start = 12.dp * widthScale),
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                val chipIcon = viewModel.icons.first()
+        Box(
+            modifier =
+                (if (isFlashlight) {
+                    Modifier.weight(1f)
+                } else {
+                    Modifier.width(if (isSystemEvent) rightSegmentWidth else 30.dp * widthScale)
+                })
+                    .padding(start = (if (isSystemEvent) 12.dp else 10.dp) * widthScale),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            val chipIcon = viewModel.icons.first()
+            if (isSystemEvent) {
                 val event = viewModel.popupContent as PopupContentModel.SystemEvent
                 if (event.kind == SystemEventKind.Charging) {
                     ChargingChipGlyph(
@@ -418,26 +439,25 @@ private fun UtilityStatusIslandChip(
                     Icon(icon = chipIcon.icon, modifier = Modifier.size(18.dp * widthScale),
                         tint = if (chipIcon.tint) chipContentColor else Color.Unspecified)
                 }
+            } else {
+                CollapsedGlyphBadge(
+                    icon = chipIcon.icon,
+                    accent = islandChipAccentFor(viewModel.popupContent) ?: chipContentColor,
+                    content = viewModel.popupContent,
+                    badgeSize = 20.dp * widthScale,
+                    iconSize = 13.dp * widthScale,
+                )
             }
-        } else {
-            Spacer(modifier = Modifier.width(10.dp * widthScale))
-            CollapsedGlyphBadge(
-                icon = viewModel.icons.first().icon,
-                accent = islandChipAccentFor(viewModel.popupContent) ?: chipContentColor,
-                content = viewModel.popupContent,
-                badgeSize = 20.dp * widthScale,
-                iconSize = 13.dp * widthScale,
-            )
         }
         Spacer(modifier = Modifier.width(cameraGapWidth))
         Box(
             modifier =
-                Modifier.width(rightSegmentWidth)
+                (if (isFlashlight) Modifier.weight(1f) else Modifier.width(rightSegmentWidth))
                     .padding(
                         start = 6.dp * widthScale,
                         top = 7.dp * heightScale,
                         bottom = 7.dp * heightScale,
-                        end = (if (isSystemEvent) 12.dp else 6.dp) * widthScale,
+                        end = textEndPadding,
                     ),
             contentAlignment = Alignment.CenterEnd,
         ) {
@@ -451,9 +471,10 @@ private fun UtilityStatusIslandChip(
                     style = MaterialTheme.typography.labelLarge,
                     color = chipContentColor,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    softWrap = !isFlashlight,
+                    overflow = if (isFlashlight) TextOverflow.Clip else TextOverflow.Ellipsis,
                     textAlign = TextAlign.End,
-                    modifier = Modifier.weight(1f),
+                    modifier = if (isFlashlight) Modifier else Modifier.weight(1f),
                 )
                 deviceImage?.let { artwork ->
                     Icon(icon = artwork, tint = Color.Unspecified,
@@ -461,7 +482,7 @@ private fun UtilityStatusIslandChip(
                 }
             }
         }
-        if (!isSystemEvent) Spacer(modifier = Modifier.width(10.dp * widthScale))
+        if (!hasBalancedSegments) Spacer(modifier = Modifier.width(10.dp * widthScale))
     }
 }
 
@@ -532,7 +553,7 @@ private val CompactUtilityIslandWidth = 74.dp
 private val CompactUtilityConnectedIslandChromeWidth = 42.dp
 private val CompactUtilityConnectedIslandMinWidth = 132.dp
 private val CompactUtilityConnectedIslandMaxWidth = 188.dp
-private val DynamicIslandEmbeddedGapWidth = 20.dp
+private val DynamicIslandEmbeddedGapWidth = 25.dp
 
 internal val DynamicIslandCompanionDiameter = 34.dp
 internal val DynamicIslandCompanionGap = 8.dp

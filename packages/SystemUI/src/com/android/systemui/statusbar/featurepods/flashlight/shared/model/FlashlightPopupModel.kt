@@ -18,7 +18,6 @@ package com.android.systemui.statusbar.featurepods.flashlight.shared.model
 
 /** Popup content for the flashlight page in the dynamic island. */
 data class FlashlightPopupModel(
-    val levelPercent: Int?,
     val level: Int? = null,
     val maxLevel: Int? = null,
     val turnOff: () -> Unit,
