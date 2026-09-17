@@ -739,9 +739,12 @@ public class UdfpsController implements DozeReceiver, Dumpable {
             shouldPilfer = true;
         }
 
-        // Pilfer only once per gesture, don't pilfer for BP
+        // Pilfer only once per gesture, don't pilfer for BP or when Quick Launch is active
+        boolean isQuickLaunchEnabled = com.android.systemui.biometrics.udfps.quicklaunch.QuickLaunchHelper
+                .getInstance(mContext).isQuickLaunchEnabled();
         if (shouldPilfer && !mPointerPilfered
-                && getBiometricSessionType() != SESSION_BIOMETRIC_PROMPT) {
+                && getBiometricSessionType() != SESSION_BIOMETRIC_PROMPT
+                && !isQuickLaunchEnabled) {
             mInputManager.pilferPointers(
                     mOverlay.getTouchOverlay().getViewRootImpl().getInputToken());
             mPointerPilfered = true;

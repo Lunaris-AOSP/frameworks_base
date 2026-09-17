@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Copyright (C) 2026 Project ASCP
+    SPDX-License-Identifier: Apache-2.0
+-->
+<resources>
+    <dimen name="kgd_fp_ql_image_layout_size">52.8dp</dimen>
+    <dimen name="kgd_fp_ql_image_size">52.8dp</dimen>
+    <dimen name="kgd_fp_ql_shortcut_second_app_size">18dp</dimen>
+    <dimen name="kgd_fp_ql_image_move_end">110dp</dimen>
+    <dimen name="kgd_fp_ql_image_move_distance">30dp</dimen>
+    <dimen name="kgd_fp_ql_round_icon_size">30dp</dimen>
+    <dimen name="kgd_fp_ql_app_or_shortcuts_name_text_size">18sp</dimen>
+    <dimen name="kgd_fp_ql_shortcuts_label_text_size">14sp</dimen>
+    <dimen name="kgd_fp_ql_shortcuts_label_margin_top">4dp</dimen>
+    <dimen name="kgd_fp_ql_edit_layout_size">50dp</dimen>
+    <dimen name="kgd_fp_ql_edit_icon_size">24dp</dimen>
+    <dimen name="kgd_fp_ql_edit_region_height">60dp</dimen>
+    <integer name="kgd_fp_ql_app_nums">5</integer>
+    <integer name="kgd_fp_ql_diffusion_angle">180</integer>
+</resources>

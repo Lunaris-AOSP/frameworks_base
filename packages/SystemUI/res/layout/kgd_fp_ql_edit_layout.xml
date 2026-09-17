@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Copyright (C) 2026 Project ASCP
+    SPDX-License-Identifier: Apache-2.0
+-->
+<com.android.systemui.biometrics.udfps.quicklaunch.QuickLaunchEditView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="@dimen/kgd_fp_ql_edit_layout_size"
+    android:layout_height="@dimen/kgd_fp_ql_edit_layout_size"
+    android:contentDescription="@string/fingerprint_ql_edit_message">
+
+    <ImageView
+        android:id="@+id/circle"
+        android:layout_width="@dimen/kgd_fp_ql_edit_layout_size"
+        android:layout_height="@dimen/kgd_fp_ql_edit_layout_size"
+        android:layout_gravity="center"
+        android:src="@drawable/kgd_fp_ql_edit_circle" />
+
+    <ImageView
+        android:id="@+id/icon"
+        android:layout_width="@dimen/kgd_fp_ql_edit_icon_size"
+        android:layout_height="@dimen/kgd_fp_ql_edit_icon_size"
+        android:layout_gravity="center"
+        android:tint="@android:color/white"
+        android:src="@drawable/kgd_fp_quick_launch_edit_icon" />
+
+</com.android.systemui.biometrics.udfps.quicklaunch.QuickLaunchEditView>

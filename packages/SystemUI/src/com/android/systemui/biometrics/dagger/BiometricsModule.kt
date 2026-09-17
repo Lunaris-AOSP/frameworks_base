@@ -74,6 +74,14 @@ interface BiometricsModule {
     @ClassKey(AuthController::class)
     fun bindAuthControllerStartable(service: AuthController): CoreStartable
 
+    /** Starts QuickLaunchController. */
+    @Binds
+    @IntoMap
+    @ClassKey(com.android.systemui.biometrics.udfps.quicklaunch.QuickLaunchController::class)
+    fun bindQuickLaunchControllerStartable(
+        service: com.android.systemui.biometrics.udfps.quicklaunch.QuickLaunchController
+    ): CoreStartable
+
     /** Listen to config changes for AuthController. */
     @Binds
     @IntoSet

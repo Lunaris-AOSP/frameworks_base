@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Copyright (C) 2026 Project ASCP
+    SPDX-License-Identifier: Apache-2.0
+-->
+<resources>
+    <string name="fingerprint_ql_guide_glide_message">Slide to an icon and release to launch</string>
+    <string name="fingerprint_ql_guide_down_to_edit_message">Slide down to edit menu</string>
+    <string name="fingerprint_ql_edit_message">Release to edit menu</string>
+    <string name="fingerprint_ql_recommend_message">Quickly launch functions or apps</string>
+    <string name="fingerprint_ql_recommend_sub_message">Slide to an empty icon and release to add a function or app for quick launch.</string>
+    <string name="fingerprint_ql_setting_edit_title">Edit Quick launch menu</string>
+</resources>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Copyright (C) 2026 Project ASCP
+    SPDX-License-Identifier: Apache-2.0
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="@dimen/kgd_fp_ql_image_layout_size"
+    android:layout_height="@dimen/kgd_fp_ql_image_layout_size"
+    android:clipChildren="false"
+    android:clipToPadding="false">
+
+    <ImageView
+        android:id="@+id/image_item"
+        android:layout_width="@dimen/kgd_fp_ql_image_size"
+        android:layout_height="@dimen/kgd_fp_ql_image_size"
+        android:layout_gravity="center"
+        android:scaleType="fitCenter" />
+
+    <ImageView
+        android:id="@+id/image_app"
+        android:layout_width="@dimen/kgd_fp_ql_shortcut_second_app_size"
+        android:layout_height="@dimen/kgd_fp_ql_shortcut_second_app_size"
+        android:layout_gravity="end|bottom"
+        android:scaleType="fitCenter"
+        android:visibility="gone" />
+
+</FrameLayout>
