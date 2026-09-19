@@ -61,28 +61,18 @@ constructor(
 
     private val disabled get() = settings.disabledEventTypes.value
 
-    private fun isTypeEnabled(typeId: String): Boolean = typeId !in disabled
+    private fun isTypeEnabled(typeId: String): Boolean =
+        settings.isEnabled.value && typeId !in disabled
 
     private fun isMediaSourceNeeded(): Boolean =
         isTypeEnabled("media") || settings.isKeyguardMusicPillEnabled.value
 
     fun startListening() {
-        if (listenersStarted) return
-        listenersStarted = true
-        Log.d(TAG, "Starting event listeners")
-        syncDisabledTypes()
-        if (isMediaSourceNeeded()) media.startListening()
-        if (isTypeEnabled("bluetooth")) connectivity.startBluetooth()
-        if (isTypeEnabled("hotspot")) connectivity.startHotspot()
-        if (isTypeEnabled("vpn")) connectivity.startVpn()
-        if (isTypeEnabled("charging")) system.startCharging()
-        if (isTypeEnabled("ringer")) system.startRinger()
-        if (isTypeEnabled("clipboard")) system.startClipboard()
-        notification.startListening()
-        if (isTypeEnabled("app_switch")) appTracking.startListening()
-        if (isTypeEnabled("torch")) torch.startListening()
-        if (isTypeEnabled("biometric_unlock")) biometric.startListening()
-        if (isMediaSourceNeeded() || isTypeEnabled("sports")) smartspace.startListening()
+        if (!listenersStarted) {
+            listenersStarted = true
+            Log.d(TAG, "Starting event listeners")
+        }
+        refreshListeners()
     }
 
     fun stopListening() {
@@ -106,6 +96,9 @@ constructor(
         if (isMediaSourceNeeded()) media.startListening()
         else media.stopListening()
 
+        if (settings.isEnabled.value) notification.startListening()
+        else notification.stopListening()
+
         if (isTypeEnabled("bluetooth")) connectivity.startBluetooth()
         else connectivity.stopBluetooth()
         if (isTypeEnabled("hotspot")) connectivity.startHotspot()
@@ -127,7 +120,7 @@ constructor(
         if (isTypeEnabled("biometric_unlock")) biometric.startListening()
         else biometric.stopListening()
 
-        if (isMediaSourceNeeded() || isTypeEnabled("sports")) smartspace.startListening()
+        if (isTypeEnabled("media") || isTypeEnabled("sports")) smartspace.startListening()
         else smartspace.stopListening()
     }
 
