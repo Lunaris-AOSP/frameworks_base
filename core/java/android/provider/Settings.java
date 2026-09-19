@@ -7923,6 +7923,13 @@ public final class Settings {
         public static final String BLOCK_WALLPAPER_DIMMING = "block_wallpaper_dimming";
 
         /**
+         * Whether wallpaper zoom effects are enabled. Defaults to 1 (enabled).
+         * @hide
+         */
+        @Readable
+        public static final String WALLPAPER_ZOOM_ENABLED = "wallpaper_zoom_enabled";
+
+        /**
          * What to show at the bottom of the Ambient display
          * 0: Nothing.
          * 1: Battery Percentage.
