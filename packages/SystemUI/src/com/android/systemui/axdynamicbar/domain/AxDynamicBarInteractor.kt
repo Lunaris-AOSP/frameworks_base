@@ -224,8 +224,15 @@ constructor(
         }
 
         applicationScope.launch {
-            settings.isEnabled.collect { enabled ->
-                if (enabled) repository.startListening()
+            combine(
+                settings.isEnabled,
+                settings.isKeyguardMusicPillEnabled,
+                settings.disabledEventTypes,
+            ) { enabled, pillEnabled, _ ->
+                enabled to pillEnabled
+            }.collect { (enabled, pillEnabled) ->
+                if (!enabled) dismissNotificationAlert()
+                if (enabled || pillEnabled) repository.startListening()
                 else {
                     repository.stopListening()
                     autoDismissJobs.values.forEach { it.cancel() }
@@ -234,12 +241,6 @@ constructor(
                     repository.clearAllIndicationEvents()
                     _uiState.value = IslandUiState()
                 }
-            }
-        }
-
-        applicationScope.launch {
-            settings.disabledEventTypes.collect {
-                repository.refreshListeners()
             }
         }
 
@@ -253,18 +254,21 @@ constructor(
             combine(
                 repository.events,
                 settings.disabledEventTypes,
+                combine(settings.isEnabled, settings.isKeyguardEnabled) { enabled, kgEnabled ->
+                    enabled to kgEnabled
+                },
                 settings.isKeyguardMusicPillEnabled,
                 _isOnKeyguard,
-            ) { raw, _, pillEnabled, kg ->
+            ) { raw, _, (enabled, kgEnabled), pillEnabled, kg ->
                 raw.filter { e ->
-                    if (e is IslandEvent.Media) {
-                        settings.isEventEnabled(e) || pillEnabled
+                    if (kg && e is IslandEvent.Media) {
+                        // The lock screen music pill has its own switch and event source.
+                        pillEnabled
                     } else {
-                        settings.isEventEnabled(e)
+                        enabled && (!kg || kgEnabled) && settings.isEventEnabled(e)
                     }
                 } to kg
             }.collect { (rawEvents, onKeyguard) ->
-                if (!settings.isEnabled.value) return@collect
                 dismissedEventIds.removeAll { id -> rawEvents.none { it.id == id } }
                 val events = rawEvents.filter { e ->
                     e.id !in dismissedEventIds &&
@@ -478,6 +482,7 @@ constructor(
     private fun showNotificationAlert(
         notification: IslandEvent.Notification,
     ) {
+        if (!settings.isEnabled.value) return
         if (panelBlocking || statusBlocking || _isOnKeyguard.value) return
         if (shouldSuppressForDndOrRinger(notification)) return
         val current = _uiState.value

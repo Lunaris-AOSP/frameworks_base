@@ -172,6 +172,21 @@ constructor(
 
     val isOnKeyguard: StateFlow<Boolean> = interactor.isOnKeyguard
 
+    val isKeyguardChipVisible: StateFlow<Boolean> =
+        combine(
+            isOnKeyguard,
+            isEnabled,
+            isKeyguardEnabled,
+            isKeyguardMusicPillEnabled,
+            chipState,
+        ) { onKeyguard, enabled, keyguardEnabled, pillEnabled, state ->
+            onKeyguard && (
+                (enabled && keyguardEnabled) ||
+                    (pillEnabled && state?.allEvents?.any { it is IslandEvent.Media } == true)
+            )
+        }.distinctUntilChanged()
+            .stateIn(applicationScope, SharingStarted.Eagerly, false)
+
     val isKeyguardFadingAway: StateFlow<Boolean> = interactor.isKeyguardFadingAway
 
     val isBouncerShowing: StateFlow<Boolean> = interactor.isBouncerShowing
