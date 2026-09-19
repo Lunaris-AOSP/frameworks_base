@@ -13018,6 +13018,12 @@ public final class Settings {
                 "lock_screen_notification_minimalism";
 
         /**
+         * @hide
+         */
+        public static final String LOCK_SCREEN_STACKED_NOTIFICATIONS =
+                "lock_screen_stacked_notifications";
+
+        /**
          * Indicates whether snooze options should be shown on notifications
          * <p>
          * Type: int (0 for false, 1 for true)

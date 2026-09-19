@@ -916,6 +916,8 @@ public class ViewState implements Dumpable {
         abortAnimation(view, TAG_ANIMATOR_TRANSLATION_Y);
         abortAnimation(view, TAG_ANIMATOR_TRANSLATION_Z);
         abortAnimation(view, TAG_ANIMATOR_ALPHA);
+        abortAnimation(view, SCALE_X_PROPERTY.getAnimatorTag());
+        abortAnimation(view, SCALE_Y_PROPERTY.getAnimatorTag());
     }
 
     /**
@@ -927,6 +929,8 @@ public class ViewState implements Dumpable {
         skipAnimationToEnd(view, TAG_ANIMATOR_TRANSLATION_Y);
         skipAnimationToEnd(view, TAG_ANIMATOR_TRANSLATION_Z);
         skipAnimationToEnd(view, TAG_ANIMATOR_ALPHA);
+        skipAnimationToEnd(view, SCALE_X_PROPERTY.getAnimatorTag());
+        skipAnimationToEnd(view, SCALE_Y_PROPERTY.getAnimatorTag());
     }
 
     @Override

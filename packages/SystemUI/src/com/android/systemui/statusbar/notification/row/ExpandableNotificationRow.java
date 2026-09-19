@@ -108,6 +108,7 @@ import com.android.systemui.statusbar.RemoteInputController;
 import com.android.systemui.statusbar.SmartReplyController;
 import com.android.systemui.statusbar.StatusBarIconView;
 import com.android.systemui.statusbar.notification.AboveShelfChangedListener;
+import com.android.systemui.statusbar.notification.AnimatableProperty;
 import com.android.systemui.statusbar.notification.BundleInteractionLogger;
 import com.android.systemui.statusbar.notification.ColorUpdateLogger;
 import com.android.systemui.statusbar.notification.FeedbackIcon;
@@ -186,6 +187,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     private static final long RECENTLY_ALERTED_THRESHOLD_MS = TimeUnit.SECONDS.toMillis(30);
     private static final SourceType BASE_VALUE = SourceType.from("BaseValue");
     private static final SourceType FROM_PARENT = SourceType.from("FromParent(ENR)");
+    private static final SourceType LOCKSCREEN_STACK = SourceType.from("LockscreenStack");
     private static final long INITIALIZATION_DELAY = 400;
 
     // We don't correctly track dark mode until the content views are inflated, so always update
@@ -293,6 +295,74 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     private String mAppName;
     private NotificationRebindingTracker mRebindingTracker;
     private FalsingManager mFalsingManager;
+    private int mLockscreenStackIndex = -1;
+    private float mLockscreenStackContentAlpha = 1f;
+    private float mLockscreenStackRoundness;
+
+    public static final AnimatableProperty LOCKSCREEN_STACK_CONTENT_ALPHA =
+            AnimatableProperty.from("lockscreenStackContentAlpha",
+                    ExpandableNotificationRow::setLockscreenStackContentAlpha,
+                    ExpandableNotificationRow::getLockscreenStackContentAlpha,
+                    R.id.lockscreen_stack_content_alpha_animator_tag,
+                    R.id.lockscreen_stack_content_alpha_start_tag,
+                    R.id.lockscreen_stack_content_alpha_end_tag);
+
+    public static final AnimatableProperty LOCKSCREEN_STACK_ROUNDNESS =
+            AnimatableProperty.from("lockscreenStackRoundness",
+                    ExpandableNotificationRow::setLockscreenStackRoundness,
+                    ExpandableNotificationRow::getLockscreenStackRoundness,
+                    R.id.lockscreen_stack_roundness_animator_tag,
+                    R.id.lockscreen_stack_roundness_start_tag,
+                    R.id.lockscreen_stack_roundness_end_tag);
+
+    public float getLockscreenStackRoundness() {
+        return mLockscreenStackRoundness;
+    }
+
+    private void setLockscreenStackRoundness(float roundness) {
+        if (mLockscreenStackRoundness != roundness) {
+            mLockscreenStackRoundness = roundness;
+            requestRoundness(roundness, roundness, LOCKSCREEN_STACK, false /* animate */);
+        }
+    }
+
+    public float getLockscreenStackContentAlpha() {
+        return mLockscreenStackContentAlpha;
+    }
+
+    private void setLockscreenStackContentAlpha(float alpha) {
+        if (mLockscreenStackContentAlpha != alpha) {
+            mLockscreenStackContentAlpha = alpha;
+            invalidate();
+        }
+    }
+
+    public boolean isBehindLockscreenStack() {
+        return mLockscreenStackIndex > 0;
+    }
+
+    public boolean isInLockscreenStack() {
+        return mLockscreenStackIndex >= 0;
+    }
+
+    public void setLockscreenStackIndex(int index) {
+        if (mLockscreenStackIndex == index) {
+            return;
+        }
+        mLockscreenStackIndex = index;
+        updateClickAndFocus();
+        updateAccessibilityImportance(!areGutsExposed());
+    }
+
+    @Override
+    public boolean performClick() {
+        if (isInLockscreenStack()
+                && getParent() instanceof NotificationStackScrollLayout stack) {
+            stack.expandLockscreenNotificationStack();
+            return true;
+        }
+        return super.performClick();
+    }
 
     /**
      * Whether or not the notification is using the heads up view and should peek from the top.
@@ -1295,7 +1365,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         if (ev.getActionMasked() != MotionEvent.ACTION_DOWN) {
             mFalsingManager.isFalseTap(FalsingManager.MODERATE_PENALTY);
         }
-        return super.onInterceptTouchEvent(ev);
+        return isInLockscreenStack() || super.onInterceptTouchEvent(ev);
     }
 
     @Override
@@ -1522,6 +1592,9 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
      * @return whether the notification row is long clickable or not.
      */
     public boolean isNotificationRowLongClickable() {
+        if (isBehindLockscreenStack()) {
+            return false;
+        }
         if (mLongPressListener == null) {
             return false;
         }
@@ -1595,9 +1668,10 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     }
 
     private void updateClickAndFocus() {
-        boolean normalChild = !isChildInGroup() || isGroupExpanded();
-        boolean clickable = mOnClickListener != null
-                && (normalChild || isBundledSummaryClickable());
+        boolean normalChild = !isBehindLockscreenStack()
+                && (!isChildInGroup() || isGroupExpanded());
+        boolean clickable = isInLockscreenStack() || (mOnClickListener != null
+                && (normalChild || isBundledSummaryClickable()));
         if (isFocusable() != normalChild) {
             setFocusable(normalChild);
         }
@@ -2803,7 +2877,8 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
      * Updates whether this view is important for accessibility based on {@code isEnabled}.
      */
     private void updateAccessibilityImportance(boolean isEnabled) {
-        setImportantForAccessibility(isEnabled
+        setImportantForAccessibility(isBehindLockscreenStack()
+                ? View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS : isEnabled
                 ? View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
                 : View.IMPORTANT_FOR_ACCESSIBILITY_NO);
     }
@@ -3110,6 +3185,12 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             setAboveShelf(true);
             mExpandAnimationRunning = true;
             getViewState().cancelAnimations(this);
+            if (getViewState().lockscreenStackScaleApplied) {
+                setScaleX(1f);
+                getViewState().lockscreenStackScaleApplied = false;
+            }
+            setLockscreenStackContentAlpha(1f);
+            setLockscreenStackIndex(-1);
             mNotificationLaunchHeight = AmbientState.getNotificationLaunchHeight(getContext());
         } else {
             mExpandAnimationRunning = false;
@@ -4517,16 +4598,29 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             NotificationChildrenContainer childrenContainer = getChildrenContainerNonNull();
             info.setContentDescription(childrenContainer.getBundleHeaderDescription());
         }
+        if (mLockscreenStackIndex == 0) {
+            CharSequence label = getContext().getString(R.string.lockscreen_notification_stack_expand);
+            info.addAction(new AccessibilityAction(AccessibilityNodeInfo.ACTION_CLICK, label));
+            info.addAction(new AccessibilityAction(AccessibilityNodeInfo.ACTION_EXPAND, label));
+            info.setExpandedState(AccessibilityNodeInfo.EXPANDED_STATE_COLLAPSED);
+        }
     }
 
     /** @return whether this row's expansion state can be toggled by an accessibility action. */
     private boolean isAccessibilityExpandable() {
         // don't add expand accessibility actions to snoozed notifications
-        return !mIsSnoozed && isContentExpandable();
+        return !isInLockscreenStack() && !mIsSnoozed && isContentExpandable();
     }
 
     @Override
     public boolean performAccessibilityActionInternal(int action, Bundle arguments) {
+        if (isBehindLockscreenStack()) {
+            return false;
+        }
+        if (mLockscreenStackIndex == 0 && action == AccessibilityNodeInfo.ACTION_EXPAND
+                && getParent() instanceof NotificationStackScrollLayout stack) {
+            return stack.expandLockscreenNotificationStack();
+        }
         if (super.performAccessibilityActionInternal(action, arguments)) {
             return true;
         }
@@ -4605,6 +4699,22 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     public void setExpandingClipPath(Path path) {
         mExpandingClipPath = path;
         invalidate();
+    }
+
+    @Override
+    protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
+        if (mLockscreenStackContentAlpha < 1f
+                && (child instanceof NotificationContentView || child == mChildrenContainer)) {
+            if (mLockscreenStackContentAlpha <= 0f) {
+                return false;
+            }
+            int save = canvas.saveLayerAlpha(0f, 0f, getWidth(), getHeight(),
+                    Math.round(255 * mLockscreenStackContentAlpha));
+            boolean drawn = super.drawChild(canvas, child, drawingTime);
+            canvas.restoreToCount(save);
+            return drawn;
+        }
+        return super.drawChild(canvas, child, drawingTime);
     }
 
     @Override

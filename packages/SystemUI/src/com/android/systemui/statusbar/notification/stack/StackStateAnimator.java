@@ -54,6 +54,7 @@ import java.util.function.Consumer;
 public class StackStateAnimator {
 
     public static final int ANIMATION_DURATION_STANDARD = 360;
+    public static final int ANIMATION_DURATION_LOCKSCREEN_STACK = 420;
     public static final int ANIMATION_DURATION_CORNER_RADIUS = 200;
     public static final int ANIMATION_DURATION_WAKEUP = 500;
     public static final int ANIMATION_DURATION_WAKEUP_SCRIM = 667;
@@ -178,6 +179,11 @@ public class StackStateAnimator {
 
         int childCount = mHostLayout.getChildCount();
         mAnimationFilter.applyCombination(mNewEvents);
+        if (!mNewEvents.isEmpty() && mHostLayout.shouldAnimateLockscreenNotificationStack()) {
+            mAnimationFilter.animateAlpha().animateHeight().animateZ().animateScale()
+                    .animate(ExpandableNotificationRow.LOCKSCREEN_STACK_CONTENT_ALPHA.getProperty())
+                    .animate(ExpandableNotificationRow.LOCKSCREEN_STACK_ROUNDNESS.getProperty());
+        }
         mCurrentAdditionalDelay = additionalDelay;
         mCurrentLength = NotificationStackScrollLayout.AnimationEvent.combineLength(mNewEvents);
         // Used to stagger concurrent animations' delays and durations for visual effect

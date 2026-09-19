@@ -10,4 +10,7 @@
     <string name="quick_settings_ringer_label">Ringer mode</string>
     <string name="torch_active">Torch Active</string>
     <string name="google_wallet">Google Wallet</string>
+
+    <string name="lockscreen_notification_stack_expand">Expand notifications</string>
+    <string name="lockscreen_notification_stack_collapse">Collapse notifications</string>
 </resources>

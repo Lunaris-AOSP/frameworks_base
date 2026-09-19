@@ -21,4 +21,9 @@
 
     <!-- Weather -->  
     <dimen name="weather_image_max_size">24dp</dimen>
+
+    <dimen name="lockscreen_notification_stack_peek">10dp</dimen>
+    <dimen name="lockscreen_notification_stack_elevation">2dp</dimen>
+    <dimen name="lockscreen_notification_stack_bottom_padding">16dp</dimen>
+    <dimen name="lockscreen_notification_stack_list_gap">6dp</dimen>
 </resources>

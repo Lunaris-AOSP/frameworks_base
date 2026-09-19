@@ -321,4 +321,11 @@
     <!-- Now Playing -->
     <item type="id" name="now_playing_view" />
 
+    <item type="id" name="lockscreen_stack_content_alpha_animator_tag" />
+    <item type="id" name="lockscreen_stack_content_alpha_start_tag" />
+    <item type="id" name="lockscreen_stack_content_alpha_end_tag" />
+    <item type="id" name="lockscreen_stack_roundness_animator_tag" />
+    <item type="id" name="lockscreen_stack_roundness_start_tag" />
+    <item type="id" name="lockscreen_stack_roundness_end_tag" />
+
 </resources>

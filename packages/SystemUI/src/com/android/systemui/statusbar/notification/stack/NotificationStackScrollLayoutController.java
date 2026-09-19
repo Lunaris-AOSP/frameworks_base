@@ -126,6 +126,7 @@ import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
 import com.android.systemui.statusbar.notification.row.NotificationSnooze;
 import com.android.systemui.statusbar.notification.shared.GroupHunAnimationFix;
 import com.android.systemui.statusbar.notification.shared.NotificationBundleUi;
+import com.android.systemui.statusbar.notification.shared.NotificationMinimalism;
 import com.android.systemui.statusbar.notification.stack.ui.viewbinder.NotificationListViewBinder;
 import com.android.systemui.statusbar.phone.HeadsUpAppearanceController;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
@@ -213,6 +214,18 @@ public class NotificationStackScrollLayoutController implements Dumpable {
             mSensitiveNotificationProtectionController;
 
     private View mLongPressedView;
+    private boolean mStackedNotificationsEnabled;
+    private boolean mCompactNotificationsEnabled = true;
+
+    private final TunerService.Tunable mLockscreenStackTunable = (key, value) -> {
+        if (Settings.Secure.LOCK_SCREEN_STACKED_NOTIFICATIONS.equals(key)) {
+            mStackedNotificationsEnabled = TunerService.parseIntegerSwitch(value, false);
+        } else if (Settings.Secure.LOCK_SCREEN_NOTIFICATION_MINIMALISM.equals(key)) {
+            mCompactNotificationsEnabled = TunerService.parseIntegerSwitch(value, true);
+        }
+        mView.setLockscreenNotificationStackEnabled(mStackedNotificationsEnabled
+                && !(NotificationMinimalism.isEnabled() && mCompactNotificationsEnabled));
+    };
 
     private final NotificationListContainerImpl mNotificationListContainer =
             new NotificationListContainerImpl();
@@ -224,6 +237,9 @@ public class NotificationStackScrollLayoutController implements Dumpable {
                 public void onViewAttachedToWindow(View v) {
                     mColorUpdateLogger.logTriggerEvent("NSSLC.onViewAttachedToWindow()");
                     mConfigurationController.addCallback(mConfigurationListener);
+                    mTunerService.addTunable(mLockscreenStackTunable,
+                            Settings.Secure.LOCK_SCREEN_NOTIFICATION_MINIMALISM,
+                            Settings.Secure.LOCK_SCREEN_STACKED_NOTIFICATIONS);
                     final int newBarState = mStatusBarStateController.getState();
                     if (newBarState != mBarState) {
                         mStateListener.onStateChanged(newBarState);
@@ -239,6 +255,8 @@ public class NotificationStackScrollLayoutController implements Dumpable {
                     mConfigurationController.removeCallback(mConfigurationListener);
                     mStatusBarStateController.removeCallback(mStateListener);
                     mTunerService.removeTunable(mTunable);
+                    mTunerService.removeTunable(mLockscreenStackTunable);
+                    mView.resetLockscreenNotificationStack();
                 }
             };
 
@@ -370,6 +388,7 @@ public class NotificationStackScrollLayoutController implements Dumpable {
     private final UserChangedListener mLockscreenUserChangeListener = new UserChangedListener() {
         @Override
         public void onUserChanged(int userId) {
+            mView.resetLockscreenNotificationStack();
             updateSensitivenessWithAnimation(false);
             mHistoryEnabled = null;
         }
@@ -1039,6 +1058,14 @@ public class NotificationStackScrollLayoutController implements Dumpable {
                 break;
         }
     };
+
+    boolean isFalseStackTap() {
+        return mFalsingManager.isFalseTap(FalsingManager.LOW_PENALTY);
+    }
+
+    public void setLockscreenNotificationStackAvailableHeight(float height) {
+        mView.setLockscreenNotificationStackAvailableHeight(height);
+    }
 
     public void setApplyHunTranslation(boolean apply) {
         mView.setApplyHunTranslation(apply);

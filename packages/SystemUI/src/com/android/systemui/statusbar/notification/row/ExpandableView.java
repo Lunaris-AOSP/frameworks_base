@@ -50,6 +50,7 @@ import com.android.systemui.statusbar.notification.headsup.PinnedStatus;
 import com.android.systemui.statusbar.notification.stack.ExpandableViewState;
 import com.android.systemui.statusbar.notification.stack.MagneticRowListener;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
+import com.android.systemui.statusbar.notification.stack.ViewState;
 import com.android.systemui.util.Compile;
 import com.android.systemui.util.DumpUtilsKt;
 
@@ -817,8 +818,13 @@ public abstract class ExpandableView extends FrameLayout implements Dumpable, Ro
         mViewState.notGoneIndex = -1;
         mViewState.setXTranslation(getTranslationX());
         mViewState.hidden = false;
-        mViewState.setScaleX(getScaleX());
+        mViewState.setScaleX(mViewState.lockscreenStackScaleApplied ? 1f : getScaleX());
+        mViewState.lockscreenStackScaleApplied &= getScaleX() != 1f
+                || ViewState.isAnimatingY(this) || ViewState.isAnimating(this, HEIGHT_PROPERTY);
         mViewState.setScaleY(getScaleY());
+        mViewState.lockscreenStackIndex = -1;
+        mViewState.lockscreenStackContentAlpha = 1f;
+        mViewState.lockscreenStackRoundness = 0f;
         mViewState.inShelf = false;
         mViewState.headsUpIsVisible = false;
 
