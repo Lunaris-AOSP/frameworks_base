@@ -108,8 +108,9 @@ public class WirelessChargingAnimation {
         }
 
         mPreviousWirelessChargingView = mCurrentWirelessChargingView;
+        long duration = mCurrentWirelessChargingView.mNextView.getWindowDuration();
         mCurrentWirelessChargingView.show(delay);
-        mCurrentWirelessChargingView.hide(delay + DURATION);
+        mCurrentWirelessChargingView.hide(delay + duration);
     }
 
     private static class WirelessChargingView {
@@ -149,7 +150,8 @@ public class WirelessChargingAnimation {
                     WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
             params.setFitInsetsTypes(0 /* ignore all system bar insets */);
             params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                    | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+                    | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                    | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
             params.setTrustedOverlay();
 
             if (looper == null) {
@@ -211,7 +213,7 @@ public class WirelessChargingAnimation {
                 }
                 mWM = mWindowManagerProvider.getWindowManager(context);
                 mParams.packageName = packageName;
-                mParams.hideTimeoutMilliseconds = DURATION;
+                mParams.hideTimeoutMilliseconds = mView.getWindowDuration();
 
                 if (mView.getParent() != null) {
                     if (DEBUG) Slog.d(TAG, "REMOVE! " + mView + " in " + this);

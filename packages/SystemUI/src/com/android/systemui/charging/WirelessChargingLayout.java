@@ -21,8 +21,9 @@ import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Color;
-import android.provider.Settings;
+import android.os.SystemClock;
 import android.os.UserHandle;
+import android.provider.Settings;
 import android.util.AttributeSet;
 import android.util.TypedValue;
 import android.view.ContextThemeWrapper;
@@ -33,6 +34,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import com.android.app.animation.Interpolators;
+import com.android.lunaris.waterripple.WaterRippleView;
 import com.android.settingslib.Utils;
 import com.android.systemui.res.R;
 import com.android.systemui.shared.recents.utilities.Utilities;
@@ -48,14 +50,23 @@ import java.text.NumberFormat;
 final class WirelessChargingLayout extends FrameLayout {
     private static final long CIRCLE_RIPPLE_ANIMATION_DURATION = 2200;
     private static final long ROUNDED_BOX_RIPPLE_ANIMATION_DURATION = 3000;
+    // Water lasts 95% as long as Circle; its window gets a short cleanup margin.
+    private static final long WATER_RIPPLE_ANIMATION_DURATION =
+            CIRCLE_RIPPLE_ANIMATION_DURATION * 95 / 100;
     private static final int SCRIM_COLOR = 0x4C000000;
     private static final int SCRIM_FADE_DURATION = 400;
     
     private static final int RIPPLE_SHAPE_CIRCLE = 0;
     private static final int RIPPLE_SHAPE_ROUNDED_BOX = 1;
+    private static final int RIPPLE_SHAPE_WATER = 2;
     
     private RippleView mRippleView;
     private RippleShader.SizeAtProgress[] mSizeAtProgressArray;
+    private WaterRippleView mWaterRippleView;
+    private boolean mUseWaterRipple;
+    private boolean mWaterRippleStarted;
+    private long mAttachedAt;
+    private final Runnable mStartWaterRipple = this::startWaterRipple;
 
     WirelessChargingLayout(Context context, int transmittingBatteryLevel, int batteryLevel,
             boolean isDozing, RippleShape rippleShape) {
@@ -97,12 +108,19 @@ final class WirelessChargingLayout extends FrameLayout {
 
     private long getAnimationDuration(int shapeValue) {
         switch (shapeValue) {
+            case RIPPLE_SHAPE_WATER:
+                return WATER_RIPPLE_ANIMATION_DURATION;
             case RIPPLE_SHAPE_ROUNDED_BOX:
                 return ROUNDED_BOX_RIPPLE_ANIMATION_DURATION;
             case RIPPLE_SHAPE_CIRCLE:
             default:
                 return CIRCLE_RIPPLE_ANIMATION_DURATION;
         }
+    }
+
+    long getWindowDuration() {
+        return mUseWaterRipple ? WATER_RIPPLE_ANIMATION_DURATION + 100
+                : WirelessChargingAnimation.DURATION;
     }
 
     private int getDynamicRippleColor(Context context, int batteryLevel) {
@@ -141,6 +159,7 @@ final class WirelessChargingLayout extends FrameLayout {
                 UserHandle.USER_CURRENT);
         
         final long animationDuration = getAnimationDuration(shapeValue);
+        mUseWaterRipple = shapeValue == RIPPLE_SHAPE_WATER;
         rippleShape = getRippleShapeFromSettings(context);
 
         // set style based on background
@@ -248,7 +267,10 @@ final class WirelessChargingLayout extends FrameLayout {
         long scrimFadeDuration;
         long scrimFadeStartDelay;
 
-        if (rippleShape == RippleShape.CIRCLE) {
+        if (mUseWaterRipple) {
+                scrimFadeDuration = SCRIM_FADE_DURATION;
+                scrimFadeStartDelay = animationDuration - SCRIM_FADE_DURATION;
+        } else if (rippleShape == RippleShape.CIRCLE) {
                 scrimFadeDuration = 550;
                 scrimFadeStartDelay = animationDuration - 1000;
         } else {
@@ -305,17 +327,27 @@ final class WirelessChargingLayout extends FrameLayout {
             mRippleView.setColor(color, RippleShader.RIPPLE_DEFAULT_ALPHA);
         }
 
-        OnAttachStateChangeListener listener = new OnAttachStateChangeListener() {
-            @Override
-            public void onViewAttachedToWindow(View view) {
-                mRippleView.startRipple();
-                mRippleView.removeOnAttachStateChangeListener(this);
-            }
+        if (mUseWaterRipple) {
+            mRippleView.setVisibility(INVISIBLE);
+            mWaterRippleView = new WaterRippleView(context);
+            // The percentage/icon row remains part of the live charging scene.
+            FrameLayout host = (FrameLayout) mRippleView.getParent();
+            host.addView(mWaterRippleView, host.indexOfChild(mRippleView),
+                    new FrameLayout.LayoutParams(
+                            LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+        } else {
+            OnAttachStateChangeListener listener = new OnAttachStateChangeListener() {
+                @Override
+                public void onViewAttachedToWindow(View view) {
+                    mRippleView.startRipple();
+                    mRippleView.removeOnAttachStateChangeListener(this);
+                }
 
-            @Override
-            public void onViewDetachedFromWindow(View view) {}
-        };
-        mRippleView.addOnAttachStateChangeListener(listener);
+                @Override
+                public void onViewDetachedFromWindow(View view) {}
+            };
+            mRippleView.addOnAttachStateChangeListener(listener);
+        }
 
         if (!showTransmittingBatteryLevel) {
             animatorSet.start();
@@ -406,6 +438,63 @@ final class WirelessChargingLayout extends FrameLayout {
         }
 
         super.onLayout(changed, left, top, right, bottom);
+        if (mUseWaterRipple && !mWaterRippleStarted && getWidth() > 0 && getHeight() > 0) {
+            mWaterRippleStarted = true;
+            // The effect needs its final size and display position before starting EGL.
+            post(mStartWaterRipple);
+        }
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        mAttachedAt = SystemClock.uptimeMillis();
+    }
+
+    private void startWaterRipple() {
+        final WaterRippleView effect = mWaterRippleView;
+        if (!isAttachedToWindow() || effect == null) return;
+        long remaining = WATER_RIPPLE_ANIMATION_DURATION
+                - (SystemClock.uptimeMillis() - mAttachedAt);
+        if (remaining <= 0) {
+            removeWaterRipple();
+            return;
+        }
+        int[] location = new int[2];
+        effect.getLocationOnScreen(location);
+        // The charging window has a fixed lifetime. Do not let a slow animator
+        // scale postpone Water's fade until after WindowManager removes it.
+        long duration = Math.max(1,
+                (long) (remaining / Math.max(1f, ValueAnimator.getDurationScale())));
+        effect.play(location[0] + effect.getWidth() * 0.5f,
+                location[1] + effect.getHeight() * 0.5f,
+                duration, WaterRippleView.EFFECT_WATER,
+                /* highFrameRate= */ true, /* fullscreen= */ true,
+                this::removeWaterRipple,
+                () -> {
+                    removeWaterRipple();
+                    if (isAttachedToWindow()) {
+                        // Capture, native or EGL failure retains the charging indication.
+                        mRippleView.setVisibility(VISIBLE);
+                        mRippleView.startRipple();
+                    }
+                });
+    }
+
+    private void removeWaterRipple() {
+        if (mWaterRippleView == null) return;
+        WaterRippleView effect = mWaterRippleView;
+        mWaterRippleView = null;
+        effect.cancel();
+        FrameLayout host = (FrameLayout) effect.getParent();
+        if (host != null) host.removeView(effect);
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        removeCallbacks(mStartWaterRipple);
+        removeWaterRipple();
+        super.onDetachedFromWindow();
     }
 
     private void updateRippleSizeAtProgressList(float width, float height) {

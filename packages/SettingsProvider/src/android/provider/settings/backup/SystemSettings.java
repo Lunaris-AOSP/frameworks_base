@@ -135,7 +135,12 @@ public class SystemSettings {
                 Settings.System.SHADE_SCRIM_ALPHA,
                 Settings.System.NOTIFICATION_SCRIM_ALPHA,
                 Settings.System.FLING_VELOCITY_MIN,
-                Settings.System.FLING_VELOCITY_MAX
+                Settings.System.FLING_VELOCITY_MAX,
+                Settings.System.LOCKSCREEN_WATER_RIPPLE_ENABLED,
+                Settings.System.LOCKSCREEN_UNLOCK_ANIMATION,
+                Settings.System.LOCKSCREEN_UNLOCK_EFFECT_HFR,
+                Settings.System.LOCKSCREEN_WATER_RIPPLE_FULLSCREEN,
+                Settings.System.WIRELESS_CHARGING_RIPPLE_SHAPE
         ));
         if (Flags.backUpSmoothDisplayAndForcePeakRefreshRate()) {
             settings.add(Settings.System.PEAK_REFRESH_RATE);

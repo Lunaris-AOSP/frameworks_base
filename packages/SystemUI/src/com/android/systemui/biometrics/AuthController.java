@@ -46,6 +46,7 @@ import android.hardware.biometrics.BiometricStateListener;
 import android.hardware.biometrics.IBiometricContextListener;
 import android.hardware.biometrics.IBiometricSysuiReceiver;
 import android.hardware.biometrics.PromptInfo;
+import android.hardware.biometrics.SensorLocationInternal;
 import android.hardware.display.DisplayManager;
 import android.hardware.face.FaceManager;
 import android.hardware.face.FaceSensorPropertiesInternal;
@@ -619,6 +620,12 @@ public class AuthController implements
         if (getUdfpsLocation() != null) {
             return getUdfpsLocation();
         } else {
+            // Side sensors can report different positions for the inner and outer display.
+            // Prefer that HAL location to the generic resource fallback, then apply the same
+            // resolution scaling and rotation used for UDFPS.
+            Point sideLocation = getSideFpsLocation(
+                    mSidefpsProps, mCachedDisplayInfo.uniqueId, mScaleFactor);
+            if (sideLocation != null) return sideLocation;
             int xFpLocation = mCachedDisplayInfo.getNaturalWidth() / 2;
             try {
                 xFpLocation = mContext.getResources().getDimensionPixelSize(
@@ -635,6 +642,24 @@ public class AuthController implements
                             * mScaleFactor)
             );
         }
+    }
+
+    @Nullable private static Point getSideFpsLocation(
+            @Nullable List<FingerprintSensorPropertiesInternal> properties,
+            String displayId, float scaleFactor) {
+        if (properties == null) return null;
+        for (FingerprintSensorPropertiesInternal prop : properties) {
+            SensorLocationInternal location = prop.getLocation(displayId);
+            if (location == null
+                    || (location.sensorLocationX == 0 && location.sensorLocationY == 0)) {
+                location = prop.getLocation();
+            }
+            if (location.sensorLocationX != 0 || location.sensorLocationY != 0) {
+                return new Point(Math.round(location.sensorLocationX * scaleFactor),
+                        Math.round(location.sensorLocationY * scaleFactor));
+            }
+        }
+        return null;
     }
 
     /**

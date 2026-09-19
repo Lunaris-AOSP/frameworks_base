@@ -27,6 +27,8 @@ import android.graphics.Point
 import android.util.AttributeSet
 import android.view.View
 import android.view.animation.PathInterpolator
+import android.widget.FrameLayout
+import com.android.lunaris.waterripple.WaterRippleView
 import com.android.internal.graphics.ColorUtils
 import com.android.app.animation.Interpolators
 import com.android.settingslib.Utils
@@ -43,7 +45,7 @@ private const val RIPPLE_SPARKLE_STRENGTH: Float = 0.7f
  * Unlocked ripple:
  *     - startUnlockedRipple: ripple expands from biometric auth location to the edges of the screen
  */
-class AuthRippleView(context: Context?, attrs: AttributeSet?) : View(context, attrs) {
+class AuthRippleView(context: Context, attrs: AttributeSet?) : FrameLayout(context, attrs) {
     private val retractInterpolator = PathInterpolator(.05f, .93f, .1f, 1f)
 
     private val dwellPulseDuration = 100L
@@ -60,6 +62,8 @@ class AuthRippleView(context: Context?, attrs: AttributeSet?) : View(context, at
     private val rippleShader = RippleShader()
     private val ripplePaint = Paint()
     private var unlockedRippleAnimator: Animator? = null
+    private var waterRipple: WaterRippleView? = null
+    private var unlockCompletion: Runnable? = null
     private var fadeDwellAnimator: Animator? = null
     private var retractDwellAnimator: Animator? = null
     private var dwellPulseOutAnimator: Animator? = null
@@ -85,6 +89,7 @@ class AuthRippleView(context: Context?, attrs: AttributeSet?) : View(context, at
         }
 
     init {
+        setWillNotDraw(false)
         rippleShader.rawProgress = 0f
         rippleShader.pixelDensity = resources.displayMetrics.density
         rippleShader.sparkleStrength = RIPPLE_SPARKLE_STRENGTH
@@ -263,8 +268,67 @@ class AuthRippleView(context: Context?, attrs: AttributeSet?) : View(context, at
      * Ripple that bursts outwards from the position of the sensor to the edges of the screen
      */
     fun startUnlockedRipple(onAnimationEnd: Runnable?) {
-        unlockedRippleAnimator?.cancel()
+        cancelUnlockedRipple()
+        unlockCompletion = onAnimationEnd
+        startPlatformUnlockedRipple()
+    }
 
+    /** LLE effects share the existing authentication ripple's shade window and lifetime. */
+    fun startWaterUnlockedRipple(
+        onAnimationEnd: Runnable?,
+        animation: Int = WaterRippleView.EFFECT_WATER,
+        highFrameRate: Boolean = false,
+        fullscreen: Boolean = false,
+    ) {
+        cancelUnlockedRipple()
+        unlockCompletion = onAnimationEnd
+        visibility = VISIBLE
+        val effect = WaterRippleView(context)
+        waterRipple = effect
+        addView(effect, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        effect.play(
+            origin.x.toFloat(),
+            origin.y.toFloat(),
+            AuthRippleController.RIPPLE_ANIMATION_DURATION,
+            animation,
+            highFrameRate,
+            fullscreen,
+            { finishUnlockedRipple() },
+            {
+                removeWaterRipple()
+                startPlatformUnlockedRipple()
+            },
+        )
+    }
+
+    private fun removeWaterRipple() {
+        val effect = waterRipple ?: return
+        waterRipple = null
+        effect.cancel()
+        removeView(effect)
+    }
+
+    private fun finishUnlockedRipple() {
+        removeWaterRipple()
+        drawRipple = false
+        visibility = GONE
+        val completion = unlockCompletion
+        unlockCompletion = null
+        completion?.run()
+    }
+
+    fun cancelUnlockedRipple() {
+        unlockedRippleAnimator?.cancel()
+        unlockedRippleAnimator = null
+        finishUnlockedRipple()
+    }
+
+    override fun onDetachedFromWindow() {
+        cancelUnlockedRipple()
+        super.onDetachedFromWindow()
+    }
+
+    private fun startPlatformUnlockedRipple() {
         val rippleAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
             duration = AuthRippleController.RIPPLE_ANIMATION_DURATION
             addUpdateListener { animator ->
@@ -284,10 +348,8 @@ class AuthRippleView(context: Context?, attrs: AttributeSet?) : View(context, at
                 }
 
                 override fun onAnimationEnd(animation: Animator) {
-                    onAnimationEnd?.run()
-                    drawRipple = false
-                    visibility = GONE
                     unlockedRippleAnimator = null
+                    finishUnlockedRipple()
                 }
             })
         }
