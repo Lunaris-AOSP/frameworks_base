@@ -83,7 +83,7 @@ constructor(
     override fun bindData(constraintLayout: ConstraintLayout) {
         val composeView: AxComposeView = constraintLayout.requireViewById(chipViewId)
 
-        indicationController.setSuppressIndication(viewModel.isKeyguardChipVisible.value)
+        indicationController.setSuppressIndication(viewModel.shouldSuppressKeyguardIndication.value)
 
         composeView.setContent {
             PlatformTheme {
@@ -93,7 +93,7 @@ constructor(
 
         bindHandle = composeView.repeatWhenAttached {
             repeatOnLifecycle(Lifecycle.State.CREATED) {
-                viewModel.isKeyguardChipVisible.collect {
+                viewModel.shouldSuppressKeyguardIndication.collect {
                     indicationController.setSuppressIndication(it)
                 }
             }
