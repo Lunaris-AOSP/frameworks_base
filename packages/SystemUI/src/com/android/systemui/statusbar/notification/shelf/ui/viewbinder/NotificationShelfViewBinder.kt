@@ -21,6 +21,7 @@ import com.android.app.tracing.traceSection
 import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.scene.shared.flag.SceneContainerFlag
 import com.android.systemui.statusbar.NotificationShelf
+import com.android.systemui.statusbar.StatusBarIconView
 import com.android.systemui.statusbar.notification.icon.ui.viewbinder.NotificationIconContainerShelfViewBinder
 import com.android.systemui.statusbar.notification.row.ui.viewbinder.ActivatableNotificationViewBinder
 import com.android.systemui.statusbar.notification.shelf.ui.viewmodel.NotificationShelfViewModel
@@ -49,19 +50,39 @@ object NotificationShelfViewBinder {
 
             launch { viewModel.isBlurSupported.collect(shelf::setIsBlurSupported) }
 
-            registerViewListenersWhileAttached(shelf, viewModel)
+            registerViewListenersWhileAttached(shelf, viewModel, falsingManager)
         }
     }
 
     private suspend fun registerViewListenersWhileAttached(
         shelf: NotificationShelf,
         viewModel: NotificationShelfViewModel,
+        falsingManager: FalsingManager,
     ) {
         try {
-            shelf.setOnClickListener { viewModel.onShelfClicked() }
+            shelf.setOnClickListener {
+                val icon = shelf.touchedMotoIcon
+                if (icon != null && icon.visibleState == StatusBarIconView.STATE_ICON) {
+                    if (!falsingManager.isFalseTap(FalsingManager.LOW_PENALTY)) {
+                        shelf.onMotoIconClicked(icon)
+                    }
+                } else {
+                    viewModel.onShelfClicked()
+                }
+            }
+            shelf.setMotoIconClickListener { icon ->
+                if (!falsingManager.isFalseTap(FalsingManager.LOW_PENALTY)) {
+                    if (icon.visibleState == StatusBarIconView.STATE_DOT) {
+                        viewModel.onShelfClicked()
+                    } else {
+                        shelf.onMotoIconClicked(icon)
+                    }
+                }
+            }
             awaitCancellation()
         } finally {
             shelf.setOnClickListener(null)
+            shelf.setMotoIconClickListener(null)
         }
     }
 }

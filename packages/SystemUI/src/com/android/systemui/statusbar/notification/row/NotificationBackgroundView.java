@@ -300,7 +300,13 @@ public class NotificationBackgroundView extends View implements Dumpable,
         }
     }
 
-    private boolean drawAxBlurBackground(Canvas canvas, Rect bounds) {
+    protected boolean drawAxBlurBackground(Canvas canvas, Rect bounds) {
+        return drawAxBlurBackground(canvas, bounds, mAxBlurKey, mCornerRadii);
+    }
+
+    /** Draw a separately bounded blur surface, such as an individual compact shelf icon. */
+    protected boolean drawAxBlurBackground(Canvas canvas, Rect bounds, Object key,
+            float[] cornerRadii) {
         if (!mAxBlurEnabled
                 || !(mBackground instanceof LayerDrawable)
                 || bounds == null
@@ -311,12 +317,12 @@ public class NotificationBackgroundView extends View implements Dumpable,
         mBackground.setBounds(bounds);
         return mAxBlurRenderer.draw(
                 canvas,
-                mAxBlurKey,
+                key,
                 bounds.left,
                 bounds.top,
                 bounds.right,
                 bounds.bottom,
-                mCornerRadii,
+                cornerRadii,
                 mAxBlurOverlayColor,
                 mBackground.getAlpha());
     }

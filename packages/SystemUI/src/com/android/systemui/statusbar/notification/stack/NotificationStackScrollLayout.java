@@ -106,6 +106,7 @@ import com.android.systemui.scene.shared.flag.SceneContainerFlag;
 import com.android.systemui.shade.QSHeaderBoundsProvider;
 import com.android.systemui.shade.TouchLogger;
 import com.android.systemui.statusbar.NotificationShelf;
+import com.android.systemui.statusbar.StatusBarIconView;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.headsup.shared.StatusBarNoHunBehavior;
 import com.android.systemui.statusbar.notification.ColorUpdateLogger;
@@ -497,6 +498,10 @@ public class NotificationStackScrollLayout
     private boolean mForwardScrollable;
     private boolean mBackwardScrollable;
     private NotificationShelf mShelf;
+    private String mMotoCompactPackage;
+    private int mMotoCompactUserId = UserHandle.USER_NULL;
+    private final ArrayList<ExpandableNotificationRow> mMotoCompactExpandedRows = new ArrayList<>();
+    private final ArrayList<ExpandableNotificationRow> mMotoCompactPreviewRows = new ArrayList<>();
     /**
      * Limits the number of visible notifications. The remaining are collapsed in the notification
      * shelf. -1 when there is no limit.
@@ -5401,6 +5406,9 @@ public class NotificationStackScrollLayout
             return;
         }
         mAmbientState.setDozing(dozing);
+        if (dozing) {
+            clearMotoCompactSelection();
+        }
         setNotificationsDozing(dozing);
         requestChildrenUpdate();
         notifyHeightChangeListener(mShelf);
@@ -6108,9 +6116,91 @@ public class NotificationStackScrollLayout
     }
 
     void resetLockscreenNotificationStack() {
+        clearMotoCompactSelection();
         mCollapseStackOnTouchUp = false;
         mStackScrollAlgorithm.getLockscreenNotificationStack().reset();
         requestChildrenUpdate();
+    }
+
+    public boolean isMotoCompactDesignActive() {
+        return mShelf != null && mShelf.isMotoCompactDesignEnabled()
+                && isLockscreenNotificationLayoutActive();
+    }
+
+    public boolean isMotoCompactAppSelected(StatusBarNotification notification) {
+        return notification != null && mMotoCompactPackage != null
+                && mMotoCompactPackage.equals(notification.getPackageName())
+                && mMotoCompactUserId == notification.getUserId();
+    }
+
+    public boolean isMotoCompactNotificationSelected(ExpandableView view) {
+        if (!(view instanceof ExpandableNotificationRow row)) return false;
+        final StatusBarIconView icon = row.getShelfIcon();
+        return icon != null && isMotoCompactAppSelected(icon.getNotification());
+    }
+
+    /** Keep selected app cards ahead of the rows collapsed into the shelf. */
+    public void orderMotoCompactNotifications(List<ExpandableView> children) {
+        if (isMotoCompactDesignActive()) {
+            children.sort(Comparator.comparingInt(
+                    view -> view instanceof MediaContainerView ? -1
+                            : isMotoCompactNotificationSelected(view) ? 0 : 1));
+        }
+    }
+
+    public void toggleMotoCompactApp(StatusBarNotification notification) {
+        if (!isMotoCompactDesignActive() || notification == null) return;
+        final boolean collapse = isMotoCompactAppSelected(notification);
+        resetMotoCompactExpandedRows();
+        mMotoCompactPackage = collapse ? null : notification.getPackageName();
+        mMotoCompactUserId = collapse ? UserHandle.USER_NULL : notification.getUserId();
+        if (!collapse) {
+            for (int i = 0; i < getChildCount(); i++) {
+                if (getChildAt(i) instanceof ExpandableNotificationRow row
+                        && row.getVisibility() != GONE && isMotoCompactNotificationSelected(row)) {
+                    mMotoCompactPreviewRows.add(row);
+                    row.setMotoCompactPreview(true);
+                    if (!row.isUserExpanded() && !row.isGroupExpanded()) {
+                        mMotoCompactExpandedRows.add(row);
+                        // The row retains its public/redacted content and normal action handling.
+                        row.setUserExpanded(true, true /* allowChildExpansion */);
+                    }
+                }
+            }
+        }
+        updateMotoCompactPreview();
+    }
+
+    private void resetMotoCompactExpandedRows() {
+        for (ExpandableNotificationRow row : mMotoCompactPreviewRows) {
+            row.setMotoCompactPreview(false);
+        }
+        mMotoCompactPreviewRows.clear();
+        for (ExpandableNotificationRow row : mMotoCompactExpandedRows) {
+            row.setUserExpanded(false, true /* allowChildExpansion */);
+            row.resetUserExpansion();
+        }
+        mMotoCompactExpandedRows.clear();
+    }
+
+    public void clearMotoCompactSelection() {
+        if (mMotoCompactPackage == null) return;
+        mMotoCompactPackage = null;
+        mMotoCompactUserId = UserHandle.USER_NULL;
+        resetMotoCompactExpandedRows();
+        updateMotoCompactPreview();
+    }
+
+    public void onMotoCompactDesignChanged() {
+        clearMotoCompactSelection();
+        updateMotoCompactPreview();
+    }
+
+    private void updateMotoCompactPreview() {
+        requestAnimationOnViewResize(null);
+        updateContentHeight();
+        requestChildrenUpdate();
+        notifyHeightChangeListener(mShelf, true /* needsAnimation */);
     }
 
     public boolean expandLockscreenNotificationStack() {

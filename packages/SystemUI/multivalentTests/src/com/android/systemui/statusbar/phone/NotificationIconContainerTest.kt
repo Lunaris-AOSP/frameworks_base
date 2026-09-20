@@ -27,6 +27,7 @@ import com.android.systemui.SysuiTestCase
 import com.android.systemui.statusbar.StatusBarIconView
 import com.android.systemui.statusbar.StatusBarIconView.STATE_DOT
 import com.android.systemui.statusbar.StatusBarIconView.STATE_HIDDEN
+import com.android.systemui.statusbar.StatusBarIconView.STATE_ICON
 import junit.framework.Assert.assertEquals
 import junit.framework.Assert.assertFalse
 import junit.framework.Assert.assertTrue
@@ -75,6 +76,88 @@ class NotificationIconContainerTest : SysuiTestCase() {
             /* expected= */ iconContainer.calculateWidthFor(/* numIcons= */ 4f),
             /* actual= */ 60f,
         )
+    }
+
+    @Test
+    fun spacedIcons_sevenFitWithoutOverflow() {
+        val icons = prepareSpacedIcons(count = 7)
+
+        iconContainer.calculateIconXTranslations()
+
+        icons.forEachIndexed { index, icon ->
+            assertEquals(10f + index * 28f, iconContainer.getIconState(icon).xTranslation)
+            assertEquals(STATE_ICON, iconContainer.getIconState(icon).visibleState)
+        }
+        assertFalse(iconContainer.areIconsOverflowing())
+    }
+
+    @Test
+    @DisableFlags(Flags.FLAG_PHYSICAL_NOTIFICATION_MOVEMENT)
+    fun spacedIcons_moreThanSeven_showSixAndOverflowDot() {
+        assertSpacedIconOverflow()
+    }
+
+    @Test
+    @EnableFlags(Flags.FLAG_PHYSICAL_NOTIFICATION_MOVEMENT)
+    fun spacedIcons_physicalMovement_moreThanSeven_showSixAndOverflowDot() {
+        assertSpacedIconOverflow()
+    }
+
+    @Test
+    fun spacedIcons_hiddenDuplicatesDoNotConsumeSlots() {
+        val icons = prepareSpacedIcons(count = 10)
+        val hiddenIndices = setOf(0, 3, 9)
+        hiddenIndices.forEach {
+            iconContainer.getIconState(icons[it]).apply {
+                hidden = true
+                iconAppearAmount = 0f
+            }
+        }
+        iconContainer.setUseVisibleIconCount(true)
+        // The regular shelf's ambient-notification index must not truncate app icons.
+        iconContainer.setMaxIconsAmount(1)
+
+        iconContainer.calculateIconXTranslations()
+
+        assertFalse(iconContainer.areIconsOverflowing())
+        icons.filterIndexed { index, _ -> index !in hiddenIndices }.forEachIndexed { index, icon ->
+            assertEquals(10f + index * 28f, iconContainer.getIconState(icon).xTranslation)
+            assertEquals(STATE_ICON, iconContainer.getIconState(icon).visibleState)
+        }
+        hiddenIndices.forEach {
+            assertEquals(STATE_HIDDEN, iconContainer.getIconState(icons[it]).visibleState)
+        }
+    }
+
+    @Test
+    fun spacedIcons_disablingSpacingRestoresOriginalWidth() {
+        prepareSpacedIcons(count = 7)
+        assertEquals(198f, iconContainer.calculateWidthFor(7f))
+        assertEquals(30f, iconContainer.calculateWidthFor(1f))
+        assertEquals(0f, iconContainer.calculateWidthFor(0f))
+
+        iconContainer.setIconSpacing(0)
+
+        assertEquals(90f, iconContainer.calculateWidthFor(7f))
+    }
+
+    private fun prepareSpacedIcons(count: Int): List<StatusBarIconView> {
+        iconContainer.setActualPaddingStart(10f)
+        iconContainer.setActualPaddingEnd(10f)
+        iconContainer.setIconSize(10)
+        iconContainer.setIconSpacing(18)
+        val icons = List(count) { mockStatusBarIcon().also(iconContainer::addView) }
+        iconContainer.setActualLayoutWidth(iconContainer.calculateWidthFor(7f).toInt())
+        return icons
+    }
+
+    private fun assertSpacedIconOverflow() {
+        val icons = prepareSpacedIcons(count = 9)
+        iconContainer.calculateIconXTranslations()
+        val states = icons.map { iconContainer.getIconState(it).visibleState }
+        assertEquals(6, states.count { it == STATE_ICON })
+        assertEquals(1, states.count { it == STATE_DOT })
+        assertEquals(2, states.count { it == STATE_HIDDEN })
     }
 
     @Test

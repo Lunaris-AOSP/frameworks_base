@@ -149,6 +149,8 @@ public class NotificationIconContainer extends ViewGroup {
     private int mAddAnimationStartIndex = -1;
     private int mCannedAnimationStartIndex = -1;
     private int mIconSize;
+    private int mIconSpacing;
+    private boolean mUseVisibleIconCount;
     private boolean mDisallowNextAnimation;
     private boolean mAnimationsEnabled = true;
     private ArrayMap<String, StatusBarIcon> mReplacingIcons;
@@ -246,6 +248,9 @@ public class NotificationIconContainer extends ViewGroup {
             View child = getChildAt(i);
             measureChild(child, childWidthSpec, heightMeasureSpec);
             if (i <= maxVisibleIcons) {
+                if (i > 0) {
+                    totalWidth += mIconSpacing;
+                }
                 totalWidth += child.getMeasuredWidth();
             }
         }
@@ -447,7 +452,8 @@ public class NotificationIconContainer extends ViewGroup {
         if (numIcons == 0) {
             return 0f;
         }
-        final float contentWidth = mIconSize * numIcons;
+        final float contentWidth = mIconSize * numIcons
+                + mIconSpacing * Math.max(0f, numIcons - 1f);
         return getActualPaddingStart() + contentWidth + getActualPaddingEnd();
     }
 
@@ -480,13 +486,25 @@ public class NotificationIconContainer extends ViewGroup {
         mIsShowingOverflowDot = false;
         mWasOverflowForced = false;
         int childCount = getChildCount();
-        int maxVisibleIcons = mMaxIcons;
+        int maxVisibleIcons = mUseVisibleIconCount ? Integer.MAX_VALUE : mMaxIcons;
+        int lastVisibleIndex = childCount - 1;
+        if (mUseVisibleIconCount) {
+            while (lastVisibleIndex >= 0) {
+                IconState state = mIconStates.get(getChildAt(lastVisibleIndex));
+                if (!state.hidden && state.iconAppearAmount > 0f) break;
+                lastVisibleIndex--;
+            }
+        }
         float layoutRight = getRightBound();
         mVisualOverflowStart = 0;
         mFirstVisibleIconState = null;
         for (int i = 0; i < childCount; i++) {
             View view = getChildAt(i);
             IconState iconState = mIconStates.get(view);
+            if (mUseVisibleIconCount && (iconState.hidden || iconState.iconAppearAmount == 0f)) {
+                iconState.visibleState = StatusBarIconView.STATE_HIDDEN;
+                continue;
+            }
             if (iconState.iconAppearAmount == 1.0f) {
                 // We only modify the xTranslation if it's fully inside of the container
                 // since during the transition to the shelf, the translations are controlled
@@ -503,7 +521,8 @@ public class NotificationIconContainer extends ViewGroup {
             final boolean forceOverflow =
                     shouldForceOverflow(i, iconState.iconAppearAmount, maxVisibleIcons);
             final boolean isOverflowing = forceOverflow || isOverflowing(
-                    /* isLastChild= */ i == childCount - 1, translationX, layoutRight, mIconSize);
+                    /* isLastChild= */ i == lastVisibleIndex, translationX,
+                    layoutRight + mIconSpacing, mIconSize + mIconSpacing);
 
             // First icon to overflow.
             if (mFirstOverflowIndex == -1 && isOverflowing) {
@@ -513,16 +532,20 @@ public class NotificationIconContainer extends ViewGroup {
             }
 
             final float drawingScale = getDrawingScale(view);
-            translationX += iconState.iconAppearAmount * view.getWidth() * drawingScale;
+            translationX += iconState.iconAppearAmount
+                    * (view.getWidth() * drawingScale + mIconSpacing);
         }
         if (mFirstOverflowIndex != -1) {
             translationX = mVisualOverflowStart;
             for (int i = mFirstOverflowIndex; i < childCount; i++) {
                 View view = getChildAt(i);
                 IconState iconState = mIconStates.get(view);
+                if (mUseVisibleIconCount && (iconState.hidden || iconState.iconAppearAmount == 0f)) {
+                    continue;
+                }
                 int dotWidth = mStaticDotDiameter + mDotPadding;
                 iconState.setXTranslation(translationX);
-                boolean isLastChild = i == childCount - 1;
+                boolean isLastChild = i == lastVisibleIndex;
                 if (!mIsShowingOverflowDot) {
                     if (iconState.iconAppearAmount < 0.8f && (isLastChild || !physicalNotificationMovement())) {
                         iconState.visibleState = StatusBarIconView.STATE_ICON;
@@ -542,10 +565,12 @@ public class NotificationIconContainer extends ViewGroup {
                             StatusBarIconView.STATE_HIDDEN;
                 }
             }
-        } else if (childCount > 0) {
-            View lastChild = getChildAt(childCount - 1);
+        } else if (lastVisibleIndex >= 0) {
+            View lastChild = getChildAt(lastVisibleIndex);
             mLastVisibleIconState = mIconStates.get(lastChild);
-            mFirstVisibleIconState = mIconStates.get(getChildAt(0));
+            if (!mUseVisibleIconCount) {
+                mFirstVisibleIconState = mIconStates.get(getChildAt(0));
+            }
         }
         if (isLayoutRtl()) {
             for (int i = 0; i < childCount; i++) {
@@ -721,6 +746,19 @@ public class NotificationIconContainer extends ViewGroup {
 
     public int getIconSize() {
         return mIconSize;
+    }
+
+    /** Extra space between icons, without changing the size of their drawables. */
+    public void setIconSpacing(int iconSpacing) {
+        if (mIconSpacing != iconSpacing) {
+            mIconSpacing = iconSpacing;
+            requestLayout();
+        }
+    }
+
+    /** Pack only participating icons, for a shelf grouped by app rather than notification. */
+    public void setUseVisibleIconCount(boolean useVisibleIconCount) {
+        mUseVisibleIconCount = useVisibleIconCount;
     }
 
     public void setAnimationsEnabled(boolean enabled) {

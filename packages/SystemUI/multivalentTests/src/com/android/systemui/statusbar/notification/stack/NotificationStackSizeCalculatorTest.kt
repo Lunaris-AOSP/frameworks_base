@@ -105,6 +105,47 @@ class NotificationStackSizeCalculatorTest : SysuiTestCase() {
     }
 
     @Test
+    fun motoCompact_noAppSelected_showsOnlyShelf() {
+        whenever(stackLayout.isMotoCompactDesignActive).thenReturn(true)
+        val rows = createLockscreenRows(3)
+
+        val count = computeMaxKeyguardNotifications(rows, Float.MAX_VALUE, 0f, shelfHeight)
+
+        assertThat(count).isEqualTo(0)
+        assertThat(sizeCalculator.computeHeight(stackLayout, count, shelfHeight))
+            .isEqualTo(shelfHeight)
+    }
+
+    @Test
+    fun motoCompact_multipleNotifications_onlySelectedAppCardsCount() {
+        whenever(stackLayout.isMotoCompactDesignActive).thenReturn(true)
+        val rows = createLockscreenRows(4)
+        whenever(stackLayout.isMotoCompactNotificationSelected(rows[1])).thenReturn(true)
+        whenever(stackLayout.isMotoCompactNotificationSelected(rows[3])).thenReturn(true)
+
+        val count = computeMaxKeyguardNotifications(rows, Float.MAX_VALUE, 0f, shelfHeight)
+
+        assertThat(count).isEqualTo(2)
+        assertThat(sizeCalculator.computeHeight(stackLayout, count, shelfHeight))
+            .isEqualTo(2 * rowHeight + 2 * dividerHeight + shelfHeight)
+    }
+
+    @Test
+    fun motoCompact_singleExpandedCard_reservesFullHeightAndShelf() {
+        whenever(stackLayout.isMotoCompactDesignActive).thenReturn(true)
+        whenever(sysuiStatusBarStateController.state).thenReturn(StatusBarState.KEYGUARD)
+        val row = createMockRow(rowHeight)
+        whenever(row.getMinHeight(any())).thenReturn((rowHeight / 2).toInt())
+        whenever(stackLayout.isMotoCompactNotificationSelected(row)).thenReturn(true)
+
+        val count = computeMaxKeyguardNotifications(listOf(row), Float.MAX_VALUE, 0f, shelfHeight)
+
+        assertThat(count).isEqualTo(1)
+        assertThat(sizeCalculator.computeHeight(stackLayout, count, shelfHeight))
+            .isEqualTo(rowHeight + dividerHeight + shelfHeight)
+    }
+
+    @Test
     fun computeMaxKeyguardNotifications_infiniteSpace_returnsAll() {
         val numberOfRows = 30
         val rows = createLockscreenRows(numberOfRows)
@@ -439,6 +480,8 @@ class NotificationStackSizeCalculatorTest : SysuiTestCase() {
         shelfHeight: Float = this.shelfHeight,
     ): Int {
         setupChildren(rows)
+        whenever(stackLayout.getLockscreenNotificationAvailableHeight(spaceForNotifications))
+            .thenReturn(spaceForNotifications)
         return sizeCalculator.computeMaxKeyguardNotifications(
             stackLayout,
             spaceForNotifications,

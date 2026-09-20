@@ -399,6 +399,9 @@ public class NotificationStackScrollLayoutController implements Dumpable {
         @Override
         public void onUserChanged(int userId) {
             mView.resetLockscreenNotificationStack();
+            if (mView.getShelf() instanceof NotificationShelf shelf) {
+                shelf.onUserChanged();
+            }
             updateSensitivenessWithAnimation(false);
             mHistoryEnabled = null;
         }

@@ -185,6 +185,7 @@ public class SecureSettings {
         Settings.Secure.LOCK_SCREEN_SHOW_SILENT_NOTIFICATIONS,
         Settings.Secure.LOCK_SCREEN_SHOW_ONLY_UNSEEN_NOTIFICATIONS,
         Settings.Secure.LOCK_SCREEN_NOTIFICATION_MINIMALISM,
+        Settings.Secure.LOCK_SCREEN_MOTO_COMPACT_NOTIFICATIONS,
         Settings.Secure.LOCK_SCREEN_STACKED_NOTIFICATIONS,
         Settings.Secure.SHOW_NOTIFICATION_SNOOZE,
         Settings.Secure.NOTIFICATION_HISTORY_ENABLED,

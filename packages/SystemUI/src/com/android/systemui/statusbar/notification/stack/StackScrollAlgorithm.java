@@ -525,6 +525,15 @@ public class StackScrollAlgorithm {
             }
         }
 
+        if (mHostView instanceof NotificationStackScrollLayout stack
+                && stack.isMotoCompactDesignActive()) {
+            stack.orderMotoCompactNotifications(state.visibleChildren);
+            notGoneIndex = 0;
+            for (ExpandableView view : state.visibleChildren) {
+                notGoneIndex = updateNotGoneIndex(notGoneIndex, view);
+            }
+        }
+
         // Save the index of first view in shelf from when shade is fully
         // expanded. Consider updating these states in updateContentView instead so that we don't
         // have to recalculate in every frame.
