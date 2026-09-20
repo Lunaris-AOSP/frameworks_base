@@ -172,6 +172,12 @@ constructor(
 
     val isOnKeyguard: StateFlow<Boolean> = interactor.isOnKeyguard
 
+    val shouldSuppressKeyguardIndication: StateFlow<Boolean> =
+        combine(isOnKeyguard, isEnabled, isKeyguardEnabled) { onKeyguard, enabled, keyguardEnabled ->
+            onKeyguard && enabled && keyguardEnabled
+        }.distinctUntilChanged()
+            .stateIn(applicationScope, SharingStarted.Eagerly, false)
+
     val isKeyguardChipVisible: StateFlow<Boolean> =
         combine(
             isOnKeyguard,
