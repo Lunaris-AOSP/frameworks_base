@@ -157,6 +157,8 @@ public class NotificationStackScrollLayoutController implements Dumpable {
     private static final String TAG = "StackScrollerController";
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
     private static final String HIGH_PRIORITY = "high_priority";
+    private static final String LOCKSCREEN_NOTIFICATION_ANCHOR_POSITION =
+            "system:" + Settings.System.LOCK_SCREEN_NOTIFICATIONS_ANCHOR_POSITION;
     /** Delay in milli-seconds before shade closes for clear all. */
     private static final int DELAY_BEFORE_SHADE_CLOSE = 200;
 
@@ -225,6 +227,9 @@ public class NotificationStackScrollLayoutController implements Dumpable {
         } else if (Settings.Secure.LOCK_SCREEN_NOTIFICATIONS_BOTTOM_ANCHORED.equals(key)) {
             mView.setLockscreenNotificationsBottomAnchored(
                     TunerService.parseIntegerSwitch(value, false));
+        } else if (LOCKSCREEN_NOTIFICATION_ANCHOR_POSITION.equals(key)) {
+            mView.setLockscreenNotificationAnchorPosition(TunerService.parseInteger(value,
+                    LockscreenNotificationStack.DEFAULT_ANCHOR_POSITION));
         }
         mView.setLockscreenNotificationStackEnabled(mStackedNotificationsEnabled
                 && !(NotificationMinimalism.isEnabled() && mCompactNotificationsEnabled));
@@ -243,7 +248,8 @@ public class NotificationStackScrollLayoutController implements Dumpable {
                     mTunerService.addTunable(mLockscreenStackTunable,
                             Settings.Secure.LOCK_SCREEN_NOTIFICATION_MINIMALISM,
                             Settings.Secure.LOCK_SCREEN_STACKED_NOTIFICATIONS,
-                            Settings.Secure.LOCK_SCREEN_NOTIFICATIONS_BOTTOM_ANCHORED);
+                            Settings.Secure.LOCK_SCREEN_NOTIFICATIONS_BOTTOM_ANCHORED,
+                            LOCKSCREEN_NOTIFICATION_ANCHOR_POSITION);
                     final int newBarState = mStatusBarStateController.getState();
                     if (newBarState != mBarState) {
                         mStateListener.onStateChanged(newBarState);
@@ -1065,10 +1071,6 @@ public class NotificationStackScrollLayoutController implements Dumpable {
 
     boolean isFalseStackTap() {
         return mFalsingManager.isFalseTap(FalsingManager.LOW_PENALTY);
-    }
-
-    public void setLockscreenNotificationStackAvailableHeight(float height) {
-        mView.setLockscreenNotificationStackAvailableHeight(height);
     }
 
     public void setApplyHunTranslation(boolean apply) {

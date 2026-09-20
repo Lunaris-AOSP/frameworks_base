@@ -28,6 +28,9 @@ import com.android.systemui.statusbar.notification.row.ExpandableView;
 import java.util.ArrayList;
 
 class LockscreenNotificationStack {
+    static final int DEFAULT_ANCHOR_POSITION = 88;
+    private static final int MIN_ANCHOR_POSITION = 10;
+    private static final int MAX_ANCHOR_POSITION = 100;
     private static final int VISIBLE_CARDS = 3;
     private static final float SCALE_STEP = 0.04f;
     private static final float ALPHA_STEP = 0.08f;
@@ -37,7 +40,8 @@ class LockscreenNotificationStack {
     private float mElevation;
     private float mBottomPadding;
     private float mAdditionalGap;
-    private float mAvailableHeight;
+    private int mAnchorPosition = DEFAULT_ANCHOR_POSITION;
+    private float mAnchorBottom = -1f;
     private float mBottom;
     private boolean mEnabled;
     private boolean mBottomAnchored;
@@ -64,12 +68,12 @@ class LockscreenNotificationStack {
         return true;
     }
 
-    boolean setAvailableHeight(float height) {
-        height = Math.max(0f, height);
-        if (mAvailableHeight == height) {
+    boolean setAnchorPosition(int position) {
+        position = Math.max(MIN_ANCHOR_POSITION, Math.min(MAX_ANCHOR_POSITION, position));
+        if (mAnchorPosition == position) {
             return false;
         }
-        mAvailableHeight = height;
+        mAnchorPosition = position;
         return true;
     }
 
@@ -81,8 +85,22 @@ class LockscreenNotificationStack {
         return true;
     }
 
-    float getBottomPadding() {
-        return mBottomAnchored ? mBottomPadding : 0f;
+    boolean isBottomAnchored() {
+        return mBottomAnchored;
+    }
+
+    float getAvailableHeight(float defaultHeight, float screenHeight, float viewTop,
+            float stackTop, float bottomInset) {
+        if (!mBottomAnchored || screenHeight <= 0f) {
+            mAnchorBottom = -1f;
+            return defaultHeight;
+        }
+        // Like Now Playing, measure from the top of the full screen, independently of UDFPS.
+        // At the lowest positions, leave room for the navigation area and screen edge.
+        final float screenBottom = Math.min(screenHeight * mAnchorPosition / 100f,
+                screenHeight - bottomInset - mBottomPadding);
+        mAnchorBottom = Math.max(stackTop, screenBottom - viewTop);
+        return mAnchorBottom - stackTop;
     }
 
     float getBottom() {
@@ -174,7 +192,7 @@ class LockscreenNotificationStack {
         if (mRows.isEmpty()) {
             if (mBottomAnchored && showShelf) {
                 final float naturalBottom = shelfState.getYTranslation() + shelfState.height;
-                final float bottom = calculateBottom(naturalBottom, ambientState);
+                final float bottom = calculateBottom(naturalBottom);
                 mBottom = MathUtils.lerp(naturalBottom, bottom, amount);
                 updateShelf(algorithmState, shelfState, true, naturalBottom, bottom, amount);
             }
@@ -189,7 +207,7 @@ class LockscreenNotificationStack {
         final float naturalBottom = showShelf
                 ? shelfState.getYTranslation() + shelfState.height : listBottom;
 
-        float bottom = calculateBottom(naturalBottom, ambientState);
+        float bottom = calculateBottom(naturalBottom);
         final float preferredShelfGap = mEnabled ? mPeek
                 : (showShelf ? Math.max(0f, shelfState.getYTranslation() - listBottom) : 0f);
         final float shelfGap = showShelf
@@ -256,17 +274,11 @@ class LockscreenNotificationStack {
         updateShelf(algorithmState, shelfState, showShelf, naturalBottom, bottom, amount);
     }
 
-    private float calculateBottom(float naturalBottom, AmbientState ambientState) {
-        if (!mBottomAnchored || mAvailableHeight <= 0f) {
+    private float calculateBottom(float naturalBottom) {
+        if (!mBottomAnchored || mAnchorBottom < 0f) {
             return naturalBottom;
         }
-        final float stackTop = SceneContainerFlag.isEnabled()
-                ? ambientState.getStackTop() : ambientState.getStackY();
-        float bottom = stackTop + mAvailableHeight;
-        if (SceneContainerFlag.isEnabled()) {
-            bottom = Math.min(bottom, ambientState.getStackCutoff());
-        }
-        return Math.max(naturalBottom, bottom - mBottomPadding);
+        return Math.max(naturalBottom, mAnchorBottom);
     }
 
     private void updateShelf(StackScrollAlgorithm.StackScrollAlgorithmState algorithmState,

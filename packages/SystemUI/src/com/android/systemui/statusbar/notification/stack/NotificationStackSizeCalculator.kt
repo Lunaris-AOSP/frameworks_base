@@ -188,9 +188,8 @@ constructor(
         shelfSpace: Float,
         shelfHeight: Float,
     ): Int {
-        val bottomPadding = stack.lockscreenNotificationBottomPadding
-        val spaceForNotifications = notifSpace - bottomPadding
-        val spaceForShelf = if (bottomPadding > 0f) 0f else shelfSpace
+        val spaceForNotifications = stack.getLockscreenNotificationAvailableHeight(notifSpace)
+        val spaceForShelf = if (stack.areLockscreenNotificationsBottomAnchored()) 0f else shelfSpace
         log { "\n " }
         log {
             "computeMaxKeyguardNotifications ---" +

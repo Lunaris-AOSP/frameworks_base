@@ -8107,6 +8107,11 @@ public final class Settings {
         /**
          * @hide
          */
+        public static final String LOCK_SCREEN_NOTIFICATIONS_ANCHOR_POSITION = "lock_screen_notifications_anchor_position";
+
+        /**
+         * @hide
+         */
         public static final String SCREENSHOT_CLIPBOARD_ONLY = "screenshot_clipboard_only";
 
         /**
