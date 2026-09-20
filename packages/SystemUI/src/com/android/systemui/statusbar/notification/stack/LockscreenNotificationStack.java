@@ -27,7 +27,6 @@ import com.android.systemui.statusbar.notification.row.ExpandableView;
 
 import java.util.ArrayList;
 
-
 class LockscreenNotificationStack {
     private static final int VISIBLE_CARDS = 3;
     private static final float SCALE_STEP = 0.04f;
@@ -41,6 +40,7 @@ class LockscreenNotificationStack {
     private float mAvailableHeight;
     private float mBottom;
     private boolean mEnabled;
+    private boolean mBottomAnchored;
     private boolean mExpanded;
     private boolean mApplied;
 
@@ -51,7 +51,7 @@ class LockscreenNotificationStack {
     void updateResources(Resources resources) {
         mPeek = resources.getDimension(R.dimen.lockscreen_notification_stack_peek);
         mElevation = resources.getDimension(R.dimen.lockscreen_notification_stack_elevation);
-        mBottomPadding = resources.getDimension(R.dimen.lockscreen_notification_stack_bottom_padding);
+        mBottomPadding = resources.getDimension(R.dimen.lockscreen_notification_bottom_padding);
         mAdditionalGap = resources.getDimension(R.dimen.lockscreen_notification_stack_list_gap);
     }
 
@@ -71,6 +71,18 @@ class LockscreenNotificationStack {
         }
         mAvailableHeight = height;
         return true;
+    }
+
+    boolean setBottomAnchored(boolean bottomAnchored) {
+        if (mBottomAnchored == bottomAnchored) {
+            return false;
+        }
+        mBottomAnchored = bottomAnchored;
+        return true;
+    }
+
+    float getBottomPadding() {
+        return mBottomAnchored ? mBottomPadding : 0f;
     }
 
     float getBottom() {
@@ -114,7 +126,7 @@ class LockscreenNotificationStack {
         mApplied = false;
         mBottom = 0f;
         mRows.clear();
-        if (!mEnabled || !isOnLockscreen(ambientState) || ambientState.isPulsing()
+        if ((!mEnabled && !mBottomAnchored) || !isOnLockscreen(ambientState) || ambientState.isPulsing()
                 || ambientState.isPulseExpanding()) {
             mExpanded = false;
             return;
@@ -150,13 +162,22 @@ class LockscreenNotificationStack {
             mRows.add(row);
         }
 
-        if (hasExpandedGroup) {
+        if (mEnabled && hasExpandedGroup) {
             mExpanded = true;
         }
         if (mRows.size() < 2) {
             mExpanded = false;
         }
+        NotificationShelf shelf = ambientState.getShelf();
+        ExpandableViewState shelfState = shelf != null ? shelf.getViewState() : null;
+        final boolean showShelf = shelfState != null && !shelfState.hidden;
         if (mRows.isEmpty()) {
+            if (mBottomAnchored && showShelf) {
+                final float naturalBottom = shelfState.getYTranslation() + shelfState.height;
+                final float bottom = calculateBottom(naturalBottom, ambientState);
+                mBottom = MathUtils.lerp(naturalBottom, bottom, amount);
+                updateShelf(algorithmState, shelfState, true, naturalBottom, bottom, amount);
+            }
             return;
         }
 
@@ -165,38 +186,35 @@ class LockscreenNotificationStack {
         final float listTop = firstState.getYTranslation();
         final float listBottom = lastState.getYTranslation() + lastState.height;
         final int height = firstState.height;
-        NotificationShelf shelf = ambientState.getShelf();
-        ExpandableViewState shelfState = shelf != null ? shelf.getViewState() : null;
-        final boolean showShelf = shelfState != null && !shelfState.hidden;
         final float naturalBottom = showShelf
                 ? shelfState.getYTranslation() + shelfState.height : listBottom;
 
-        final float stackTop = SceneContainerFlag.isEnabled()
-                ? ambientState.getStackTop() : ambientState.getStackY();
-        float bottom = mAvailableHeight > 0f
-                ? Math.max(naturalBottom, stackTop + mAvailableHeight - mBottomPadding)
-                : naturalBottom;
-        if (SceneContainerFlag.isEnabled()) {
-            bottom = Math.min(bottom, ambientState.getStackCutoff());
-        }
+        float bottom = calculateBottom(naturalBottom, ambientState);
+        final float preferredShelfGap = mEnabled ? mPeek
+                : (showShelf ? Math.max(0f, shelfState.getYTranslation() - listBottom) : 0f);
         final float shelfGap = showShelf
-                ? Math.min(mPeek, Math.max(0f, bottom - shelfState.height - listBottom)) : 0f;
+                ? Math.min(preferredShelfGap,
+                        Math.max(0f, bottom - shelfState.height - listBottom)) : 0f;
         final float shelfHeight = showShelf ? shelfState.height + shelfGap : 0f;
         final float cardsBottom = bottom - shelfHeight;
         if (height <= 0 || cardsBottom < listTop + height) {
             return;
         }
 
-        final boolean collapsed = !mExpanded && mRows.size() > 1;
+        final boolean collapsed = mEnabled && !mExpanded && mRows.size() > 1;
         final int peekingCards = Math.min(mRows.size() - 1, VISIBLE_CARDS - 1);
         final float peek = peekingCards == 0 ? 0f
                 : Math.min(mPeek, (cardsBottom - listTop - height) / peekingCards);
-        final float deckTop = cardsBottom - height - peekingCards * peek;
-        final float extraGap = mRows.size() > 1
+        final float deckTop = mBottomAnchored
+                ? cardsBottom - height - peekingCards * peek : listTop;
+        if (collapsed && !mBottomAnchored) {
+            bottom = deckTop + height + peekingCards * peek + shelfHeight;
+        }
+        final float extraGap = mEnabled && mBottomAnchored && mRows.size() > 1
                 ? Math.min(mAdditionalGap,
                         Math.max(0f, cardsBottom - listBottom) / (mRows.size() - 1)) : 0f;
-        final float listOffset = Math.max(0f,
-                cardsBottom - listBottom - extraGap * (mRows.size() - 1));
+        final float listOffset = mBottomAnchored ? Math.max(0f,
+                cardsBottom - listBottom - extraGap * (mRows.size() - 1)) : 0f;
         mApplied = collapsed;
         mBottom = MathUtils.lerp(naturalBottom, bottom, amount);
 
@@ -207,7 +225,9 @@ class LockscreenNotificationStack {
                     : state.getYTranslation() + listOffset + i * extraGap;
             state.setYTranslation(MathUtils.lerp(state.getYTranslation(), targetY,
                     amount));
-            state.lockscreenStackRoundness = amount;
+            if (mEnabled) {
+                state.lockscreenStackRoundness = amount;
+            }
             if (!collapsed) {
                 continue;
             }
@@ -233,6 +253,25 @@ class LockscreenNotificationStack {
             }
         }
 
+        updateShelf(algorithmState, shelfState, showShelf, naturalBottom, bottom, amount);
+    }
+
+    private float calculateBottom(float naturalBottom, AmbientState ambientState) {
+        if (!mBottomAnchored || mAvailableHeight <= 0f) {
+            return naturalBottom;
+        }
+        final float stackTop = SceneContainerFlag.isEnabled()
+                ? ambientState.getStackTop() : ambientState.getStackY();
+        float bottom = stackTop + mAvailableHeight;
+        if (SceneContainerFlag.isEnabled()) {
+            bottom = Math.min(bottom, ambientState.getStackCutoff());
+        }
+        return Math.max(naturalBottom, bottom - mBottomPadding);
+    }
+
+    private void updateShelf(StackScrollAlgorithm.StackScrollAlgorithmState algorithmState,
+            ExpandableViewState shelfState, boolean showShelf, float naturalBottom,
+            float bottom, float amount) {
         if (shelfState != null) {
             final float shelfY = shelfState.getYTranslation();
             final float targetShelfY = showShelf

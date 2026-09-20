@@ -24,6 +24,6 @@
 
     <dimen name="lockscreen_notification_stack_peek">10dp</dimen>
     <dimen name="lockscreen_notification_stack_elevation">2dp</dimen>
-    <dimen name="lockscreen_notification_stack_bottom_padding">16dp</dimen>
-    <dimen name="lockscreen_notification_stack_list_gap">6dp</dimen>
+    <dimen name="lockscreen_notification_bottom_padding">35dp</dimen>
+    <dimen name="lockscreen_notification_stack_list_gap">4dp</dimen>
 </resources>

@@ -222,6 +222,9 @@ public class NotificationStackScrollLayoutController implements Dumpable {
             mStackedNotificationsEnabled = TunerService.parseIntegerSwitch(value, false);
         } else if (Settings.Secure.LOCK_SCREEN_NOTIFICATION_MINIMALISM.equals(key)) {
             mCompactNotificationsEnabled = TunerService.parseIntegerSwitch(value, true);
+        } else if (Settings.Secure.LOCK_SCREEN_NOTIFICATIONS_BOTTOM_ANCHORED.equals(key)) {
+            mView.setLockscreenNotificationsBottomAnchored(
+                    TunerService.parseIntegerSwitch(value, false));
         }
         mView.setLockscreenNotificationStackEnabled(mStackedNotificationsEnabled
                 && !(NotificationMinimalism.isEnabled() && mCompactNotificationsEnabled));
@@ -239,7 +242,8 @@ public class NotificationStackScrollLayoutController implements Dumpable {
                     mConfigurationController.addCallback(mConfigurationListener);
                     mTunerService.addTunable(mLockscreenStackTunable,
                             Settings.Secure.LOCK_SCREEN_NOTIFICATION_MINIMALISM,
-                            Settings.Secure.LOCK_SCREEN_STACKED_NOTIFICATIONS);
+                            Settings.Secure.LOCK_SCREEN_STACKED_NOTIFICATIONS,
+                            Settings.Secure.LOCK_SCREEN_NOTIFICATIONS_BOTTOM_ANCHORED);
                     final int newBarState = mStatusBarStateController.getState();
                     if (newBarState != mBarState) {
                         mStateListener.onStateChanged(newBarState);

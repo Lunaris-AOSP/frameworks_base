@@ -13024,6 +13024,12 @@ public final class Settings {
                 "lock_screen_stacked_notifications";
 
         /**
+         * @hide
+         */
+        public static final String LOCK_SCREEN_NOTIFICATIONS_BOTTOM_ANCHORED =
+                "lock_screen_notifications_bottom_anchored";
+
+        /**
          * Indicates whether snooze options should be shown on notifications
          * <p>
          * Type: int (0 for false, 1 for true)
