@@ -208,7 +208,8 @@ constructor(
         // TODO: Avoid making this split shade assumption by simply checking the stack for media
         val isMediaShowing = mediaDataManager.hasActiveMedia()
         val isMediaShowingInStack =
-            isMediaShowing && !splitShadeStateController.shouldUseSplitNotificationShade(resources)
+            isMediaShowing && !stack.isMotoCompactPreviewVisible &&
+                !splitShadeStateController.shouldUseSplitNotificationShade(resources)
 
         log { "\tGet maxNotifWithoutSavingSpace ---" }
         val maxNotifWithoutSavingSpace =

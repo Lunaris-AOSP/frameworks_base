@@ -318,6 +318,10 @@ public class NotificationShelf extends ActivatableNotificationView {
         final float y = mMotoTouchY;
         mMotoTouchX = Float.NaN;
         mMotoTouchY = Float.NaN;
+        return getMotoIconAtPosition(x, y);
+    }
+
+    public StatusBarIconView getMotoIconAtPosition(float x, float y) {
         if (!mMotoCompactDesign) return null;
         final float radius = getResources().getDimension(
                 R.dimen.moto_compact_notification_background_size) / 2f;
@@ -334,6 +338,7 @@ public class NotificationShelf extends ActivatableNotificationView {
 
     private int updateMotoCompactIcons() {
         mMotoCompactApps.clear();
+        boolean hasSelectedApp = false;
         for (int i = 0; i < mShelfIcons.getChildCount(); i++) {
             if (mShelfIcons.getChildAt(i) instanceof StatusBarIconView icon) {
                 NotificationIconContainer.IconState state = getIconState(icon);
@@ -359,6 +364,7 @@ public class NotificationShelf extends ActivatableNotificationView {
             state.setScaleX(1f);
             state.setScaleY(1f);
             icon.setSelected(mHostLayout.isMotoCompactAppSelected(notification));
+            hasSelectedApp |= icon.isSelected();
             // Expose the app name, not potentially redacted notification text, to accessibility.
             final String packageName = notification.getPackageName();
             CharSequence label = mMotoAppLabels.get(packageName);
@@ -377,6 +383,9 @@ public class NotificationShelf extends ActivatableNotificationView {
                     if (mMotoIconClickListener != null) mMotoIconClickListener.accept(icon);
                 });
             }
+        }
+        if (!hasSelectedApp) {
+            mHostLayout.clearMotoCompactSelection();
         }
         return mMotoCompactApps.size();
     }

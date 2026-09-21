@@ -1044,6 +1044,10 @@ public class NotificationStackScrollLayoutController implements Dumpable {
             mView.requestChildrenUpdate();
             return kotlin.Unit.INSTANCE;
         });
+        if (!SceneContainerFlag.isEnabled()) {
+            mView.setMotoCompactPreviewListener(
+                    mKeyguardMediaController::setNotificationPreviewVisible);
+        }
 
         if (screenshareNotificationHiding()) {
             mSensitiveNotificationProtectionController

@@ -473,6 +473,9 @@ public class NotificationShadeWindowViewController implements Dumpable {
                 }
 
                 mFalsingCollector.onTouchEvent(ev);
+                if (isDown && mStackScrollLayout != null) {
+                    mStackScrollLayout.closeMotoCompactPreviewIfOutsideTouch(ev);
+                }
                 mQQSGestureHandler.onTouchEvent(ev);
                 // Pass touch events to the pulsing gesture listener only if it's dozing,
                 // otherwise lockscreen DT2S and AOD DT2W will conflict.
