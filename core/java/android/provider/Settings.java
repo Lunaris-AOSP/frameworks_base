@@ -15112,6 +15112,12 @@ public final class Settings {
         public static final String IDLE_MANAGER_RESTORE_PENDING = "idle_manager_restore_pending";
 
         /**
+         * Persisted original and applied standby buckets for idle-manager recovery.
+         * @hide
+         */
+        public static final String IDLE_MANAGER_BUCKET_STATE = "idle_manager_bucket_state";
+
+        /**
          * @hide
          */
         public static final String IDLE_MANAGER_SLEEP_MODE_TRIGGER = "idle_manager_sleep_mode_trigger";
