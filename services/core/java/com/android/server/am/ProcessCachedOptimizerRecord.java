@@ -86,6 +86,9 @@ public final class ProcessCachedOptimizerRecord {
      */
     @GuardedBy("mProcLock") private CachedAppOptimizer.CompactProfile mLastCompactProfile;
 
+    /** RSS after the last compaction that reclaimed anonymous memory, for delta throttling. */
+    @GuardedBy("mProcLock") private long[] mLastCompactRss;
+
     /**
      * This process has been scheduled for a memory compaction.
      */
@@ -214,7 +217,7 @@ public final class ProcessCachedOptimizerRecord {
     CachedAppOptimizer.CompactProfile getLastCompactProfile() {
         if (mLastCompactProfile == null) {
             // The first compaction won't have a previous one, so assign one to avoid crashing.
-            mLastCompactProfile = CachedAppOptimizer.CompactProfile.FULL;
+            mLastCompactProfile = CachedAppOptimizer.CompactProfile.NONE;
         }
 
         return mLastCompactProfile;
@@ -223,6 +226,16 @@ public final class ProcessCachedOptimizerRecord {
     @GuardedBy("mProcLock")
     void setLastCompactProfile(CachedAppOptimizer.CompactProfile lastCompactProfile) {
         mLastCompactProfile = lastCompactProfile;
+    }
+
+    @GuardedBy("mProcLock")
+    long[] getLastCompactRss() {
+        return mLastCompactRss;
+    }
+
+    @GuardedBy("mProcLock")
+    void setLastCompactRss(long[] lastCompactRss) {
+        mLastCompactRss = lastCompactRss;
     }
 
     @GuardedBy("mProcLock")

@@ -68,6 +68,8 @@ fun StatusBarPopupChipsContainer(
         }
     }
 
+    if (chips.isEmpty()) return
+
     Box {
         Row(
             modifier = modifier.padding(horizontal = 8.dp),

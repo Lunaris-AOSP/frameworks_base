@@ -88,7 +88,6 @@ import com.android.internal.os.ProcLocksReader;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.ServiceThread;
 import com.android.server.am.compaction.CompactionStatsManager;
-import com.android.server.am.compaction.SingleCompactionStats;
 
 import dalvik.annotation.optimization.NeverCompile;
 
@@ -1410,8 +1409,9 @@ public class CachedAppOptimizer {
      */
     @GuardedBy({"mAm", "mProcLock"})
     void onCleanupApplicationRecordLocked(ProcessRecord app) {
+        final ProcessCachedOptimizerRecord opt = app.mOptRecord;
+        opt.setLastCompactRss(null);
         if (mUseFreezer) {
-            final ProcessCachedOptimizerRecord opt = app.mOptRecord;
             if (opt.isPendingFreeze()) {
                 // Remove pending DO_FREEZE message
                 mFreezeHandler.removeMessages(SET_FROZEN_PROCESS_MSG, app);
@@ -1627,6 +1627,14 @@ public class CachedAppOptimizer {
             CompactProfile lastCompactProfile = opt.getLastCompactProfile();
             long lastCompactTime = opt.getLastCompactTime();
 
+            // Both profiles reclaim anonymous memory and share the full-compaction throttles.
+            if (pendingProfile == CompactProfile.ANON) {
+                pendingProfile = CompactProfile.FULL;
+            }
+            if (lastCompactProfile == CompactProfile.ANON) {
+                lastCompactProfile = CompactProfile.FULL;
+            }
+
             // basic throttling
             // use the Phenotype flag knobs to determine whether current/previous
             // compaction combo should be throttled or not.
@@ -1685,10 +1693,8 @@ public class CachedAppOptimizer {
         }
 
         private boolean shouldRssThrottleCompaction(
-                CompactProfile profile, int pid, String name, long[] rssBefore) {
+                CompactProfile profile, int pid, String name, long[] rssBefore, long[] lastRss) {
             long anonRssBefore = rssBefore[RSS_ANON_INDEX];
-            SingleCompactionStats lastCompactionStats =
-                    mCompactStatsManager.getLastCompactionStats(pid);
 
             if (rssBefore[RSS_TOTAL_INDEX] == 0 && rssBefore[RSS_FILE_INDEX] == 0
                     && rssBefore[RSS_ANON_INDEX] == 0 && rssBefore[RSS_SWAP_INDEX] == 0) {
@@ -1700,25 +1706,24 @@ public class CachedAppOptimizer {
                 return true;
             }
 
-            if (profile == CompactProfile.FULL) {
+            if (profile == CompactProfile.FULL || profile == CompactProfile.ANON) {
                 if (mFullAnonRssThrottleKb > 0L && anonRssBefore < mFullAnonRssThrottleKb) {
                     if (DEBUG_COMPACTION) {
                         Slog.d(TAG_AM,
-                                "Skipping full compaction for process " + name
+                                "Skipping " + profile + " compaction for process " + name
                                         + "; anon RSS is too small: " + anonRssBefore + "KB.");
                     }
                     return true;
                 }
 
-                if (lastCompactionStats != null && mFullDeltaRssThrottleKb > 0L) {
-                    long[] lastRss = lastCompactionStats.getRssAfterCompaction();
+                if (lastRss != null && mFullDeltaRssThrottleKb > 0L) {
                     long absDelta = Math.abs(rssBefore[RSS_FILE_INDEX] - lastRss[RSS_FILE_INDEX])
                             + Math.abs(rssBefore[RSS_ANON_INDEX] - lastRss[RSS_ANON_INDEX])
                             + Math.abs(rssBefore[RSS_SWAP_INDEX] - lastRss[RSS_SWAP_INDEX]);
                     if (absDelta <= mFullDeltaRssThrottleKb) {
                         if (DEBUG_COMPACTION) {
                             Slog.d(TAG_AM,
-                                    "Skipping full compaction for process " + name
+                                    "Skipping " + profile + " compaction for process " + name
                                             + "; abs delta is too small: " + absDelta + "KB.");
                         }
                         return true;
@@ -1756,6 +1761,7 @@ public class CachedAppOptimizer {
                     final String name;
                     CompactProfile lastCompactProfile;
                     long lastCompactTime;
+                    long[] lastCompactRss;
                     int newOomAdj = msg.arg1;
                     int procState = msg.arg2;
                     boolean forceCompaction;
@@ -1781,6 +1787,7 @@ public class CachedAppOptimizer {
                         requestedProfile = opt.getReqCompactProfile();
                         lastCompactProfile = opt.getLastCompactProfile();
                         lastCompactTime = opt.getLastCompactTime();
+                        lastCompactRss = opt.getLastCompactRss();
                         oomAdjReason = opt.getLastOomAdjChangeReason();
                     }
 
@@ -1824,7 +1831,8 @@ public class CachedAppOptimizer {
                             return;
                         }
                         rssBefore = mProcessDependencies.getRss(pid);
-                        if (shouldRssThrottleCompaction(requestedProfile, pid, name, rssBefore)) {
+                        if (shouldRssThrottleCompaction(
+                                requestedProfile, pid, name, rssBefore, lastCompactRss)) {
                             mCompactStatsManager.logCompactionThrottled(
                                     CompactionStatsManager.COMPACT_THROTTLE_REASON_DELTA_RSS,
                                     compactSource, name);
@@ -1910,6 +1918,10 @@ public class CachedAppOptimizer {
                         synchronized (mProcLock) {
                             opt.setLastCompactTime(end);
                             opt.setLastCompactProfile(requestedProfile);
+                            if (proc.getPid() == pid && (resolvedProfile == CompactProfile.FULL
+                                    || resolvedProfile == CompactProfile.ANON)) {
+                                opt.setLastCompactRss(rssAfter);
+                            }
                         }
                     } catch (Exception e) {
                         // nothing to do, presumably the process died

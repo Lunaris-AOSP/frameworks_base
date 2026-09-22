@@ -173,9 +173,13 @@ fun StatusBarDynamicIslandContainer(
                 .onGloballyPositioned { coordinates ->
                     val b = coordinates.boundsInWindow()
                     onIslandBoundsChanged(
-                        android.graphics.Rect(
-                            b.left.toInt(), b.top.toInt(), b.right.toInt(), b.bottom.toInt(),
-                        )
+                        if (chips.isEmpty()) {
+                            android.graphics.Rect()
+                        } else {
+                            android.graphics.Rect(
+                                b.left.toInt(), b.top.toInt(), b.right.toInt(), b.bottom.toInt(),
+                            )
+                        }
                     )
                 },
         contentAlignment = Alignment.Center,
