@@ -1038,10 +1038,14 @@ public abstract class AndroidKeyStoreKeyPairGeneratorSpi extends KeyPairGenerato
                     KeymasterDefs.KM_TAG_PADDING, padding
             ));
             if (padding == KeymasterDefs.KM_PAD_RSA_OAEP) {
+                // Track if any MGF digest was added
+                final boolean[] mgfDigestAdded = {false};
+
                 ArrayUtils.forEach(mKeymasterMgf1Digests, (mgf1Digest) -> {
                     params.add(KeyStore2ParameterUtils.makeEnum(
                             KeymasterDefs.KM_TAG_RSA_OAEP_MGF_DIGEST, mgf1Digest
                     ));
+                    mgfDigestAdded[0] = true;
                 });
 
                 /* If the MGF1 Digest setter is not set, fall back to the previous behaviour:
@@ -1056,8 +1060,16 @@ public abstract class AndroidKeyStoreKeyPairGeneratorSpi extends KeyPairGenerato
                         if (digest != defaultMgf1Digest) {
                             params.add(KeyStore2ParameterUtils.makeEnum(
                                     KeymasterDefs.KM_TAG_RSA_OAEP_MGF_DIGEST, digest));
+                            mgfDigestAdded[0] = true;
                         }
                     });
+                }
+
+                // KeyMint 3+ requires RSA_OAEP_MGF_DIGEST - ensure at least SHA-1 is present
+                if (!mgfDigestAdded[0]) {
+                    params.add(KeyStore2ParameterUtils.makeEnum(
+                            KeymasterDefs.KM_TAG_RSA_OAEP_MGF_DIGEST,
+                            KeyProperties.Digest.toKeymaster(DEFAULT_MGF1_DIGEST)));
                 }
             }
         });
