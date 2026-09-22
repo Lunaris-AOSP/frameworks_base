@@ -329,6 +329,10 @@
     <string name="dynamic_island_event_open">Open</string>
     <string name="dynamic_island_event_charging">Charging</string>
     <string name="dynamic_island_event_wireless_charging">Wireless charging</string>
+    <string name="dynamic_island_charging_current">Current</string>
+    <string name="dynamic_island_charging_power">Power</string>
+    <string name="dynamic_island_charging_voltage">Voltage</string>
+    <string name="dynamic_island_charging_temperature">Temperature</string>
     <string name="dynamic_island_event_battery_saver">Battery saver</string>
     <string name="dynamic_island_event_unlocked">Unlocked</string>
     <string name="dynamic_island_event_disconnect">Disconnect</string>

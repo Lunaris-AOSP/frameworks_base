@@ -12,8 +12,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -55,6 +58,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -62,6 +66,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.android.systemui.common.ui.compose.Icon as StatusBarIcon
+import com.android.systemui.statusbar.featurepods.popups.ui.model.ChargingDetailModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.SystemEventKind
 import kotlinx.coroutines.delay
@@ -75,13 +80,16 @@ fun SystemEventPopup(model: PopupContentModel.SystemEvent, modifier: Modifier = 
     val accent = model.kind.accent
     val isMessage = model.kind == SystemEventKind.Notification || model.kind == SystemEventKind.Ongoing
     val isMedia = model.kind == SystemEventKind.NowPlaying
+    val isCharging = model.kind == SystemEventKind.Charging
     PopupSurface(
         shape = EventPopupShape,
-        modifier = modifier.widthIn(min = if (isMessage || isMedia) 320.dp else 280.dp,
+        modifier = modifier.widthIn(min = if (isMessage || isMedia || isCharging) 320.dp else 280.dp,
             max = if (isMessage || isMedia) 400.dp else 360.dp),
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp),
+            modifier = Modifier.fillMaxWidth()
+                .then(if (isCharging) Modifier.verticalScroll(rememberScrollState()) else Modifier)
+                .padding(horizontal = 20.dp, vertical = 18.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             when (model.kind) {
@@ -162,6 +170,10 @@ fun SystemEventPopup(model: PopupContentModel.SystemEvent, modifier: Modifier = 
                 )
             }
 
+            if (isCharging && model.chargingDetails.isNotEmpty()) {
+                ChargingDetailsGrid(model.chargingDetails, accent)
+            }
+
             if (model.actions.isNotEmpty()) {
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
@@ -174,6 +186,59 @@ fun SystemEventPopup(model: PopupContentModel.SystemEvent, modifier: Modifier = 
                             accent = accent,
                             modifier = Modifier.widthIn(max = 320.dp),
                         )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChargingDetailsGrid(details: List<ChargingDetailModel>, accent: Color) {
+    val columns = if (LocalDensity.current.fontScale > 1.3f) 1 else 2
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        details.chunked(columns).forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                row.forEach { detail ->
+                    Column(
+                        modifier = Modifier.weight(1f)
+                            .heightIn(min = 84.dp)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(accent.copy(alpha = 0.09f))
+                            .semantics(mergeDescendants = true) {}
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = detail.label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = LocalContentColor.current.copy(alpha = 0.7f),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = detail.value,
+                                style = MaterialTheme.typography.titleLarge.copy(
+                                    fontFeatureSettings = "tnum",
+                                ),
+                                fontWeight = FontWeight.SemiBold,
+                                color = LocalContentColor.current,
+                                maxLines = 1,
+                                modifier = Modifier.alignByBaseline(),
+                            )
+                            Text(
+                                text = detail.unit,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = LocalContentColor.current.copy(alpha = 0.7f),
+                                maxLines = 1,
+                                modifier = Modifier.alignByBaseline(),
+                            )
+                        }
                     }
                 }
             }

@@ -2,10 +2,13 @@ package com.android.systemui.statusbar.featurepods.popups.ui.viewmodel
 
 import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.graphics.drawable.Drawable
 import android.media.AudioManager
+import android.os.BatteryManager
 import android.os.UserHandle
 import android.service.notification.StatusBarNotification
+import com.android.settingslib.fuelgauge.BatteryStatus
 import com.android.systemui.ActivityIntentHelper
 import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.dagger.qualifiers.Application
@@ -18,6 +21,7 @@ import com.android.systemui.statusbar.featurepods.popups.shared.toActivityLaunch
 import com.android.systemui.statusbar.featurepods.popups.shared.toSendAction
 import com.android.systemui.statusbar.featurepods.popups.ui.model.ChipIcon
 import com.android.systemui.statusbar.featurepods.popups.ui.model.BluetoothBatteryModel
+import com.android.systemui.statusbar.featurepods.popups.ui.model.ChargingDetailModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.ColorsModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
@@ -42,12 +46,55 @@ class SystemEventPopupMapper @Inject constructor(
         null
     }
 
+    fun toChargingDetails(intent: Intent): List<ChargingDetailModel> {
+        val status = BatteryStatus(intent)
+        if (!status.isPluggedIn) return emptyList()
+
+        val divider = context.resources.getInteger(R.integer.config_currentInfoDivider).coerceAtLeast(1)
+        val locale = context.resources.configuration.locales[0]
+        val voltage = intent.getIntExtra(BatteryManager.EXTRA_MAX_CHARGING_VOLTAGE, -1)
+        return buildList {
+            val currentMa = status.maxChargingCurrent / divider
+            if (currentMa > 0f) {
+                val useAmps = currentMa >= 1000f
+                add(ChargingDetailModel(
+                    label = context.getString(R.string.dynamic_island_charging_current),
+                    value = String.format(locale, if (useAmps) "%.1f" else "%.0f",
+                        if (useAmps) currentMa / 1000f else currentMa),
+                    unit = if (useAmps) "A" else "mA",
+                ))
+            }
+            if (status.maxChargingWattage > 0f && voltage > 0) {
+                add(ChargingDetailModel(
+                    label = context.getString(R.string.dynamic_island_charging_power),
+                    value = String.format(locale, "%.1f", status.maxChargingWattage / divider / 1000f),
+                    unit = "W",
+                ))
+            }
+            if (voltage > 0) {
+                add(ChargingDetailModel(
+                    label = context.getString(R.string.dynamic_island_charging_voltage),
+                    value = String.format(locale, "%.1f", status.maxChargingVoltage / 1000000f),
+                    unit = "V",
+                ))
+            }
+            if (status.temperature > 0f) {
+                add(ChargingDetailModel(
+                    label = context.getString(R.string.dynamic_island_charging_temperature),
+                    value = String.format(locale, "%.1f", status.temperature / 10f),
+                    unit = "°C",
+                ))
+            }
+        }
+    }
+
     fun toChip(
         event: IslandEvent,
         disconnect: (String) -> Unit,
         switchApp: (Int) -> Unit,
         setRinger: (Int) -> Unit,
         notificationCount: Int = 1,
+        chargingDetails: List<ChargingDetailModel> = emptyList(),
     ): PopupChipModel.Shown? {
         val kind = when (event) {
             is IslandEvent.Charging -> SystemEventKind.Charging
@@ -296,6 +343,7 @@ class SystemEventPopupMapper @Inject constructor(
                 pulse = pulse,
                 image = image,
                 bluetoothBatteries = bluetoothBatteries,
+                chargingDetails = chargingDetails.takeIf { event is IslandEvent.Charging }.orEmpty(),
             ),
         )
     }

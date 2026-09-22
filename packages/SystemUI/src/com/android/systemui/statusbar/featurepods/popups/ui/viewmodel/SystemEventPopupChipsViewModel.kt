@@ -1,6 +1,9 @@
 package com.android.systemui.statusbar.featurepods.popups.ui.viewmodel
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.UserHandle
 import android.provider.Settings
 import androidx.compose.runtime.getValue
@@ -21,6 +24,7 @@ import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFea
 import com.android.systemui.statusbar.featurepods.popups.shared.SystemEventFeature
 import com.android.systemui.statusbar.featurepods.popups.shared.SystemEventFeature.*
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
+import com.android.systemui.statusbar.featurepods.popups.ui.model.ChargingDetailModel
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import javax.inject.Provider
@@ -37,6 +41,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
@@ -71,6 +76,23 @@ class SystemEventPopupChipsViewModel @AssistedInject constructor(
         awaitClose { userTracker.removeCallback(callback) }
     }
 
+    private fun chargingDetails(): Flow<List<ChargingDetailModel>> = callbackFlow {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action == Intent.ACTION_BATTERY_CHANGED) {
+                    trySend(mapper.toChargingDetails(intent))
+                }
+            }
+        }
+        val stickyIntent = context.registerReceiver(
+            receiver,
+            IntentFilter(Intent.ACTION_BATTERY_CHANGED),
+            Context.RECEIVER_NOT_EXPORTED,
+        )
+        trySend(stickyIntent?.let(mapper::toChargingDetails).orEmpty())
+        awaitClose { context.unregisterReceiver(receiver) }
+    }.distinctUntilChanged()
+
     val chips: List<PopupChipModel.Shown> by hydrator.hydratedStateOf(
         traceName = "systemEventChips",
         initialValue = emptyList(),
@@ -102,6 +124,12 @@ class SystemEventPopupChipsViewModel @AssistedInject constructor(
         }) { enabled ->
             features.filterIndexed { index, _ -> enabled[index] }.toSet()
         }.distinctUntilChanged().stateIn(this, SharingStarted.Eagerly, emptySet())
+
+        val chargingDetailsFlow = enabledFeatures.map { BATTERY in it }
+            .distinctUntilChanged()
+            .flatMapLatest { enabled ->
+                if (enabled) chargingDetails() else flowOf(emptyList())
+            }
 
         var previousHeadsUp: Int? = null
         fun updateHeadsUp(suppress: Boolean) {
@@ -188,15 +216,17 @@ class SystemEventPopupChipsViewModel @AssistedInject constructor(
                 }
             }
             launch(start = CoroutineStart.UNDISPATCHED) {
-                combine(connectivityEvents, statusEvents, notificationEvents, enabledFeatures) { a, b, c, enabled ->
+                combine(connectivityEvents, statusEvents, notificationEvents, enabledFeatures,
+                    chargingDetailsFlow) { a, b, c, enabled, details ->
                     (a + b + c).filter { SystemEventFeature.forEvent(it) in enabled }.let { events ->
                         if (events.any { it.behavior.autoShowsIsland }) events.sorted() else emptyList()
-                    }
-                }.collect { events ->
+                    } to details
+                }.collect { (events, details) ->
                     send(events.mapNotNull { event ->
                         mapper.toChip(event, connectivity::disconnectBluetooth,
                             appTracking::switchToApp, system::setRingerMode,
-                            notificationCount = events.count { it is IslandEvent.Notification })?.let { chip ->
+                            notificationCount = events.count { it is IslandEvent.Notification },
+                            chargingDetails = details)?.let { chip ->
                             fun expireNotification() {
                                 if (event is IslandEvent.Notification && event.progress < 0 &&
                                     !event.isProgressIndeterminate) {
