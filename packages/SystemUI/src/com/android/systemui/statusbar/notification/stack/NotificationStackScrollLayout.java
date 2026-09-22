@@ -58,9 +58,7 @@ import android.graphics.RectF;
 import android.graphics.RenderEffect;
 import android.graphics.RenderNode;
 import android.graphics.Shader;
-import android.hardware.power.Boost;
 import android.os.Bundle;
-import android.os.PowerManagerInternal;
 import android.os.SystemClock;
 import android.os.Trace;
 import android.os.UserHandle;
@@ -94,7 +92,6 @@ import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.policy.SystemBarUtils;
 import com.android.keyguard.BouncerPanelExpansionCalculator;
 import com.android.keyguard.KeyguardSliceView;
-import com.android.server.LocalServices;
 import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
 import com.android.systemui.ExpandHelper;
@@ -145,6 +142,7 @@ import com.android.systemui.statusbar.policy.SplitShadeStateController;
 import com.android.systemui.util.Assert;
 import com.android.systemui.util.ColorUtilKt;
 import com.android.systemui.util.DumpUtilsKt;
+import com.android.systemui.util.InteractionBoost;
 import com.android.systemui.util.ListenerSet;
 import com.android.systemui.util.state.DownstreamObservableState;
 import com.android.systemui.util.state.ObservableState;
@@ -1996,10 +1994,7 @@ public class NotificationStackScrollLayout
     }
 
     private void boostInteraction(int durationMs) {
-        PowerManagerInternal pmi = LocalServices.getService(PowerManagerInternal.class);
-        if (pmi != null) {
-            pmi.setPowerBoost(Boost.INTERACTION, durationMs);
-        }
+        InteractionBoost.request(durationMs);
     }
 
     @Override

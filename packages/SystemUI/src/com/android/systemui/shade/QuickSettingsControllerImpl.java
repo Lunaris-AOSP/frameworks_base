@@ -37,11 +37,9 @@ import android.app.Fragment;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
-import android.hardware.power.Boost;
 import android.graphics.Insets;
 import android.graphics.Rect;
 import android.graphics.Region;
-import android.os.PowerManagerInternal;
 import android.provider.Settings;
 import android.util.IndentingPrintWriter;
 import android.util.Log;
@@ -68,7 +66,6 @@ import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto;
 import com.android.internal.policy.ScreenDecorationsUtils;
 import com.android.internal.policy.SystemBarUtils;
-import com.android.server.LocalServices;
 import com.android.systemui.DejankUtils;
 import com.android.systemui.Dumpable;
 import com.android.systemui.classifier.Classifier;
@@ -114,6 +111,7 @@ import com.android.systemui.statusbar.policy.CastController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.statusbar.policy.SplitShadeStateController;
 import com.android.systemui.tuner.TunerService;
+import com.android.systemui.util.InteractionBoost;
 import com.android.systemui.util.LargeScreenUtils;
 import com.android.systemui.util.ScrimUtils;
 import com.android.systemui.util.kotlin.JavaAdapter;
@@ -2670,10 +2668,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
     }
 
     private void boostInteraction(int durationMs) {
-        PowerManagerInternal pmi = LocalServices.getService(PowerManagerInternal.class);
-        if (pmi != null) {
-            pmi.setPowerBoost(Boost.INTERACTION, durationMs);
-        }
+        InteractionBoost.request(durationMs);
     }
 
     interface ExpansionHeightSetToMaxListener {
