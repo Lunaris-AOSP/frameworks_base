@@ -710,15 +710,14 @@ constructor(
     }
 
     private fun scheduleUpdate() {
-        val (blur, zoomOutFromShadeRadius) = computeBlurAndZoomOut()
-        zoomOutCalculatedFromShadeRadius = zoomOutFromShadeRadius
-
         // Do not blur or zoom out the wallpaper if the blurred wallpaper is not supported.
         if (!windowRootViewBlurInteractor.isBlurredWallpaperSupported) {
             return
         }
 
         if (Flags.bouncerUiRevamp() || Flags.glanceableHubBlurredBackground()) {
+            val (blur, zoomOutFromShadeRadius) = computeBlurAndZoomOut()
+            zoomOutCalculatedFromShadeRadius = zoomOutFromShadeRadius
             if (windowRootViewBlurInteractor.isBlurCurrentlySupported.value) {
                 updateScheduled =
                     windowRootViewBlurInteractor.requestBlurForShade(
@@ -739,6 +738,7 @@ constructor(
             return
         }
         updateScheduled = true
+        val (blur, _) = computeBlurAndZoomOut()
         blurUtils.prepareBlur(blur)
         choreographer.postFrameCallback(updateBlurCallback)
     }
