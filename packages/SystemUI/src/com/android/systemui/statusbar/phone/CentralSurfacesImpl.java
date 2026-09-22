@@ -968,6 +968,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces,
 
     @Override
     public void start() {
+        LunarisIdleManager.initManager(mContext);
         mScreenLifecycle.addObserver(mScreenObserver);
         mWakefulnessLifecycle.addObserver(mWakefulnessObserver);
         mUiModeManager = mContext.getSystemService(UiModeManager.class);

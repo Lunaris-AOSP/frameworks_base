@@ -33,6 +33,7 @@ import android.os.BatteryManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.os.SystemClock;
 import android.provider.Settings;
 import android.telephony.TelephonyManager;
 import android.util.Log;
@@ -50,10 +51,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.TimeUnit;
 
 public class LunarisIdleManager {
@@ -89,7 +88,9 @@ public class LunarisIdleManager {
     public static final int STANDBY_BUCKET_RARE = 40;
     public static final int STANDBY_BUCKET_RESTRICTED = 45;
 
-    private final AtomicLong mLastScanStartMs = new AtomicLong(0L);
+    private volatile long mSession;
+    private long mLastScanStartMs = -SCAN_DEBOUNCE_MS;
+    private boolean mScanQueued;
 
     private volatile boolean mSleepModeTriggerEnabled = false;
     private volatile boolean mIsSleepModeActive = false;
@@ -179,9 +180,15 @@ public class LunarisIdleManager {
     }
 
     private static final class AppIdleState {
-        int currentBucket = STANDBY_BUCKET_ACTIVE;
-        boolean isRestricted = false;
-        long restrictedAtMs = 0L;
+        final int originalBucket;
+        final int appliedBucket;
+        boolean restoreRequested;
+
+        AppIdleState(int originalBucket, int appliedBucket, boolean restoreRequested) {
+            this.originalBucket = originalBucket;
+            this.appliedBucket = appliedBucket;
+            this.restoreRequested = restoreRequested;
+        }
     }
 
     private static volatile LunarisIdleManager sInstance;
@@ -195,14 +202,15 @@ public class LunarisIdleManager {
     private final UsageStatsManager mUsageStatsManager;
     private final PowerManager mPowerManager;
     private final TelephonyManager mTelephonyManager;
-    private final Executor mIoExecutor;
+    private final ExecutorService mIoExecutor;
 
     private volatile boolean mEnabled = true;
     private volatile boolean mDestroyed = false;
     private volatile Map<String, AppConfig> mAppConfigCache = Collections.emptyMap();
 
-    private final Map<String, AppIdleState> mAppIdleStates = new ConcurrentHashMap<>();
-    private final Map<String, Long> mLastKillTime = new ConcurrentHashMap<>();
+    private final Map<String, AppIdleState> mAppIdleStates = new HashMap<>();
+    private final Map<String, Long> mLastKillTime = new HashMap<>();
+    private boolean mBucketStateLoaded;
 
     private volatile int mBatteryLevel = 100;
     private volatile boolean mIsCharging = false;
@@ -221,6 +229,11 @@ public class LunarisIdleManager {
     private LunarisIdleManager(@NonNull Context context) {
         mContext = context.getApplicationContext();
         mMainHandler = new Handler(Looper.getMainLooper());
+        mIoExecutor = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "LunarisIdleManager-IO");
+            t.setDaemon(true);
+            return t;
+        });
         mActivityManager = (ActivityManager) mContext.getSystemService(Context.ACTIVITY_SERVICE);
         mAlarmManager = (AlarmManager) mContext.getSystemService(Context.ALARM_SERVICE);
         mAudioManager = (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
@@ -228,18 +241,20 @@ public class LunarisIdleManager {
         mPowerManager = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
         mTelephonyManager = (TelephonyManager) mContext.getSystemService(Context.TELEPHONY_SERVICE);
 
-        mIoExecutor = Executors.newSingleThreadExecutor(r -> {
-            Thread t = new Thread(r, "LunarisIdleManager-IO");
-            t.setDaemon(true);
-            return t;
-        });
-
         loadConfigFromSettings();
+        initScanWakeLock();
+        mIoExecutor.execute(() -> {
+            loadBucketStates();
+            boolean pending = Settings.Secure.getInt(mContext.getContentResolver(),
+                    Settings.Secure.IDLE_MANAGER_RESTORE_PENDING, 0) == 1;
+            boolean hasPendingRecords = mAppIdleStates.values().stream()
+                    .anyMatch(state -> state.restoreRequested);
+            restoreBuckets(!isPolicyEnabled() || (pending && !hasPendingRecords), mAppConfigCache);
+        });
         registerSettingsObserver();
         registerBatteryReceiver();
         registerAlarmReceiver();
         registerDozeReceiver();
-        initScanWakeLock();
     }
 
     public static void initManager(@NonNull Context context) {
@@ -255,7 +270,7 @@ public class LunarisIdleManager {
     @Nullable
     public static LunarisIdleManager getInstance() { return sInstance; }
 
-    public void executeManager() {
+    public synchronized void executeManager() {
         if (mDestroyed) {
             Log.w(TAG, "executeManager called on destroyed instance");
             return;
@@ -268,10 +283,13 @@ public class LunarisIdleManager {
             Log.d(TAG, "Sleep-Mode trigger enabled but Sleep Mode is off — skipping");
             return;
         }
+        if (mAppConfigCache.isEmpty() || mAlarmManager == null) return;
         if (mIsRunning) {
             Log.d(TAG, "Already running — ignoring duplicate start");
             return;
         }
+        mSession++;
+        mLastScanStartMs = -SCAN_DEBOUNCE_MS;
         mIsRunning = true;
         mHasScanCompleted = false;
         mHaltRetries = 0;
@@ -299,22 +317,32 @@ public class LunarisIdleManager {
         }
     }
 
-    public void haltManager() {
-        if (mDestroyed) return;
-        Log.d(TAG, "Halting LunarisIdleManager");
-        cancelCallbacks();
+    public synchronized void haltManager() {
         mIsRunning = false;
+        mSession++;
+        cancelCallbacks();
+        if (!mDestroyed) {
+            Map<String, AppConfig> configs = mAppConfigCache;
+            mIoExecutor.execute(() -> restoreBuckets(false, configs));
+        }
     }
 
-    public void cleanup() {
-        mDestroyed = true;
+    public synchronized void cleanup() {
+        if (mDestroyed) return;
         haltManager();
+        mDestroyed = true;
         unregisterSettingsObserver();
         unregisterBatteryReceiver();
         unregisterDozeReceiver();
         unregisterAlarmReceiver();
+        restoreAllBuckets();
+        mIoExecutor.execute(() -> {
+            synchronized (sLock) {
+                if (sInstance == this) sInstance = null;
+            }
+        });
+        mIoExecutor.shutdown();
         releaseWakeLockIfHeld();
-        synchronized (sLock) { sInstance = null; }
         Log.d(TAG, "LunarisIdleManager cleaned up");
     }
 
@@ -339,40 +367,31 @@ public class LunarisIdleManager {
         return Collections.unmodifiableMap(mAppConfigCache);
     }
 
-    public void setEnabled(boolean enabled) {
+    public synchronized void setEnabled(boolean enabled) {
         if (mDestroyed) return;
-        mEnabled = enabled;
-        Settings.Secure.putInt(mContext.getContentResolver(),
-                Settings.Secure.IDLE_MANAGER, enabled ? 1 : 0);
-        if (!enabled) {
-            haltManager();
-            Settings.Secure.putInt(mContext.getContentResolver(),
-                    Settings.Secure.IDLE_MANAGER_RESTORE_PENDING, 1);
-            restoreAllBuckets();
+        if (Settings.Secure.putInt(mContext.getContentResolver(),
+                Settings.Secure.IDLE_MANAGER, enabled ? 1 : 0)) {
+            onSettingsChanged();
         }
     }
 
-    public void saveAppConfigs(@NonNull Map<String, AppConfig> configs) {
+    public synchronized void saveAppConfigs(@NonNull Map<String, AppConfig> configs) {
         if (mDestroyed) return;
-        mAppConfigCache = new HashMap<>(configs);
-        persistAppConfigs(configs);
+        if (persistAppConfigs(new HashMap<>(configs))) {
+            onSettingsChanged();
+        }
     }
 
-    public void addOrUpdateApp(@NonNull AppConfig config) {
-        if (mDestroyed) return;
+    public synchronized void addOrUpdateApp(@NonNull AppConfig config) {
         Map<String, AppConfig> updated = new HashMap<>(mAppConfigCache);
         updated.put(config.packageName, config);
         saveAppConfigs(updated);
     }
 
-    public void removeApp(@NonNull String packageName) {
-        if (mDestroyed) return;
+    public synchronized void removeApp(@NonNull String packageName) {
         Map<String, AppConfig> updated = new HashMap<>(mAppConfigCache);
         updated.remove(packageName);
         saveAppConfigs(updated);
-        restoreBucket(packageName);
-        mAppIdleStates.remove(packageName);
-        mLastKillTime.remove(packageName);
     }
 
     @NonNull
@@ -413,39 +432,22 @@ public class LunarisIdleManager {
         return mSleepModeTriggerEnabled;
     }
 
-    public void setSleepModeTriggerEnabled(boolean enabled) {
+    public synchronized void setSleepModeTriggerEnabled(boolean enabled) {
         if (mDestroyed) return;
-        mSleepModeTriggerEnabled = enabled;
-        Settings.Secure.putInt(mContext.getContentResolver(),
-                Settings.Secure.IDLE_MANAGER_SLEEP_MODE_TRIGGER, enabled ? 1 : 0);
-        Log.d(TAG, "Sleep-Mode trigger set to: " + enabled);
-        if (!enabled && mEnabled && !mIsRunning) {
-            executeManager();
-        } else if (enabled && !mIsSleepModeActive && mIsRunning) {
-            haltManager();
+        if (Settings.Secure.putInt(mContext.getContentResolver(),
+                Settings.Secure.IDLE_MANAGER_SLEEP_MODE_TRIGGER, enabled ? 1 : 0)) {
+            onSettingsChanged();
         }
     }
 
-    private void onSleepModeChanged() {
-        if (mDestroyed) return;
-        boolean sleepActive = Settings.Secure.getInt(
-                mContext.getContentResolver(),
-                Settings.Secure.SLEEP_MODE_ENABLED, 0) == 1;
-        Log.d(TAG, "onSleepModeChanged: sleepActive=" + sleepActive
-                + " triggerEnabled=" + mSleepModeTriggerEnabled);
-        if (sleepActive == mIsSleepModeActive) return;
-        mIsSleepModeActive = sleepActive;
-        if (!mSleepModeTriggerEnabled || !mEnabled) return;
-        if (sleepActive) {
-            if (!mIsRunning) {
-                executeManager();
-            }
-        } else {
-            if (mIsRunning) {
-                haltManager();
-                restoreAllBuckets();
-            }
-        }
+    private boolean isPolicyEnabled() {
+        return mEnabled && (!mSleepModeTriggerEnabled || mIsSleepModeActive);
+    }
+
+    private boolean canScan(long session) {
+        return !mDestroyed && mIsRunning && mSession == session && isPolicyEnabled()
+                && !mAppConfigCache.isEmpty() && mPowerManager != null
+                && !mPowerManager.isInteractive();
     }
 
     private void initScanWakeLock() {
@@ -462,7 +464,7 @@ public class LunarisIdleManager {
         }
     }
 
-    private void releaseWakeLockIfHeld() {
+    private synchronized void releaseWakeLockIfHeld() {
         if (mScanWakeLock != null && mScanWakeLock.isHeld()) {
             mScanWakeLock.release();
         }
@@ -472,10 +474,10 @@ public class LunarisIdleManager {
         if (mAlarmManager == null) return;
         PendingIntent pi = PendingIntent.getBroadcast(
                 mContext, PI_SCAN_REQUEST,
-                new Intent(ACTION_SCAN),
+                new Intent(ACTION_SCAN).setPackage(mContext.getPackageName()),
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        long triggerAt = System.currentTimeMillis() + Math.max(delayMs, MIN_DELAY_MS);
-        mAlarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi);
+        long triggerAt = SystemClock.elapsedRealtime() + Math.max(delayMs, MIN_DELAY_MS);
+        mAlarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi);
         Log.d(TAG, "Scan alarm set in " + TimeUnit.MILLISECONDS.toMinutes(delayMs) + " min");
     }
 
@@ -483,7 +485,7 @@ public class LunarisIdleManager {
         if (mAlarmManager == null) return;
         PendingIntent pi = PendingIntent.getBroadcast(
                 mContext, PI_SCAN_REQUEST,
-                new Intent(ACTION_SCAN),
+                new Intent(ACTION_SCAN).setPackage(mContext.getPackageName()),
                 PendingIntent.FLAG_NO_CREATE | PendingIntent.FLAG_IMMUTABLE);
         if (pi != null) mAlarmManager.cancel(pi);
     }
@@ -492,17 +494,17 @@ public class LunarisIdleManager {
         if (mAlarmManager == null) return;
         PendingIntent pi = PendingIntent.getBroadcast(
                 mContext, PI_HALT_REQUEST,
-                new Intent(ACTION_HALT),
+                new Intent(ACTION_HALT).setPackage(mContext.getPackageName()),
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        long triggerAt = System.currentTimeMillis() + Math.max(delayMs, MIN_DELAY_MS);
-        mAlarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi);
+        long triggerAt = SystemClock.elapsedRealtime() + Math.max(delayMs, MIN_DELAY_MS);
+        mAlarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi);
     }
 
     private void cancelHaltAlarm() {
         if (mAlarmManager == null) return;
         PendingIntent pi = PendingIntent.getBroadcast(
                 mContext, PI_HALT_REQUEST,
-                new Intent(ACTION_HALT),
+                new Intent(ACTION_HALT).setPackage(mContext.getPackageName()),
                 PendingIntent.FLAG_NO_CREATE | PendingIntent.FLAG_IMMUTABLE);
         if (pi != null) mAlarmManager.cancel(pi);
     }
@@ -535,39 +537,38 @@ public class LunarisIdleManager {
         }
     }
 
-    private void onScanAlarmFired() {
-        if (!mIsRunning || mDestroyed) return;
-        long now = System.currentTimeMillis();
-        long previous = mLastScanStartMs.get();
-        if ((now - previous) < SCAN_DEBOUNCE_MS) {
-            Log.d(TAG, "onScanAlarmFired: debounced (last scan " 
-                    + (now - previous) + "ms ago)");
+    private synchronized void onScanAlarmFired() {
+        if (!mIsRunning || mDestroyed || !isPolicyEnabled()) return;
+        long now = SystemClock.elapsedRealtime();
+        long remaining = SCAN_DEBOUNCE_MS - (now - mLastScanStartMs);
+        if (mScanQueued || remaining > 0) {
+            scheduleScanAlarm(Math.max(remaining, SCAN_DEBOUNCE_MS));
             return;
         }
-        if (!mLastScanStartMs.compareAndSet(previous, now)) {
-            Log.d(TAG, "onScanAlarmFired: lost race to concurrent trigger");
-            return;
-        }
+        mLastScanStartMs = now;
+        mScanQueued = true;
+        final long session = mSession;
         acquireWakeLock();
         mIoExecutor.execute(() -> {
             try {
-                performIdleScan();
-                mHasScanCompleted = true;
-                if (mIsRunning) {
-                    long interval = getDynamicScanIntervalMs();
-                    Log.d(TAG, "Next scan in "
-                            + TimeUnit.MILLISECONDS.toMinutes(interval)
-                            + " min [battery=" + mBatteryLevel
-                            + "%, charging=" + mIsCharging + "]");
-                    scheduleScanAlarm(interval);
-                }
+                if (canScan(session)) performIdleScan(session);
+            } catch (Exception e) {
+                Log.e(TAG, "Idle scan failed", e);
             } finally {
-                releaseWakeLockIfHeld();
+                synchronized (LunarisIdleManager.this) {
+                    releaseWakeLockIfHeld();
+                    mScanQueued = false;
+                    if (mSession == session && mIsRunning && !mDestroyed
+                            && isPolicyEnabled()) {
+                        mHasScanCompleted = true;
+                        scheduleScanAlarm(getDynamicScanIntervalMs());
+                    }
+                }
             }
         });
     }
 
-    private void onHaltAlarmFired() {
+    private synchronized void onHaltAlarmFired() {
         if (!mIsRunning) return;
         if (!mHasScanCompleted && mHaltRetries < 3) {
             mHaltRetries++;
@@ -578,15 +579,11 @@ public class LunarisIdleManager {
         haltManager();
     }
 
-    private void performIdleScan() {
-        if (mActivityManager == null || mUsageStatsManager == null) return;
-
-        boolean screenOff = mPowerManager == null || !mPowerManager.isInteractive();
-
-        if (!screenOff) {
-            Log.d(TAG, "Screen is on — skipping scan");
-            return;
-        }
+    private void performIdleScan(long session) {
+        if (!canScan(session) || mActivityManager == null || mUsageStatsManager == null) return;
+        Map<String, AppConfig> configs = mAppConfigCache;
+        restoreBuckets(false, configs);
+        if (!mBucketStateLoaded || !canScan(session)) return;
 
         Log.d(TAG, "performIdleScan: trigger=[screenOff]"
                 + " evaluating " + mAppConfigCache.size() + " configured apps");
@@ -598,15 +595,29 @@ public class LunarisIdleManager {
             Log.e(TAG, "Error fetching processes", e);
             return;
         }
-        if (processes == null) processes = Collections.emptyList();
+        if (processes == null) return;
+
+        final long now = System.currentTimeMillis();
+        final Map<String, UsageStats> stats;
+        try {
+            stats = mUsageStatsManager.queryAndAggregateUsageStats(now - IDLE_TIMEOUT_MS, now);
+        } catch (Exception e) {
+            Log.w(TAG, "Usage statistics unavailable; skipping scan", e);
+            return;
+        }
+        if (stats == null || stats.isEmpty()) {
+            Log.w(TAG, "Usage statistics empty; skipping scan");
+            return;
+        }
 
         Set<String> foregroundPkgs = getForegroundPackages(processes);
         boolean audioActive = isAudioActive();
-        long now = System.currentTimeMillis();
+        Map<String, IdleAction> actions = new HashMap<>();
         int restricted = 0;
         int killed = 0;
 
-        for (Map.Entry<String, AppConfig> entry : mAppConfigCache.entrySet()) {
+        for (Map.Entry<String, AppConfig> entry : configs.entrySet()) {
+            if (!canScan(session)) break;
             String pkg = entry.getKey();
             AppConfig cfg = entry.getValue();
 
@@ -625,7 +636,7 @@ public class LunarisIdleManager {
                 continue;
             }
 
-            if (!isAppIdleLongEnough(pkg, now)) {
+            if (!isAppIdleLongEnough(pkg, now, stats)) {
                 Log.v(TAG, "Not idle long enough: " + pkg);
                 continue;
             }
@@ -634,20 +645,20 @@ public class LunarisIdleManager {
 
             switch (cfg.action) {
                 case STANDBY_BUCKET_RARE:
-                    didAct = applyStandbyBucket(pkg, STANDBY_BUCKET_RARE);
+                    didAct = applyStandbyBucket(pkg, STANDBY_BUCKET_RARE, session);
                     if (didAct) restricted++;
                     break;
                 case STANDBY_BUCKET_RESTRICTED:
-                    didAct = applyStandbyBucket(pkg, STANDBY_BUCKET_RESTRICTED);
+                    didAct = applyStandbyBucket(pkg, STANDBY_BUCKET_RESTRICTED, session);
                     if (didAct) restricted++;
                     break;
                 case KILL_BACKGROUND:
-                    didAct = killBackground(pkg, now);
+                    didAct = killBackground(pkg, session);
                     if (didAct) killed++;
                     break;
                 case FULL_KILL:
-                    boolean r = applyStandbyBucket(pkg, STANDBY_BUCKET_RESTRICTED);
-                    boolean k = forceStop(pkg, now);
+                    boolean r = applyStandbyBucket(pkg, STANDBY_BUCKET_RESTRICTED, session);
+                    boolean k = forceStop(pkg, session);
                     didAct = r || k;
                     if (r) restricted++;
                     if (k) killed++;
@@ -655,37 +666,56 @@ public class LunarisIdleManager {
             }
 
             if (didAct) {
-                updateKillStats(pkg, now, cfg.action);
+                actions.put(pkg, cfg.action);
             }
         }
 
+        updateKillStats(actions, now);
         Log.i(TAG, "Scan done — restricted=" + restricted
                 + " killed=" + killed
                 + " total=" + mAppConfigCache.size());
     }
 
-    private boolean applyStandbyBucket(String pkg, int targetBucket) {
-        if (mUsageStatsManager == null) return false;
-
-        AppIdleState state = mAppIdleStates.computeIfAbsent(pkg, k -> new AppIdleState());
-        if (state.isRestricted && state.currentBucket <= targetBucket) {
-            return false;
-        }
-
+    private boolean applyStandbyBucket(String pkg, int targetBucket, long session) {
+        if (!mBucketStateLoaded || !canScan(session)) return false;
         try {
+            int currentBucket = readBucket(pkg);
+            AppIdleState previous = mAppIdleStates.get(pkg);
+            if (previous != null && previous.restoreRequested) return false;
+            if (currentBucket < STANDBY_BUCKET_ACTIVE || currentBucket >= targetBucket) {
+                return false;
+            }
+            int originalBucket = previous != null && currentBucket == previous.appliedBucket
+                    ? previous.originalBucket : currentBucket;
+            mAppIdleStates.put(pkg, new AppIdleState(originalBucket, targetBucket, false));
+            if (!persistBucketStates()) {
+                if (previous == null) mAppIdleStates.remove(pkg);
+                else mAppIdleStates.put(pkg, previous);
+                return false;
+            }
+            if (!canScan(session)) return false;
             mUsageStatsManager.setAppStandbyBucket(pkg, targetBucket);
-            state.isRestricted = true;
-            state.currentBucket = targetBucket;
-            state.restrictedAtMs = System.currentTimeMillis();
+            if (readBucket(pkg) != targetBucket) {
+                Log.w(TAG, "Standby bucket change not applied for " + pkg);
+                return false;
+            }
             Log.d(TAG, "Bucket applied [" + bucketName(targetBucket) + "]: " + pkg);
             return true;
         } catch (Exception e) {
-            Log.w(TAG, "Failed to set standby bucket for " + pkg + ": " + e.getMessage());
+            Log.w(TAG, "Failed to set standby bucket for " + pkg, e);
             return false;
         }
     }
 
-    private boolean killBackground(String pkg, long now) {
+    private int readBucket(String pkg) {
+        Integer bucket = mUsageStatsManager.getAppStandbyBuckets().get(pkg);
+        if (bucket == null) throw new IllegalStateException("No standby bucket for " + pkg);
+        return bucket;
+    }
+
+    private boolean killBackground(String pkg, long session) {
+        if (!canScan(session)) return false;
+        long now = SystemClock.elapsedRealtime();
         Long lastKill = mLastKillTime.get(pkg);
         if (lastKill != null && (now - lastKill) < MIN_KILL_INTERVAL_MS) {
             return false;
@@ -701,7 +731,9 @@ public class LunarisIdleManager {
         }
     }
 
-    private boolean forceStop(String pkg, long now) {
+    private boolean forceStop(String pkg, long session) {
+        if (!canScan(session)) return false;
+        long now = SystemClock.elapsedRealtime();
         Long lastKill = mLastKillTime.get(pkg);
         if (lastKill != null && (now - lastKill) < MIN_KILL_INTERVAL_MS) {
             return false;
@@ -718,9 +750,11 @@ public class LunarisIdleManager {
         }
 
         try {
-            mActivityManager.killBackgroundProcesses(pkg);
-            stopped = true;
-            Log.d(TAG, "killBackgroundProcesses called: " + pkg);
+            if (!stopped && canScan(session)) {
+                mActivityManager.killBackgroundProcesses(pkg);
+                stopped = true;
+                Log.d(TAG, "killBackgroundProcesses called: " + pkg);
+            }
         } catch (Exception e) {
             Log.w(TAG, "killBackgroundProcesses failed for " + pkg + ": " + e.getMessage());
         }
@@ -734,29 +768,106 @@ public class LunarisIdleManager {
 
     private void restoreBucket(String pkg) {
         AppIdleState state = mAppIdleStates.get(pkg);
-        if (state == null || !state.isRestricted) return;
+        if (state == null || !state.restoreRequested) return;
         try {
-            mUsageStatsManager.setAppStandbyBucket(pkg, STANDBY_BUCKET_WORKING_SET);
-            state.isRestricted  = false;
-            state.currentBucket = STANDBY_BUCKET_WORKING_SET;
-            Log.d(TAG, "Bucket restored (WORKING_SET): " + pkg);
+            int currentBucket = readBucket(pkg);
+            if (currentBucket == state.appliedBucket) {
+                mUsageStatsManager.setAppStandbyBucket(pkg, state.originalBucket);
+                if (readBucket(pkg) != state.originalBucket) {
+                    Log.w(TAG, "Bucket restore not applied for " + pkg + "; keeping pending");
+                    return;
+                }
+            }
+            mAppIdleStates.remove(pkg);
+            if (!persistBucketStates()) mAppIdleStates.put(pkg, state);
         } catch (Exception e) {
-            Log.w(TAG, "Failed to restore bucket for " + pkg);
+            Log.w(TAG, "Failed to restore bucket for " + pkg + "; keeping pending", e);
         }
     }
 
     private void restoreAllBuckets() {
-        mIoExecutor.execute(() -> {
-            Log.d(TAG, "restoreAllBuckets: starting for "
-                    + mAppIdleStates.size() + " apps");
-            for (String pkg : new HashSet<>(mAppIdleStates.keySet())) {
-                restoreBucket(pkg);
+        Settings.Secure.putInt(mContext.getContentResolver(),
+                Settings.Secure.IDLE_MANAGER_RESTORE_PENDING, 1);
+        mIoExecutor.execute(() -> restoreBuckets(true, Collections.emptyMap()));
+    }
+
+    private static int configuredBucket(@Nullable AppConfig config) {
+        if (config == null) return -1;
+        switch (config.action) {
+            case STANDBY_BUCKET_RARE: return STANDBY_BUCKET_RARE;
+            case STANDBY_BUCKET_RESTRICTED:
+            case FULL_KILL: return STANDBY_BUCKET_RESTRICTED;
+            default: return -1;
+        }
+    }
+
+    private void restoreBuckets(boolean all, Map<String, AppConfig> configs) {
+        if (!mBucketStateLoaded) loadBucketStates();
+        if (!mBucketStateLoaded) return;
+        boolean requested = false;
+        for (Map.Entry<String, AppIdleState> entry : mAppIdleStates.entrySet()) {
+            AppIdleState state = entry.getValue();
+            if (all || configuredBucket(configs.get(entry.getKey())) != state.appliedBucket) {
+                state.restoreRequested = true;
             }
-            Settings.Secure.putInt(
-                    mContext.getContentResolver(),
-                    Settings.Secure.IDLE_MANAGER_RESTORE_PENDING, 0);
-            Log.d(TAG, "restoreAllBuckets: complete");
-        });
+            requested |= state.restoreRequested;
+        }
+        if (requested) {
+            if (!persistBucketStates()) return;
+            for (String pkg : new HashSet<>(mAppIdleStates.keySet())) restoreBucket(pkg);
+        }
+        boolean pending = false;
+        for (AppIdleState state : mAppIdleStates.values()) pending |= state.restoreRequested;
+        Settings.Secure.putInt(mContext.getContentResolver(),
+                Settings.Secure.IDLE_MANAGER_RESTORE_PENDING, pending ? 1 : 0);
+        mLastKillTime.keySet().retainAll(configs.keySet());
+    }
+
+    private void loadBucketStates() {
+        try {
+            String json = Settings.Secure.getString(mContext.getContentResolver(),
+                    Settings.Secure.IDLE_MANAGER_BUCKET_STATE);
+            Map<String, AppIdleState> restored = new HashMap<>();
+            if (json != null && !json.isEmpty()) {
+                JSONObject root = new JSONObject(json);
+                for (java.util.Iterator<String> it = root.keys(); it.hasNext();) {
+                    String pkg = it.next();
+                    JSONObject entry = root.getJSONObject(pkg);
+                    int original = entry.getInt("original_bucket");
+                    int applied = entry.getInt("applied_bucket");
+                    if (original < STANDBY_BUCKET_ACTIVE || original >= applied
+                            || (applied != STANDBY_BUCKET_RARE
+                            && applied != STANDBY_BUCKET_RESTRICTED)) {
+                        throw new IllegalArgumentException("Invalid bucket record for " + pkg);
+                    }
+                    restored.put(pkg, new AppIdleState(original, applied,
+                            entry.optBoolean("restore_requested", false)));
+                }
+            }
+            mAppIdleStates.putAll(restored);
+            mBucketStateLoaded = true;
+        } catch (Exception e) {
+            Log.e(TAG, "Cannot load bucket recovery state; enforcement disabled", e);
+        }
+    }
+
+    private boolean persistBucketStates() {
+        try {
+            JSONObject root = new JSONObject();
+            for (Map.Entry<String, AppIdleState> entry : mAppIdleStates.entrySet()) {
+                AppIdleState state = entry.getValue();
+                JSONObject value = new JSONObject();
+                value.put("original_bucket", state.originalBucket);
+                value.put("applied_bucket", state.appliedBucket);
+                value.put("restore_requested", state.restoreRequested);
+                root.put(entry.getKey(), value);
+            }
+            return Settings.Secure.putString(mContext.getContentResolver(),
+                    Settings.Secure.IDLE_MANAGER_BUCKET_STATE, root.toString());
+        } catch (Exception e) {
+            Log.e(TAG, "Cannot persist bucket recovery state", e);
+            return false;
+        }
     }
 
     private static String bucketName(int bucket) {
@@ -776,39 +887,9 @@ public class LunarisIdleManager {
         }
     }
 
-    private boolean isAppIdleLongEnough(String pkg, long now) {
-        try {
-            long begin = now - IDLE_TIMEOUT_MS;
-            Map<String, UsageStats> stats =
-                    mUsageStatsManager.queryAndAggregateUsageStats(begin, now);
-
-            if (stats == null || stats.isEmpty()) {
-                Log.w(TAG, "UsageStats returned empty — "
-                        + "check PACKAGE_USAGE_STATS grant. Treating " + pkg + " as idle.");
-                return true;
-            }
-
-            UsageStats appStats = stats.get(pkg);
-            if (appStats == null) {
-                Log.v(TAG, pkg + ": no usage in window → idle");
-                return true;
-            }
-
-            long lastUsed = appStats.getLastTimeUsed();
-            long idleDuration = now - lastUsed;
-
-            Log.v(TAG, pkg + ": idle for "
-                    + TimeUnit.MILLISECONDS.toMinutes(idleDuration)
-                    + " min (threshold="
-                    + TimeUnit.MILLISECONDS.toMinutes(IDLE_TIMEOUT_MS) + " min)");
-
-            return idleDuration >= IDLE_TIMEOUT_MS;
-
-        } catch (Exception e) {
-            Log.w(TAG, "UsageStats query failed for " + pkg + ": " + e.getMessage());
-            Long lastKill = mLastKillTime.get(pkg);
-            return lastKill == null || (now - lastKill) >= IDLE_TIMEOUT_MS;
-        }
+    private boolean isAppIdleLongEnough(String pkg, long now, Map<String, UsageStats> stats) {
+        UsageStats appStats = stats.get(pkg);
+        return appStats == null || now - appStats.getLastTimeUsed() >= IDLE_TIMEOUT_MS;
     }
 
     private Set<String> getForegroundPackages(
@@ -873,29 +954,44 @@ public class LunarisIdleManager {
         ContentResolver cr = mContext.getContentResolver();
         mEnabled = Settings.Secure.getInt(cr, Settings.Secure.IDLE_MANAGER, 1) == 1;
 
-        int restorePending = Settings.Secure.getInt(
-                cr, Settings.Secure.IDLE_MANAGER_RESTORE_PENDING, 0);
-        if (restorePending == 1) {
-            Log.w(TAG, "Previous restoreAllBuckets was interrupted — re-running");
-            mIoExecutor.execute(() -> {
-                for (String pkg : new HashSet<>(mAppIdleStates.keySet())) {
-                    restoreBucket(pkg);
-                }
-                Settings.Secure.putInt(
-                        cr, Settings.Secure.IDLE_MANAGER_RESTORE_PENDING, 0);
-            });
-        }
-
         mSleepModeTriggerEnabled = Settings.Secure.getInt(
                 cr, Settings.Secure.IDLE_MANAGER_SLEEP_MODE_TRIGGER, 0) == 1;
         mIsSleepModeActive = Settings.Secure.getInt(
                 cr, Settings.Secure.SLEEP_MODE_ENABLED, 0) == 1;
 
         String appsJson = Settings.Secure.getString(cr, Settings.Secure.IDLE_MANAGER_APPS);
-        Log.d(TAG, "loadConfigFromSettings: json=" + appsJson);
-        mAppConfigCache = parseAppConfigs(appsJson);
+        mAppConfigCache = Collections.unmodifiableMap(parseAppConfigs(appsJson));
         Log.d(TAG, "Config loaded — enabled=" + mEnabled
                 + ", apps=" + mAppConfigCache.size());
+    }
+
+    private synchronized void onSettingsChanged() {
+        if (mDestroyed) return;
+        boolean enabled = mEnabled;
+        boolean trigger = mSleepModeTriggerEnabled;
+        boolean sleepActive = mIsSleepModeActive;
+        Map<String, AppConfig> previous = mAppConfigCache;
+        loadConfigFromSettings();
+        if (enabled == mEnabled && trigger == mSleepModeTriggerEnabled
+                && sleepActive == mIsSleepModeActive && sameConfigs(previous, mAppConfigCache)) {
+            return;
+        }
+        haltManager();
+        Map<String, AppConfig> configs = mAppConfigCache;
+        if (!isPolicyEnabled()) {
+            restoreAllBuckets();
+        } else {
+            mIoExecutor.execute(() -> restoreBuckets(false, configs));
+            if (mPowerManager != null && !mPowerManager.isInteractive()) executeManager();
+        }
+    }
+
+    private static boolean sameConfigs(Map<String, AppConfig> a, Map<String, AppConfig> b) {
+        if (!a.keySet().equals(b.keySet())) return false;
+        for (String pkg : a.keySet()) {
+            if (a.get(pkg).action != b.get(pkg).action) return false;
+        }
+        return true;
     }
 
     private void registerSettingsObserver() {
@@ -903,13 +999,7 @@ public class LunarisIdleManager {
         mSettingsObserver = new ContentObserver(mMainHandler) {
             @Override
             public void onChange(boolean selfChange, @Nullable Uri uri) {
-                Log.d(TAG, "Settings changed — refreshing config");
-                loadConfigFromSettings();
-                Uri sleepModeUri = Settings.Secure.getUriFor(
-                        Settings.Secure.SLEEP_MODE_ENABLED);
-                if (sleepModeUri != null && sleepModeUri.equals(uri)) {
-                    onSleepModeChanged();
-                }
+                onSettingsChanged();
             }
         };
         for (String key : new String[]{
@@ -983,18 +1073,16 @@ public class LunarisIdleManager {
         }
     }
 
-    private void persistAppConfigs(@NonNull Map<String, AppConfig> configs) {
-        mIoExecutor.execute(() -> {
-            try {
-                JSONArray arr = new JSONArray();
-                for (AppConfig c : configs.values()) arr.put(c.toJson());
-                Settings.Secure.putString(
-                        mContext.getContentResolver(),
-                        Settings.Secure.IDLE_MANAGER_APPS, arr.toString());
-            } catch (Exception e) {
-                Log.e(TAG, "Failed to persist configs", e);
-            }
-        });
+    private boolean persistAppConfigs(@NonNull Map<String, AppConfig> configs) {
+        try {
+            JSONArray arr = new JSONArray();
+            for (AppConfig c : configs.values()) arr.put(c.toJson());
+            return Settings.Secure.putString(mContext.getContentResolver(),
+                    Settings.Secure.IDLE_MANAGER_APPS, arr.toString());
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to persist configs", e);
+            return false;
+        }
     }
 
     @NonNull
@@ -1013,29 +1101,26 @@ public class LunarisIdleManager {
         return map;
     }
 
-    private void updateKillStats(@NonNull String pkg, long tsMs, @NonNull IdleAction action) {
-        mIoExecutor.execute(() -> {
-            ContentResolver cr = mContext.getContentResolver();
-            try {
-                String existing = Settings.Secure.getString(
-                        cr, Settings.Secure.IDLE_MANAGER_KILL_STATS);
-                JSONObject root = (existing != null && !existing.isEmpty())
-                        ? new JSONObject(existing) : new JSONObject();
-
+    private void updateKillStats(Map<String, IdleAction> actions, long tsMs) {
+        if (actions.isEmpty()) return;
+        ContentResolver cr = mContext.getContentResolver();
+        try {
+            String existing = Settings.Secure.getString(cr, Settings.Secure.IDLE_MANAGER_KILL_STATS);
+            JSONObject root = (existing != null && !existing.isEmpty())
+                    ? new JSONObject(existing) : new JSONObject();
+            for (Map.Entry<String, IdleAction> action : actions.entrySet()) {
+                String pkg = action.getKey();
                 JSONObject entry = root.optJSONObject(pkg);
                 if (entry == null) entry = new JSONObject();
-
                 entry.put("count", entry.optInt("count", 0) + 1);
                 entry.put("last_kill", tsMs);
-                entry.put("last_action", action.name());
+                entry.put("last_action", action.getValue().name());
                 root.put(pkg, entry);
-
-                Settings.Secure.putString(
-                        cr, Settings.Secure.IDLE_MANAGER_KILL_STATS, root.toString());
-            } catch (Exception e) {
-                Log.e(TAG, "Failed to update stats for " + pkg, e);
             }
-        });
+            Settings.Secure.putString(cr, Settings.Secure.IDLE_MANAGER_KILL_STATS, root.toString());
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to update enforcement statistics", e);
+        }
     }
 
     private long getDynamicScanIntervalMs() {
