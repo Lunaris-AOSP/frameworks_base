@@ -66,12 +66,10 @@ import android.graphics.drawable.Animatable;
 import android.graphics.Shader;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.TransitionDrawable;
-import android.hardware.power.Boost;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.PowerManager;
-import android.os.PowerManagerInternal;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.provider.Settings;
@@ -108,7 +106,6 @@ import com.android.keyguard.ActiveUnlockConfig;
 import com.android.keyguard.KeyguardUnfoldTransition;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.dagger.KeyguardStatusBarViewComponent;
-import com.android.server.LocalServices;
 import com.android.systemui.DejankUtils;
 import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
@@ -218,6 +215,7 @@ import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.statusbar.policy.SplitShadeStateController;
 import com.android.systemui.tuner.TunerService;
 import com.android.systemui.unfold.SysUIUnfoldComponent;
+import com.android.systemui.util.InteractionBoost;
 import com.android.systemui.util.ScrimUtils;
 import com.android.systemui.util.Utils;
 import com.android.systemui.util.time.SystemClock;
@@ -2637,10 +2635,7 @@ public final class NotificationPanelViewController implements
     }
 
     private void boostInteraction(int durationMs) {
-        PowerManagerInternal pmi = LocalServices.getService(PowerManagerInternal.class);
-        if (pmi != null) {
-            pmi.setPowerBoost(Boost.INTERACTION, durationMs);
-        }
+        InteractionBoost.request(durationMs);
     }
 
     private class ShadeHeadsUpTrackerImpl implements ShadeHeadsUpTracker {
