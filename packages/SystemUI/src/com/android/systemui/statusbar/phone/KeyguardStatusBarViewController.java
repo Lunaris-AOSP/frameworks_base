@@ -99,6 +99,7 @@ import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.statusbar.policy.UserInfoController;
 import com.android.systemui.statusbar.ui.binder.KeyguardStatusBarViewBinder;
 import com.android.systemui.statusbar.ui.viewmodel.KeyguardStatusBarViewModel;
+import com.android.systemui.statusbar.featurepods.popups.ui.binder.KeyguardDynamicIslandViewBinder;
 import com.android.systemui.axdynamicbar.ui.AxDynamicBarChipViewModel;
 import com.android.systemui.tuner.TunerService;
 import com.android.systemui.user.ui.viewmodel.StatusBarUserChipViewModel;
@@ -181,6 +182,7 @@ public class KeyguardStatusBarViewController extends ViewController<KeyguardStat
     private final KeyguardInteractor mKeyguardInteractor;
     private final TunerService mTunerService;
     private final AxDynamicBarChipViewModel mAxDynamicBarChipViewModel;
+    private final KeyguardDynamicIslandViewBinder mDynamicIslandViewBinder;
 
     @Nullable private ComposeView mBatteryComposeView;
     private ViewGroup mSystemIconsContainer;
@@ -407,7 +409,8 @@ public class KeyguardStatusBarViewController extends ViewController<KeyguardStat
             DreamViewModel dreamViewModel,
             KeyguardInteractor keyguardInteractor,
             TunerService tunerService,
-            AxDynamicBarChipViewModel axDynamicBarChipViewModel
+            AxDynamicBarChipViewModel axDynamicBarChipViewModel,
+            KeyguardDynamicIslandViewBinder dynamicIslandViewBinder
     ) {
         super(view);
         mCoroutineDispatcher = dispatcher;
@@ -446,6 +449,7 @@ public class KeyguardStatusBarViewController extends ViewController<KeyguardStat
         mKeyguardInteractor = keyguardInteractor;
         mTunerService = tunerService;
         mAxDynamicBarChipViewModel = axDynamicBarChipViewModel;
+        mDynamicIslandViewBinder = dynamicIslandViewBinder;
 
         mFirstBypassAttempt = mKeyguardBypassController.getBypassEnabled();
         if (!SceneContainerFlag.isEnabled()) {
@@ -480,6 +484,7 @@ public class KeyguardStatusBarViewController extends ViewController<KeyguardStat
     protected void onInit() {
         super.onInit();
         mCarrierTextController.init();
+        mDynamicIslandViewBinder.bind(mView);
         if (!NewStatusBarIcons.isEnabled()) {
             mBatteryMeterViewController.init();
         }

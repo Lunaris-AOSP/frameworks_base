@@ -61,7 +61,7 @@ import com.android.systemui.statusbar.chips.uievents.StatusBarChipsUiEventLogger
 import com.android.systemui.statusbar.events.domain.interactor.SystemStatusEventAnimationInteractor
 import com.android.systemui.statusbar.events.shared.model.SystemEventAnimationState.Idle
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
-import com.android.systemui.statusbar.featurepods.popups.ui.viewmodel.StatusBarPopupChipsViewModel
+import com.android.systemui.statusbar.featurepods.popups.ui.viewmodel.StatusBarPopupChipsViewModelStore
 import com.android.systemui.statusbar.headsup.shared.StatusBarNoHunBehavior
 import com.android.systemui.statusbar.layout.ui.viewmodel.AppHandlesViewModel
 import com.android.systemui.statusbar.layout.ui.viewmodel.StatusBarBoundsViewModel
@@ -269,7 +269,7 @@ constructor(
     private val shadeInteractor: ShadeInteractor,
     shareToAppChipViewModel: ShareToAppChipViewModel,
     @DisplayAware private val ongoingActivityChipsViewModel: OngoingActivityChipsViewModel,
-    statusBarPopupChipsViewModelFactory: StatusBarPopupChipsViewModel.Factory,
+    statusBarPopupChipsViewModelStore: StatusBarPopupChipsViewModelStore,
     animations: SystemStatusEventAnimationInteractor,
     statusBarContentInsetsViewModelStore: StatusBarContentInsetsViewModelStore,
     @DisplayAware bgDisplayScope: CoroutineScope,
@@ -282,7 +282,9 @@ constructor(
 
     val tableLogger = tableLoggerFactory.getOrCreate(tableLogBufferName(thisDisplayId), 200)
 
-    private val statusBarPopupChips by lazy { statusBarPopupChipsViewModelFactory.create() }
+    private val statusBarPopupChips by lazy {
+        statusBarPopupChipsViewModelStore.forDisplay(thisDisplayId)
+    }
 
     override val isTransitioningFromLockscreenToOccluded: StateFlow<Boolean> =
         if (SceneContainerFlag.isEnabled) {
@@ -748,7 +750,6 @@ constructor(
     override suspend fun onActivated(): Nothing {
         coroutineScope {
             launch { hydrator.activate() }
-            launch { statusBarPopupChips.activate() }
             launch { uiEventLogger.hydrateUiEventLogging(chipsFlow = chipsVisibilityModel) }
             awaitCancellation()
         }
