@@ -40,8 +40,8 @@ import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.VpnLock
 import androidx.compose.material.icons.filled.WifiTethering
-import androidx.compose.material3.Icon
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -59,6 +59,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -66,6 +67,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.android.systemui.common.ui.compose.Icon as StatusBarIcon
+import com.android.systemui.res.R
+import com.android.systemui.statusbar.featurepods.popups.ui.model.BluetoothBatteryComponent
+import com.android.systemui.statusbar.featurepods.popups.ui.model.BluetoothBatteryModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.ChargingDetailModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.SystemEventKind
@@ -81,6 +85,8 @@ fun SystemEventPopup(model: PopupContentModel.SystemEvent, modifier: Modifier = 
     val isMessage = model.kind == SystemEventKind.Notification || model.kind == SystemEventKind.Ongoing
     val isMedia = model.kind == SystemEventKind.NowPlaying
     val isCharging = model.kind == SystemEventKind.Charging
+    val isBluetooth = model.kind == SystemEventKind.Bluetooth
+    val compact = isCharging || isBluetooth
     PopupSurface(
         shape = EventPopupShape,
         modifier = modifier.widthIn(min = if (isMessage || isMedia || isCharging) 320.dp else 280.dp,
@@ -89,8 +95,8 @@ fun SystemEventPopup(model: PopupContentModel.SystemEvent, modifier: Modifier = 
         Column(
             modifier = Modifier.fillMaxWidth()
                 .then(if (isCharging) Modifier.verticalScroll(rememberScrollState()) else Modifier)
-                .padding(horizontal = 20.dp, vertical = 18.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(horizontal = 20.dp, vertical = if (compact) 16.dp else 18.dp),
+            verticalArrangement = Arrangement.spacedBy(if (compact) 12.dp else 16.dp),
         ) {
             when (model.kind) {
                 SystemEventKind.Call -> CallIdentity(model, accent)
@@ -123,27 +129,11 @@ fun SystemEventPopup(model: PopupContentModel.SystemEvent, modifier: Modifier = 
                 }
             }
 
-            if (model.kind == SystemEventKind.Bluetooth && model.bluetoothBatteries.isNotEmpty()) {
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    model.bluetoothBatteries.forEach { battery ->
-                        Column(
-                            modifier = Modifier.widthIn(min = 88.dp, max = 140.dp)
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(accent.copy(alpha = 0.12f))
-                                .semantics(mergeDescendants = true) {}
-                                .padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Text(battery.label, style = MaterialTheme.typography.labelMedium)
-                            Text("${battery.level}%", style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.SemiBold, color = accent)
-                        }
-                    }
+            if (isBluetooth) {
+                val earbuds = model.bluetoothBatteries.filter {
+                    it.component != BluetoothBatteryComponent.Case
                 }
+                if (earbuds.isNotEmpty()) BluetoothEarbudBatteries(earbuds, accent)
             }
 
             model.prominentText?.let { value -> ProminentEventValue(value, accent) }
@@ -194,46 +184,104 @@ fun SystemEventPopup(model: PopupContentModel.SystemEvent, modifier: Modifier = 
 }
 
 @Composable
-private fun ChargingDetailsGrid(details: List<ChargingDetailModel>, accent: Color) {
+private fun BluetoothEarbudBatteries(batteries: List<BluetoothBatteryModel>, accent: Color) {
     val columns = if (LocalDensity.current.fontScale > 1.3f) 1 else 2
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        details.chunked(columns).forEach { row ->
+        batteries.chunked(columns).forEach { row ->
             Row(
                 modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                row.forEach { battery ->
+                    Row(
+                        modifier = Modifier.weight(1f)
+                            .heightIn(min = 56.dp)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(LocalContentColor.current.copy(alpha = 0.05f))
+                            .semantics(mergeDescendants = true) {}
+                            .padding(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.dynamic_island_earbud),
+                            contentDescription = null,
+                            tint = LocalContentColor.current.copy(alpha = 0.85f),
+                            modifier = Modifier.size(24.dp)
+                                .graphicsLayer {
+                                    scaleX =
+                                        if (battery.component == BluetoothBatteryComponent.RightEarbud) -1f
+                                        else 1f
+                                },
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = battery.label,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = LocalContentColor.current.copy(alpha = 0.7f),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = "${battery.level}%",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontFeatureSettings = "tnum",
+                                ),
+                                fontWeight = FontWeight.SemiBold,
+                                color = accent,
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChargingDetailsGrid(details: List<ChargingDetailModel>, accent: Color) {
+    val columns = if (LocalDensity.current.fontScale > 1.3f) 1 else 2
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        details.chunked(columns).forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
                 row.forEach { detail ->
                     Column(
                         modifier = Modifier.weight(1f)
-                            .heightIn(min = 84.dp)
+                            .heightIn(min = 56.dp)
                             .fillMaxHeight()
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(accent.copy(alpha = 0.09f))
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(accent.copy(alpha = 0.06f))
                             .semantics(mergeDescendants = true) {}
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         Text(
                             text = detail.label,
-                            style = MaterialTheme.typography.labelMedium,
+                            style = MaterialTheme.typography.labelSmall,
                             color = LocalContentColor.current.copy(alpha = 0.7f),
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                             Text(
                                 text = detail.value,
-                                style = MaterialTheme.typography.titleLarge.copy(
+                                style = MaterialTheme.typography.bodyMedium.copy(
                                     fontFeatureSettings = "tnum",
                                 ),
-                                fontWeight = FontWeight.SemiBold,
+                                fontWeight = FontWeight.Medium,
                                 color = LocalContentColor.current,
                                 maxLines = 1,
-                                modifier = Modifier.alignByBaseline(),
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false).alignByBaseline(),
                             )
                             Text(
                                 text = detail.unit,
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = LocalContentColor.current.copy(alpha = 0.7f),
                                 maxLines = 1,
                                 modifier = Modifier.alignByBaseline(),
@@ -249,10 +297,15 @@ private fun ChargingDetailsGrid(details: List<ChargingDetailModel>, accent: Colo
 @Composable
 private fun EventHeader(model: PopupContentModel.SystemEvent, accent: Color, showSubtitle: Boolean) {
     val artwork = model.kind == SystemEventKind.NowPlaying
-    Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (model.kind == SystemEventKind.Bluetooth && model.image != null) {
+    val isBluetooth = model.kind == SystemEventKind.Bluetooth
+    val caseBattery = model.bluetoothBatteries.firstOrNull {
+        it.component == BluetoothBatteryComponent.Case
+    }.takeIf { isBluetooth }
+    Row(horizontalArrangement = Arrangement.spacedBy(if (isBluetooth) 12.dp else 14.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        if (isBluetooth && model.image != null) {
             StatusBarIcon(icon = model.image, tint = Color.Unspecified,
-                modifier = Modifier.size(72.dp))
+                modifier = Modifier.size(56.dp))
         } else {
             EventGlyph(model, accent, size = if (artwork) 52.dp else 44.dp, artwork = artwork)
         }
@@ -268,9 +321,39 @@ private fun EventHeader(model: PopupContentModel.SystemEvent, accent: Color, sho
                     if (model.pulse) {
                         Box(Modifier.size(6.dp).background(accent, CircleShape))
                     }
-                    Text(model.text, style = MaterialTheme.typography.bodyMedium,
+                    Text(model.text, style = if (isBluetooth) MaterialTheme.typography.bodySmall
+                            else MaterialTheme.typography.bodyMedium,
                         color = if (model.pulse) accent else LocalContentColor.current.copy(alpha = 0.73f),
                         maxLines = 3, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            caseBattery?.let { battery ->
+                Row(
+                    modifier = Modifier.semantics(mergeDescendants = true) {},
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.dynamic_island_earbuds_case),
+                        contentDescription = null,
+                        tint = LocalContentColor.current.copy(alpha = 0.7f),
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Text(
+                        text = battery.label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = LocalContentColor.current.copy(alpha = 0.7f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    Text(
+                        text = "${battery.level}%",
+                        style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = "tnum"),
+                        fontWeight = FontWeight.SemiBold,
+                        color = accent,
+                        maxLines = 1,
+                    )
                 }
             }
         }

@@ -65,7 +65,17 @@ sealed interface HoverBehavior {
     data class Buttons(val icons: List<ChipIcon>) : HoverBehavior
 }
 
-data class BluetoothBatteryModel(val label: String, val level: Int)
+enum class BluetoothBatteryComponent {
+    LeftEarbud,
+    RightEarbud,
+    Case,
+}
+
+data class BluetoothBatteryModel(
+    val label: String,
+    val level: Int,
+    val component: BluetoothBatteryComponent,
+)
 
 data class ChargingDetailModel(val label: String, val value: String, val unit: String)
 

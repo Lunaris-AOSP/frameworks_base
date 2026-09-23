@@ -19,9 +19,10 @@ import com.android.systemui.statusbar.NotificationLockscreenUserManager
 import com.android.systemui.statusbar.featurepods.popups.shared.model.PopupActionModel
 import com.android.systemui.statusbar.featurepods.popups.shared.toActivityLaunchAction
 import com.android.systemui.statusbar.featurepods.popups.shared.toSendAction
-import com.android.systemui.statusbar.featurepods.popups.ui.model.ChipIcon
+import com.android.systemui.statusbar.featurepods.popups.ui.model.BluetoothBatteryComponent
 import com.android.systemui.statusbar.featurepods.popups.ui.model.BluetoothBatteryModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.ChargingDetailModel
+import com.android.systemui.statusbar.featurepods.popups.ui.model.ChipIcon
 import com.android.systemui.statusbar.featurepods.popups.ui.model.ColorsModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
@@ -162,13 +163,25 @@ class SystemEventPopupMapper @Inject constructor(
                 image = event.deviceImage?.let { Icon.Loaded(it, null) }
                 bluetoothBatteries = listOfNotNull(
                     event.leftBatteryLevel?.takeIf { it in 0..100 }?.let {
-                        BluetoothBatteryModel(context.getString(R.string.dynamic_island_bluetooth_left_earbud), it)
+                        BluetoothBatteryModel(
+                            label = context.getString(R.string.dynamic_island_bluetooth_left_earbud),
+                            level = it,
+                            component = BluetoothBatteryComponent.LeftEarbud,
+                        )
                     },
                     event.rightBatteryLevel?.takeIf { it in 0..100 }?.let {
-                        BluetoothBatteryModel(context.getString(R.string.dynamic_island_bluetooth_right_earbud), it)
+                        BluetoothBatteryModel(
+                            label = context.getString(R.string.dynamic_island_bluetooth_right_earbud),
+                            level = it,
+                            component = BluetoothBatteryComponent.RightEarbud,
+                        )
                     },
                     event.caseBatteryLevel?.takeIf { it in 0..100 }?.let {
-                        BluetoothBatteryModel(context.getString(R.string.dynamic_island_bluetooth_case), it)
+                        BluetoothBatteryModel(
+                            label = context.getString(R.string.dynamic_island_bluetooth_case),
+                            level = it,
+                            component = BluetoothBatteryComponent.Case,
+                        )
                     },
                 )
                 iconRes = R.drawable.dynamic_island_headphones
