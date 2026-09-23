@@ -17,6 +17,29 @@
 
 <resources>
 
+    <style name="Theme.PackageInstaller.Expressive" parent="@style/Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:colorBackgroundCacheHint">@null</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowDisablePreview">true</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+
+    <style name="Theme.PackageInstaller.Expressive.Dialog" parent="@style/Theme.Material3.DayNight.Dialog.Alert">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowMinWidthMajor">0dp</item>
+        <item name="android:windowMinWidthMinor">0dp</item>
+        <item name="android:backgroundDimAmount">0.24</item>
+        <item name="android:windowAnimationStyle">@style/Animation.PackageInstaller.Expressive.Dialog</item>
+    </style>
+
+    <style name="Animation.PackageInstaller.Expressive.Dialog" parent="@android:style/Animation.Dialog">
+        <item name="android:windowEnterAnimation">@android:anim/fade_in</item>
+        <item name="android:windowExitAnimation">@android:anim/fade_out</item>
+    </style>
+
     <style name="Theme.AlertDialogActivity"
         parent="@android:style/Theme.DeviceDefault.Light.Dialog.Alert">
         <item name="android:windowActionBar">false</item>

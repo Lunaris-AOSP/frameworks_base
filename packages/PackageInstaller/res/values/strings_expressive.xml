@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="installer_package_id">Package ID</string>
+    <string name="installer_size">Package size</string>
+    <string name="installer_version">Version</string>
+    <string name="installer_target_sdk">Target Android</string>
+    <string name="installer_sdk_value">API %1$d</string>
+    <string name="installer_detail_unavailable">Not available</string>
+    <string name="installer_install_hint">Ready when you are</string>
+    <string name="installer_update_hint">A fresh version is ready</string>
+    <string name="installer_staging_hint">Getting everything ready</string>
+    <string name="installer_installing_hint">Just a moment</string>
+    <string name="installer_success_hint">You’re all set</string>
+    <string name="installer_uninstall_hint">Manage this app</string>
+    <string name="installer_archiving">Archiving…</string>
+</resources>

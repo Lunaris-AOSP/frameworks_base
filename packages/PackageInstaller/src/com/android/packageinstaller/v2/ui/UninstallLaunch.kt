@@ -29,15 +29,13 @@ import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.ViewModelProvider
 
-import com.android.packageinstaller.R
-import com.android.packageinstaller.v2.model.PackageUtil
 import com.android.packageinstaller.v2.model.PackageUtil.localLogv
 import com.android.packageinstaller.v2.model.UninstallAborted
 import com.android.packageinstaller.v2.model.UninstallFailed
 import com.android.packageinstaller.v2.model.UninstallRepository
 import com.android.packageinstaller.v2.model.UninstallStage
 import com.android.packageinstaller.v2.model.UninstallSuccess
-import com.android.packageinstaller.v2.ui.fragments.UninstallationFragment
+import com.android.packageinstaller.v2.ui.compose.ExpressiveUninstallationFragment
 import com.android.packageinstaller.v2.viewmodel.UninstallViewModel
 import com.android.packageinstaller.v2.viewmodel.UninstallViewModelFactory
 
@@ -64,13 +62,6 @@ class UninstallLaunch : FragmentActivity(), UninstallActionListener {
         // Never restore any state, esp. never create any fragments. The data in the fragment might
         // be stale, if e.g. the app was uninstalled while the activity was destroyed.
         super.onCreate(null)
-
-        // The base theme inherits a deviceDefault theme. Applying a material style on the base
-        // theme to support the material design.
-        if (PackageUtil.isMaterialDesignEnabled(this)) {
-            Log.d(LOG_TAG, "Apply material design")
-            theme.applyStyle(R.style.Theme_AlertDialogActivity_Material, /* force= */ true)
-        }
 
         fragmentManager = supportFragmentManager
         notificationManager = getSystemService(NotificationManager::class.java)
@@ -151,7 +142,7 @@ class UninstallLaunch : FragmentActivity(), UninstallActionListener {
     }
 
     private fun showUninstallationDialog() {
-        val fragment = getUninstallationFragment() ?: UninstallationFragment()
+        val fragment = getUninstallationFragment() ?: ExpressiveUninstallationFragment()
         fragment.updateUI()
         showDialogInner(fragment, TAG_UNINSTALLATION_DIALOG)
     }
@@ -183,9 +174,9 @@ class UninstallLaunch : FragmentActivity(), UninstallActionListener {
         newDialog?.show(fragmentManager!!, tag)
     }
 
-    private fun getUninstallationFragment(): UninstallationFragment? {
+    private fun getUninstallationFragment(): ExpressiveUninstallationFragment? {
         return (fragmentManager!!.findFragmentByTag(TAG_UNINSTALLATION_DIALOG)
-            ?: return null) as UninstallationFragment?
+            ?: return null) as ExpressiveUninstallationFragment?
     }
 
     fun setResult(resultCode: Int, data: Intent?, shouldFinish: Boolean) {

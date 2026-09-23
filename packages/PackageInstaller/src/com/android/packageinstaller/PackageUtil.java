@@ -410,8 +410,7 @@ public class PackageUtil {
     /**
      * Returns if the version two is enabled.
      * 1. Currently, the version two is only enabled for the mobile devices
-     * 2. The aconfig usePiaV2 is true
-     * 3. The test settings use_pia_v2 is 1
+     * 2. Enabled by the expressive UI configuration, usePiaV2 flag, or test override
      */
     public static boolean isVersionTwoEnabled(@NonNull Context context) {
         if (isAuto(context) || isTV(context) || isWatch(context)) {
@@ -428,7 +427,8 @@ public class PackageUtil {
         boolean testOverrideForPiaV2 = Settings.System.getInt(context.getContentResolver(),
                 "use_pia_v2", 0) == 1;
         boolean usePiaV2aConfig = Flags.usePiaV2();
-        if (usePiaV2aConfig || testOverrideForPiaV2) {
+        if (usePiaV2aConfig || testOverrideForPiaV2
+                || context.getResources().getBoolean(R.bool.config_useExpressivePackageInstaller)) {
             Log.d(LOG_TAG, getDebugStringForPiaV2(usePiaV2aConfig, testOverrideForPiaV2));
             return true;
         }
