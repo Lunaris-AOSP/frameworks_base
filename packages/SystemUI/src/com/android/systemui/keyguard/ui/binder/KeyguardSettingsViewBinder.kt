@@ -27,7 +27,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.android.app.tracing.coroutines.launchTraced as launch
 import com.android.systemui.Flags
-import com.android.systemui.animation.ActivityTransitionAnimator
 import com.android.systemui.common.ui.binder.IconViewBinder
 import com.android.systemui.common.ui.binder.TextViewBinder
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardRootViewModel
@@ -134,7 +133,9 @@ object KeyguardSettingsViewBinder {
         activityStarter.postStartActivityDismissingKeyguard(
             WallpaperPickerIntentUtils.getIntent(view.context, LAUNCH_SOURCE_KEYGUARD),
             /* delay= */ 0,
-            /* animationController= */ ActivityTransitionAnimator.Controller.fromView(view),
+            // The switcher grows out of the lock screen by itself; animating from the hidden
+            // popup looked off.
+            /* animationController= */ null,
             /* customMessage= */ view.context.getString(R.string.keyguard_unlock_to_customize_ls),
         )
     }
