@@ -27,6 +27,14 @@ object WallpaperPickerIntentUtils {
     fun getIntent(context: Context, launchSource: String): Intent {
         val isGoogleWpInstalled = Utils.isPackageInstalled(context, GOOGLE_WP_PKG)
         val wpPkg = if (isGoogleWpInstalled) GOOGLE_WP_PKG else DEFAULT_WP_PKG
+        if (launchSource == LAUNCH_SOURCE_KEYGUARD) {
+            val lockScreens =
+                Intent(ACTION_LOCK_SCREENS).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    setPackage(wpPkg)
+                }
+            if (lockScreens.resolveActivity(context.packageManager) != null) return lockScreens
+        }
         return Intent(Intent.ACTION_SET_WALLPAPER).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
             setPackage(wpPkg)
@@ -35,6 +43,7 @@ object WallpaperPickerIntentUtils {
     }
 
     private const val WALLPAPER_LAUNCH_SOURCE = "com.android.wallpaper.LAUNCH_SOURCE"
+    private const val ACTION_LOCK_SCREENS = "com.android.wallpaper.action.LOCK_SCREENS"
     const val LAUNCH_SOURCE_KEYGUARD = "app_launched_keyguard"
     private const val DEFAULT_WP_PKG = "com.android.wallpaper"
     private const val GOOGLE_WP_PKG = "com.google.android.apps.wallpaper"

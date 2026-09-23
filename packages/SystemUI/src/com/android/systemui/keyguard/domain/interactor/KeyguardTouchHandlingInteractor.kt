@@ -206,11 +206,9 @@ constructor(
             return
         }
 
-        if (isA11yAction) {
-            showSettings()
-        } else {
-            showMenu()
-        }
+        // Straight to the lock screen switcher, as on iOS, rather than a popup first.
+        logger.log(LogEvents.LOCK_SCREEN_LONG_PRESS_POPUP_CLICKED)
+        showSettings()
     }
 
     /** Notifies that the user has touched outside of the pop-up. */
