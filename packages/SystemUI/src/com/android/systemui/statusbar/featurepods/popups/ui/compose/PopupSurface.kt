@@ -126,7 +126,9 @@ fun PopupSurface(
                     },
                     modifier = Modifier.matchParentSize(),
                 )
-                CompositionLocalProvider(LocalContentColor provides Color.White) {
+                CompositionLocalProvider(
+                    LocalContentColor provides MaterialTheme.colorScheme.onSurface
+                ) {
                     content()
                 }
             }
