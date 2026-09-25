@@ -1,6 +1,5 @@
 package com.android.packageinstaller.v2.ui.compose
 
-import android.content.DialogInterface
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
@@ -57,8 +56,7 @@ class ExpressiveInstallationFragment : InstallerDialogFragment() {
         progress = value.takeIf { it >= 0 }?.let { it.coerceAtMost(100) / 100f }
     }
 
-    override fun onCancel(dialog: DialogInterface) {
-        super.onCancel(dialog)
+    override fun onUserDismiss() {
         if (stage is InstallSuccess) listener.openInstalledApp(null)
         else listener.onNegativeResponse(stage.stageCode)
     }
@@ -68,7 +66,11 @@ class ExpressiveInstallationFragment : InstallerDialogFragment() {
         val view = LocalView.current
         val state = installDialogState(requireContext(), stage, details, progress, listener)
         var bypassSubmitted by remember(stage, actionsEnabled) { mutableStateOf(false) }
-        InstallerDialogContent(state, actionsEnabled && !bypassSubmitted) { enabled ->
+        InstallerDialogContent(
+            state,
+            actionsEnabled && !bypassSubmitted,
+            isBottomSheet = isBottomSheet,
+        ) { enabled ->
             val confirmation = stage as? InstallUserActionRequired
             val info = confirmation?.verificationInfo
             if (confirmation?.actionReason == USER_ACTION_REASON_VERIFICATION_CONFIRMATION &&

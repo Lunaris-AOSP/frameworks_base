@@ -32,7 +32,6 @@ import android.view.WindowManager
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.DialogFragment
-import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.ViewModelProvider
 import com.android.packageinstaller.R
@@ -45,10 +44,12 @@ import com.android.packageinstaller.v2.model.InstallUserActionRequired
 import com.android.packageinstaller.v2.model.PackageUtil.localLogv
 import com.android.packageinstaller.v2.ui.compose.ExpressiveInstallRestrictionFragment
 import com.android.packageinstaller.v2.ui.compose.ExpressiveInstallationFragment
+import com.android.packageinstaller.v2.ui.fragments.InstallRestrictionFragment
+import com.android.packageinstaller.v2.ui.fragments.InstallationFragment
 import com.android.packageinstaller.v2.viewmodel.InstallViewModel
 import com.android.packageinstaller.v2.viewmodel.InstallViewModelFactory
 
-class InstallLaunch : FragmentActivity(), InstallActionListener {
+class InstallLaunch : InstallerActivity(), InstallActionListener {
 
     companion object {
         @JvmField val EXTRA_CALLING_PKG_UID =
@@ -120,7 +121,10 @@ class InstallLaunch : FragmentActivity(), InstallActionListener {
             InstallStage.STAGE_STAGING -> {
                 showInstallationDialog()
                 installViewModel!!.stagingProgress.observe(this) { progress: Int ->
-                    getInstallationFragment()?.setProgress(progress)
+                    when (val fragment = getInstallationFragment()) {
+                        is ExpressiveInstallationFragment -> fragment.setProgress(progress)
+                        is InstallationFragment -> fragment.setProgress(progress)
+                    }
                 }
             }
 
@@ -227,23 +231,33 @@ class InstallLaunch : FragmentActivity(), InstallActionListener {
         if (localLogv) {
             Log.i(LOG_TAG, "createDialog($restriction)")
         }
-        return when (restriction) {
+        val messageId = when (restriction) {
             UserManager.DISALLOW_INSTALL_APPS ->
-                ExpressiveInstallRestrictionFragment.newInstance(
-                    R.string.message_no_install_apps_restriction)
+                R.string.message_no_install_apps_restriction
 
             UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES,
             UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES_GLOBALLY ->
-                ExpressiveInstallRestrictionFragment.newInstance(
-                    R.string.message_no_install_unknown_apps_restriction)
+                R.string.message_no_install_unknown_apps_restriction
 
-            else -> null
+            else -> return null
+        }
+        return if (installerStyle == InstallerStyle.AOSP) {
+            InstallRestrictionFragment.newInstance(messageId)
+        } else {
+            ExpressiveInstallRestrictionFragment.newInstance(messageId)
         }
     }
 
     private fun showInstallationDialog() {
-        val fragment = getInstallationFragment() ?: ExpressiveInstallationFragment()
-        fragment.updateUI()
+        val fragment = getInstallationFragment() ?: if (installerStyle == InstallerStyle.AOSP) {
+            InstallationFragment()
+        } else {
+            ExpressiveInstallationFragment()
+        }
+        when (fragment) {
+            is ExpressiveInstallationFragment -> fragment.updateUI()
+            is InstallationFragment -> fragment.updateUI()
+        }
         showDialogInner(fragment, TAG_INSTALLATION_DIALOG)
     }
 
@@ -272,12 +286,11 @@ class InstallLaunch : FragmentActivity(), InstallActionListener {
         if (currentDialog is DialogFragment) {
             currentDialog.dismissAllowingStateLoss()
         }
-        newDialog?.show(fragmentManager!!, tag)
+        showInstallerDialog(newDialog, tag)
     }
 
-    private fun getInstallationFragment(): ExpressiveInstallationFragment? {
-        return (fragmentManager!!.findFragmentByTag(TAG_INSTALLATION_DIALOG)
-            ?: return null) as ExpressiveInstallationFragment?
+    private fun getInstallationFragment(): DialogFragment? {
+        return fragmentManager!!.findFragmentByTag(TAG_INSTALLATION_DIALOG) as? DialogFragment
     }
 
     fun setResult(resultCode: Int, data: Intent?, shouldFinish: Boolean) {
@@ -366,16 +379,18 @@ class InstallLaunch : FragmentActivity(), InstallActionListener {
         if (localLogv) {
             Log.d(LOG_TAG, "Opening $intent")
         }
-        setResult(RESULT_OK, intent, true)
-        if (intent != null && intent.hasCategory(Intent.CATEGORY_LAUNCHER)) {
-            startActivity(intent)
+        setResult(RESULT_OK, intent, false)
+        finishAfterInstallerDismissal {
+            if (intent != null && intent.hasCategory(Intent.CATEGORY_LAUNCHER)) {
+                startActivity(intent)
+            }
         }
     }
 
     override fun sendManageAppsIntent() {
         val intent = Intent("android.intent.action.MANAGE_PACKAGE_STORAGE")
-        startActivity(intent)
-        setResult(RESULT_FIRST_USER, null, true)
+        setResult(RESULT_FIRST_USER, null, false)
+        finishAfterInstallerDismissal { startActivity(intent) }
     }
 
     private fun registerAppOpChangeListener(listener: UnknownSourcesListener, packageName: String) {

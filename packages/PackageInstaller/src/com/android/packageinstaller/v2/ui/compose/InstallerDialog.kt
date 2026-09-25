@@ -3,6 +3,7 @@
 package com.android.packageinstaller.v2.ui.compose
 
 import android.app.Dialog
+import android.content.DialogInterface
 import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.text.Html
@@ -17,6 +18,7 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -98,6 +100,37 @@ import kotlin.math.roundToInt
 
 abstract class InstallerDialogFragment : DialogFragment() {
     protected var actionsEnabled by mutableStateOf(false)
+    private var sheetCancelable by mutableStateOf(true)
+    private var sheetVisible by mutableStateOf(true)
+    private var sheetDismissRequested by mutableStateOf(false)
+    private var onSheetDismissed: (() -> Unit)? = null
+
+    val isBottomSheet: Boolean
+        get() = !showsDialog
+
+    override fun setCancelable(cancelable: Boolean) {
+        super.setCancelable(cancelable)
+        sheetCancelable = cancelable
+    }
+
+    override fun onCancel(dialog: DialogInterface) {
+        super.onCancel(dialog)
+        onUserDismiss()
+    }
+
+    fun dismissWithAnimation(onDismissed: () -> Unit) {
+        if (!isBottomSheet || !isResumed || !sheetVisible || view == null) {
+            onDismissed()
+            return
+        }
+        val previous = onSheetDismissed
+        onSheetDismissed = {
+            previous?.invoke()
+            onDismissed()
+        }
+        actionsEnabled = false
+        sheetDismissRequested = true
+    }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog =
         Dialog(requireContext(), R.style.Theme_PackageInstaller_Expressive_Dialog).apply {
@@ -130,9 +163,26 @@ abstract class InstallerDialogFragment : DialogFragment() {
                             else dynamicLightColorScheme(context),
                         motionScheme = MotionScheme.expressive(),
                     ) {
-                        AxBlurLifecycle(enabled = actionsEnabled) {
-                            // Qualify the receiver to avoid recursively calling ComposeView.Content().
-                            this@InstallerDialogFragment.Content()
+                        if (isBottomSheet) {
+                            if (sheetVisible) {
+                                InstallerBottomSheet(
+                                    cancelable = sheetCancelable,
+                                    actionsEnabled = actionsEnabled,
+                                    dismissRequested = sheetDismissRequested,
+                                    onDismissRequest = {
+                                        sheetVisible = false
+                                        actionsEnabled = false
+                                        onUserDismiss()
+                                    },
+                                    onDismissed = ::completeSheetDismissal,
+                                ) {
+                                    this@InstallerDialogFragment.Content()
+                                }
+                            }
+                        } else {
+                            AxBlurLifecycle(enabled = actionsEnabled) {
+                                this@InstallerDialogFragment.Content()
+                            }
                         }
                     }
                 }
@@ -152,7 +202,7 @@ abstract class InstallerDialogFragment : DialogFragment() {
 
     override fun onResume() {
         super.onResume()
-        actionsEnabled = true
+        actionsEnabled = !sheetDismissRequested
     }
 
     override fun onPause() {
@@ -160,8 +210,22 @@ abstract class InstallerDialogFragment : DialogFragment() {
         super.onPause()
     }
 
+    override fun onStop() {
+        super.onStop()
+        if (sheetDismissRequested) completeSheetDismissal()
+    }
+
+    private fun completeSheetDismissal() {
+        sheetVisible = false
+        val callback = onSheetDismissed
+        onSheetDismissed = null
+        callback?.invoke()
+    }
+
     @Composable
     protected abstract fun Content()
+
+    protected abstract fun onUserDismiss()
 }
 
 data class InstallerAction(val label: String, val onClick: () -> Unit)
@@ -187,20 +251,17 @@ data class InstallerDialogState(
 fun InstallerDialogContent(
     state: InstallerDialogState,
     actionsEnabled: Boolean,
+    isBottomSheet: Boolean = false,
     extraContent: @Composable (Boolean) -> Unit = {},
 ) {
     var submitted by remember(state.key, actionsEnabled) { mutableStateOf(false) }
     val enabled = actionsEnabled && !submitted
     val colors = MaterialTheme.colorScheme
-    val shape = RoundedCornerShape(32.dp)
     val maxHeight = (LocalConfiguration.current.screenHeightDp - 48).coerceAtLeast(160).dp
-    // The window handles the entrance fade; keep the blur surface and text at their final scale.
-    AxBlurSurface(
+    InstallerContentSurface(
+        isBottomSheet = isBottomSheet,
         modifier = Modifier.fillMaxWidth().heightIn(max = maxHeight)
             .semantics { paneTitle = state.title },
-        shape = shape,
-        cornerRadius = 32.dp,
-        surfaceColor = colors.surfaceContainerHigh,
     ) {
         Column(
             Modifier.fillMaxWidth().padding(24.dp),
@@ -285,6 +346,33 @@ fun InstallerDialogContent(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun InstallerContentSurface(
+    isBottomSheet: Boolean,
+    modifier: Modifier,
+    content: @Composable () -> Unit,
+) {
+    if (isBottomSheet) {
+        Box(
+            modifier.animateContentSize(
+                animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
+                alignment = Alignment.BottomCenter,
+            ),
+        ) {
+            content()
+        }
+    } else {
+        AxBlurSurface(
+            modifier = modifier,
+            shape = RoundedCornerShape(32.dp),
+            cornerRadius = 32.dp,
+            surfaceColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        ) {
+            content()
         }
     }
 }

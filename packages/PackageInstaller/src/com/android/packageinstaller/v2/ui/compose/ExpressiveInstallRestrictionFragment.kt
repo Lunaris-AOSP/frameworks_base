@@ -1,6 +1,5 @@
 package com.android.packageinstaller.v2.ui.compose
 
-import android.content.DialogInterface
 import android.os.Bundle
 import android.text.TextUtils
 import androidx.compose.runtime.Composable
@@ -11,8 +10,7 @@ import com.android.packageinstaller.v2.ui.InstallActionListener
 class ExpressiveInstallRestrictionFragment : InstallerDialogFragment() {
     private val listener get() = requireActivity() as InstallActionListener
 
-    override fun onCancel(dialog: DialogInterface) {
-        super.onCancel(dialog)
+    override fun onUserDismiss() {
         listener.onNegativeResponse(InstallStage.STAGE_ABORTED)
     }
 
@@ -30,6 +28,7 @@ class ExpressiveInstallRestrictionFragment : InstallerDialogFragment() {
                 },
             ),
             actionsEnabled = actionsEnabled,
+            isBottomSheet = isBottomSheet,
         )
     }
 

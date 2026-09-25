@@ -53,6 +53,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 
+import com.android.packageinstaller.v2.ui.InstallerStyle;
+
 import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.File;
@@ -428,7 +430,7 @@ public class PackageUtil {
                 "use_pia_v2", 0) == 1;
         boolean usePiaV2aConfig = Flags.usePiaV2();
         if (usePiaV2aConfig || testOverrideForPiaV2
-                || context.getResources().getBoolean(R.bool.config_useExpressivePackageInstaller)) {
+                || InstallerStyle.get(context) != InstallerStyle.AOSP) {
             Log.d(LOG_TAG, getDebugStringForPiaV2(usePiaV2aConfig, testOverrideForPiaV2));
             return true;
         }

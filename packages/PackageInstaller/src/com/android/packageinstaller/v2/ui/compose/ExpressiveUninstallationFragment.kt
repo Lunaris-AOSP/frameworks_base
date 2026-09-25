@@ -1,6 +1,5 @@
 package com.android.packageinstaller.v2.ui.compose
 
-import android.content.DialogInterface
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.UserHandle
@@ -55,8 +54,7 @@ class ExpressiveUninstallationFragment : InstallerDialogFragment() {
             .currentUninstallStage.value
     }
 
-    override fun onCancel(dialog: DialogInterface) {
-        super.onCancel(dialog)
+    override fun onUserDismiss() {
         listener.onNegativeResponse()
     }
 
@@ -138,7 +136,7 @@ class ExpressiveUninstallationFragment : InstallerDialogFragment() {
             )
             else -> return
         }
-        InstallerDialogContent(state, actionsEnabled) { enabled ->
+        InstallerDialogContent(state, actionsEnabled, isBottomSheet = isBottomSheet) { enabled ->
             if (confirmation != null && confirmation.appDataSize > 0 && !uninstalling) {
                 Surface(
                     color = MaterialTheme.colorScheme.surfaceContainerHighest,
