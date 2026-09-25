@@ -8,6 +8,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.Configuration
+import android.database.ContentObserver
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -17,12 +19,18 @@ import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.graphics.Shader
 import android.graphics.drawable.Drawable
+import android.os.Handler
+import android.os.Looper
+import android.os.UserHandle
+import android.provider.Settings
 import android.text.format.DateFormat
 import android.util.AttributeSet
 import android.view.View
 import com.android.systemui.res.R
+import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import java.util.TimeZone
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
@@ -84,10 +92,23 @@ class HyperClockView @JvmOverloads constructor(
 
     private var hour = -1
     private var minute = -1
+    private var month = -1
+    private var day = -1
+    private var weekday = -1
+    private var locale = resources.configuration.locales[0]
     private var contentWidth = 0f
     private var contentHeight = 0f
     private var originX = 0f
     private var originY = 0f
+
+    private val isGraffiti: Boolean
+        get() = mode in MODE_GRAFFITI_ART..MODE_GRAFFITI_COMPACT
+
+    private val timeFormatObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) {
+            refreshTime()
+        }
+    }
 
     private val timeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -107,6 +128,7 @@ class HyperClockView @JvmOverloads constructor(
         val inkBottom: Float,
         val isColon: Boolean,
         val alpha: Float,
+        val fitCenter: Boolean = false,
     )
 
     init {
@@ -167,20 +189,41 @@ class HyperClockView @JvmOverloads constructor(
             Context.RECEIVER_NOT_EXPORTED,
         )
         HyperBackdrop.addListener(context, backdropChanged)
+        context.contentResolver.registerContentObserver(
+            Settings.System.getUriFor(Settings.System.TIME_12_24),
+            false,
+            timeFormatObserver,
+            UserHandle.USER_ALL,
+        )
         refreshTime()
     }
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         runCatching { context.unregisterReceiver(timeReceiver) }
+        context.contentResolver.unregisterContentObserver(timeFormatObserver)
         HyperBackdrop.removeListener(backdropChanged)
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // Localized artwork must be resolved again after a language change.
+        if (isGraffiti) drawables.clear()
+        refreshTime()
     }
 
     fun refreshTime() {
         val oldHour = hour
         val oldMinute = minute
+        val oldMonth = month
+        val oldDay = day
+        val oldWeekday = weekday
+        val oldLocale = locale
         readTime()
-        if (hour == oldHour && minute == oldMinute) return
+        if (locale != oldLocale && isGraffiti) drawables.clear()
+        if (hour == oldHour && minute == oldMinute && month == oldMonth &&
+            day == oldDay && weekday == oldWeekday && locale == oldLocale
+        ) return
         layoutGlyphs()
         requestLayout()
         invalidate()
@@ -231,36 +274,69 @@ class HyperClockView @JvmOverloads constructor(
     }
 
     private fun readTime() {
+        calendar.timeZone = TimeZone.getDefault()
+        calendar.timeInMillis = System.currentTimeMillis()
+        locale = resources.configuration.locales[0]
+        month = calendar.get(Calendar.MONTH) + 1
+        day = calendar.get(Calendar.DAY_OF_MONTH)
+        weekday = calendar.get(Calendar.DAY_OF_WEEK)
         val preview = previewTime
         if (preview != null) {
             val parts = preview.split(":")
             hour = parts.getOrNull(0)?.toIntOrNull()?.coerceIn(0, 23) ?: 16
             minute = parts.getOrNull(1)?.toIntOrNull()?.coerceIn(0, 59) ?: 25
-            return
-        }
-        calendar.timeInMillis = System.currentTimeMillis()
-        val hour24 = calendar.get(Calendar.HOUR_OF_DAY)
-        hour = if (DateFormat.is24HourFormat(context)) {
-            hour24
+            calendar.set(Calendar.HOUR_OF_DAY, hour)
+            calendar.set(Calendar.MINUTE, minute)
         } else {
-            if (hour24 % 12 == 0) 12 else hour24 % 12
+            val hour24 = calendar.get(Calendar.HOUR_OF_DAY)
+            hour = if (DateFormat.is24HourFormat(context, UserHandle.USER_CURRENT)) {
+                hour24
+            } else {
+                if (hour24 % 12 == 0) 12 else hour24 % 12
+            }
+            minute = calendar.get(Calendar.MINUTE)
         }
-        minute = calendar.get(Calendar.MINUTE)
+        if (isGraffiti) {
+            val timePattern = DateFormat.getTimeFormatString(context, UserHandle.USER_CURRENT)
+            val datePattern = DateFormat.getBestDateTimePattern(locale, "EEEEMMMMd")
+            contentDescription = SimpleDateFormat("$timePattern, $datePattern", locale)
+                .format(calendar.time)
+        }
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         if (placements.isEmpty()) layoutGlyphs()
         val w = ceil(contentWidth).toInt() + paddingLeft + paddingRight
-        val h = ceil(contentHeight).toInt() + paddingTop + paddingBottom
+        val measuredWidth = resolveSizeAndState(w, widthMeasureSpec, 0)
+        val availableWidth = ((measuredWidth and MEASURED_SIZE_MASK) - paddingLeft - paddingRight)
+            .coerceAtLeast(0)
+        val scale = if (isGraffiti && contentWidth > 0f) {
+            min(1f, availableWidth / contentWidth)
+        } else {
+            1f
+        }
+        val h = ceil(contentHeight * scale).toInt() + paddingTop + paddingBottom
         setMeasuredDimension(
-            resolveSizeAndState(w, widthMeasureSpec, 0),
+            measuredWidth,
             resolveSizeAndState(h, heightMeasureSpec, 0),
         )
     }
 
     override fun onDraw(canvas: Canvas) {
         if (placements.isEmpty()) layoutGlyphs()
-        val dx = paddingLeft - originX
+        val scale = if (isGraffiti && contentWidth > 0f && contentHeight > 0f) {
+            min(1f, min(
+                (width - paddingLeft - paddingRight).coerceAtLeast(0) / contentWidth,
+                (height - paddingTop - paddingBottom).coerceAtLeast(0) / contentHeight,
+            ))
+        } else {
+            1f
+        }
+        val dx = paddingLeft - originX + if (isGraffiti) {
+            ((width - paddingLeft - paddingRight) - contentWidth * scale) / 2f
+        } else {
+            0f
+        }
         val dy = paddingTop - originY
 
         val shader = gradientShader
@@ -273,16 +349,16 @@ class HyperClockView @JvmOverloads constructor(
         val fillAlpha = if (blurEnabled && backdrop == null) blurTintAlpha else 1f
 
         val ownColour = !colonFollowsDigits
-        if (ownColour && !colonOnTop) drawPass(canvas, dx, dy, true, colonColor)
+        if (ownColour && !colonOnTop) drawPass(canvas, dx, dy, true, colonColor, scale = scale)
 
         val layer = if (shader != null || backdrop != null) {
             canvas.saveLayer(0f, 0f, width.toFloat(), height.toFloat(), null)
         } else {
             -1
         }
-        if (!ownColour && !colonOnTop) drawPass(canvas, dx, dy, true, digitColor, fillAlpha)
-        drawPass(canvas, dx, dy, false, digitColor, fillAlpha)
-        if (!ownColour && colonOnTop) drawPass(canvas, dx, dy, true, digitColor, fillAlpha)
+        if (!ownColour && !colonOnTop) drawPass(canvas, dx, dy, true, digitColor, fillAlpha, scale)
+        drawPass(canvas, dx, dy, false, digitColor, fillAlpha, scale)
+        if (!ownColour && colonOnTop) drawPass(canvas, dx, dy, true, digitColor, fillAlpha, scale)
         if (shader != null) {
             gradientPaint.shader = shader
             canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), gradientPaint)
@@ -290,7 +366,7 @@ class HyperClockView @JvmOverloads constructor(
             drawBackdrop(canvas, backdrop)
         }
         if (layer != -1) canvas.restoreToCount(layer)
-        if (ownColour && colonOnTop) drawPass(canvas, dx, dy, true, colonColor)
+        if (ownColour && colonOnTop) drawPass(canvas, dx, dy, true, colonColor, scale = scale)
     }
 
     private fun drawBackdrop(canvas: Canvas, backdrop: Bitmap) {
@@ -321,9 +397,11 @@ class HyperClockView @JvmOverloads constructor(
         colon: Boolean,
         color: Int,
         alphaScale: Float = 1f,
+        scale: Float = 1f,
     ) {
         canvas.save()
         canvas.translate(dx, dy)
+        canvas.scale(scale, scale)
         for (i in placements.indices) {
             val p = placements[i]
             if (p.isColon == colon) draw(canvas, p, color, alphaScale)
@@ -333,11 +411,20 @@ class HyperClockView @JvmOverloads constructor(
 
     private fun draw(canvas: Canvas, p: Placement, color: Int, alphaScale: Float) {
         val d = drawable(p.name) ?: return
+        val fit = if (p.fitCenter && d.intrinsicWidth > 0 && d.intrinsicHeight > 0) {
+            min(p.w / d.intrinsicWidth, p.h / d.intrinsicHeight)
+        } else {
+            0f
+        }
+        val w = if (fit > 0f) d.intrinsicWidth * fit else p.w
+        val h = if (fit > 0f) d.intrinsicHeight * fit else p.h
+        val x = p.x + (p.w - w) / 2f
+        val y = p.y + (p.h - h) / 2f
         d.setBounds(
-            p.x.roundToInt(),
-            p.y.roundToInt(),
-            (p.x + p.w).roundToInt(),
-            (p.y + p.h).roundToInt(),
+            x.roundToInt(),
+            y.roundToInt(),
+            (x + w).roundToInt(),
+            (y + h).roundToInt(),
         )
         d.setTint(color)
         val digitAlpha = if (blurEnabled) 1f else p.alpha
@@ -347,7 +434,7 @@ class HyperClockView @JvmOverloads constructor(
 
     private fun drawable(name: String): Drawable? {
         if (drawables.containsKey(name)) return drawables[name]
-        val id = HyperGlyphDrawables.id(name)
+        val id = if (isGraffiti) GraffitiGlyphDrawables.id(name) else HyperGlyphDrawables.id(name)
         val d = if (id == 0) null else context.getDrawable(id)?.mutate()
         drawables[name] = d
         return d
@@ -355,6 +442,10 @@ class HyperClockView @JvmOverloads constructor(
 
     private fun layoutGlyphs() {
         placements.clear()
+        if (isGraffiti) {
+            layoutGraffiti()
+            return
+        }
         when (mode) {
             MODE_DUO -> layoutDuo()
             MODE_ROW -> layoutRow()
@@ -362,6 +453,33 @@ class HyperClockView @JvmOverloads constructor(
             else -> layoutArt()
         }
         measureContent()
+    }
+
+    private fun layoutGraffiti() {
+        val layout = GraffitiClockLayout.create(mode, hour, minute, month, day, weekday)
+        // Graffiti uses the complete composition width as its em size.
+        val scale = em / layout.width
+        for (glyph in layout.glyphs) {
+            val x = glyph.x * scale
+            val y = glyph.y * scale
+            val w = glyph.width * scale
+            val h = glyph.height * scale
+            placements.add(Placement(
+                name = glyph.name,
+                x = x, y = y, w = w, h = h,
+                inkLeft = x, inkTop = y, inkRight = x + w, inkBottom = y + h,
+                // The colon and date stickers share the same fill as the time.
+                isColon = false,
+                alpha = 1f,
+                fitCenter = true,
+            ))
+        }
+        contentWidth = em
+        contentHeight = layout.height * scale
+        originX = 0f
+        originY = 0f
+        // These are bitmap pairs: retaining all 60 minutes would waste tens of MB.
+        drawables.keys.retainAll(layout.glyphs.map { it.name }.toSet())
     }
 
     private fun tens(value: Int): Int = (value / 10) % 10
@@ -593,6 +711,9 @@ class HyperClockView @JvmOverloads constructor(
         const val MODE_ROW = 1
         const val MODE_STACK = 2
         const val MODE_DUO = 3
+        const val MODE_GRAFFITI_ART = 4
+        const val MODE_GRAFFITI_STACK = 5
+        const val MODE_GRAFFITI_COMPACT = 6
 
         private const val DEFAULT_EM_DP = 104f
         private val DEFAULT_COLON_COLOR = 0xFFFA2A2A.toInt()

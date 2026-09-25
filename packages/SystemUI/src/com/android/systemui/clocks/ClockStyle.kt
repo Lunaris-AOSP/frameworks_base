@@ -642,7 +642,7 @@ class ClockStyle @JvmOverloads constructor(
     private fun applyClockColors() {
         if (isNoColorClock(clockStyle)) return
         applyHyperClockColors()
-        if (textClocks.isEmpty()) return
+        if (styledTextViews.isEmpty()) return
         val whiteColor = context.getColor(android.R.color.white)
         val useGradient = gradientEnabled && !isDozing
         for (i in textClocks.indices) {
@@ -1101,6 +1101,9 @@ class ClockStyle @JvmOverloads constructor(
             R.layout.keyguard_clock_hyperos_tall2,   // 97
             R.layout.keyguard_clock_hyperos_tall3,   // 98
             R.layout.keyguard_clock_hyperos_stack,   // 99
+            R.layout.keyguard_clock_graffiti_art,    // 100
+            R.layout.keyguard_clock_graffiti_stack,  // 101
+            R.layout.keyguard_clock_graffiti_compact, // 102
         )
 
         private val NO_COLOR_CLOCKS = hashSetOf(1, 2, 25, 26)
