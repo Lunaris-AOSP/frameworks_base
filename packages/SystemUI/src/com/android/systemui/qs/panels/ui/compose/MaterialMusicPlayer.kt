@@ -277,6 +277,7 @@ private fun MaterialMusicPlayerContent(
     var localIsPlaying by remember(mediaState.controller, mediaState.isPlaying) {
         mutableStateOf(mediaState.isPlaying)
     }
+    var showExpandedPopup by remember { mutableStateOf(false) }
 
     val playSrc = remember { MutableInteractionSource() }
     val playPressed by playSrc.collectIsPressedAsState()
@@ -398,7 +399,7 @@ private fun MaterialMusicPlayerContent(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(enabled = hasController, onClick = ::launchSessionApp),
+                    .clickable(enabled = hasController) { showExpandedPopup = true },
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -565,6 +566,13 @@ private fun MaterialMusicPlayerContent(
                 }
             }
         }
+    }
+
+    if (showExpandedPopup && hasController) {
+        MaterialMediaExpandedPopup(
+            mediaState = mediaState,
+            onDismiss = { showExpandedPopup = false },
+        )
     }
 }
 
