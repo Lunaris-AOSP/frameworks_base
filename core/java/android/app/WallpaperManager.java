@@ -3284,26 +3284,17 @@ public class WallpaperManager {
     @Keep
     @TestApi
     public void setWallpaperZoomOut(@NonNull IBinder windowToken, float zoom) {
-        final float mZoom = isDepthWallpaperEnabled() ? 1 : zoom;
-        if (mZoom < 0 || mZoom > 1f) {
-            throw new IllegalArgumentException("zoom must be between 0 and 1: " + mZoom);
+        if (zoom < 0 || zoom > 1f) {
+            throw new IllegalArgumentException("zoom must be between 0 and 1: " + zoom);
         }
         if (windowToken == null) {
             throw new IllegalArgumentException("windowToken must not be null");
         }
         try {
-            WindowManagerGlobal.getWindowSession().setWallpaperZoomOut(windowToken, mZoom);
+            WindowManagerGlobal.getWindowSession().setWallpaperZoomOut(windowToken, zoom);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
-
-      }
-        private boolean isDepthWallpaperEnabled() {
-        boolean depthWallpaperEnabled = android.provider.Settings.System.getInt(mContext.getContentResolver(), 
-                "depth_wallpaper_enabled", 0) == 1;
-        String depthWallpaperUri = android.provider.Settings.System.getString(mContext.getContentResolver(),
-                "depth_wallpaper_subject_image_uri");
-        return depthWallpaperEnabled && depthWallpaperUri != null && !depthWallpaperUri.isEmpty();
     }
 
     /**

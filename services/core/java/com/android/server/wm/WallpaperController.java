@@ -38,6 +38,7 @@ import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.Debug;
 import android.os.IBinder;
+import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.util.MathUtils;
@@ -45,6 +46,7 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.view.Display;
 import android.view.DisplayInfo;
+import android.view.IWallpaperZoomListener;
 import android.view.SurfaceControl;
 import android.view.WindowManager;
 import android.window.ScreenCaptureInternal;
@@ -83,6 +85,11 @@ class WallpaperController {
     private static final float WALLPAPER_ZOOM_EPSILON = 0.003f;
     private float mLastWallpaperZoomOut = 0;
     private WindowState mMaxZoomOutWindow = null;
+
+    private final RemoteCallbackList<IWallpaperZoomListener> mWallpaperZoomListeners =
+            new RemoteCallbackList<>();
+    private float mLockWallpaperZoomScale = 1f;
+    private final Rect mLockWallpaperZoomBounds = new Rect();
 
     // Whether COMMAND_FREEZE was dispatched.
     private boolean mLastFrozen = false;
@@ -446,6 +453,10 @@ class WallpaperController {
         final float totalZoom = zoom * cropZoom;
         boolean changed = wallpaperWin.setWallpaperOffset(offsetX, offsetY, totalZoom);
 
+        if (token.canShowWhenLocked()) {
+            updateLockWallpaperZoom(zoom, lastWallpaperBounds);
+        }
+
         if (rawChanged && (wallpaperWin.mAttrs.privateFlags &
                 WindowManager.LayoutParams.PRIVATE_FLAG_WANTS_OFFSET_NOTIFICATIONS) != 0) {
             try {
@@ -554,6 +565,44 @@ class WallpaperController {
         for (int i = mWallpaperTokens.size() - 1; i >= 0; i--) {
             final WallpaperWindowToken token = mWallpaperTokens.get(i);
             token.updateWallpaperOffset();
+        }
+    }
+
+    void registerWallpaperZoomListener(IWallpaperZoomListener listener) {
+        updateWallpaperZoom();
+        if (mWallpaperZoomListeners.register(listener)) {
+            dispatchWallpaperZoom(listener);
+        }
+    }
+
+    void unregisterWallpaperZoomListener(IWallpaperZoomListener listener) {
+        mWallpaperZoomListeners.unregister(listener);
+    }
+
+    private void updateLockWallpaperZoom(float scale, Rect bounds) {
+        if (Float.compare(mLockWallpaperZoomScale, scale) == 0
+                && mLockWallpaperZoomBounds.equals(bounds)) {
+            return;
+        }
+        mLockWallpaperZoomScale = scale;
+        mLockWallpaperZoomBounds.set(bounds);
+        final int count = mWallpaperZoomListeners.beginBroadcast();
+        try {
+            for (int i = 0; i < count; i++) {
+                dispatchWallpaperZoom(mWallpaperZoomListeners.getBroadcastItem(i));
+            }
+        } finally {
+            mWallpaperZoomListeners.finishBroadcast();
+        }
+    }
+
+    private void dispatchWallpaperZoom(IWallpaperZoomListener listener) {
+        final Rect bounds = mLockWallpaperZoomBounds.isEmpty()
+                ? mDisplayContent.getBounds() : mLockWallpaperZoomBounds;
+        try {
+            listener.onWallpaperZoomChanged(mLockWallpaperZoomScale,
+                    bounds.exactCenterX(), bounds.exactCenterY());
+        } catch (RemoteException e) {
         }
     }
 

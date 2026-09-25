@@ -276,6 +276,7 @@ import android.view.IRotationWatcher;
 import android.view.IScrollCaptureResponseListener;
 import android.view.ISystemGestureExclusionListener;
 import android.view.IWallpaperVisibilityListener;
+import android.view.IWallpaperZoomListener;
 import android.view.IWindow;
 import android.view.IWindowId;
 import android.view.IWindowManager;
@@ -5283,6 +5284,31 @@ public class WindowManagerService extends IWindowManager.Stub
         synchronized (mGlobalLock) {
             mWallpaperVisibilityListeners
                     .unregisterWallpaperVisibilityListener(listener, displayId);
+        }
+    }
+
+    @EnforcePermission(REGISTER_WINDOW_MANAGER_LISTENERS)
+    @Override
+    public void registerWallpaperZoomListener(IWallpaperZoomListener listener, int displayId) {
+        registerWallpaperZoomListener_enforcePermission();
+        synchronized (mGlobalLock) {
+            final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
+            if (displayContent == null) {
+                throw new IllegalArgumentException("Invalid display: " + displayId);
+            }
+            displayContent.mWallpaperController.registerWallpaperZoomListener(listener);
+        }
+    }
+
+    @EnforcePermission(REGISTER_WINDOW_MANAGER_LISTENERS)
+    @Override
+    public void unregisterWallpaperZoomListener(IWallpaperZoomListener listener, int displayId) {
+        unregisterWallpaperZoomListener_enforcePermission();
+        synchronized (mGlobalLock) {
+            final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
+            if (displayContent != null) {
+                displayContent.mWallpaperController.unregisterWallpaperZoomListener(listener);
+            }
         }
     }
 

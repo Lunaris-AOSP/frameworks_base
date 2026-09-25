@@ -28,13 +28,18 @@ import android.graphics.drawable.LayerDrawable;
 import android.graphics.Rect;
 import android.net.Uri;
 import android.os.AsyncTask;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.RemoteException;
 import android.provider.Settings;
 import android.util.DisplayMetrics;
 import android.util.MathUtils;
 import android.util.Log;
+import android.view.IWallpaperZoomListener;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.view.WindowManagerGlobal;
 import android.widget.FrameLayout;
 
 import com.android.systemui.Dependency;
@@ -64,6 +69,15 @@ public class WallpaperDepthUtils {
     private final Context mContext;
     private final ScrimController mScrimController;
     private final TunerService mTunerService;
+    private boolean mTunableRegistered;
+    private final Handler mMainHandler = new Handler(Looper.getMainLooper());
+    private IWallpaperZoomListener mWallpaperZoomListener;
+    private int mWallpaperZoomDisplayId;
+    private boolean mHasWallpaperZoom;
+    private float mWallpaperZoomScale = 1f;
+    private float mWallpaperZoomPivotX;
+    private float mWallpaperZoomPivotY;
+    private final int[] mParentLocation = new int[2];
 
     private boolean mDWallpaperEnabled;
     private int mDWallOpacity = 255;
@@ -87,12 +101,20 @@ public class WallpaperDepthUtils {
         mContext = context.getApplicationContext();
         mScrimController = scrimController;
         mTunerService = Dependency.get(TunerService.class);
-        mTunerService.addTunable(mTunable, WALLPAPER_DEPTH_KEY, 
-            WALLPAPER_DEPTH_ENABLED_KEY, WALLPAPER_DEPTH_OPACITY_KEY, 
-            WALLPAPER_DEPTH_OFFSET_X_KEY, WALLPAPER_DEPTH_OFFSET_Y_KEY,
-            WALLPAPER_DEPTH_BOTTOM_FADE_KEY, WALLPAPER_DEPTH_FADE_CURVE_KEY,
-            WALLPAPER_DEPTH_BOTTOM_INSET_KEY);
         mLockScreenSubject = new FrameLayout(mContext) {
+            @Override
+            protected void onAttachedToWindow() {
+                super.onAttachedToWindow();
+                registerTunable();
+                updateWallpaperZoomListener();
+            }
+
+            @Override
+            protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+                super.onLayout(changed, left, top, right, bottom);
+                applyWallpaperZoom();
+            }
+
             @Override
             protected void onDetachedFromWindow() {
                 super.onDetachedFromWindow();
@@ -105,6 +127,18 @@ public class WallpaperDepthUtils {
         mLockScreenSubject.setClickable(false);
         mLockScreenSubject.setFocusable(false);
         mLockScreenSubject.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        mLockScreenSubject.setVisibility(View.GONE);
+        registerTunable();
+    }
+
+    private void registerTunable() {
+        if (mTunableRegistered) return;
+        mTunableRegistered = true;
+        mTunerService.addTunable(mTunable, WALLPAPER_DEPTH_KEY,
+            WALLPAPER_DEPTH_ENABLED_KEY, WALLPAPER_DEPTH_OPACITY_KEY,
+            WALLPAPER_DEPTH_OFFSET_X_KEY, WALLPAPER_DEPTH_OFFSET_Y_KEY,
+            WALLPAPER_DEPTH_BOTTOM_FADE_KEY, WALLPAPER_DEPTH_FADE_CURVE_KEY,
+            WALLPAPER_DEPTH_BOTTOM_INSET_KEY);
     }
 
     public static WallpaperDepthUtils getInstance(Context context, ScrimController scrimController) {
@@ -184,11 +218,13 @@ public class WallpaperDepthUtils {
             switch (key) {
                 case WALLPAPER_DEPTH_ENABLED_KEY:
                     mDWallpaperEnabled = TunerService.parseIntegerSwitch(newValue, false);
+                    updateWallpaperZoomListener();
                     updateDepthWallpaper(true);
                     break;
                 case WALLPAPER_DEPTH_KEY:
                     mPreviousWallpaperPath = mWallpaperSubjectPath;
                     mWallpaperSubjectPath = newValue;
+                    updateWallpaperZoomListener();
                     updateDepthWallpaper(true);
                     break;
                 case WALLPAPER_DEPTH_OPACITY_KEY:
@@ -269,6 +305,65 @@ public class WallpaperDepthUtils {
         return mLockScreenSubject;
     }
 
+    private void updateWallpaperZoomListener() {
+        if (!isDWallpaperEnabled() || !mLockScreenSubject.isAttachedToWindow()) {
+            unregisterWallpaperZoomListener();
+            updateDepthWallpaperVisibility();
+            return;
+        }
+        if (mWallpaperZoomListener != null) return;
+        mWallpaperZoomDisplayId = mLockScreenSubject.getDisplay().getDisplayId();
+        mWallpaperZoomListener = new IWallpaperZoomListener.Stub() {
+            @Override
+            public void onWallpaperZoomChanged(float scale, float pivotX, float pivotY) {
+                mMainHandler.post(() -> {
+                    if (mWallpaperZoomListener != this) return;
+                    boolean firstUpdate = !mHasWallpaperZoom;
+                    mWallpaperZoomScale = scale;
+                    mWallpaperZoomPivotX = pivotX;
+                    mWallpaperZoomPivotY = pivotY;
+                    mHasWallpaperZoom = true;
+                    applyWallpaperZoom();
+                    if (firstUpdate) {
+                        updateDepthWallpaperVisibility();
+                    }
+                });
+            }
+        };
+        try {
+            WindowManagerGlobal.getWindowManagerService().registerWallpaperZoomListener(
+                    mWallpaperZoomListener, mWallpaperZoomDisplayId);
+        } catch (RemoteException | IllegalArgumentException e) {
+            Log.w("WallpaperDepthUtils", "Unable to listen for wallpaper zoom", e);
+            mWallpaperZoomListener = null;
+        }
+    }
+
+    private void unregisterWallpaperZoomListener() {
+        if (mWallpaperZoomListener == null) return;
+        IWallpaperZoomListener listener = mWallpaperZoomListener;
+        mWallpaperZoomListener = null;
+        mHasWallpaperZoom = false;
+        try {
+            WindowManagerGlobal.getWindowManagerService().unregisterWallpaperZoomListener(
+                    listener, mWallpaperZoomDisplayId);
+        } catch (RemoteException e) {
+            Log.w("WallpaperDepthUtils", "Unable to remove wallpaper zoom listener", e);
+        }
+    }
+
+    private void applyWallpaperZoom() {
+        if (!mHasWallpaperZoom || !(mLockScreenSubject.getParent() instanceof View)) return;
+        View parent = (View) mLockScreenSubject.getParent();
+        parent.getLocationOnScreen(mParentLocation);
+        mLockScreenSubject.setPivotX(
+                mWallpaperZoomPivotX - mParentLocation[0] - mLockScreenSubject.getLeft());
+        mLockScreenSubject.setPivotY(
+                mWallpaperZoomPivotY - mParentLocation[1] - mLockScreenSubject.getTop());
+        mLockScreenSubject.setScaleX(mWallpaperZoomScale);
+        mLockScreenSubject.setScaleY(mWallpaperZoomScale);
+    }
+
     private boolean isDWallpaperEnabled() {
         return mDWallpaperEnabled && mWallpaperSubjectPath != null
                 && !mWallpaperSubjectPath.isEmpty();
@@ -279,6 +374,7 @@ public class WallpaperDepthUtils {
         // Only show on KEYGUARD state when bouncer is NOT showing
         return mLockScreenSubject != null
                 && isDWallpaperEnabled()
+                && mHasWallpaperZoom
                 && !mDozing
                 && !mBouncerShowing
                 && !mGlanceableHubShowing
@@ -290,10 +386,10 @@ public class WallpaperDepthUtils {
     }
 
     public void updateDepthWallpaperVisibility() {
-        if (mLockScreenSubject == null || !isDWallpaperEnabled()) return;
-        int subjectVisibility = canShowDepthWallpaper() ? View.VISIBLE : View.GONE;
-        if (mLockScreenSubject.getVisibility() == subjectVisibility) return;
+        if (mLockScreenSubject == null) return;
         mLockScreenSubject.post(() -> {
+            int subjectVisibility = canShowDepthWallpaper() ? View.VISIBLE : View.GONE;
+            if (mLockScreenSubject.getVisibility() == subjectVisibility) return;
             mLockScreenSubject.setVisibility(subjectVisibility);
             if (subjectVisibility == View.VISIBLE) {
                 mLockScreenSubject.invalidate();
@@ -412,7 +508,10 @@ public class WallpaperDepthUtils {
     }
     
     public void onDetachedFromWindow() {
+        unregisterWallpaperZoomListener();
+        mLockScreenSubject.setVisibility(View.GONE);
         mTunerService.removeTunable(mTunable);
+        mTunableRegistered = false;
         mWallpaperBitmap = null;
     }
 }

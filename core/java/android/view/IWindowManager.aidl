@@ -50,6 +50,7 @@ import android.view.IRotationWatcher;
 import android.view.ISystemGestureExclusionListener;
 import android.view.IDecorViewGestureListener;
 import android.view.IWallpaperVisibilityListener;
+import android.view.IWallpaperZoomListener;
 import android.view.IWindow;
 import android.view.IWindowSession;
 import android.view.IWindowSessionCallback;
@@ -457,6 +458,13 @@ interface IWindowManager
      */
     void unregisterWallpaperVisibilityListener(IWallpaperVisibilityListener listener,
         int displayId);
+
+    /** Registers for lock screen wallpaper zoom, including an initial callback. */
+    @EnforcePermission("REGISTER_WINDOW_MANAGER_LISTENERS")
+    void registerWallpaperZoomListener(IWallpaperZoomListener listener, int displayId);
+
+    @EnforcePermission("REGISTER_WINDOW_MANAGER_LISTENERS")
+    void unregisterWallpaperZoomListener(IWallpaperZoomListener listener, int displayId);
 
     /**
      * Registers a system gesture exclusion listener for a given display.
