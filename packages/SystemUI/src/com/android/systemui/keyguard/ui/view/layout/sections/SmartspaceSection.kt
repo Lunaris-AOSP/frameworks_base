@@ -418,6 +418,14 @@ constructor(
                     setVisibility(sharedR.id.date_smartspace_view_large, GONE)
                 }
             }
+
+            // Custom clock styles draw their own date, so this one would sit over them.
+            if (smartspaceController.isCustomClockEnabled) {
+                setVisibility(sharedR.id.date_smartspace_view, GONE)
+                setAlpha(sharedR.id.date_smartspace_view, 0f)
+                setVisibility(sharedR.id.date_smartspace_view_large, GONE)
+                setAlpha(sharedR.id.date_smartspace_view_large, 0f)
+            }
         }
     }
 }
