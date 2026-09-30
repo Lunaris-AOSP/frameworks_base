@@ -469,6 +469,11 @@ class ClockStyle @JvmOverloads constructor(
                 clockContainer?.let { container ->
                     val inflated = LayoutInflater.from(context)
                         .inflate(CLOCK_LAYOUTS[clockStyle], container, false)
+                    // As the stub does on first inflation: some styles fill their parent,
+                    // which would make the clock as tall as the screen.
+                    inflated.layoutParams = inflated.layoutParams.apply {
+                        height = ViewGroup.LayoutParams.WRAP_CONTENT
+                    }
                     currentClockView = inflated
                     container.addView(inflated)
                 }
