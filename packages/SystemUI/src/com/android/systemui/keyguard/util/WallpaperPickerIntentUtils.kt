@@ -28,10 +28,11 @@ object WallpaperPickerIntentUtils {
         val isGoogleWpInstalled = Utils.isPackageInstalled(context, GOOGLE_WP_PKG)
         val wpPkg = if (isGoogleWpInstalled) GOOGLE_WP_PKG else DEFAULT_WP_PKG
         if (launchSource == LAUNCH_SOURCE_KEYGUARD) {
+            // The gallery is Lock Styles' rather than the wallpaper picker's here.
             val lockScreens =
                 Intent(ACTION_LOCK_SCREENS).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                    setPackage(wpPkg)
+                    setPackage(LOCK_STYLES_PKG)
                 }
             if (lockScreens.resolveActivity(context.packageManager) != null) return lockScreens
         }
@@ -47,4 +48,5 @@ object WallpaperPickerIntentUtils {
     const val LAUNCH_SOURCE_KEYGUARD = "app_launched_keyguard"
     private const val DEFAULT_WP_PKG = "com.android.wallpaper"
     private const val GOOGLE_WP_PKG = "com.google.android.apps.wallpaper"
+    private const val LOCK_STYLES_PKG = "org.lunaris.lockstyles"
 }
