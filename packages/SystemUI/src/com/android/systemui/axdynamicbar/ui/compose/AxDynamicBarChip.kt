@@ -1,6 +1,9 @@
 package com.android.systemui.axdynamicbar.ui.compose
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.foundation.border
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -65,6 +68,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.res.stringResource
 import com.android.systemui.islandevents.model.IslandEvent
 import com.android.systemui.axdynamicbar.shared.AlphaIconBg
+import com.android.systemui.axdynamicbar.shared.AlphaGlass
+import com.android.systemui.axdynamicbar.shared.islandBlur
 import com.android.systemui.axdynamicbar.shared.AlphaSecondary
 import com.android.systemui.axdynamicbar.shared.AlphaTertiary
 import com.android.systemui.axdynamicbar.shared.PillPrimary
@@ -75,8 +80,8 @@ import com.android.systemui.axdynamicbar.shared.SpaceMd
 import com.android.systemui.axdynamicbar.shared.SpaceSm
 import com.android.systemui.axdynamicbar.shared.SpaceXs
 import com.android.systemui.axdynamicbar.shared.TsBadge
-import com.android.systemui.axdynamicbar.shared.chipAccentColorFor
-import com.android.systemui.axdynamicbar.shared.chipContentColorOn
+import com.android.systemui.axdynamicbar.shared.islandChipColorFor
+import com.android.systemui.axdynamicbar.shared.islandChipContentColorFor
 import com.android.systemui.axdynamicbar.shared.chipProgressFor
 import com.android.systemui.axdynamicbar.shared.textKeyFor
 import com.android.systemui.axdynamicbar.shared.toScaledBitmap
@@ -215,6 +220,14 @@ fun AxDynamicBarChip(
                 }
             },
     ) {
+        val visibilityBlurAlpha by transition.animateFloat(
+            transitionSpec = {
+                if (targetState == EnterExitState.Visible) motionScheme.defaultEffectsSpec()
+                else motionScheme.fastEffectsSpec()
+            },
+            label = "chip_blur_visibility",
+        ) { if (it == EnterExitState.Visible) 1f else 0f }
+
         state?.let { chipState ->
             val isAlert = chipState.notificationAlert != null
 
@@ -245,11 +258,18 @@ fun AxDynamicBarChip(
                     },
                     label = "chip_event",
                 ) {
+                    val contentBlurAlpha by transition.animateFloat(
+                        transitionSpec = {
+                            if (targetState == EnterExitState.Visible) motionScheme.defaultEffectsSpec()
+                            else motionScheme.fastEffectsSpec()
+                        },
+                        label = "chip_blur_content",
+                    ) { if (it == EnterExitState.Visible) 1f else 0f }
                     val event = displayEvent
-                    val rawAccent = chipAccentColorFor(event)
+                    val rawAccent = islandChipColorFor(event)
                     val accent by animateColorAsState(rawAccent, MaterialTheme.motionScheme.fastEffectsSpec(), label = "accent")
                     val contentColor by animateColorAsState(
-                        chipContentColorOn(rawAccent), MaterialTheme.motionScheme.fastEffectsSpec(), label = "content",
+                        islandChipContentColorFor(event), MaterialTheme.motionScheme.fastEffectsSpec(), label = "content",
                     )
                     val statusBarEventCount = remember(chipState.allEvents, isMediaEventTypeEnabled) {
                         if (isMediaEventTypeEnabled) chipState.eventCount
@@ -274,7 +294,16 @@ fun AxDynamicBarChip(
                             accent = accent,
                             contentColor = contentColor,
                             progress = progress,
-                            modifier = Modifier.squishAnimation(toggleCount),
+                            modifier = Modifier
+                                .squishAnimation(toggleCount)
+                                .clip(CircleShape)
+                                .border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), CircleShape)
+                                .islandBlur(
+                                    cornerRadius = 14.dp,
+                                    fallbackColor = accent,
+                                    alpha = visibilityBlurAlpha * contentBlurAlpha,
+                                )
+                                .background(accent.copy(alpha = AlphaGlass)),
                         )
                     }
                 } else {
@@ -286,9 +315,15 @@ fun AxDynamicBarChip(
                         modifier =
                             Modifier.height(ChipHeight)
                                 .widthIn(max = 100.dp)
-                                .clip(ChipShape)
                                 .squishAnimation(toggleCount)
-                                .background(accent)
+                                .clip(ChipShape)
+                                .border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), ChipShape)
+                                .islandBlur(
+                                    cornerRadius = ChipHeight / 2,
+                                    fallbackColor = accent,
+                                    alpha = visibilityBlurAlpha * contentBlurAlpha,
+                                )
+                                .background(accent.copy(alpha = AlphaGlass))
                                 .then(
                                     if (progress != null) {
                                         val trackColor = lerp(accent, contentColor, 0.2f)
@@ -383,7 +418,7 @@ fun AxDynamicBarChip(
                                 },
                                 label = "chip_icon",
                             ) {
-                                PillEventIcon(event, tint = contentColor, animated = false)
+                                IslandPillEventIcon(event, tint = contentColor, animated = false)
                             }
                             Spacer(Modifier.width(SpaceXs))
                             AnimatedContent(

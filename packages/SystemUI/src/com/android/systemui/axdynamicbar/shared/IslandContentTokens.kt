@@ -1,6 +1,24 @@
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 package com.android.systemui.axdynamicbar.shared
 
 import android.app.ActivityOptions
+import android.app.Notification
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Rect
+import android.graphics.drawable.BitmapDrawable
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.MoreTime
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Snooze
+import androidx.compose.material.icons.filled.Stop
 import com.android.systemui.res.R
 import android.app.PendingIntent
 import android.content.Context
@@ -71,11 +89,14 @@ internal val SpaceSection = 20.dp
 internal val SpacePanel = 24.dp
 internal val SpacePanelLarge = 28.dp
 
+internal val RadiusCard = 28.dp
+internal val RadiusXl = 32.dp
+
 internal val ShapeXs = RoundedCornerShape(8.dp)
 internal val ShapeSm = RoundedCornerShape(12.dp)
 internal val ShapeLg = RoundedCornerShape(24.dp)
 internal val ShapeXl = RoundedCornerShape(32.dp)
-internal val ShapeCard = RoundedCornerShape(28.dp)
+internal val ShapeCard = RoundedCornerShape(RadiusCard)
 
 internal val SizeBadge = 14.dp
 internal val SizeIconSm = 20.dp
@@ -91,6 +112,10 @@ internal val SizeStrokeWidth = 2.dp
 internal val SizeStrokeThin = 1.5f
 internal val SizeCompactIcon = 40.dp
 internal val SizeActionHeight = 48.dp
+internal val SizeIconBadge = 28.dp
+internal val SizeActionIcon = 36.dp
+
+internal const val AlphaGlass = 0.72f
 
 internal const val AlphaSecondary = 0.7f
 internal const val AlphaTertiary = 0.5f
@@ -223,8 +248,16 @@ internal data class IslandColorScheme(
 )
 
 @Composable
-internal fun rememberIslandColors(event: IslandEvent): IslandColorScheme =
-    buildColorScheme(accentColorFor(event))
+internal fun rememberIslandColors(event: IslandEvent): IslandColorScheme {
+    val tone = toneFor(event)
+    val tint = tone.tint
+    return IslandColorScheme(
+        accent = tint,
+        onAccent = tone.onTint,
+        tonal = tint.copy(alpha = AlphaFaint),
+        surfaceTint = tint.copy(alpha = 0.12f),
+    )
+}
 
 @Composable
 internal fun rememberMediaColors(event: IslandEvent.Media): IslandColorScheme {
@@ -301,14 +334,26 @@ private fun rememberPaletteColor(drawable: Drawable): Color? {
     return color
 }
 
+/** A ticking number inside an expanded row. */
+internal val TsCounter: TextStyle
+    @Composable get() = MaterialTheme.typography.labelLargeEmphasized.copy(
+        fontFamily = FontFamily.Monospace,
+    )
+
+/** Headline value of a compact expanded tile (countdown, stopwatch, recording time). */
+internal val TsValue: TextStyle
+    @Composable get() = MaterialTheme.typography.headlineSmall.copy(
+        fontFamily = FontFamily.Monospace,
+    )
+
 @Composable
 internal fun StatusChip(text: String, color: Color = SubtleGray) {
     Box(
         modifier =
             Modifier.background(color.copy(alpha = AlphaSubtle), ShapeChip)
-                .padding(horizontal = SpaceXl, vertical = SpaceSm)
+                .padding(horizontal = SpaceMd, vertical = SpaceXxs)
     ) {
-        Text(text.uppercase(), color = color, style = MaterialTheme.typography.labelSmall)
+        Text(text.uppercase(), color = color, style = MaterialTheme.typography.labelSmallEmphasized)
     }
 }
 
@@ -329,43 +374,40 @@ internal fun CircleButton(
     }
 }
 
+/**
+ * The expanded tile shell: a compact header row — icon badge, title column, optional trailing
+ * control — over an optional action row. The header is a plain row, not a second tinted surface
+ * nested inside the frosted card the tile already sits on.
+ */
 @Composable
 internal fun ExpandedCardLayout(
     accentColor: Color,
     icon: @Composable () -> Unit,
-    iconSize: Dp = 44.dp,
+    iconSize: Dp = SizeIconBadge,
     iconBackground: Boolean = true,
     title: @Composable ColumnScope.() -> Unit,
     trailing: @Composable (() -> Unit)? = null,
     actions: @Composable (ColumnScope.() -> Unit)? = null,
 ) {
-    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(SpaceLg)) {
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(SpaceSm)) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(ShapeLg)
-                .background(accentColor.copy(alpha = AlphaFaint))
-                .padding(SpaceLg),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(SpaceLg),
+            horizontalArrangement = Arrangement.spacedBy(SpaceMd),
         ) {
-            if (iconBackground) {
-                Box(
-                    modifier = Modifier
-                        .size(iconSize)
-                        .clip(CircleShape)
-                        .background(accentColor.copy(alpha = AlphaSubtle)),
-                    contentAlignment = Alignment.Center,
-                ) { icon() }
-            } else {
-                Box(
-                    modifier = Modifier.size(iconSize),
-                    contentAlignment = Alignment.Center,
-                ) { icon() }
-            }
+            Box(
+                modifier =
+                    if (iconBackground) {
+                        Modifier.size(iconSize)
+                            .background(accentColor.copy(alpha = AlphaIconBg), ShapeCompact)
+                    } else {
+                        Modifier.size(iconSize)
+                    },
+                contentAlignment = Alignment.Center,
+            ) { icon() }
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(SpaceXs),
+                verticalArrangement = Arrangement.spacedBy(SpaceXxs),
             ) { title() }
             trailing?.invoke()
         }
@@ -380,24 +422,153 @@ internal fun ActionChip(
     color: Color = OnActionText,
     bg: Color = ActionBg,
     modifier: Modifier = Modifier,
+    compact: Boolean = false,
     onClick: () -> Unit,
 ) {
+    val height = if (compact) SizeActionIcon else SizeActionHeight
+    val horizontal = if (compact) SpaceLg else SpacePanel
     Surface(
         onClick = onClick,
         shape = ShapeChip,
         color = bg,
+        contentColor = color,
         modifier = modifier.border(1.2.dp, color.copy(alpha = 0.12f), ShapeChip),
     ) {
         Row(
-            modifier = Modifier.height(SizeActionHeight).padding(horizontal = SpacePanel),
+            modifier = Modifier.height(height).padding(horizontal = horizontal),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(SpaceMd, Alignment.CenterHorizontally),
         ) {
             if (icon != null) {
                 Icon(icon, null, tint = color, modifier = Modifier.size(SizeIconSm))
             }
-            Text(label, color = color, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+            Text(
+                label,
+                color = color,
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
+    }
+}
+
+/** Circular, icon-only tile action that fits in a tile's header row. */
+@Composable
+internal fun ActionIconButton(
+    icon: ImageVector,
+    tint: Color,
+    bg: Color,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    size: Dp = SizeActionIcon,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = bg,
+        contentColor = tint,
+        modifier = modifier.size(size),
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(size)) {
+            Icon(icon, contentDescription, tint = tint, modifier = Modifier.size(SizeIconSm))
+        }
+    }
+}
+
+/**
+ * Icon for a classified notification action, or null when there is no unambiguous glyph — the
+ * caller then keeps the action's own label rather than inventing a meaning.
+ *
+ * Exhaustive over [NotificationActionType] so a new constant fails the build instead of
+ * silently falling back to a label.
+ */
+internal val NotificationActionType.icon: ImageVector?
+    get() =
+        when (this) {
+            NotificationActionType.PAUSE -> Icons.Filled.Pause
+            NotificationActionType.RESUME -> Icons.Filled.PlayArrow
+            NotificationActionType.STOP -> Icons.Filled.Stop
+            NotificationActionType.RESET -> Icons.Filled.Refresh
+            NotificationActionType.LAP -> Icons.Filled.Flag
+            NotificationActionType.ADD_MINUTE -> Icons.Filled.MoreTime
+            NotificationActionType.SNOOZE -> Icons.Filled.Snooze
+            NotificationActionType.DELETE -> Icons.Filled.Delete
+            NotificationActionType.DISMISS -> Icons.Filled.Close
+            NotificationActionType.OTHER -> null
+        }
+
+internal data class ActionVisuals(val bg: Color, val content: Color)
+
+/** Destructive commands take the error roles, resume the positive one, the rest the event tone. */
+@Composable
+internal fun NotificationActionType.visuals(tone: IslandTone): ActionVisuals =
+    when (this) {
+        NotificationActionType.STOP,
+        NotificationActionType.DELETE -> ActionVisuals(DestructiveBg, OnDestructiveText)
+        NotificationActionType.RESUME -> ActionVisuals(IslandTone.POSITIVE.container, IslandTone.POSITIVE.onContainer)
+        else -> ActionVisuals(tone.tint.copy(alpha = AlphaIconBg), tone.tint)
+    }
+
+/**
+ * One action forwarded from an event's notification: an [ActionIconButton] when the classifier
+ * recognises it, a compact labelled [ActionChip] when it doesn't.
+ */
+@Composable
+internal fun NotificationActionButton(
+    action: Notification.Action,
+    label: String,
+    tone: IslandTone,
+    modifier: Modifier = Modifier,
+    onSend: () -> Unit,
+) {
+    val context = LocalContext.current
+    // classify() goes through the package manager; don't repeat it every tick of a running timer.
+    val kind =
+        remember(action) {
+            action.classify(context, action.actionIntent?.creatorPackage ?: context.packageName)
+        }
+    val icon = kind.icon
+    if (icon != null) {
+        val visuals = kind.visuals(tone)
+        ActionIconButton(
+            icon = icon,
+            tint = visuals.content,
+            bg = visuals.bg,
+            contentDescription = label,
+            modifier = modifier,
+            onClick = onSend,
+        )
+    } else {
+        ActionChip(
+            label = label,
+            color = tone.tint,
+            bg = tone.tint.copy(alpha = AlphaIconBg),
+            modifier = modifier,
+            compact = true,
+            onClick = onSend,
+        )
+    }
+}
+
+/** Most actions a tile carries in its header row before they move to a row of their own. */
+internal const val MAX_INLINE_ACTIONS = 2
+
+/**
+ * Whether a tile's forwarded actions can sit inline in its header row: only when there are few of
+ * them and every one resolves to an icon. A single labelled fallback chip in the header squeezes
+ * the title to nothing, so any unrecognised action sends the whole set to an action row instead.
+ */
+@Composable
+internal fun rememberActionsFitInline(actions: List<Notification.Action>): Boolean {
+    val context = LocalContext.current
+    return remember(actions) {
+        actions.size <= MAX_INLINE_ACTIONS &&
+            actions.all { action ->
+                action.classify(context, action.actionIntent?.creatorPackage ?: context.packageName)
+                    .icon != null
+            }
     }
 }
 
@@ -488,13 +659,49 @@ internal fun Drawable.toScaledBitmap(sizeDp: Dp): ImageBitmap {
     return remember(this, px) { toBitmap(px, px).asImageBitmap() }
 }
 
+/**
+ * Square, centre-cropped bitmap of this drawable. Album art and artwork are rarely square, and
+ * [toScaledBitmap] stretches them to fit; `ContentScale.Crop` can't undo a stretch that already
+ * happened in the bitmap.
+ */
+@Composable
+internal fun Drawable.toSquareScaledBitmap(sizeDp: Dp): ImageBitmap {
+    val px = with(LocalDensity.current) { sizeDp.roundToPx() }.coerceAtLeast(1)
+    return remember(this, px) { centerCropSquare(this, px).asImageBitmap() }
+}
+
+private fun centerCropSquare(drawable: Drawable, px: Int): Bitmap {
+    if (drawable is BitmapDrawable && drawable.bitmap != null) {
+        val src = drawable.bitmap
+        val side = minOf(src.width, src.height)
+        val left = (src.width - side) / 2
+        val top = (src.height - side) / 2
+        val out = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
+        Canvas(out).drawBitmap(src, Rect(left, top, left + side, top + side), Rect(0, 0, px, px), null)
+        return out
+    }
+    val w = drawable.intrinsicWidth
+    val h = drawable.intrinsicHeight
+    if (w <= 0 || h <= 0) return drawable.toBitmap(px, px)
+    val scale = maxOf(px.toFloat() / w, px.toFloat() / h)
+    val dw = (w * scale).toInt()
+    val dh = (h * scale).toInt()
+    val out = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
+    // Bounds are shared drawable state; restore them so other users of this drawable are unaffected.
+    val oldBounds = Rect(drawable.bounds)
+    drawable.setBounds((px - dw) / 2, (px - dh) / 2, (px - dw) / 2 + dw, (px - dh) / 2 + dh)
+    drawable.draw(Canvas(out))
+    drawable.bounds = oldBounds
+    return out
+}
+
 internal fun chipProgressFor(event: IslandEvent, includeMediaProgress: Boolean = false): Float? =
     when (event) {
         is IslandEvent.Media -> if (includeMediaProgress) event.progress.coerceIn(0f, 1f) else null
         is IslandEvent.PromotedOngoing ->
             if (event.progress >= 0f) event.progress.coerceIn(0f, 1f) else null
         is IslandEvent.Notification ->
-            if (event.progress >= 0)
+            if (event.progress >= 0 && event.progressMax > 0)
                 (event.progress.toFloat() / event.progressMax).coerceIn(0f, 1f)
             else null
         else -> null

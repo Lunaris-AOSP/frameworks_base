@@ -140,8 +140,21 @@ internal fun CircleChip(
         }
 
         Box(modifier = Modifier.size(CircleChipIconSize), contentAlignment = Alignment.Center) {
-            PillEventIcon(event, tint = contentColor, animated = false)
+            IslandPillEventIcon(event, tint = contentColor, animated = false)
         }
+    }
+}
+
+/** Status-bar glyphs on frosted containers; keyguard callers retain their existing fallbacks. */
+@Composable
+internal fun IslandPillEventIcon(event: IslandEvent, tint: Color, animated: Boolean = true) {
+    when (event) {
+        is IslandEvent.Media -> MediaPillIcon(event, animated, tint)
+        is IslandEvent.Call -> CallPillIcon(event, tint)
+        is IslandEvent.Notification -> NotificationPillIcon(event, tint)
+        is IslandEvent.Sports -> SportsPillIcon(event, tint)
+        is IslandEvent.AppSwitch -> AppSwitchPillIcon(event, tint)
+        else -> PillEventIcon(event, tint, animated)
     }
 }
 
@@ -392,7 +405,8 @@ private fun AnimatedTrophyIcon(color: Color) {
 }
 
 @Composable
-private fun MediaPillIcon(event: IslandEvent.Media, animated: Boolean = true) {
+private fun MediaPillIcon(event: IslandEvent.Media, animated: Boolean = true, tint: Color? = null) {
+    val color = tint ?: OrangeAccent
     event.albumArt?.let { art ->
         Image(
             bitmap = art.toScaledBitmap(16.dp),
@@ -403,11 +417,11 @@ private fun MediaPillIcon(event: IslandEvent.Media, animated: Boolean = true) {
     }
         ?: Box(
             modifier =
-                Modifier.size(16.dp).clip(CircleShape).background(OrangeAccent.copy(alpha = 0.42f)),
+                Modifier.size(16.dp).clip(CircleShape).background(color.copy(alpha = 0.42f)),
             contentAlignment = Alignment.Center,
         ) {
             WaveformAnimation(
-                OrangeAccent,
+                color,
                 Modifier.size(10.dp),
                 isAnimating = animated && event.isPlaying,
                 barCount = 3,
@@ -824,7 +838,7 @@ private fun AnimatedRecentsIcon(color: Color) {
 }
 
 @Composable
-private fun CallPillIcon(event: IslandEvent.Call) {
+private fun CallPillIcon(event: IslandEvent.Call, tint: Color? = null) {
     val icon = event.appIcon
     icon?.let {
         Image(
@@ -834,11 +848,11 @@ private fun CallPillIcon(event: IslandEvent.Call) {
                 Modifier.size(16.dp)
                     .clip(ShapeXs),
         )
-    } ?: Icon(Icons.Filled.Call, null, tint = GreenAccent, modifier = Modifier.size(SizeBadge))
+    } ?: Icon(Icons.Filled.Call, null, tint = tint ?: GreenAccent, modifier = Modifier.size(SizeBadge))
 }
 
 @Composable
-private fun NotificationPillIcon(event: IslandEvent.Notification) {
+private fun NotificationPillIcon(event: IslandEvent.Notification, tint: Color? = null) {
     val icon = event.senderIcon ?: event.appIcon
     val isRound = event.isConversation && event.senderIcon != null
     val hasBadge = event.isConversation && event.senderIcon != null && event.appIcon != null
@@ -860,7 +874,7 @@ private fun NotificationPillIcon(event: IslandEvent.Notification) {
                         .clip(if (isRound) CircleShape else ShapeXs),
             )
         }
-    } ?: Icon(Icons.Filled.Notifications, null, tint = BlueAccent, modifier = Modifier.size(SizeBadge))
+    } ?: Icon(Icons.Filled.Notifications, null, tint = tint ?: BlueAccent, modifier = Modifier.size(SizeBadge))
 }
 
 private val DOWNLOAD_KEYWORDS = Regex(
@@ -951,7 +965,7 @@ private fun PromotedOngoingText(event: IslandEvent.PromotedOngoing, modifier: Mo
 }
 
 @Composable
-private fun SportsPillIcon(event: IslandEvent.Sports) {
+private fun SportsPillIcon(event: IslandEvent.Sports, tint: Color? = null) {
     val icon = event.team1Icon ?: event.team2Icon ?: event.appIcon
     if (icon != null) {
         Image(
@@ -961,7 +975,7 @@ private fun SportsPillIcon(event: IslandEvent.Sports) {
             contentScale = ContentScale.Crop,
         )
     } else {
-        AnimatedTrophyIcon(accentColorFor(event))
+        AnimatedTrophyIcon(tint ?: accentColorFor(event))
     }
 }
 
@@ -989,7 +1003,7 @@ private fun SportsText(event: IslandEvent.Sports, modifier: Modifier, overrideCo
 }
 
 @Composable
-private fun AppSwitchPillIcon(event: IslandEvent.AppSwitch) {
+private fun AppSwitchPillIcon(event: IslandEvent.AppSwitch, tint: Color? = null) {
     val app = event.previousApp ?: event.recentApps.firstOrNull()
     app?.appIcon?.let {
         Image(
@@ -998,7 +1012,7 @@ private fun AppSwitchPillIcon(event: IslandEvent.AppSwitch) {
             modifier = Modifier.size(16.dp).clip(CircleShape),
             contentScale = ContentScale.Crop,
         )
-    } ?: AnimatedRecentsIcon(SubtleGray)
+    } ?: AnimatedRecentsIcon(tint ?: SubtleGray)
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)

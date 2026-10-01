@@ -2,6 +2,12 @@
 
 package com.android.systemui.axdynamicbar.ui.compose
 
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.CompositionLocalProvider
+
 import android.view.MotionEvent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
@@ -111,7 +117,7 @@ import kotlinx.coroutines.flow.drop
 private const val KEYGUARD_MEDIA_PANEL_HEIGHT_FRACTION = 0.78f
 
 @Composable
-internal fun KeyguardExpandedContent(
+internal fun AnimatedVisibilityScope.KeyguardExpandedContent(
     event: IslandEvent,
     allEvents: List<IslandEvent>,
     interactor: IslandActions,
@@ -170,13 +176,26 @@ internal fun KeyguardExpandedContent(
             },
         contentAlignment = Alignment.Center,
     ) {
-        when (event) {
-            is IslandEvent.Media ->
-                KeyguardMediaPanel(event, interactor, Modifier.align(Alignment.BottomCenter))
-            is IslandEvent.Timer -> KeyguardTimerPanel(event, interactor)
-            is IslandEvent.Stopwatch -> KeyguardStopwatchPanel(event, interactor)
-            is IslandEvent.AudioRecording -> KeyguardAudioRecordingPanel(event, interactor)
-            else -> KeyguardGenericPanel(event, interactor, hapticsViewModelFactory)
+        if (event is IslandEvent.Media) {
+            KeyguardMediaPanel(event, interactor, Modifier.align(Alignment.BottomCenter))
+        } else {
+            val motionScheme = MaterialTheme.motionScheme
+            val blurAlpha by transition.animateFloat(
+                transitionSpec = {
+                    if (targetState == EnterExitState.Visible) motionScheme.defaultEffectsSpec()
+                    else tween(250)
+                },
+                label = "keyguard_panel_blur_alpha",
+            ) { if (it == EnterExitState.Visible) 1f else 0f }
+            val parentBlurAlpha = LocalBlurAlpha.current
+            CompositionLocalProvider(LocalBlurAlpha provides parentBlurAlpha * blurAlpha) {
+                when (event) {
+                    is IslandEvent.Timer -> KeyguardTimerPanel(event, interactor)
+                    is IslandEvent.Stopwatch -> KeyguardStopwatchPanel(event, interactor)
+                    is IslandEvent.AudioRecording -> KeyguardAudioRecordingPanel(event, interactor)
+                    else -> KeyguardGenericPanel(event, interactor, hapticsViewModelFactory)
+                }
+            }
         }
     }
 }
@@ -232,8 +251,8 @@ private fun KeyguardPanelSurface(content: @Composable () -> Unit) {
             .fillMaxWidth()
             .padding(horizontal = SpaceSection)
             .clip(ShapeXl)
-            .background(CardBg)
             .border(1.dp, CardBorderBrush, ShapeXl)
+            .islandBlur(cornerRadius = RadiusXl, fallbackColor = CardBg)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
