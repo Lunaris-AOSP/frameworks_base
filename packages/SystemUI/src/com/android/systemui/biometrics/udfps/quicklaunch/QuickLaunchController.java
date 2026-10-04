@@ -108,7 +108,7 @@ public class QuickLaunchController implements CoreStartable,
             new KeyguardUpdateMonitorCallback() {
                 @Override
                 public void onKeyguardVisibilityChanged(boolean showing) {
-                    if (showing && QuickLaunchHelper.getInstance(mContext).isQuickLaunchEnabled()) {
+                    if (showing && isQuickLaunchAvailable()) {
                         startInputMonitoring();
                     } else if (!showing && !mGestureActive && !mOverlayShowing) {
                         dismissOverlay();
@@ -124,8 +124,7 @@ public class QuickLaunchController implements CoreStartable,
 
                 @Override
                 public void onStartedWakingUp() {
-                    if (mKeyguardStateController.isShowing()
-                            && QuickLaunchHelper.getInstance(mContext).isQuickLaunchEnabled()) {
+                    if (mKeyguardStateController.isShowing() && isQuickLaunchAvailable()) {
                         startInputMonitoring();
                     }
                 }
@@ -210,6 +209,7 @@ public class QuickLaunchController implements CoreStartable,
                     if (modality == BiometricAuthenticator.TYPE_FINGERPRINT
                             && mAuthController.isUdfpsSupported()) {
                         registerUdfpsCallback();
+                        updateInputMonitoring();
                     }
                 }
             });
@@ -218,10 +218,17 @@ public class QuickLaunchController implements CoreStartable,
         updateInputMonitoring();
     }
 
+    // The menu opens around the sensor, so it only makes sense with UDFPS. Ask AuthController
+    // each time: the sensors may not be registered yet when SystemUI starts.
+    private boolean isQuickLaunchAvailable() {
+        return mAuthController.isUdfpsSupported()
+                && QuickLaunchHelper.getInstance(mContext).isQuickLaunchEnabled();
+    }
+
     private void updateInputMonitoring() {
         boolean shouldMonitor = mKeyguardStateController.isShowing()
                 && !mKeyguardStateController.isOccluded()
-                && QuickLaunchHelper.getInstance(mContext).isQuickLaunchEnabled();
+                && isQuickLaunchAvailable();
         if (shouldMonitor) {
             startInputMonitoring();
         } else if (!mGestureActive && !mOverlayShowing) {
@@ -256,6 +263,9 @@ public class QuickLaunchController implements CoreStartable,
     
     public void onFingerprintAuthenticated() {
         Log.d(TAG, "onFingerprintAuthenticated called: mFingerDown=" + mFingerDown);
+        if (!mAuthController.isUdfpsSupported()) {
+            return;
+        }
         if (!QuickLaunchHelper.getInstance(mContext).isQuickLaunchEnabled()) {
             Log.d(TAG, "Quick Launch disabled in settings, skipping");
             return;
