@@ -156,7 +156,7 @@ public class QuickLaunchContainer extends FrameLayout {
         mLabelTextView.setTextColor(Color.WHITE);
         mLabelTextView.setAlpha(0.45f);
         mLabelTextView.setGravity(Gravity.CENTER);
-        mLabelTextView.setMaxLines(1);
+        mLabelTextView.setMaxLines(2);
         mLabelTextView.setEllipsize(TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams labelLp = new LinearLayout.LayoutParams(
                 LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
@@ -538,6 +538,13 @@ public class QuickLaunchContainer extends FrameLayout {
                 });
                 return;
             }
+            // An empty slot opens the editor, which is what the hint on screen promises
+            animateExit(() -> {
+                if (mListener != null) {
+                    mListener.onEditRequested();
+                }
+            });
+            return;
         } else if (selectedIndex == 101) {
                         animateExit(() -> {
                 if (mListener != null) {
