@@ -61,6 +61,12 @@ public class QuickLaunchController implements CoreStartable,
     private static final long HOLD_THRESHOLD_MS = 500L;
     private static final long FAST_GLIDE_TIMEOUT_MS = 250L;
     private static final long SAFETY_UNLOCK_TIMEOUT_MS = 3500L;
+    // After an unlock that began with the screen off: how long to wait for a real touch, how
+    // long it has to rest on the sensor before the menu opens, and how far from the sensor
+    // center it may be, in sensor radii.
+    private static final long AWAIT_TOUCH_TIMEOUT_MS = 1500L;
+    private static final long AWAIT_TOUCH_HOLD_MS = 250L;
+    private static final float AWAIT_TOUCH_RADIUS_SCALE = 2f;
 
     private final Context mContext;
     private final WindowManager mWindowManager;
@@ -84,9 +90,14 @@ public class QuickLaunchController implements CoreStartable,
     private float mTouchDownX;
     private float mTouchDownY;
     private long mTouchDownTime = 0L;
+    // Touch state as seen by the gesture monitor. With the screen off UdfpsController fakes the
+    // finger down and up, so mFingerDown can not be trusted there.
+    private boolean mPointerDown = false;
+    private boolean mAwaitingTouch = false;
 
     private final Runnable mLongPressRunnable = this::onLongPressTriggered;
     private final Runnable mSafetyUnlockRunnable = this::onSafetyTimeout;
+    private final Runnable mAwaitTouchTimeoutRunnable = this::onAwaitTouchTimeout;
 
     private void onSafetyTimeout() {
         if (mFingerDown) {
@@ -119,7 +130,9 @@ public class QuickLaunchController implements CoreStartable,
                 @Override
                 public void onStartedGoingToSleep(int why) {
                     dismissOverlay();
-                    stopInputMonitoring();
+                    // Stay registered on the lock screen, to see the first touch after the
+                    // display turns back on.
+                    updateInputMonitoring();
                 }
 
                 @Override
@@ -262,12 +275,17 @@ public class QuickLaunchController implements CoreStartable,
 
     
     public void onFingerprintAuthenticated() {
-        Log.d(TAG, "onFingerprintAuthenticated called: mFingerDown=" + mFingerDown);
+        Log.d(TAG, "onFingerprintAuthenticated called: mFingerDown=" + mFingerDown
+                + " mPointerDown=" + mPointerDown);
         if (!mAuthController.isUdfpsSupported()) {
             return;
         }
         if (!QuickLaunchHelper.getInstance(mContext).isQuickLaunchEnabled()) {
             Log.d(TAG, "Quick Launch disabled in settings, skipping");
+            return;
+        }
+        if (!mKeyguardUpdateMonitor.isDeviceInteractive()) {
+            onAuthenticatedWhileNotInteractive();
             return;
         }
 
@@ -316,6 +334,53 @@ public class QuickLaunchController implements CoreStartable,
         mMainHandler.postDelayed(mLongPressRunnable, delay);
     }
 
+    // The screen was off or dozing, so the finger state from UdfpsController is fake. Only a
+    // real touch counts here.
+    private void onAuthenticatedWhileNotInteractive() {
+        mMainHandler.removeCallbacks(mLongPressRunnable);
+        mMainHandler.removeCallbacks(mSafetyUnlockRunnable);
+        mMainHandler.removeCallbacks(mAwaitTouchTimeoutRunnable);
+        mGestureActive = true;
+        mFingerDown = mPointerDown;
+        startInputMonitoring();
+
+        if (mPointerDown) {
+            Log.d(TAG, "Unlocked with the screen off and a touch already down");
+            mAwaitingTouch = false;
+            mMainHandler.postDelayed(mSafetyUnlockRunnable, SAFETY_UNLOCK_TIMEOUT_MS);
+            mMainHandler.postDelayed(mLongPressRunnable, AWAIT_TOUCH_HOLD_MS);
+        } else {
+            Log.d(TAG, "Unlocked with the screen off, waiting for a touch on the sensor");
+            mAwaitingTouch = true;
+            mMainHandler.postDelayed(mAwaitTouchTimeoutRunnable, AWAIT_TOUCH_TIMEOUT_MS);
+        }
+    }
+
+    private void onAwaitedTouchDown(float x, float y) {
+        mAwaitingTouch = false;
+        mMainHandler.removeCallbacks(mAwaitTouchTimeoutRunnable);
+
+        Point sensor = mAuthController.getUdfpsLocation();
+        float radius = mAuthController.getUdfpsRadius() * AWAIT_TOUCH_RADIUS_SCALE;
+        if (sensor == null || radius <= 0
+                || Math.hypot(x - sensor.x, y - sensor.y) > radius) {
+            Log.d(TAG, "Touch after the screen-off unlock is not on the sensor, skipping");
+            dismissOverlay();
+            return;
+        }
+
+        Log.d(TAG, "Touch on the sensor after the screen-off unlock, scheduling Quick Launch");
+        mMainHandler.postDelayed(mSafetyUnlockRunnable, SAFETY_UNLOCK_TIMEOUT_MS);
+        mMainHandler.postDelayed(mLongPressRunnable, AWAIT_TOUCH_HOLD_MS);
+    }
+
+    private void onAwaitTouchTimeout() {
+        if (mAwaitingTouch) {
+            Log.d(TAG, "No touch on the sensor after the screen-off unlock, skipping");
+            dismissOverlay();
+        }
+    }
+
     private void onLongPressTriggered() {
         Log.d(TAG, "onLongPressTriggered: mFingerDown=" + mFingerDown
                 + " mGestureActive=" + mGestureActive);
@@ -354,6 +419,8 @@ public class QuickLaunchController implements CoreStartable,
     private void dismissOverlay() {
         mMainHandler.removeCallbacks(mLongPressRunnable);
         mMainHandler.removeCallbacks(mSafetyUnlockRunnable);
+        mMainHandler.removeCallbacks(mAwaitTouchTimeoutRunnable);
+        mAwaitingTouch = false;
         mGestureActive = false;
         mFingerDown = false;
         mTouchDownTime = 0L;
@@ -403,6 +470,7 @@ public class QuickLaunchController implements CoreStartable,
     }
 
     private synchronized void stopInputMonitoring() {
+        mPointerDown = false;
         if (mInputEventReceiver != null) {
             mInputEventReceiver.dispose();
             mInputEventReceiver = null;
@@ -421,10 +489,14 @@ public class QuickLaunchController implements CoreStartable,
 
         switch (action) {
             case MotionEvent.ACTION_DOWN:
+                mPointerDown = true;
                 mFingerDown = true;
                 mTouchDownTime = SystemClock.uptimeMillis();
                 mTouchDownX = x;
                 mTouchDownY = y;
+                if (mAwaitingTouch) {
+                    onAwaitedTouchDown(x, y);
+                }
                 break;
 
             case MotionEvent.ACTION_MOVE:
@@ -444,6 +516,7 @@ public class QuickLaunchController implements CoreStartable,
                 break;
 
             case MotionEvent.ACTION_UP:
+                mPointerDown = false;
                 mFingerDown = false;
                 mTouchDownTime = 0L;
                 if (mOverlayShowing) {
@@ -454,6 +527,7 @@ public class QuickLaunchController implements CoreStartable,
                 break;
 
             case MotionEvent.ACTION_CANCEL:
+                mPointerDown = false;
                 mFingerDown = false;
                 mTouchDownTime = 0L;
                 dismissOverlay();
