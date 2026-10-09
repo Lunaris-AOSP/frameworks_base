@@ -151,7 +151,7 @@ constructor(
             setContent { PlatformTheme { OverlayContent(viewModel, statusBarTop, hasCutout) } }
             setOnTouchListener { _, event ->
                 if (event.action == android.view.MotionEvent.ACTION_OUTSIDE) {
-                    viewModel.statusBarExpansion.collapse()
+                    viewModel.collapseFromOutsideTouch(event.downTime)
                     true
                 } else {
                     false

@@ -36,7 +36,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -155,16 +154,19 @@ fun AxDynamicBarChip(
                             } else if (!decided) {
 
                                 change.consume()
-                                val wasExpanded = viewModel.statusBarExpansion.isExpanded.value
-                                val current = state?.event
-                                if (current is IslandEvent.AospChip) {
-                                    if (!viewModel.handleAospChipTap(current, expandableController.expandable)) {
-                                        viewModel.statusBarExpansion.toggle()
-                                        if (!wasExpanded) toggleCount++
-                                    }
+                                if (viewModel.chipTapClosesPanel(down.uptimeMillis)) {
+                                    viewModel.statusBarExpansion.collapse()
                                 } else {
-                                    viewModel.statusBarExpansion.toggle()
-                                    if (!wasExpanded) toggleCount++
+                                    val current = state?.event
+                                    if (current is IslandEvent.AospChip) {
+                                        if (!viewModel.handleAospChipTap(current, expandableController.expandable)) {
+                                            viewModel.statusBarExpansion.expand()
+                                            toggleCount++
+                                        }
+                                    } else {
+                                        viewModel.statusBarExpansion.expand()
+                                        toggleCount++
+                                    }
                                 }
                             }
                             
