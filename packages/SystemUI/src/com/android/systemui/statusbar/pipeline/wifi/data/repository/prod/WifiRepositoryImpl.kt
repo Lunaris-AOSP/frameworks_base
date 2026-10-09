@@ -68,6 +68,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
@@ -129,15 +130,16 @@ constructor(
                     -> // flatMapLatest because when selectedUserContext emits a new value, we want
                     // to re-create a whole flow
                     callbackFlow {
+                            var tracker: WifiPickerTracker? = null
                             val callback =
                                 object : WifiPickerTracker.WifiPickerTrackerCallback {
                                     override fun onWifiEntriesChanged() {
                                         val connectedEntry =
-                                            wifiPickerTracker.mergedOrPrimaryConnection
+                                            tracker.mergedOrPrimaryConnection
                                         logOnWifiEntriesChanged(connectedEntry)
 
                                         val activeNetworks =
-                                            wifiPickerTracker?.activeWifiEntries ?: emptyList()
+                                            tracker?.activeWifiEntries ?: emptyList()
                                         val secondaryNetworks =
                                             activeNetworks
                                                 .filter {
@@ -166,7 +168,7 @@ constructor(
                                     }
 
                                     override fun onWifiStateChanged() {
-                                        val state = wifiPickerTracker?.wifiState
+                                        val state = tracker?.wifiState
                                         logOnWifiStateChanged(state)
                                         send(newState = state ?: WIFI_STATE_DEFAULT)
                                     }
@@ -190,15 +192,13 @@ constructor(
                                                 newPrimaryNetwork,
                                                 newSecondaryNetworks,
                                             )
-                                        current = new
-                                        trySend(new)
+                                        if (trySend(new).isSuccess) {
+                                            current = new
+                                        }
                                     }
                                 }
 
-                            // If a WifiPicker already exists, call onStop to begin its shutdown
-                            // process in preparation for a new one to be created.
-                            wifiPickerTracker?.onStop()
-                            wifiPickerTracker =
+                            tracker =
                                 wifiPickerTrackerFactory
                                     .create(currentContext, lifecycle, callback, "WifiRepository")
                                     .apply {
@@ -209,9 +209,11 @@ constructor(
                                         // costly and should be avoided whenever possible).
                                         this?.disableScanning()
                                     }
-                            awaitClose { mainExecutor.execute { wifiPickerTracker?.onStop() } }
+                            awaitClose {
+                                mainExecutor.execute { tracker?.onStop() }
+                            }
                         }
-                        .stateIn(scope, SharingStarted.Eagerly, current)
+                        .conflate()
                 }
                 .stateIn(scope, SharingStarted.Eagerly, current)
         } else {

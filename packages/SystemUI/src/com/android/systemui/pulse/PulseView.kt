@@ -25,7 +25,6 @@ import android.util.AttributeSet
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
-import android.view.ViewPropertyAnimator
 
 class PulseView @JvmOverloads constructor(
     context: Context,
@@ -40,9 +39,7 @@ class PulseView @JvmOverloads constructor(
     private var renderingRequested = false 
     private var settingsRepo: PulseSettingsRepository? = null
     
-    private var fadeAnimator: ValueAnimator? = null
     private val fadeInterpolator = DecelerateInterpolator()
-    private var visibilityAnimator: ViewPropertyAnimator? = null
     private var captureMode: PulseAudioDataProcessor.CaptureMode =
         PulseAudioDataProcessor.CaptureMode.FFT
 
@@ -104,9 +101,10 @@ class PulseView @JvmOverloads constructor(
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         isAttached = false
-        fadeAnimator?.cancel()
-        fadeAnimator = null
-        visibilityAnimator?.cancel()
+        cancelVisibilityAnimation()
+        alpha = if (targetVisible) 1f else 0f
+        visibility = if (targetVisible) VISIBLE else GONE
+        renderingRequested = targetVisible
         engine?.stop()
         if (ownsRenderer) {
             renderer?.cleanup()
@@ -144,7 +142,7 @@ class PulseView @JvmOverloads constructor(
         targetVisible = visible
         isVisible = visible
 
-        currentAnimator?.cancel()
+        cancelVisibilityAnimation()
 
         if (!animate) {
             currentAnimator = null
@@ -159,7 +157,7 @@ class PulseView @JvmOverloads constructor(
             this.visibility = VISIBLE
         }
 
-        currentAnimator = ValueAnimator.ofFloat(alpha, if (visible) 1f else 0f).apply {
+        val animator = ValueAnimator.ofFloat(alpha, if (visible) 1f else 0f).apply {
             duration = durationMs
             interpolator = fadeInterpolator
             addUpdateListener { anim ->
@@ -168,20 +166,23 @@ class PulseView @JvmOverloads constructor(
             }
             addListener(object : AnimatorListenerAdapter() {
                 override fun onAnimationEnd(animation: Animator) {
-                    if (targetVisible == visible) { // only finalize if nothing superseded us
-                        if (!visible) {
-                            renderingRequested = false
-                            this@PulseView.visibility = GONE
-                        }
+                    if (currentAnimator !== animation) return
+                    if (!visible) {
+                        renderingRequested = false
+                        this@PulseView.visibility = GONE
                     }
                     currentAnimator = null
                 }
-                override fun onAnimationCancel(animation: Animator) {
-                    currentAnimator = null
-                }
             })
-            start()
         }
+        currentAnimator = animator
+        animator.start()
     }
 
+    private fun cancelVisibilityAnimation() {
+        currentAnimator?.removeAllListeners()
+        currentAnimator?.cancel()
+        currentAnimator?.removeAllUpdateListeners()
+        currentAnimator = null
+    }
 }

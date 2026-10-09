@@ -117,6 +117,10 @@ interface NotificationScrollView {
     /** sets the current QS expand fraction */
     fun setQsExpandFraction(expandFraction: Float)
 
+    fun setLStoShadeProgress(shadeProgress: Float)
+
+    fun setCurrentSceneLockscreen(isCurrentLockscreen: Boolean)
+
     /**
      * Returns the number of max Notifications that can be fitted in the given space without
      * clipping their height.

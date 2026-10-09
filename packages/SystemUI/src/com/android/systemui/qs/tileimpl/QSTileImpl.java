@@ -737,6 +737,20 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
             return mId;
         }
 
+        @Nullable
+        public DrawableIconWithRes copy() {
+            Drawable.ConstantState constantState = mDrawable.getConstantState();
+            return constantState != null
+                    ? new DrawableIconWithRes(constantState.newDrawable().mutate(), mId, mGeneration)
+                    : null;
+        }
+
+        private DrawableIconWithRes(Drawable drawable, int id, int generation) {
+            super(drawable);
+            mId = id;
+            mGeneration = generation;
+        }
+
         @Override
         public boolean equals(Object o) {
             return o instanceof DrawableIconWithRes

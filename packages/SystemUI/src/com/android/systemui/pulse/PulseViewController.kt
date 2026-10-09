@@ -19,6 +19,7 @@ package com.android.systemui.pulse
 
 import android.content.Context
 import android.media.session.PlaybackState
+import android.os.Looper
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.media.MediaSessionManager
 import com.android.systemui.util.ScrimUtils
@@ -40,7 +41,11 @@ class PulseViewController @Inject constructor(
     private var listenersRegistered = false
 
     private var isMediaPlaying = false
-    private var bouncerShowingOrKeyguardDismissing = false
+    private var bouncerShowing = false
+    private var keyguardGoingAway = false
+    private var keyguardFadingAway = false
+    private val bouncerShowingOrKeyguardDismissing: Boolean
+        get() = bouncerShowing || keyguardGoingAway || keyguardFadingAway
     private var keyguardShowing = false
     private var isDozing = false
     private var isPulsing = false
@@ -86,19 +91,23 @@ class PulseViewController @Inject constructor(
     private val PULSE_HIDE_DELAY_MS = 100L
     private val PULSE_FADE_IN_DURATION_MS = 200L
     private val PULSE_FADE_OUT_DURATION_MS = 150L
+    private val settingsChangedListener: () -> Unit = { onSettingsChanged() }
 
     init {
         INSTANCE = this
 
         view.initialize(settingsRepository)
-        settingsRepository.setOnSettingsChangedListener { onSettingsChanged() }
-        settingsRepository.startObserving()
+        settingsRepository.addOnSettingsChangedListener(settingsChangedListener)
         onSettingsChanged()
     }
 
     fun getPulseView(): PulseView = view
 
     private fun updateState() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainScope.launch { updateState() }
+            return
+        }
         if (!pulseEnabled) {
             showDelayJob?.cancel()
             hideDelayJob?.cancel()
@@ -236,7 +245,7 @@ class PulseViewController @Inject constructor(
     }
 
     override fun onKeyguardFadingAwayChanged(fadingAway: Boolean) {
-        bouncerShowingOrKeyguardDismissing = fadingAway
+        keyguardFadingAway = fadingAway
         if (fadingAway) {
             showDelayJob?.cancel()
             hideDelayJob?.cancel()
@@ -247,7 +256,7 @@ class PulseViewController @Inject constructor(
     }
 
     override fun onKeyguardGoingAwayChanged(goingAway: Boolean) {
-        bouncerShowingOrKeyguardDismissing = goingAway
+        keyguardGoingAway = goingAway
         if (goingAway) {
             showDelayJob?.cancel()
             hideDelayJob?.cancel()
@@ -258,7 +267,7 @@ class PulseViewController @Inject constructor(
     }
 
     override fun onPrimaryBouncerShowingChanged(showing: Boolean) {
-        bouncerShowingOrKeyguardDismissing = showing
+        bouncerShowing = showing
         updateState()
     }
 
@@ -285,7 +294,7 @@ class PulseViewController @Inject constructor(
         showDelayJob?.cancel()
         hideDelayJob?.cancel()
         pulseRunning = false
-        settingsRepository.stopObserving()
+        settingsRepository.removeOnSettingsChangedListener(settingsChangedListener)
         if (listenersRegistered) {
             ScrimUtils.get().removeListener(this)
             MediaSessionManager.get().removeListener(this)

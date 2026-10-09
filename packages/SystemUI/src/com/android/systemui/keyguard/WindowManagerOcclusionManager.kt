@@ -226,6 +226,17 @@ constructor(
             var unoccludeAnimator: ValueAnimator? = null
             val unoccludeMatrix = Matrix()
 
+            private fun finishAnimation() {
+                val callback = unoccludeAnimationFinishedCallback
+                unoccludeAnimationFinishedCallback = null
+                interactionJankMonitor.end(InteractionJankMonitor.CUJ_LOCKSCREEN_OCCLUSION)
+                try {
+                    callback?.onAnimationFinished()
+                } catch (e: RemoteException) {
+                    Log.e(TAG, "Failed to finish unocclude animation", e)
+                }
+            }
+
             /** TODO(b/326470033): Extract this logic into ViewModels. */
             override fun onAnimationStart(
                 transit: Int,
@@ -235,44 +246,45 @@ constructor(
                 finishedCallback: IRemoteAnimationFinishedCallback?,
             ) {
                 Log.d(TAG, "unoccludeAnimationRunner#onAnimationStart")
-                // Wrap the callback so that it's guaranteed to be nulled out once called.
-                unoccludeAnimationFinishedCallback =
-                    object : IRemoteAnimationFinishedCallback.Stub() {
-                        override fun onAnimationFinished() {
-                            finishedCallback?.onAnimationFinished()
-                            unoccludeAnimationFinishedCallback = null
-                        }
-                    }
-                keyguardOcclusionInteractor.setWmNotifiedShowWhenLockedActivityOnTop(
-                    showWhenLockedActivityOnTop = false,
-                    taskInfo = apps.firstOrNull()?.taskInfo,
-                )
-                interactionJankMonitor.begin(
-                    createInteractionJankMonitorConf(
-                        InteractionJankMonitor.CUJ_LOCKSCREEN_OCCLUSION,
-                        "UNOCCLUDE",
-                    )
-                )
-                if (apps.isEmpty()) {
-                    Log.d(
-                        TAG,
-                        "No apps provided to unocclude runner; " +
-                            "skipping animation and unoccluding.",
-                    )
-                    unoccludeAnimationFinishedCallback?.onAnimationFinished()
-                    return
-                }
-                val target = apps[0]
-                val localView: View = keyguardViewController.get().getViewRootImpl().getView()
-                val applier = SyncRtSurfaceTransactionApplier(localView)
-                // TODO(
                 executor.execute {
                     unoccludeAnimator?.cancel()
+                    unoccludeAnimationFinishedCallback = finishedCallback
+                    keyguardOcclusionInteractor.setWmNotifiedShowWhenLockedActivityOnTop(
+                        showWhenLockedActivityOnTop = false,
+                        taskInfo = apps.firstOrNull()?.taskInfo,
+                    )
+                    interactionJankMonitor.begin(
+                        createInteractionJankMonitorConf(
+                            InteractionJankMonitor.CUJ_LOCKSCREEN_OCCLUSION,
+                            "UNOCCLUDE",
+                        )
+                    )
+                    if (apps.isEmpty()) {
+                        Log.d(
+                            TAG,
+                            "No apps provided to unocclude runner; " +
+                                "skipping animation and unoccluding.",
+                        )
+                        finishAnimation()
+                        return@execute
+                    }
+                    val target = apps[0]
+                    if (!target.leash.isValid) {
+                        Log.w(TAG, "Unocclude animation skipped: leash is invalid")
+                        finishAnimation()
+                        return@execute
+                    }
+                    val localView: View = keyguardViewController.get().getViewRootImpl().view
+                    val applier = SyncRtSurfaceTransactionApplier(localView)
                     unoccludeAnimator =
                         ValueAnimator.ofFloat(1f, 0f).apply {
                             duration = UNOCCLUDE_ANIMATION_DURATION.toLong()
                             interpolator = Interpolators.TOUCH_RESPONSE
                             addUpdateListener { animation: ValueAnimator ->
+                                if (!target.leash.isValid) {
+                                    animation.cancel()
+                                    return@addUpdateListener
+                                }
                                 val animatedValue = animation.animatedValue as Float
                                 val surfaceHeight: Float =
                                     target.screenSpaceBounds.height().toFloat()
@@ -294,29 +306,23 @@ constructor(
                             addListener(
                                 object : AnimatorListenerAdapter() {
                                     override fun onAnimationEnd(animation: Animator) {
-                                        try {
-                                            unoccludeAnimationFinishedCallback
-                                                ?.onAnimationFinished()
-                                            unoccludeAnimator = null
-                                            interactionJankMonitor.end(
-                                                InteractionJankMonitor.CUJ_LOCKSCREEN_OCCLUSION
-                                            )
-                                        } catch (e: RemoteException) {
-                                            e.printStackTrace()
-                                        }
+                                        unoccludeAnimator = null
+                                        finishAnimation()
                                     }
                                 }
                             )
-                            start()
                         }
+                    unoccludeAnimator?.start()
                 }
             }
 
             override fun onAnimationCancelled() {
                 Log.d(TAG, "unoccludeAnimationRunner#onAnimationCancelled")
-                context.mainExecutor.execute { unoccludeAnimator?.cancel() }
-                Log.d(TAG, "Unocclude animation cancelled.")
-                interactionJankMonitor.cancel(InteractionJankMonitor.CUJ_LOCKSCREEN_OCCLUSION)
+                executor.execute {
+                    interactionJankMonitor.cancel(InteractionJankMonitor.CUJ_LOCKSCREEN_OCCLUSION)
+                    unoccludeAnimator?.cancel()
+                    Log.d(TAG, "Unocclude animation cancelled.")
+                }
             }
         }
 

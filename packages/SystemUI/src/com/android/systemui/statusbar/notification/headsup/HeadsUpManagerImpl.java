@@ -223,6 +223,7 @@ public class HeadsUpManagerImpl
         mUiEventLogger = uiEventLogger;
         mAvalancheController = avalancheController;
         mAvalancheController.setBaseEntryMapStr(this::getEntryMapStr);
+        mAvalancheController.setOnCleanup(this::clearPendingRemovals);
         mBypassController = bypassController;
         mGroupMembershipManager = groupMembershipManager;
         mVisualStabilityProvider = visualStabilityProvider;
@@ -457,7 +458,7 @@ public class HeadsUpManagerImpl
             for (NotificationEntry entry : getAllEntries().toList()) {
                 entry.setSeenInShade(true);
             }
-            for (NotificationEntry entry : mEntriesToRemoveAfterExpand) {
+            for (NotificationEntry entry : new ArrayList<>(mEntriesToRemoveAfterExpand)) {
                 if (isHeadsUpEntry(entry.getKey())) {
                     // Maybe the heads-up was removed already
                     removeEntry(entry.getKey(), "onExpandingFinished");
@@ -690,6 +691,7 @@ public class HeadsUpManagerImpl
     @VisibleForTesting
     void onEntryRemoved(@NonNull HeadsUpEntry headsUpEntry, String reason) {
         NotificationEntry entry = headsUpEntry.requireEntry();
+        clearPendingRemovals(headsUpEntry);
         entry.setHeadsUp(false);
         setEntryPinned(headsUpEntry, PinnedStatus.NotPinned, "onEntryRemoved");
         EventLogTags.writeSysuiHeadsUpStatus(entry.getKey(), 0 /* visible */);
@@ -702,19 +704,11 @@ public class HeadsUpManagerImpl
         }
         updateTopHeadsUpFlow();
         updateHeadsUpFlow();
-        if (NotificationThrottleHun.isEnabled()) {
-            NotificationEntry notifEntry = headsUpEntry.mEntry;
-            if (notifEntry == null) {
-                return;
-            }
-            // If reorder was just allowed and we called onEntryRemoved while iterating over
-            // mEntriesToRemoveWhenReorderingAllowed, we should not remove from this list (and cause
-            // ArrayIndexOutOfBoundsException). We don't need to in this case anyway, because we
-            // clear mEntriesToRemoveWhenReorderingAllowed after removing these entries.
-            if (!reason.equals(REASON_REORDER_ALLOWED)) {
-                mEntriesToRemoveWhenReorderingAllowed.remove(notifEntry);
-            }
-        }
+    }
+
+    private void clearPendingRemovals(HeadsUpEntry headsUpEntry) {
+        mEntriesToRemoveAfterExpand.remove(headsUpEntry.mEntry);
+        mEntriesToRemoveWhenReorderingAllowed.remove(headsUpEntry.mEntry);
     }
 
     private void updateTopHeadsUpFlow() {
@@ -1229,7 +1223,7 @@ public class HeadsUpManagerImpl
             }
         }
         mAnimationStateHandler.setHeadsUpGoingAwayAnimationsAllowed(false);
-        for (NotificationEntry entry : mEntriesToRemoveWhenReorderingAllowed) {
+        for (NotificationEntry entry : new ArrayList<>(mEntriesToRemoveWhenReorderingAllowed)) {
             if (entry != null && isHeadsUpEntry(entry.getKey())) {
                 // Maybe the heads-up was removed already
                 removeEntry(entry.getKey(), REASON_REORDER_ALLOWED);

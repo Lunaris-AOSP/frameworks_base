@@ -48,6 +48,9 @@ public abstract class LyricViewController implements
     private final Context mContext;
     private final TextSwitcher mTextSwitcher;
     private final View mLyricContainer;
+    private final NotificationListener mNotificationListener;
+    private final DarkIconDispatcher mDarkIconDispatcher;
+    private final Runnable mRestoreLyric = () -> showLyricView(true);
 
     private boolean mEnabled;
     private boolean mStarted;
@@ -61,6 +64,8 @@ public abstract class LyricViewController implements
 
     public LyricViewController(Context context, View statusBar) {
         mContext = context;
+        mNotificationListener = Dependency.get(NotificationListener.class);
+        mDarkIconDispatcher = Dependency.get(DarkIconDispatcher.class);
         mLyricContainer = statusBar.findViewById(R.id.lyric_container);
         mTextSwitcher = statusBar.findViewById(R.id.lyric_text);
 
@@ -75,7 +80,8 @@ public abstract class LyricViewController implements
         mLyricContainer.setOnTouchListener((v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_DOWN) {
                 hideLyricView(true);
-                v.postDelayed(() -> showLyricView(true), HIDE_LYRIC_DELAY);
+                v.removeCallbacks(mRestoreLyric);
+                v.postDelayed(mRestoreLyric, HIDE_LYRIC_DELAY);
             }
             return false;
         });
@@ -114,14 +120,19 @@ public abstract class LyricViewController implements
             }
         };
 
-        Dependency.get(DarkIconDispatcher.class).addDarkReceiver(this);
-        Dependency.get(NotificationListener.class).addNotificationHandler(this);
-        mLyricsFetcher.addCallback(mLyricsCallback);
+        mDarkIconDispatcher.addDarkReceiver(this);
+        mNotificationListener.addNotificationHandler(this);
     }
 
     public void setEnabled(boolean enabled) {
+        if (mEnabled == enabled) return;
         mEnabled = enabled;
-        if (!mEnabled && mStarted) {
+        if (enabled) {
+            mLyricsFetcher.addCallback(mLyricsCallback);
+        } else {
+            mLyricsFetcher.removeCallback(mLyricsCallback);
+            mLyricContainer.removeCallbacks(mRestoreLyric);
+            mMediaLyricsActive = false;
             stopLyric();
         }
     }
@@ -157,6 +168,8 @@ public abstract class LyricViewController implements
     }
 
     public void onNotificationRemoved(StatusBarNotification sbn, RankingMap rankingMap) {
+        if (!mEnabled || mMediaLyricsActive) return;
+
         boolean isCurrentNotification = mCurrentNotificationId == sbn.getId() &&
                 TextUtils.equals(sbn.getPackageName(), mCurrentNotificationPackage);
         if (isCurrentNotification) {
@@ -178,9 +191,11 @@ public abstract class LyricViewController implements
     }
 
     public void destroy() {
-        if (mLyricsFetcher != null) {
-            mLyricsFetcher.removeCallback(mLyricsCallback);
-        }
+        setEnabled(false);
+        mLyricContainer.removeCallbacks(mRestoreLyric);
+        mLyricContainer.setOnTouchListener(null);
+        mNotificationListener.removeNotificationHandler(this);
+        mDarkIconDispatcher.removeDarkReceiver(this);
     }
 
     public void startLyric() {
@@ -194,9 +209,9 @@ public abstract class LyricViewController implements
         if (mStarted) {
             mStarted = false;
             hideLyricView(true);
-            mCurrentNotificationPackage = null;
-            mCurrentNotificationId = 0;
         }
+        mCurrentNotificationPackage = null;
+        mCurrentNotificationId = 0;
     }
 
     public abstract void showLyricView(boolean animate);

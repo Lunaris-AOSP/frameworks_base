@@ -189,17 +189,18 @@ public class StackScrollAlgorithm {
                     viewState.setAlpha(1f - ambientState.getDozeAmount());
                 }
             } else if (SceneContainerFlag.isEnabled()
-                    && ambientState.isShowingStackOnLockscreen()) {
+                    && (ambientState.isShowingStackOnLockscreen()
+                            || ambientState.isLockscreenStackFadingIn())) {
                     // Adjust alpha for wakeup to lockscreen.
                 if (view.isHeadsUpState()) {
                     // Pulsing HUN should be visible on AOD and stay visible during
                     // AOD=>lockscreen transition
                     viewState.setAlpha(1f - ambientState.getHideAmount());
                 } else {
-                    // Take into account scene container-specific Lockscreen fade-in progress
-                    float fadeAlpha = ambientState.getLockscreenStackFadeInProgress();
-                    float dozeAlpha = 1f - ambientState.getDozeAmount();
-                    viewState.setAlpha(Math.min(dozeAlpha, fadeAlpha));
+                    float alpha = ambientState.isLockscreenStackFadingIn()
+                            ? ambientState.getLockscreenStackFadeInProgress()
+                            : 1f - ambientState.getDozeAmount();
+                    viewState.setAlpha(alpha);
                 }
             } else if (ambientState.isExpansionChanging()) {
                 // Adjust alpha for shade open & close.

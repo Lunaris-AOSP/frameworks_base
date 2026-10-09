@@ -2020,6 +2020,24 @@ public class NotificationStackScrollLayout
         mAmbientState.setQsExpansionFraction(expandFraction);
     }
 
+    @Override
+    public void setLStoShadeProgress(float shadeProgress) {
+        if (SceneContainerFlag.isUnexpectedlyInLegacyMode()) return;
+        if (mAmbientState.getLStoShadeProgress() != shadeProgress) {
+            mAmbientState.setLStoShadeProgress(shadeProgress);
+            requestChildrenUpdate();
+        }
+    }
+
+    @Override
+    public void setCurrentSceneLockscreen(boolean isCurrentLockscreen) {
+        if (SceneContainerFlag.isUnexpectedlyInLegacyMode()) return;
+        if (mAmbientState.isCurrentSceneLockscreen() != isCurrentLockscreen) {
+            mAmbientState.setCurrentSceneLockscreen(isCurrentLockscreen);
+            requestChildrenUpdate();
+        }
+    }
+
     /**
      * Update the height of the panel.
      *

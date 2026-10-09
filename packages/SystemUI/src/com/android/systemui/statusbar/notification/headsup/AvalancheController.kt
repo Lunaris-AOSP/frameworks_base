@@ -29,6 +29,7 @@ import com.android.systemui.statusbar.notification.promoted.PromotedNotification
 import com.android.systemui.statusbar.notification.shared.AvalancheReplaceHunWhenCritical
 import com.android.systemui.statusbar.notification.shared.NotificationThrottleHun
 import java.io.PrintWriter
+import java.util.function.Consumer
 import javax.inject.Inject
 
 /*
@@ -52,6 +53,7 @@ constructor(
     private val tag = "AvalancheController"
     private val debug = false // Compile.IS_DEBUG && Log.isLoggable(tag, Log.DEBUG)
     var baseEntryMapStr: () -> String = { "baseEntryMapStr not initialized" }
+    var onCleanup: Consumer<HeadsUpEntry> = Consumer {}
 
     var enableAtRuntime = true
         set(value) {
@@ -327,6 +329,7 @@ constructor(
         }
         val outcome: String
         if (entry in nextMap) {
+            onCleanup.accept(entry)
             if (entry in nextMap) nextMap.remove(entry)
             if (entry in nextList) nextList.remove(entry)
             uiEventLogger.log(ThrottleEvent.AVALANCHE_THROTTLING_HUN_REMOVED)
@@ -587,6 +590,7 @@ constructor(
 
         // Remove runnable labels for dropped huns
         val listToDrop = nextList.subList(1, nextList.size)
+        listToDrop.forEach { onCleanup.accept(it) }
         logDroppedHunsInBackground(listToDrop.size)
 
         if (debug) {

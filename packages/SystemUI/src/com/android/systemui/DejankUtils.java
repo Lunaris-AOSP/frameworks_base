@@ -26,6 +26,7 @@ import android.os.Binder.ProxyTransactListener;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.RemoteException;
 import android.os.StrictMode;
 import android.os.SystemProperties;
@@ -51,8 +52,8 @@ public class DejankUtils {
 
     public static final boolean STRICT_MODE_ENABLED = Build.IS_ENG
             || SystemProperties.getBoolean("persist.sysui.strictmode", false);
-    private static final Choreographer sChoreographer = Choreographer.getInstance();
-    private static final Handler sHandler = new Handler();
+    private static Choreographer sChoreographer = null;
+    private static Handler sHandler;
     private static final ArrayList<Runnable> sPendingRunnables = new ArrayList<>();
     private static final Random sRandom = new Random();
     private static Stack<String> sBlockingIpcs = new Stack<>();
@@ -248,10 +249,19 @@ public class DejankUtils {
     public static void removeCallbacks(Runnable r) {
         Assert.isMainThread();
         sPendingRunnables.remove(r);
-        sHandler.removeCallbacks(r);
+        if (sHandler != null) {
+            sHandler.removeCallbacks(r);
+        }
     }
 
     private static void postAnimationCallback() {
+        Assert.isMainThread();
+        if (sChoreographer == null) {
+            sChoreographer = Choreographer.getInstance();
+        }
+        if (sHandler == null) {
+            sHandler = new Handler(Looper.getMainLooper());
+        }
         sChoreographer.postCallback(Choreographer.CALLBACK_ANIMATION, sAnimationCallbackRunnable,
                 null);
     }

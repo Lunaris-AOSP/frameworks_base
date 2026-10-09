@@ -173,6 +173,12 @@ public class StageTaskListener implements ShellTaskOrganizer.TaskListener {
         return taskInfo != null ? taskInfo.taskId : INVALID_TASK_ID;
     }
 
+    int getTopChildTaskId() {
+        final ActivityManager.RunningTaskInfo taskInfo =
+                getChildTaskInfo(t -> t.topActivityInfo != null);
+        return taskInfo != null ? taskInfo.taskId : INVALID_TASK_ID;
+    }
+
     /**
      * Returns all visible child task's ids.
      */

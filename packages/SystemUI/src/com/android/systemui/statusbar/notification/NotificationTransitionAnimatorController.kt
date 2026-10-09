@@ -84,6 +84,8 @@ class NotificationTransitionAnimatorController(
             // Do nothing. Notifications are always animated inside their rootView.
         }
 
+    private var isCancelled = false
+
     override fun createAnimatorState(): TransitionAnimator.State {
         // If the notification panel is collapsed, the clip may be larger than the height.
         val clipBottomAmount =
@@ -145,6 +147,7 @@ class NotificationTransitionAnimatorController(
     }
 
     override fun onIntentStarted(willAnimate: Boolean) {
+        if (isCancelled) return
         val reason = "onIntentStarted(willAnimate=$willAnimate)"
         if (ActivityTransitionAnimator.DEBUG_TRANSITION_ANIMATION) {
             Log.d(TAG, reason)
@@ -186,6 +189,7 @@ class NotificationTransitionAnimatorController(
     }
 
     override fun onTransitionAnimationCancelled(newKeyguardOccludedState: Boolean?) {
+        isCancelled = true
         if (ActivityTransitionAnimator.DEBUG_TRANSITION_ANIMATION) {
             Log.d(TAG, "onLaunchAnimationCancelled()")
         }

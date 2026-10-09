@@ -35,6 +35,7 @@ import android.provider.DeviceConfig;
 import android.util.AttributeSet;
 import android.util.Property;
 import android.view.GestureDetector;
+import android.view.Gravity;
 import android.view.InsetsController;
 import android.view.InsetsSource;
 import android.view.InsetsState;
@@ -317,6 +318,10 @@ public class DividerView extends FrameLayout implements View.OnTouchListener {
         mHandle.setIsLeftRightSplit(isLeftRightSplit);
         mCorners.setIsLeftRightSplit(isLeftRightSplit);
         mTooltip.setIsLeftRightSplit(isLeftRightSplit);
+
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) mDividerBar.getLayoutParams();
+        lp.gravity = isLeftRightSplit ? Gravity.TOP : Gravity.CENTER;
+        mDividerBar.setLayoutParams(lp);
 
         mHandleRegionWidth = getResources().getDimensionPixelSize(isLeftRightSplit
                 ? R.dimen.split_divider_handle_region_height

@@ -93,6 +93,8 @@ public class AmbientState implements Dumpable {
     private float mCurrentScrollVelocity;
     private int mStatusBarState;
     private boolean mShowingStackOnLockscreen;
+    private boolean mCurrentSceneLockscreen;
+    private float mLStoShadeProgress;
     private float mLockscreenStackFadeInProgress;
     private float mExpandingVelocity;
     private boolean mPanelTracking;
@@ -651,9 +653,34 @@ public class AmbientState implements Dumpable {
         return mShowingStackOnLockscreen;
     }
 
+    public boolean isCurrentSceneLockscreen() {
+        if (SceneContainerFlag.isUnexpectedlyInLegacyMode()) return false;
+        return mCurrentSceneLockscreen;
+    }
+
+    public void setCurrentSceneLockscreen(boolean isCurrentSceneLockscreen) {
+        if (SceneContainerFlag.isUnexpectedlyInLegacyMode()) return;
+        mCurrentSceneLockscreen = isCurrentSceneLockscreen;
+    }
+
+    public float getLStoShadeProgress() {
+        if (SceneContainerFlag.isUnexpectedlyInLegacyMode()) return 0f;
+        return mLStoShadeProgress;
+    }
+
+    public void setLStoShadeProgress(float shadeProgress) {
+        if (SceneContainerFlag.isUnexpectedlyInLegacyMode()) return;
+        mLStoShadeProgress = shadeProgress;
+    }
+
     public void setShowingStackOnLockscreen(boolean showingStackOnLockscreen) {
         if (SceneContainerFlag.isUnexpectedlyInLegacyMode()) return;
         mShowingStackOnLockscreen = showingStackOnLockscreen;
+    }
+
+    public boolean isLockscreenStackFadingIn() {
+        if (SceneContainerFlag.isUnexpectedlyInLegacyMode()) return false;
+        return mLockscreenStackFadeInProgress > 0f && mLockscreenStackFadeInProgress < 1f;
     }
 
     public float getLockscreenStackFadeInProgress() {

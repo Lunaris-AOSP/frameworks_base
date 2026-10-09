@@ -388,6 +388,7 @@ internal class ElementNode(
         measurable: Measurable,
         constraints: Constraints,
     ): MeasureResult {
+        syncAncestorElementState()
         val elementState = elementState(layoutImpl, element, currentTransitionStates)
         if (elementState == null) {
             // If the element is not part of any transition, place it normally in its idle scene.
@@ -407,7 +408,6 @@ internal class ElementNode(
                 doNotPlace(measurable, constraints)
             }
         }
-        syncAncestorElementState()
 
         val transition = elementState as? TransitionState.Transition
 
@@ -727,19 +727,31 @@ internal inline fun elementState(
     transitionStates.fastForEachIndexed { index, states ->
         if (index < transitionStates.size - 1) {
             // Check if any ancestor runs a transition that has a transformation for the element
-            states.fastForEachReversed { state ->
+            for (j in states.indices.reversed()) {
+                val state = states[j]
+                if (state !is TransitionState.Transition) continue
+
                 if (
                     isSharedElement(state, isInContent) ||
-                        hasTransformationForElement(state, elementKey)
+                        isElementAffectedByTransition(state, elementKey, isInContent)
                 ) {
                     return state
                 }
+
+                if (appearsInAnyContent(state, isInContent)) break
             }
         } else {
             return localElementState(states, isInContent)
         }
     }
     return null
+}
+
+private inline fun appearsInAnyContent(
+    state: TransitionState.Transition,
+    isInContent: (ContentKey) -> Boolean,
+): Boolean {
+    return isInContent(state.fromContent) || isInContent(state.toContent)
 }
 
 private inline fun localElementState(
@@ -756,7 +768,7 @@ private inline fun localElementState(
     // Find the last transition with a content that contains the element.
     states.fastForEachReversed { state ->
         val transition = state as TransitionState.Transition
-        if (isInContent(transition.fromContent) || isInContent(transition.toContent)) {
+        if (appearsInAnyContent(transition, isInContent)) {
             return transition
         }
     }
@@ -776,10 +788,17 @@ private inline fun isSharedElement(
         isInContent(state.toContent)
 }
 
-private fun hasTransformationForElement(state: TransitionState, elementKey: ElementKey): Boolean {
-    return state is TransitionState.Transition &&
-        (state.transformationSpec.hasTransformation(elementKey, state.fromContent) ||
-            state.transformationSpec.hasTransformation(elementKey, state.toContent))
+private inline fun isElementAffectedByTransition(
+    state: TransitionState,
+    elementKey: ElementKey,
+    isInContent: (ContentKey) -> Boolean,
+): Boolean {
+    if (state !is TransitionState.Transition) return false
+
+    return (state.transformationSpec.hasTransformation(elementKey, state.fromContent) &&
+        isInContent(state.fromContent)) ||
+        (state.transformationSpec.hasTransformation(elementKey, state.toContent) &&
+            isInContent(state.toContent))
 }
 
 internal inline fun elementContentWhenIdle(

@@ -207,8 +207,8 @@ constructor(
      */
     private val isAnyExpanded =
         combine(
-                shadeInteractor.shadeExpansion.map { it > 0f },
-                shadeInteractor.qsExpansion.map { it > 0f },
+                shadeInteractor.shadeExpansion.map { it > 0f }.distinctUntilChanged(),
+                shadeInteractor.qsExpansion.map { it > 0f }.distinctUntilChanged(),
             ) { shadeExpansion, qsExpansion ->
                 shadeExpansion || qsExpansion
             }

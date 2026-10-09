@@ -96,6 +96,16 @@ constructor(
             launch { viewModel.shadeScrollState.collect { view.setScrollState(it) } }
             launch { viewModel.expandFraction.collectTraced { view.setExpandFraction(it) } }
             launch { viewModel.qsExpandFraction.collectTraced { view.setQsExpandFraction(it) } }
+            launch {
+                viewModel.lockScreenToShadeTransitionProgress.collectTraced {
+                    view.setLStoShadeProgress(it)
+                }
+            }
+            launch {
+                viewModel.isCurrentSceneLockscreen.collectTraced {
+                    view.setCurrentSceneLockscreen(it)
+                }
+            }
             if (Flags.notificationShadeBlur()) {
                 launch { viewModel.blurRadius(maxBlurRadius).distinctUntilChanged().collect(view::setBlurRadius) }
                 launch { viewModel.interactive.collectTraced(view::setInteractive) }

@@ -24,6 +24,7 @@ import android.media.MediaRouter.RouteInfo;
 import android.media.projection.StopReason;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.UserManager;
 import android.provider.Settings;
 import android.service.quicksettings.Tile;
 import android.text.TextUtils;
@@ -128,6 +129,11 @@ public class CastTile extends QSTileImpl<BooleanState> {
     }
 
     @Override
+    protected void handleInitialize() {
+        mController.setCurrentUserId(mHost.getUserId());
+    }
+
+    @Override
     public BooleanState newTileState() {
         BooleanState state = new BooleanState();
         return state;
@@ -226,7 +232,8 @@ public class CastTile extends QSTileImpl<BooleanState> {
         mUiHandler.post(() -> {
             final DialogHolder holder = new DialogHolder();
             final Dialog dialog = MediaRouteDialogPresenter.createDialog(
-                    mShadeDialogContextInteractor.getContext(),
+                    UserManager.isHeadlessSystemUserMode() ? mHost.getUserContext()
+                            : mShadeDialogContextInteractor.getContext(),
                     ROUTE_TYPE_REMOTE_DISPLAY,
                     v -> {
                         ActivityTransitionAnimator.Controller controller =

@@ -508,9 +508,9 @@ class TextInterpolator(
                     val newFont = newRun.glyphs.getFont(run.start)
                     for (i in run.start until run.end) {
                         require(
-                            newRun.glyphs.getGlyphId(run.start) == lineRun.glyphIds[run.start]
+                            newRun.glyphs.getGlyphId(i) == lineRun.glyphIds[i]
                         ) {
-                            "The new layout has different glyph ID at ${run.start}"
+                            "The new layout has different glyph ID at $i"
                         }
                         require(newFont === newRun.glyphs.getFont(i)) {
                             "The new layout has different font run." +

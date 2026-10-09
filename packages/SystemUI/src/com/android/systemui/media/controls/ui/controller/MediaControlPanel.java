@@ -244,8 +244,10 @@ public class MediaControlPanel {
 
     private final PulseAudioBridge mPulseAudioBridge;
     private final PulseSettingsRepository mPulseSettingsRepository;
+    private final Runnable mPulseEnabledChangedListener;
     private boolean mPulseAcquired = false;
     private boolean mLastPulseShouldRun = false;
+    private boolean mListening = false;
 
     private final PaintDrawCallback mNoiseDrawCallback =
             new PaintDrawCallback() {
@@ -319,6 +321,7 @@ public class MediaControlPanel {
         mCommunalSceneInteractor = communalSceneInteractor;
         mPulseAudioBridge = pulseAudioBridge;
         mPulseSettingsRepository = pulseSettingsRepository;
+        mPulseEnabledChangedListener = () -> mMainExecutor.execute(this::updatePulseState);
 
         mSeekBarViewModel.setLogSeek(() -> {
             if (mPackageName != null && mInstanceId != null) {
@@ -335,6 +338,10 @@ public class MediaControlPanel {
      * Clean up seekbar and controller when panel is destroyed
      */
     public void onDestroy() {
+        if (mController != null) {
+            mController.unregisterCallback(mCb);
+            mController = null;
+        }
         if (mSeekBarObserver != null) {
             mSeekBarViewModel.getProgress().removeObserver(mSeekBarObserver);
         }
@@ -344,6 +351,8 @@ public class MediaControlPanel {
         mSeekBarViewModel.onDestroy();
         mMediaViewController.onDestroy();
 
+        mPulseAudioBridge.removeOnPulseEnabledChangedListener(mPulseEnabledChangedListener);
+        mListening = false;
         if (mPulseAcquired) {
             mPulseAudioBridge.release();
             mPulseAcquired = false;
@@ -379,15 +388,9 @@ public class MediaControlPanel {
      * @param listening True when player should be active. Otherwise, false.
      */
     public void setListening(boolean listening) {
+        mListening = listening;
         mSeekBarViewModel.setListening(listening);
-
-        if (!listening && mPulseAcquired) {
-            mPulseAudioBridge.release();
-            mPulseAcquired = false;
-        } else if (listening && mLastPulseShouldRun && !mPulseAcquired) {
-            mPulseAudioBridge.acquire();
-            mPulseAcquired = true;
-        }
+        updatePulseState();
     }
 
     @VisibleForTesting
@@ -500,11 +503,7 @@ public class MediaControlPanel {
         vh.getPulseView().attachExternalRenderer(mPulseAudioBridge.getRenderer(), mPulseSettingsRepository);
         mLastPulseShouldRun = false; 
 
-        mPulseAudioBridge.setOnPulseEnabledChangedListener(() -> {
-            Log.d("PulseDebug", "pulse enabled changed callback fired");
-            mMainExecutor.execute(this::updatePulseState);
-            return Unit.INSTANCE;
-        });
+        mPulseAudioBridge.addOnPulseEnabledChangedListener(mPulseEnabledChangedListener);
 
         mColorSchemeTransition = new ColorSchemeTransition(
                 mContext, mMediaViewHolder, mMultiRippleController, mTurbulenceNoiseController);
@@ -547,6 +546,9 @@ public class MediaControlPanel {
             mToken = token;
         }
 
+        if (mController != null) {
+            mController.unregisterCallback(mCb);
+        }
         if (mToken != null) {
             mController = new MediaController(mContext, mToken);
             mController.registerCallback(mCb);
@@ -1623,7 +1625,7 @@ public class MediaControlPanel {
      private final MediaController.Callback mCb = new MediaController.Callback() { 
          @Override 
          public void onMetadataChanged(MediaMetadata metadata) { 
-            if (metadata != null) { 
+            if (metadata != null && mMediaViewHolder != null) {
                  String title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE); 
                  String artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST); 
                  mMediaViewHolder.getTitleText().setText(title); 
@@ -1644,17 +1646,18 @@ public class MediaControlPanel {
                 && mPulseSettingsRepository.isPulseMediaEnabled()
                 && isPlaying();
 
-        if (shouldRun == mLastPulseShouldRun) return;
-        mLastPulseShouldRun = shouldRun;
-
-        if (shouldRun && !mPulseAcquired) {
+        boolean shouldCapture = shouldRun && mListening;
+        if (shouldCapture && !mPulseAcquired) {
             mPulseAudioBridge.acquire();
             mPulseAcquired = true;
-        } else if (!shouldRun && mPulseAcquired) {
+        } else if (!shouldCapture && mPulseAcquired) {
             mPulseAudioBridge.release();
             mPulseAcquired = false;
         }
 
-        mMediaViewHolder.getPulseView().setVisibility(shouldRun, true, 300L);
+        if (shouldRun != mLastPulseShouldRun) {
+            mLastPulseShouldRun = shouldRun;
+            mMediaViewHolder.getPulseView().setVisibility(shouldRun, true, 300L);
+        }
     }
 }

@@ -207,6 +207,7 @@ constructor(
                 val controller =
                     if (currentModel != null && currentModel.token == token) {
                         activeControllers[currentModel.instanceId]
+                            ?: token?.let { MediaController(applicationContext, it) }
                     } else {
                         // Clear controller state if changed for the same media session.
                         currentModel?.instanceId?.let { clearControllerState(it) }
@@ -406,20 +407,37 @@ constructor(
     }
 
     private fun setupController(dataModel: MediaDataModel, controller: MediaController) {
+        if (
+            activeControllers[dataModel.instanceId] === controller &&
+                mediaCallbacks.containsKey(dataModel.instanceId)
+        ) {
+            return
+        }
+        clearControllerState(dataModel.instanceId)
         activeControllers[dataModel.instanceId] = controller
         val callback =
             object : MediaController.Callback() {
                 override fun onPlaybackStateChanged(state: PlaybackState?) {
-                    if (state == null || PlaybackState.STATE_NONE.equals(state)) {
-                        clearControllerState(dataModel.instanceId)
-                    } else {
-                        updatePollingState(dataModel.instanceId, state)
+                    applicationScope.launch {
+                        mediaMutex.withLock {
+                            if (activeControllers[dataModel.instanceId] !== controller) {
+                                return@withLock
+                            }
+                            if (state == null) {
+                                clearControllerState(dataModel.instanceId)
+                            } else {
+                                updatePollingState(dataModel.instanceId, state)
+                            }
+                        }
                     }
                 }
 
                 override fun onMetadataChanged(metadata: MediaMetadata?) {
                     applicationScope.launch {
                         mediaMutex.withLock {
+                            if (activeControllers[dataModel.instanceId] !== controller) {
+                                return@withLock
+                            }
                             val duration =
                                 metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
                             currentMedia
@@ -440,7 +458,13 @@ constructor(
                 }
 
                 override fun onSessionDestroyed() {
-                    clearControllerState(dataModel.instanceId)
+                    applicationScope.launch {
+                        mediaMutex.withLock {
+                            if (activeControllers[dataModel.instanceId] === controller) {
+                                clearControllerState(dataModel.instanceId)
+                            }
+                        }
+                    }
                 }
             }
         controller.registerCallback(callback)
@@ -467,18 +491,16 @@ constructor(
                 positionPollers[instanceId] =
                     applicationScope.launch(backgroundDispatcher) {
                         while (isActive) {
-                            val currentController = activeControllers[instanceId]
-                            val latestPlaybackState = currentController?.playbackState
-                            checkPlaybackPosition(instanceId, latestPlaybackState)
+                            val latestPlaybackState = controller.playbackState
+                            checkPlaybackPosition(instanceId, latestPlaybackState, controller)
                             delay(POSITION_UPDATE_INTERVAL_MILLIS)
                         }
-                        positionPollers.remove(instanceId)
                     }
             }
         } else if (requireUpdate) {
             positionPollers[instanceId]?.cancel()
             positionPollers.remove(instanceId)
-            checkPlaybackPosition(instanceId, controller.playbackState)
+            checkPlaybackPosition(instanceId, controller.playbackState, controller)
         }
     }
 
@@ -500,9 +522,14 @@ constructor(
         return currentPosition
     }
 
-    private fun checkPlaybackPosition(instanceId: InstanceId, playbackState: PlaybackState?) {
+    private fun checkPlaybackPosition(
+        instanceId: InstanceId,
+        playbackState: PlaybackState?,
+        controller: MediaController,
+    ) {
         applicationScope.launch {
             mediaMutex.withLock {
+                if (activeControllers[instanceId] !== controller) return@withLock
                 currentMedia
                     .find { it.instanceId == instanceId }
                     ?.let { latestModel ->

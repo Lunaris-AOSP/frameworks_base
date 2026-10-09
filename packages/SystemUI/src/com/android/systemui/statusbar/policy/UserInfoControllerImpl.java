@@ -24,6 +24,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.UserInfo;
 import android.content.res.Resources;
 import android.database.Cursor;
+import android.database.sqlite.SQLiteException;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
 import android.os.AsyncTask;
@@ -174,20 +175,17 @@ public class UserInfoControllerImpl implements UserInfoController {
                 // usually valid
                 if (um.getUsers().size() <= 1) {
                     // Try and read the display name from the local profile
-                    final Cursor cursor = context.getContentResolver().query(
+                    try (Cursor cursor = context.getContentResolver().query(
                             ContactsContract.Profile.CONTENT_URI, new String[] {
                                     ContactsContract.CommonDataKinds.Phone._ID,
                                     ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME
-                            }, null, null, null);
-                    if (cursor != null) {
-                        try {
-                            if (cursor.moveToFirst()) {
-                                name = cursor.getString(cursor.getColumnIndex(
-                                        ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME));
-                            }
-                        } finally {
-                            cursor.close();
+                            }, null, null, null)) {
+                        if (cursor != null && cursor.moveToFirst()) {
+                            name = cursor.getString(cursor.getColumnIndex(
+                                    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME));
                         }
+                    } catch (SQLiteException e) {
+                        Log.w(TAG, "Failed to load local profile info", e);
                     }
                 }
                 String userAccount = um.getUserAccount(userId);

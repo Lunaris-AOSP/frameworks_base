@@ -148,6 +148,7 @@ fun TileLazyGrid(
         verticalArrangement = spacedBy(CommonTileDefaults.TileArrangementPadding),
         horizontalArrangement = spacedBy(CommonTileDefaults.TileArrangementPadding),
         contentPadding = contentPadding,
+        userScrollEnabled = false,
         modifier = modifier,
         content = content,
     )

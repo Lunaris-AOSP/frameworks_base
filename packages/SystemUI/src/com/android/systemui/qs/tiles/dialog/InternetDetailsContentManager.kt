@@ -228,7 +228,7 @@ constructor(
 
         // Initialize LiveData observer
         internetContentData.observe(lifecycleOwner!!) { internetContent ->
-            updateDetailsUI(internetContent)
+            internetContent?.let { updateDetailsUI(it) }
         }
 
         // Network layouts
@@ -685,10 +685,14 @@ constructor(
     }
 
     private fun setNonDDSActive(autoSwitchNonDdsSubId: Int) {
-        val stub: ViewStub = contentView.findViewById(R.id.secondary_mobile_network_stub)
-        stub.inflate()
-        secondaryMobileNetworkLayout =
-            contentView.findViewById(R.id.secondary_mobile_network_layout)
+        if (secondaryMobileNetworkLayout == null) {
+            secondaryMobileNetworkLayout =
+                contentView.findViewById(R.id.secondary_mobile_network_layout)
+                    ?: (contentView
+                        .findViewById<ViewStub>(R.id.secondary_mobile_network_stub)
+                        ?.inflate() as? LinearLayout)
+        }
+        if (secondaryMobileNetworkLayout == null) return
         secondaryMobileNetworkLayout?.setOnClickListener { view: View? ->
             this.onClickConnectedSecondarySub(view)
         }
@@ -926,10 +930,14 @@ constructor(
         if (DEBUG) {
             Log.d(TAG, "unBind")
         }
+        if (!::lifecycleRegistry.isInitialized) {
+            return
+        }
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
         connectedMobileLayout.setOnClickListener(null)
         connectedWifiListLayout.setOnClickListener(null)
         secondaryMobileNetworkLayout?.setOnClickListener(null)
+        secondaryMobileNetworkLayout = null
         seeAllLayout.setOnClickListener(null)
         turnWifiOnLayout.setOnClickListener(null)
         turnMobileOnLayout.setOnClickListener(null)

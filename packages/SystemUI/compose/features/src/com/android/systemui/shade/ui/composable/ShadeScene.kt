@@ -39,6 +39,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -198,6 +199,23 @@ private fun ContentScope.ShadeScene(
     modifier: Modifier = Modifier,
     shadeSession: SaveableSession,
 ) {
+    val onEmptySpaceClick by remember(viewModel, layoutState) {
+        derivedStateOf<(() -> Unit)?> {
+            if (
+                viewModel.isEmptySpaceClickable &&
+                    !layoutState.isTransitioningBetween(Scenes.Shade, Scenes.QuickSettings)
+            ) {
+                {
+                    if (!layoutState.isTransitioningBetween(Scenes.Shade, Scenes.QuickSettings)) {
+                        viewModel.onEmptySpaceClicked()
+                    }
+                }
+            } else {
+                null
+            }
+        }
+    }
+
     if (viewModel.shadeMode is ShadeMode.Split) {
         SplitShade(
             notificationStackScrollView = notificationStackScrollView,
@@ -207,6 +225,7 @@ private fun ContentScope.ShadeScene(
             modifier = modifier,
             shadeSession = shadeSession,
             jankMonitor = jankMonitor,
+            onEmptySpaceClick = onEmptySpaceClick,
         )
     } else {
         // Compose SingleShade even if we're in Dual shade mode; the view-model will take care of
@@ -219,6 +238,7 @@ private fun ContentScope.ShadeScene(
             modifier = modifier,
             shadeSession = shadeSession,
             jankMonitor = jankMonitor,
+            onEmptySpaceClick = onEmptySpaceClick,
         )
     }
 }
@@ -232,6 +252,7 @@ private fun ContentScope.SingleShade(
     jankMonitor: InteractionJankMonitor,
     modifier: Modifier = Modifier,
     shadeSession: SaveableSession,
+    onEmptySpaceClick: (() -> Unit)?,
 ) {
     val cutoutLocation = LocalDisplayCutout.current().location
     val cutoutInsets = WindowInsets.Companion.displayCutout
@@ -282,9 +303,9 @@ private fun ContentScope.SingleShade(
         ShadePanelScrim(viewModel.isTransparencyEnabled)
         Layout(
             modifier =
-                Modifier.thenIf(viewModel.isEmptySpaceClickable) {
+                Modifier.thenIf(onEmptySpaceClick != null) {
                     Modifier.clickable(interactionSource = null, indication = null) {
-                        viewModel.onEmptySpaceClicked()
+                        onEmptySpaceClick?.invoke()
                     }
                 },
             content = {
@@ -349,8 +370,7 @@ private fun ContentScope.SingleShade(
                     stackTopPadding = notificationStackPadding,
                     stackBottomPadding = navBarHeight,
                     supportNestedScrolling = true,
-                    onEmptySpaceClick =
-                        viewModel::onEmptySpaceClicked.takeIf { viewModel.isEmptySpaceClickable },
+                    onEmptySpaceClick = onEmptySpaceClick,
                     modifier =
                         Modifier.layoutId(SingleShadeMeasurePolicy.LayoutId.Notifications)
                             .padding(horizontal = shadeHorizontalPadding),
@@ -401,6 +421,7 @@ private fun ContentScope.SplitShade(
     modifier: Modifier = Modifier,
     shadeSession: SaveableSession,
     jankMonitor: InteractionJankMonitor,
+    onEmptySpaceClick: (() -> Unit)?,
 ) {
 
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -548,8 +569,7 @@ private fun ContentScope.SplitShade(
                     stackBottomPadding = notificationStackPadding,
                     shouldPunchHoleBehindScrim = false,
                     supportNestedScrolling = false,
-                    onEmptySpaceClick =
-                        viewModel::onEmptySpaceClicked.takeIf { viewModel.isEmptySpaceClickable },
+                    onEmptySpaceClick = onEmptySpaceClick,
                     modifier =
                         Modifier.weight(weight = 1f)
                             .fillMaxHeight()

@@ -130,7 +130,7 @@ public class LyricsFetcher {
     private String mLastFetchedSong;
     private String mLastFetchedArtist;
     private String mLastPlainLyrics;
-    private int mFetchGeneration = 0;
+    private volatile int mFetchGeneration = 0;
     private int mLastActiveIndex = -1;
     private boolean mPolling;
     private boolean mPlainLyricsDelivered;
@@ -254,6 +254,9 @@ public class LyricsFetcher {
     }
 
     private void clearLyrics() {
+        ++mFetchGeneration;
+        stopPolling();
+        mRetryCount = 0;
         mCurrentLines = Collections.emptyList();
         mLastFetchedSong = null;
         mLastFetchedArtist = null;
@@ -281,14 +284,10 @@ public class LyricsFetcher {
         if (TextUtils.equals(song, mLastFetchedSong) && TextUtils.equals(artist, mLastFetchedArtist)) {
             return; // already fetched / fetching this track
         }
+        clearLyrics();
         mLastFetchedSong = song;
         mLastFetchedArtist = artist;
-        mCurrentLines = Collections.emptyList();
-        mLastActiveIndex = -1;
-        mPlainLyricsDelivered = false;
-        mRetryCount = 0;
-
-        final int generation = ++mFetchGeneration;
+        final int generation = mFetchGeneration;
 
         HttpURLConnection stale = mInFlightConnection;
         if (stale != null) {

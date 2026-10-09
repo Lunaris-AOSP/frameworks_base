@@ -2210,11 +2210,13 @@ public class StageCoordinator extends StageCoordinatorAbstract {
     }
 
     void getStageBounds(Rect outTopOrLeftBounds, Rect outBottomOrRightBounds) {
+        if (mSplitLayout == null) return;
         outTopOrLeftBounds.set(mSplitLayout.getTopLeftBounds());
         outBottomOrRightBounds.set(mSplitLayout.getBottomRightBounds());
     }
 
     void getRefStageBounds(Rect outTopOrLeftBounds, Rect outBottomOrRightBounds) {
+        if (mSplitLayout == null) return;
         outTopOrLeftBounds.set(mSplitLayout.getTopLeftRefBounds());
         outBottomOrRightBounds.set(mSplitLayout.getBottomRightRefBounds());
     }
@@ -2233,6 +2235,19 @@ public class StageCoordinator extends StageCoordinatorAbstract {
         if (mSideStage.getTopVisibleChildTaskId() == taskId) {
             return getSideStagePosition();
         } else if (mMainStage.getTopVisibleChildTaskId() == taskId) {
+            return getMainStagePosition();
+        }
+        return SPLIT_POSITION_UNDEFINED;
+    }
+
+    @SplitPosition
+    private int getSplitPositionIgnoreVisible(int taskId) {
+        if (taskId == INVALID_TASK_ID) {
+            return SPLIT_POSITION_UNDEFINED;
+        }
+        if (mSideStage.getTopChildTaskId() == taskId) {
+            return getSideStagePosition();
+        } else if (mMainStage.getTopChildTaskId() == taskId) {
             return getMainStagePosition();
         }
         return SPLIT_POSITION_UNDEFINED;
@@ -2994,7 +3009,7 @@ public class StageCoordinator extends StageCoordinatorAbstract {
         }, (finishWct, t) -> {
             mSplitLayout.setDividerInteractive(true, false, "onSplitResizeFinish");
             mSplitLayout.populateTouchZones();
-        }, decorManagers);
+        });
 
         if (enableFlexibleTwoAppSplit()) {
             switch (layout.calculateCurrentSnapPosition()) {
@@ -3461,13 +3476,13 @@ public class StageCoordinator extends StageCoordinatorAbstract {
             return false;
         }
 
-        if (request.getTriggerTask() != null && getSplitPosition(
+        if (request.getTriggerTask() != null && getSplitPositionIgnoreVisible(
                 request.getTriggerTask().taskId) != SPLIT_POSITION_UNDEFINED) {
             return true;
         }
 
         if (PipFlags.isPip2ExperimentEnabled()
-                && request.getPipChange() != null && getSplitPosition(
+                && request.getPipChange() != null && getSplitPositionIgnoreVisible(
                 request.getPipChange().getTaskInfo().taskId) != SPLIT_POSITION_UNDEFINED) {
             // In PiP2, PiP-able task can also come in through the pip change request field.
             return true;

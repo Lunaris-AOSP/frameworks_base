@@ -245,6 +245,8 @@ public class NotificationStackScrollLayoutController implements Dumpable {
                 public void onViewAttachedToWindow(View v) {
                     mColorUpdateLogger.logTriggerEvent("NSSLC.onViewAttachedToWindow()");
                     mConfigurationController.addCallback(mConfigurationListener);
+                    mTunerService.addTunable(mTunable, HIGH_PRIORITY,
+                            Settings.Secure.NOTIFICATION_HISTORY_ENABLED);
                     mTunerService.addTunable(mLockscreenStackTunable,
                             Settings.Secure.LOCK_SCREEN_NOTIFICATION_MINIMALISM,
                             Settings.Secure.LOCK_SCREEN_STACKED_NOTIFICATIONS,
@@ -1028,11 +1030,6 @@ public class NotificationStackScrollLayoutController implements Dumpable {
 
         mVisibilityLocationProviderDelegator.setDelegate(this::isInVisibleLocation);
 
-        mTunerService.addTunable(
-                mTunable,
-                HIGH_PRIORITY,
-                Settings.Secure.NOTIFICATION_HISTORY_ENABLED);
-
         mKeyguardMediaController.setVisibilityChangedListener(visible -> {
             if (visible) {
                 mView.generateAddAnimation(
@@ -1531,7 +1528,7 @@ public class NotificationStackScrollLayoutController implements Dumpable {
         }
         mLastAppliedBlurRadius = blurRadius;
         if (blurRadius > 0.0f) {
-            debugLog(
+            debugLog(() ->
                     "Setting blur RenderEffect for NotificationStackScrollLayoutController with "
                             + "radius " + blurRadius);
             mView.setRenderEffect(RenderEffect.createBlurEffect(
@@ -1539,7 +1536,7 @@ public class NotificationStackScrollLayoutController implements Dumpable {
                     blurRadius,
                     Shader.TileMode.CLAMP));
         } else {
-            debugLog("Resetting blur RenderEffect for NotificationStackScrollLayoutController");
+            debugLog(() -> "Resetting blur RenderEffect for NotificationStackScrollLayoutController");
             mView.setRenderEffect(null);
         }
     }
@@ -2389,7 +2386,8 @@ public class NotificationStackScrollLayoutController implements Dumpable {
         }
 
         private boolean shouldLockscreenExpandHandleTouch() {
-            return SceneContainerFlag.isEnabled() && mLongPressedView == null
+            return SceneContainerFlag.isEnabled() && mView.isOnLockscreen()
+                    && mLongPressedView == null
                     && !mSwipeHelper.isSwiping();
         }
 
@@ -2399,9 +2397,9 @@ public class NotificationStackScrollLayoutController implements Dumpable {
         }
     }
 
-    private void debugLog(String msg) {
+    private void debugLog(java.util.function.Supplier<String> msgSupplier) {
         if (DEBUG) {
-            Log.d(TAG, msg);
+            Log.d(TAG, msgSupplier.get());
         }
     }
 }

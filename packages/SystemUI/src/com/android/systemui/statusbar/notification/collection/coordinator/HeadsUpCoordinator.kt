@@ -703,6 +703,7 @@ constructor(
             }
 
             override fun onEntryCleanUp(entry: NotificationEntry) {
+                mNotifsExtendingLifetime.remove(entry)?.run()
                 mHeadsUpViewBinder.abortBindCallback(entry)
             }
 

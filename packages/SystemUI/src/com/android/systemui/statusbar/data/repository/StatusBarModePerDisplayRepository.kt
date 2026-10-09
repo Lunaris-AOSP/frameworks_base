@@ -47,6 +47,9 @@ import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import java.io.PrintWriter
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -132,6 +135,9 @@ constructor(
     ongoingCallRepository: OngoingCallRepository,
 ) : StatusBarModePerDisplayRepository {
 
+    private val repositoryScope =
+        CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job]))
+
     private val commandQueueCallback =
         object : CommandQueue.Callbacks {
             override fun showTransient(
@@ -192,6 +198,7 @@ constructor(
 
     override fun stop() {
         isStarted = false
+        repositoryScope.cancel()
         if (StatusBarRootModernization.isEnabled) {
             statusBarBoundsProvider?.stop()
         }
@@ -240,7 +247,7 @@ constructor(
                 // When the status bar is not requested visible, we assume we're in fullscreen mode.
                 requestedVisibleTypes and WindowInsets.Type.statusBars() == 0
             }
-            .stateIn(scope, SharingStarted.Eagerly, false)
+            .stateIn(repositoryScope, SharingStarted.Eagerly, false)
 
     /** Modifies the raw [StatusBarAttributes] if letterboxing is needed. */
     private val modifiedStatusBarAttributes: StateFlow<ModifiedStatusBarAttributes?> =
@@ -275,7 +282,7 @@ constructor(
                     )
                 }
             }
-            .stateIn(scope, SharingStarted.Eagerly, initialValue = null)
+            .stateIn(repositoryScope, SharingStarted.Eagerly, initialValue = null)
 
     override val statusBarAppearance: StateFlow<StatusBarAppearance?> =
         combine(
@@ -315,12 +322,12 @@ constructor(
                     )
                 }
             }
-            .stateIn(scope, SharingStarted.Eagerly, initialValue = null)
+            .stateIn(repositoryScope, SharingStarted.Eagerly, initialValue = null)
 
     override val statusBarMode: StateFlow<StatusBarMode> =
         statusBarAppearance
             .map { it?.mode ?: StatusBarMode.TRANSPARENT }
-            .stateIn(scope, SharingStarted.Eagerly, initialValue = StatusBarMode.TRANSPARENT)
+            .stateIn(repositoryScope, SharingStarted.Eagerly, initialValue = StatusBarMode.TRANSPARENT)
 
     private fun toBarMode(
         appearance: Int,

@@ -63,7 +63,7 @@ class PulseSettingsRepository @Inject constructor(
 
     private val handler = Handler(Looper.getMainLooper())
     private var settingsObserver: SettingsObserver? = null
-    private var onSettingsChangedListener: (() -> Unit)? = null
+    private val settingsChangedListeners = mutableSetOf<() -> Unit>()
 
     private var cachedEnabled: Boolean? = null
     private var cachedBarCount: Int? = null
@@ -109,8 +109,16 @@ class PulseSettingsRepository @Inject constructor(
         }
     }
 
-    fun setOnSettingsChangedListener(listener: () -> Unit) {
-        onSettingsChangedListener = listener
+    fun addOnSettingsChangedListener(listener: () -> Unit) {
+        settingsChangedListeners.add(listener)
+        startObserving()
+    }
+
+    fun removeOnSettingsChangedListener(listener: () -> Unit) {
+        settingsChangedListeners.remove(listener)
+        if (settingsChangedListeners.isEmpty()) {
+            stopObserving()
+        }
     }
 
     fun isPulseEnabled(): Boolean {
@@ -213,7 +221,7 @@ class PulseSettingsRepository @Inject constructor(
         cachedHapticsMode = null
         cachedCaptureMode = null
         cachedShowOnMediaPlayer = null
-        onSettingsChangedListener?.invoke()
+        settingsChangedListeners.toList().forEach { it() }
     }
 
     private fun getSecureSetting(key: String, defaultValue: Boolean): Boolean {

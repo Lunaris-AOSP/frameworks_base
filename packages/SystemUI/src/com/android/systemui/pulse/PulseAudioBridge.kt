@@ -12,12 +12,12 @@ class PulseAudioBridge @Inject constructor(
     private val settingsRepository: PulseSettingsRepository,
 ) {
     private val pulseEnabledState = mutableStateOf(
-    settingsRepository.isPulseEnabled() && settingsRepository.isPulseMediaEnabled()
+        settingsRepository.isPulseEnabled() && settingsRepository.isPulseMediaEnabled()
     )
     val pulseEnabled: Boolean by pulseEnabledState
 
     private var activeClientCount = 0
-    private var onPulseEnabledChanged: (() -> Unit)? = null
+    private val pulseEnabledListeners = mutableSetOf<Runnable>()
 
     val renderer: PulseRenderer by lazy { PulseRenderer(context, settingsRepository) }
 
@@ -27,8 +27,12 @@ class PulseAudioBridge @Inject constructor(
         }
     }
 
-    fun setOnPulseEnabledChangedListener(listener: () -> Unit) {
-        onPulseEnabledChanged = listener
+    fun addOnPulseEnabledChangedListener(listener: Runnable) {
+        pulseEnabledListeners.add(listener)
+    }
+
+    fun removeOnPulseEnabledChangedListener(listener: Runnable) {
+        pulseEnabledListeners.remove(listener)
     }
 
     private val dataListener = object : PulseAudioDataProcessor.DataListener {
@@ -49,32 +53,42 @@ class PulseAudioBridge @Inject constructor(
         }
     }
 
-    init {
-        settingsRepository.setOnSettingsChangedListener {
-            val newEnabled = settingsRepository.isPulseEnabled() && settingsRepository.isPulseMediaEnabled()
-            if (newEnabled != pulseEnabledState.value) {
-                pulseEnabledState.value = newEnabled
-                onPulseEnabledChanged?.invoke()
-            }
-            audioProcessor.captureMode = settingsRepository.getCaptureMode()
+    private val settingsChangedListener: () -> Unit = {
+        val newEnabled = settingsRepository.isPulseEnabled() && settingsRepository.isPulseMediaEnabled()
+        if (newEnabled != pulseEnabledState.value) {
+            pulseEnabledState.value = newEnabled
+            updateCaptureState()
+            pulseEnabledListeners.toList().forEach { it.run() }
         }
-        settingsRepository.startObserving()
+        audioProcessor.captureMode = settingsRepository.getCaptureMode()
+    }
+
+    init {
+        settingsRepository.addOnSettingsChangedListener(settingsChangedListener)
     }
 
     fun acquire() {
         activeClientCount++
-        if (!pulseEnabled) return
-        if (!audioProcessor.isCapturing()) audioProcessor.startCapture()
+        updateCaptureState()
     }
 
     fun release() {
         activeClientCount = (activeClientCount - 1).coerceAtLeast(0)
-        if (activeClientCount == 0) {
+        updateCaptureState()
+    }
+
+    private fun updateCaptureState() {
+        if (activeClientCount > 0 && pulseEnabled) {
+            if (!audioProcessor.isCapturing()) audioProcessor.startCapture()
+        } else {
             audioProcessor.stopCapture()
         }
     }
 
     fun destroy() {
+        pulseEnabledListeners.clear()
+        activeClientCount = 0
+        settingsRepository.removeOnSettingsChangedListener(settingsChangedListener)
         engine.stop()
         audioProcessor.cleanup()
         renderer.cleanup()

@@ -159,6 +159,29 @@ constructor(
     val qsExpandFraction: Flow<Float> =
         shadeInteractor.qsExpansion.dumpWhileCollecting("qsExpandFraction")
 
+    val lockScreenToShadeTransitionProgress: Flow<Float> =
+        combine(shadeInteractor.shadeExpansion, sceneInteractor.transitionState) {
+                shadeExpansion, state ->
+                val expandingFromLockscreen =
+                    when (state) {
+                        is Idle -> false
+                        is ChangeScene ->
+                            state.isTransitioning(from = Scenes.Lockscreen, to = Scenes.Shade)
+                        is Transition.ShowOrHideOverlay ->
+                            state.currentScene == Scenes.Lockscreen &&
+                                state.isTransitioning(to = Overlays.NotificationsShade)
+                        is Transition.ReplaceOverlay ->
+                            state.currentScene == Scenes.Lockscreen &&
+                                state.isTransitioning(to = Overlays.NotificationsShade)
+                    }
+                if (expandingFromLockscreen) shadeExpansion else 0f
+            }
+            .distinctUntilChanged()
+            .dumpWhileCollecting("lockScreenToShadeTransitionProgress")
+
+    val isCurrentSceneLockscreen: Flow<Boolean> =
+        sceneInteractor.currentScene.map { it == Scenes.Lockscreen }.distinctUntilChanged()
+
     /** Are notification stack height updates suppressed? */
     val suppressHeightUpdates: Flow<Boolean> =
         sceneInteractor.transitionState

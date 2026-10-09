@@ -24,6 +24,7 @@ class StatusBarTransitionAnimatorController(
     @DisplayId private val displayId: Int,
     private val isLaunchForActivity: Boolean = true,
 ) : ActivityTransitionAnimator.Controller by delegate {
+    private var cancelled = false
     private var hideIconsDuringLaunchAnimation: Boolean = true
 
     // Always sync the opening window with the shade, given that we draw a hole punch in the shade
@@ -33,7 +34,7 @@ class StatusBarTransitionAnimatorController(
 
     override fun onIntentStarted(willAnimate: Boolean) {
         delegate.onIntentStarted(willAnimate)
-        if (willAnimate) {
+        if (willAnimate && !cancelled) {
             shadeAnimationInteractor.setIsLaunchingActivity(true)
         } else {
             shadeController.collapseOnMainThread()
@@ -82,7 +83,8 @@ class StatusBarTransitionAnimatorController(
     }
 
     override fun onTransitionAnimationCancelled(newKeyguardOccludedState: Boolean?) {
-        delegate.onTransitionAnimationCancelled()
+        cancelled = true
+        delegate.onTransitionAnimationCancelled(newKeyguardOccludedState)
         shadeAnimationInteractor.setIsLaunchingActivity(false)
         shadeController.onLaunchAnimationCancelled(isLaunchForActivity)
     }

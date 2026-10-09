@@ -448,9 +448,8 @@ fun ContentScope.NotificationScrollingStack(
     // The top y bound of the IME.
     val imeTop = remember { mutableFloatStateOf(0f) }
 
-    val shadeScrollState by
-        shadeSession.rememberSession(key = "ShadeScrollState") {
-            derivedStateOf {
+    LaunchedEffect(scrollState, scrimOffset, viewModel) {
+        snapshotFlow {
                 ShadeScrollState(
                     // we are not scrolled to the top unless the scroll position is zero,
                     // and the scrim is at its maximum offset
@@ -459,9 +458,8 @@ fun ContentScope.NotificationScrollingStack(
                     maxScrollPosition = scrollState.maxValue,
                 )
             }
-        }
-
-    LaunchedEffect(shadeScrollState) { viewModel.setScrollState(shadeScrollState) }
+            .collect { viewModel.setScrollState(it) }
+    }
 
     // if contentHeight drops below minimum visible scrim height while scrim is
     // expanded and IME is not showing, reset scrim offset.
@@ -611,16 +609,25 @@ fun ContentScope.NotificationScrollingStack(
 
     val overScrollEffect: OffsetOverscrollEffect = rememberOffsetOverscrollEffect()
     // whether the stack is moving due to a swipe or fling
-    val isScrollInProgress =
-        scrollState.isScrollInProgress || overScrollEffect.isInProgress || scrimOffset.isRunning
+    val isScrollInProgress by
+        remember(scrollState, overScrollEffect, scrimOffset) {
+            derivedStateOf {
+                scrollState.isScrollInProgress ||
+                    overScrollEffect.isInProgress ||
+                    scrimOffset.isRunning
+            }
+        }
 
-    LaunchedEffect(isScrollInProgress) {
+    DisposableEffect(isScrollInProgress, composeViewRoot, jankMonitor) {
         if (isScrollInProgress) {
             jankMonitor.begin(composeViewRoot, CUJ_NOTIFICATION_SHADE_SCROLL_FLING)
             debugLog(viewModel) { "STACK scroll begins" }
-        } else {
-            debugLog(viewModel) { "STACK scroll ends" }
-            jankMonitor.end(CUJ_NOTIFICATION_SHADE_SCROLL_FLING)
+        }
+        onDispose {
+            if (isScrollInProgress) {
+                debugLog(viewModel) { "STACK scroll ends" }
+                jankMonitor.end(CUJ_NOTIFICATION_SHADE_SCROLL_FLING)
+            }
         }
     }
 

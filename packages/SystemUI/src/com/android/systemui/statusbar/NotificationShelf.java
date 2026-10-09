@@ -874,9 +874,12 @@ public class NotificationShelf extends ActivatableNotificationView {
                 || numViewsInShelf < 1f;
 
         final float fractionToShade = Interpolators.STANDARD.getInterpolation(
-                mAmbientState.getFractionToShade());
+                SceneContainerFlag.isEnabled() ? mAmbientState.getLStoShadeProgress()
+                        : mAmbientState.getFractionToShade());
+        final boolean isOnLockscreen = SceneContainerFlag.isEnabled()
+                ? mAmbientState.isCurrentSceneLockscreen() : mAmbientState.isOnKeyguard();
 
-        if (mAmbientState.isOnKeyguard()) {
+        if (isOnLockscreen) {
             // Reserve the final slot for the overflow dot when more notifications are present.
             final int maxSlots = mMotoCompactDesign
                     ? MOTO_COMPACT_MAX_ICONS : mMaxIconsOnLockscreen + 1;
@@ -1149,7 +1152,7 @@ public class NotificationShelf extends ActivatableNotificationView {
 
         // Let's calculate how much the view is in the shelf
         float viewStart = view.getTranslationY();
-        int fullHeight = view.getActualHeight() + mPaddingBetweenElements;
+        int fullHeight = Math.max(view.getActualHeight(), 0) + mPaddingBetweenElements;
         float iconTransformStart = calculateIconTransformationStart(view);
 
         // Let's make sure the transform distance is

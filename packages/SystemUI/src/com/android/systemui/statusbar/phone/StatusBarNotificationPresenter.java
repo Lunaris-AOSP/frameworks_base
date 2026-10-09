@@ -354,7 +354,8 @@ class StatusBarNotificationPresenter implements NotificationPresenter, CommandQu
     /** @return true if the Shade is shown over the Lockscreen, and the device is locked */
     private boolean isInLockedDownShade() {
         if (SceneContainerFlag.isEnabled()) {
-            return mStatusBarStateController.getState() == StatusBarState.SHADE_LOCKED
+            return !isPresenterFullyCollapsed()
+                    && mKeyguardStateController.isMethodSecure()
                     && !mDeviceUnlockedInteractor.getDeviceUnlockStatus().getValue().isUnlocked();
         } else {
             return mDynamicPrivacyController.isInLockedDownShade();

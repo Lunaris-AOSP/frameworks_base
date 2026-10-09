@@ -310,10 +310,18 @@ public class SystemUIDialog extends AlertDialog implements ViewRootImpl.ConfigCh
 
     @Override
     public void onConfigurationChanged(Configuration configuration) {
+        if (Looper.myLooper() != mHandler.getLooper()) {
+            final Configuration config = new Configuration(configuration);
+            mHandler.post(() -> onConfigurationChanged(config));
+            return;
+        }
+        if (!isShowing() || getWindow() == null) {
+            return;
+        }
         if (mLastConfigurationWidthDp != configuration.screenWidthDp
                 || mLastConfigurationHeightDp != configuration.screenHeightDp) {
             mLastConfigurationWidthDp = configuration.screenWidthDp;
-            mLastConfigurationHeightDp = configuration.compatScreenWidthDp;
+            mLastConfigurationHeightDp = configuration.screenHeightDp;
 
             updateWindowSize();
         }

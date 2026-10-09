@@ -155,12 +155,10 @@ constructor(
             logger?.logNotifyEvent(event)
             notifyTransitionToPersistentDot(event)
         } else if (
-            (event.priority > (scheduledEvent.value?.priority ?: -1)) &&
-                (event.priority > (currentlyDisplayedEvent?.priority ?: -1)) &&
+            (event.priority >= (scheduledEvent.value?.priority ?: -1)) &&
+                (event.priority >= (currentlyDisplayedEvent?.priority ?: -1)) &&
                 !hasPersistentDot
         ) {
-            // a event can only be scheduled if no other event is in progress or it has a higher
-            // priority. If a persistent dot is currently displayed, don't schedule the event.
             logger?.logScheduleEvent(event)
             scheduleEvent(event)
         } else if (currentlyDisplayedEvent?.shouldUpdateFromEvent(event) == true) {
@@ -177,6 +175,12 @@ constructor(
 
     override fun removePersistentDot() {
         Assert.isMainThread()
+
+        if (_animationState.value == AnimationQueued) {
+            scheduledEvent.value = null
+            _animationState.value = Idle
+            return
+        }
 
         // If there is an event scheduled currently, set its forceVisible flag to false, such that
         // it will never transform into a persistent dot

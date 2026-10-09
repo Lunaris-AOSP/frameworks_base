@@ -22,19 +22,21 @@ class LyricControllerModern(
     private val lyricContainer: View,
     private val leftSideView: View?,
     private val centeredAreaView: View?,
-) : LyricViewController(context, lyricContainer.rootView) {
+) : LyricViewController(context, lyricContainer) {
 
     private var settingsObserver: ContentObserver? = null
-    private var isNotificationIconsVisible = true
+    private var isNotificationIconsVisible = false
     private var hideForHun = false
     private var hasOngoingActivity = false
 
     override fun showLyricView(animate: Boolean) {
         // Only show if all conditions are met
-        if (!isNotificationIconsVisible || hideForHun || hasOngoingActivity || !isLyricStarted()) {
+        if (!isEnabled() || !isNotificationIconsVisible || hideForHun
+            || hasOngoingActivity || !isLyricStarted()) {
             hideLyricView(animate)
             return
         }
+        lyricContainer.alpha = 1f
         lyricContainer.visibility = View.VISIBLE
         // Hide left side and centered area when showing lyrics
         leftSideView?.visibility = View.GONE

@@ -317,7 +317,7 @@ public class StatusBarIconView extends AnimatedImageView implements StatusIconDi
     private float getIconHeight() {
         Drawable d = getDrawable();
         if (d != null) {
-            return (float) getDrawable().getIntrinsicHeight();
+            return (float) d.getIntrinsicHeight();
         } else {
             return mSystemIconIntrinsicHeight;
         }

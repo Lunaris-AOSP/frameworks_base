@@ -211,11 +211,16 @@ constructor(
         }
 
         val newSession =
-            userSmartspaceManager?.createSmartspaceSession(
-                SmartspaceConfig.Builder(userTracker.userContext, UI_SURFACE_DREAM).build()
-            )
+            try {
+                userSmartspaceManager?.createSmartspaceSession(
+                    SmartspaceConfig.Builder(userTracker.userContext, UI_SURFACE_DREAM).build()
+                )
+            } catch (e: RuntimeException) {
+                Log.w(TAG, "Failed to create dream Smartspace session", e)
+                null
+            } ?: return
         Log.d(TAG, "Starting smartspace session for dream")
-        newSession?.addOnTargetsAvailableListener(uiExecutor, sessionListener)
+        newSession.addOnTargetsAvailableListener(uiExecutor, sessionListener)
         this.session = newSession
 
         weatherPlugin?.setEventDispatcher { e -> session?.notifySmartspaceEvent(e) }

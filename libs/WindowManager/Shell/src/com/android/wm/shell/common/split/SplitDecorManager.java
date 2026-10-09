@@ -58,7 +58,9 @@ import com.android.wm.shell.R;
 import com.android.wm.shell.common.ScreenshotUtils;
 import com.android.wm.shell.common.SurfaceUtils;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
@@ -184,6 +186,17 @@ public class SplitDecorManager extends WindowlessWindowManager {
             }
             mScreenshotAnimator = null;
         }
+    }
+
+    public List<Animator> getAnimators() {
+        final List<Animator> animators = new ArrayList<>(2);
+        if (mFadeAnimator != null && mFadeAnimator.isStarted()) {
+            animators.add(mFadeAnimator);
+        }
+        if (mScreenshotAnimator != null && mScreenshotAnimator.isStarted()) {
+            animators.add(mScreenshotAnimator);
+        }
+        return animators;
     }
 
     /** Releases the surfaces for split decor. */
