@@ -211,12 +211,19 @@ public class DimmerAnimationHelper {
                 ANIMATION_TYPE_DIMMER, /* finishCallback */ (type, animator) -> {
                     synchronized (dim.mHostContainer.mWmService.mGlobalLock) {
                         EventLogTags.writeWmDimFinishAnim(dim.mDimSurface.getLayerId());
-                        SurfaceControl.Transaction finishTransaction =
-                                dim.mHostContainer.getSyncTransaction();
-                        setCurrentAlphaBlur(dim, finishTransaction);
                         if (targetAlpha == 0f && !dim.isDimming()) {
-                            dim.remove(finishTransaction);
-                            // Ensure the finishTransaction is applied if pending
+                            // The host may have been removed while the exit animation ran.
+                            // Its pending transaction will no longer be visited in that case,
+                            // and the dim may be parented outside the host (to the display).
+                            // The exit is complete, so remove the layer independently of the
+                            // host's next traversal or surface sync.
+                            try (SurfaceControl.Transaction finishTransaction =
+                                    dim.mHostContainer.mWmService.mTransactionFactory.get()) {
+                                dim.remove(finishTransaction);
+                                finishTransaction.apply();
+                            }
+                        } else {
+                            setCurrentAlphaBlur(dim, dim.mHostContainer.getSyncTransaction());
                             dim.mHostContainer.scheduleAnimation();
                         }
                         mLocalAnimationAdapter = null;
