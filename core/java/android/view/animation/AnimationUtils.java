@@ -81,7 +81,6 @@ public class AnimationUtils {
     private static Animation activityOpenExitAnim;
     private static Animation activityCloseEnterAnim;
     private static Animation activityCloseExitAnim;
-    private static Animation activityAppStartingExitAnim;
     private static int lastAnimStyle = -1;
 
     private static boolean sExpectedPresentationTimeFlagValue;
@@ -263,16 +262,24 @@ public class AnimationUtils {
         if (animStyle != 0) {
             switch (context.getResources().getResourceEntryName(id)) {
                 case "activity_open_enter":
-                    return getActivityOpenEnterAnim(animStyle);
+                    return animStyle == 4
+                            ? ActivityAnimations.getOpenEnter()
+                            : getActivityOpenEnterAnim(animStyle);
                 case "activity_open_exit":
-                    return getActivityOpenExitAnim(animStyle);
+                    return animStyle == 4
+                            ? ActivityAnimations.getOpenExit()
+                            : getActivityOpenExitAnim(animStyle);
                 case "activity_close_enter":
-                    return getActivityCloseEnterAnim(animStyle);
+                    return animStyle == 4
+                            ? ActivityAnimations.getCloseEnter()
+                            : getActivityCloseEnterAnim(animStyle);
                 case "activity_close_exit":
-                    return getActivityCloseExitAnim(animStyle);
+                    return animStyle == 4
+                            ? ActivityAnimations.getCloseExit()
+                            : getActivityCloseExitAnim(animStyle);
                 case "app_starting_exit":
                     if (animStyle == 4) {
-                        return getActivityAppStartingExitAnim();
+                        return ActivityAnimations.getAppStartingExit();
                     }
                     break;
             }
@@ -285,7 +292,6 @@ public class AnimationUtils {
         activityOpenExitAnim = null;
         activityCloseEnterAnim = null;
         activityCloseExitAnim = null;
-        activityAppStartingExitAnim = null;
     }
 
     private static Animation getActivityOpenEnterAnim(int animStyle) {
@@ -314,13 +320,6 @@ public class AnimationUtils {
             activityCloseExitAnim = createActivityCloseExitAnim(animStyle);
         }
         return activityCloseExitAnim;
-    }
-
-    private static Animation getActivityAppStartingExitAnim() {
-        if (activityAppStartingExitAnim == null) {
-            activityAppStartingExitAnim = ActivityAnimations.getAppStartingExit();
-        }
-        return activityAppStartingExitAnim;
     }
 
     private static Animation createActivityOpenEnterAnim(int animStyle) {
@@ -359,8 +358,6 @@ public class AnimationUtils {
             slideIn.setInterpolator(new OutExpoInterpolator());
             animationSet.addAnimation(slideIn);
             return animationSet;
-        } else if (animStyle == 4) {
-            return ActivityAnimations.getOpenEnter();
         }
         return null;
     }
@@ -394,8 +391,6 @@ public class AnimationUtils {
             slideLeft.setInterpolator(new OutExpoInterpolator());
             animationSet.addAnimation(slideLeft);
             return animationSet;
-        } else if (animStyle == 4) {
-            return ActivityAnimations.getOpenExit();
         }
         return null;
     }
@@ -429,8 +424,6 @@ public class AnimationUtils {
             slideIn.setInterpolator(new OutExpoInterpolator());
             animationSet.addAnimation(slideIn);
             return animationSet;
-        } else if (animStyle == 4) {
-            return ActivityAnimations.getCloseEnter();
         }
         return null;
     }
@@ -465,8 +458,6 @@ public class AnimationUtils {
             slideOut.setInterpolator(new OutExpoInterpolator());
             animationSet.addAnimation(slideOut);
             return animationSet;
-        } else if (animStyle == 4) {
-            return ActivityAnimations.getCloseExit();
         }
         return null;
     }
@@ -768,119 +759,64 @@ public class AnimationUtils {
     /** @hide */
     public final class ActivityAnimations {
 
-        private static Animation sOpenEnter;
-        private static Animation sOpenExit;
-        private static Animation sCloseEnter;
-        private static Animation sCloseExit;
-        private static Animation sAppStartingExit;
-
-        private static SpringInterpolator sSpatialSpec;
-        private static SpringInterpolator sEffectsSpec;
-
         private static final float DISTANCE = 0.333f;
         private static final long APP_STARTING_EXIT_DURATION_MS = 150L;
 
         private ActivityAnimations() {}
 
+        private static final class SpringSpecs {
+            private static final SpringInterpolator SPATIAL =
+                    new SpringInterpolator(0.8f, 380f);
+
+            private SpringSpecs() {}
+        }
+
         /** @hide */
         public static synchronized void preload() {
-            if (sOpenEnter != null) {
-                return;
-            }
-            sSpatialSpec = new SpringInterpolator(0.8f, 380f);
-            sEffectsSpec = new SpringInterpolator(1.0f, 3800f);
-            sOpenEnter = new ActivityAnimFactory()
-                    .fromX(1.0f)
-                    .toX(0.0f)
-                    .build();
-            sOpenExit = new ActivityAnimFactory()
-                    .fromX(0.0f)
-                    .toX(-DISTANCE)
-                    .build();
-            sCloseEnter = new ActivityAnimFactory()
-                        .fromX(-DISTANCE)
-                        .toX(0.0f)
-                        .build();
-            sCloseExit = new ActivityAnimFactory()
-                        .fromX(0.0f)
-                        .toX(1.0f)
-                        .build();
-            sAppStartingExit = buildAppStartingExit();
+            SpringSpecs.SPATIAL.getDurationMs();
         }
 
-        private static Animation buildAppStartingExit() {
-            Animation animation = new AlphaAnimation(1.0f, 0.0f);
-            animation.setDuration(APP_STARTING_EXIT_DURATION_MS);
-            animation.setInterpolator(new LinearInterpolator());
-            return animation;
-        }
-
-        private static class ActivityAnimFactory {
-            private float fromX = 0f, toX = 0f;
-
-            public ActivityAnimFactory fromX(float ratio) {
-                this.fromX = ratio;
-                return this;
-            }
-
-            public ActivityAnimFactory toX(float ratio) {
-                this.toX = ratio;
-                return this;
-            }
-
-            public Animation build() {
-                AnimationSet animationSet = new AnimationSet(false);
-                TranslateAnimation slide = new TranslateAnimation(
-                        Animation.RELATIVE_TO_SELF, fromX,
-                        Animation.RELATIVE_TO_SELF, toX,
-                        Animation.RELATIVE_TO_SELF, 0f,
-                        Animation.RELATIVE_TO_SELF, 0f
-                );
-                slide.setDuration(sSpatialSpec.getDurationMs());
-                slide.setInterpolator(sSpatialSpec);
-                animationSet.addAnimation(slide);
-                return animationSet;
-            }
+        private static Animation buildTransition(float fromX, float toX) {
+            final SpringInterpolator spatialSpec = SpringSpecs.SPATIAL;
+            AnimationSet animationSet = new AnimationSet(false);
+            TranslateAnimation slide = new TranslateAnimation(
+                    Animation.RELATIVE_TO_SELF, fromX,
+                    Animation.RELATIVE_TO_SELF, toX,
+                    Animation.RELATIVE_TO_SELF, 0f,
+                    Animation.RELATIVE_TO_SELF, 0f
+            );
+            slide.setDuration(spatialSpec.getDurationMs());
+            slide.setInterpolator(spatialSpec);
+            animationSet.addAnimation(slide);
+            return animationSet;
         }
 
         /** @hide */
         public static Animation getOpenEnter() {
-            if (sOpenEnter == null) {
-                preload();
-            }
-            return sOpenEnter;
+            return buildTransition(1.0f, 0.0f);
         }
 
         /** @hide */
         public static Animation getOpenExit() {
-            if (sOpenExit == null) {
-                preload();
-            }
-            return sOpenExit;
+            return buildTransition(0.0f, -DISTANCE);
         }
 
         /** @hide */
         public static Animation getCloseEnter() {
-            if (sCloseEnter == null) {
-                preload();
-            }
-            return sCloseEnter;
+            return buildTransition(-DISTANCE, 0.0f);
         }
 
         /** @hide */
         public static Animation getCloseExit() {
-            if (sCloseExit == null) {
-                preload();
-            }
-            return sCloseExit;
+            return buildTransition(0.0f, 1.0f);
         }
 
         /** @hide */
         public static Animation getAppStartingExit() {
-            if (sAppStartingExit == null) {
-                preload();
-            }
-            return sAppStartingExit;
+            Animation animation = new AlphaAnimation(1.0f, 0.0f);
+            animation.setDuration(APP_STARTING_EXIT_DURATION_MS);
+            animation.setInterpolator(new LinearInterpolator());
+            return animation;
         }
     }
 
