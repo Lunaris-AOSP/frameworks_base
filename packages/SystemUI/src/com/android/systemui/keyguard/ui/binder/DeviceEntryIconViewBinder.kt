@@ -48,6 +48,9 @@ import com.google.android.msdl.domain.MSDLPlayer
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DisposableHandle
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.callbackFlow
@@ -84,9 +87,18 @@ object DeviceEntryIconViewBinder {
         msdlPlayer: MSDLPlayer,
         overrideColor: Color? = null,
     ): DisposableHandle {
+        val disposables = DisposableHandles()
+
         val packageInstalled = Utils.isPackageInstalled(
             view.context, "com.lunaris.udfps.icons"
         )
+
+        val tunerScope =
+            CoroutineScope(
+                applicationScope.coroutineContext +
+                    SupervisorJob(applicationScope.coroutineContext[Job])
+            )
+        disposables += DisposableHandle { tunerScope.cancel() }
 
         val shouldUseCustomUdfpsIcon: StateFlow<Boolean> = callbackFlow {
             val callback = object : TunerService.Tunable {
@@ -100,12 +112,11 @@ object DeviceEntryIconViewBinder {
 
             awaitClose { Dependency.get(TunerService::class.java).removeTunable(callback) }
         }.stateIn(
-            scope = applicationScope,
+            scope = tunerScope,
             started = SharingStarted.Eagerly,
             initialValue = false
         )
 
-        val disposables = DisposableHandles()
         val touchHandlingView = view.touchHandlingView
         val fgIconView = view.iconView
         val bgView = view.bgView
