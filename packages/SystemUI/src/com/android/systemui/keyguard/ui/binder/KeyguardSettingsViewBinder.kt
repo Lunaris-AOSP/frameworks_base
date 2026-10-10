@@ -128,15 +128,15 @@ object KeyguardSettingsViewBinder {
         return disposableHandle
     }
 
-    /** Opens the wallpaper picker screen after the device is unlocked by the user. */
+    /** Opens the lock styles picker over the lock screen without requesting an unlock. */
     private fun navigateToLockScreenSettings(activityStarter: ActivityStarter, view: View) {
-        activityStarter.postStartActivityDismissingKeyguard(
+        activityStarter.startActivity(
             WallpaperPickerIntentUtils.getIntent(view.context, LAUNCH_SOURCE_KEYGUARD),
-            /* delay= */ 0,
+            /* dismissShade= */ true,
             // The switcher grows out of the lock screen by itself; animating from the hidden
             // popup looked off.
             /* animationController= */ null,
-            /* customMessage= */ view.context.getString(R.string.keyguard_unlock_to_customize_ls),
+            /* showOverLockscreenWhenLocked= */ true,
         )
     }
 
