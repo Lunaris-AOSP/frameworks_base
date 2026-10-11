@@ -41,6 +41,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -221,7 +222,7 @@ private fun formatTime(ms: Long): String {
 // Content
 // ---------------------------------------------------------------------------
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun MaterialMusicPlayerContent(
     mediaState: SharedMediaState,
@@ -399,7 +400,11 @@ private fun MaterialMusicPlayerContent(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(enabled = hasController) { showExpandedPopup = true },
+                    .combinedClickable(
+                        enabled = hasController,
+                        onClick = { showExpandedPopup = true },
+                        onLongClick = ::launchSessionApp,
+                    ),
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
