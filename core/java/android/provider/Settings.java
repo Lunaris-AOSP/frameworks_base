@@ -15234,6 +15234,30 @@ public final class Settings {
         public static final String LOCK_SCREEN_CUSTOM_CLOCK_OPACITY = "lock_screen_custom_clock_opacity";
 
         /**
+         * Whether to draw a custom shadow behind the lock screen clock.
+         * @hide
+         */
+        public static final String LOCK_SCREEN_CUSTOM_CLOCK_SHADOW_ENABLED = "lock_screen_custom_clock_shadow_enabled";
+
+        /**
+         * Custom lock screen clock shadow color, in ARGB format.
+         * @hide
+         */
+        public static final String LOCK_SCREEN_CUSTOM_CLOCK_SHADOW_COLOR = "lock_screen_custom_clock_shadow_color";
+
+        /**
+         * Custom lock screen clock shadow blur radius, in dp (0-30).
+         * @hide
+         */
+        public static final String LOCK_SCREEN_CUSTOM_CLOCK_SHADOW_SOFTNESS = "lock_screen_custom_clock_shadow_softness";
+
+        /**
+         * Custom lock screen clock shadow opacity (0-100).
+         * @hide
+         */
+        public static final String LOCK_SCREEN_CUSTOM_CLOCK_SHADOW_OPACITY = "lock_screen_custom_clock_shadow_opacity";
+
+        /**
          * Adjust top margin for custom clock
          * @hide
          */

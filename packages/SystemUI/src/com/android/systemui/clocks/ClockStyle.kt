@@ -14,10 +14,13 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.BlendMode
+import android.graphics.BlendModeColorFilter
 import android.graphics.Color
 import android.graphics.Color.colorToHSV
 import android.graphics.Color.HSVToColor
 import android.graphics.LinearGradient
+import android.graphics.RenderEffect
 import android.graphics.Shader
 import android.graphics.Typeface
 import android.media.session.PlaybackState
@@ -45,6 +48,7 @@ import com.android.systemui.res.R
 import com.android.systemui.tuner.TunerService
 import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 class ClockStyle @JvmOverloads constructor(
@@ -70,6 +74,10 @@ class ClockStyle @JvmOverloads constructor(
     private var colorMode = COLOR_MODE_DEFAULT
     private var customColor = DEFAULT_CUSTOM_COLOR
     private var clockOpacity = DEFAULT_OPACITY
+    private var shadowEnabled = false
+    private var shadowColor = DEFAULT_SHADOW_COLOR
+    private var shadowSoftness = DEFAULT_SHADOW_SOFTNESS
+    private var shadowOpacity = DEFAULT_SHADOW_OPACITY
     private var clockFrameMarginTop = DEFAULT_MARGIN_TOP
     private var clockSizeScale = DEFAULT_CLOCK_SIZE
     private var clockFrameMarginStart = DEFAULT_MARGIN_START
@@ -186,6 +194,10 @@ class ClockStyle @JvmOverloads constructor(
             CLOCK_COLOR_MODE_KEY,
             CLOCK_CUSTOM_COLOR_KEY,
             CLOCK_TEXT_OPACITY_KEY,
+            CLOCK_SHADOW_ENABLED_KEY,
+            CLOCK_SHADOW_COLOR_KEY,
+            CLOCK_SHADOW_SOFTNESS_KEY,
+            CLOCK_SHADOW_OPACITY_KEY,
             CLOCK_FRAME_MARGIN_TOP_KEY,
             CLOCK_SIZE_KEY,
             CLOCK_AOD_ANIM_KEY,
@@ -211,6 +223,7 @@ class ClockStyle @JvmOverloads constructor(
         if (isDozing) {
             applyClockAlpha()
             applyClockColors()
+            applyClockShadow()
             startBurnInProtection()
             startAodTick()
         }
@@ -269,6 +282,24 @@ class ClockStyle @JvmOverloads constructor(
                 clockOpacity = TunerService.parseInteger(newValue, DEFAULT_OPACITY)
                     .coerceIn(0, 100)
                 applyClockAlpha()
+            }
+            CLOCK_SHADOW_ENABLED_KEY -> {
+                shadowEnabled = TunerService.parseInteger(newValue, 0) != 0
+                applyClockShadow()
+            }
+            CLOCK_SHADOW_COLOR_KEY -> {
+                shadowColor = TunerService.parseInteger(newValue, DEFAULT_SHADOW_COLOR)
+                applyClockShadow()
+            }
+            CLOCK_SHADOW_SOFTNESS_KEY -> {
+                shadowSoftness = TunerService.parseInteger(newValue, DEFAULT_SHADOW_SOFTNESS)
+                    .coerceIn(0, 30)
+                applyClockShadow()
+            }
+            CLOCK_SHADOW_OPACITY_KEY -> {
+                shadowOpacity = TunerService.parseInteger(newValue, DEFAULT_SHADOW_OPACITY)
+                    .coerceIn(0, 100)
+                applyClockShadow()
             }
             CLOCK_FRAME_MARGIN_TOP_KEY -> {
                 clockFrameMarginTop = TunerService.parseInteger(newValue, DEFAULT_MARGIN_TOP)
@@ -354,6 +385,7 @@ class ClockStyle @JvmOverloads constructor(
         animateAodTransition(dozing)
         applyClockAlpha()
         applyClockColors()
+        applyClockShadow()
         if (dozing) {
             startBurnInProtection()
             startAodTick()
@@ -546,7 +578,29 @@ class ClockStyle @JvmOverloads constructor(
         if (currentClockView == null) return
         applyClockAlpha()
         applyClockColors()
+        applyClockShadow()
         applyClockScaleAfterLayout(currentClockView!!)
+    }
+
+    private fun applyClockShadow() {
+        val view = currentClockView ?: return
+        val alpha = (Color.alpha(shadowColor) * shadowOpacity / 100f).roundToInt()
+        if (!shadowEnabled || isDozing || alpha == 0) {
+            view.setRenderEffect(null)
+            return
+        }
+        val density = resources.displayMetrics.density
+        val color = Color.argb(alpha, Color.red(shadowColor), Color.green(shadowColor),
+            Color.blue(shadowColor))
+        var shadow = RenderEffect.createColorFilterEffect(
+            BlendModeColorFilter(color, BlendMode.SRC_IN))
+        val radius = shadowSoftness * density
+        if (radius > 0f) {
+            shadow = RenderEffect.createBlurEffect(radius, radius, shadow, Shader.TileMode.DECAL)
+        }
+        shadow = RenderEffect.createOffsetEffect(0f, 2f * density, shadow)
+        view.setRenderEffect(RenderEffect.createBlendModeEffect(
+            shadow, RenderEffect.createOffsetEffect(0f, 0f), BlendMode.SRC_OVER))
     }
 
     private fun applyClockAlpha() {
@@ -1118,6 +1172,10 @@ class ClockStyle @JvmOverloads constructor(
         @JvmField val CLOCK_COLOR_MODE_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_COLOR_MODE
         @JvmField val CLOCK_CUSTOM_COLOR_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_CUSTOM_COLOR
         @JvmField val CLOCK_TEXT_OPACITY_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_OPACITY
+        @JvmField val CLOCK_SHADOW_ENABLED_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_SHADOW_ENABLED
+        @JvmField val CLOCK_SHADOW_COLOR_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_SHADOW_COLOR
+        @JvmField val CLOCK_SHADOW_SOFTNESS_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_SHADOW_SOFTNESS
+        @JvmField val CLOCK_SHADOW_OPACITY_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_SHADOW_OPACITY
         @JvmField val CLOCK_FRAME_MARGIN_TOP_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_MARGIN_TOP
         @JvmField val CLOCK_SIZE_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_SIZE
         @JvmField val CLOCK_AOD_ANIM_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_AOD_ANIM
@@ -1142,6 +1200,9 @@ class ClockStyle @JvmOverloads constructor(
 
         private const val DEFAULT_STYLE = 0
         private const val DEFAULT_OPACITY = 100
+        private const val DEFAULT_SHADOW_COLOR = Color.BLACK
+        private const val DEFAULT_SHADOW_SOFTNESS = 8
+        private const val DEFAULT_SHADOW_OPACITY = 35
         private const val DEFAULT_MARGIN_TOP = 15
         private const val DEFAULT_CUSTOM_COLOR = Color.WHITE
         private const val AOD_OPACITY_CAP = 70
