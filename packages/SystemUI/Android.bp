@@ -422,6 +422,7 @@ android_library {
     static_libs: [
         "SystemUISharedLib",
         "SystemUICustomizationLib",
+        "LunarisClockFonts",
         "SettingsLib",
         "WindowManager-Shell",
         "ax_blur",
@@ -522,6 +523,7 @@ android_library {
         "axquicklook-client",
         "ax_compose",
         "lunaris_water_ripple",
+        "LunarisClockMaker",
         "ax_blur",
         "SystemUI-res",
         "WifiTrackerLib",

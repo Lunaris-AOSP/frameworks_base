@@ -1,0 +1,18 @@
+android_library {
+    name: "LunarisClockMaker",
+    srcs: ["src/**/*.kt"],
+    manifest: "AndroidManifest.xml",
+    platform_apis: true,
+    static_libs: [
+        "LunarisClockFonts",
+        "androidx.compose.material3_material3",
+        "androidx.graphics_graphics-shapes",
+    ],
+}
+
+android_library {
+    name: "LunarisClockFonts",
+    manifest: "fonts/AndroidManifest.xml",
+    resource_dirs: ["fonts/res"],
+    sdk_version: "current",
+}

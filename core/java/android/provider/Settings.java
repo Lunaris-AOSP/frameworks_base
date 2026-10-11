@@ -15216,6 +15216,12 @@ public final class Settings {
         public static final String LOCK_SCREEN_CUSTOM_CLOCK_STYLE = "lock_screen_custom_clock_style";
 
         /**
+         * The user's Clock Maker design, encoded as versioned JSON.
+         * @hide
+         */
+        public static final String LOCK_SCREEN_CUSTOM_CLOCK_DESIGN = "lock_screen_custom_clock_design";
+
+        /**
          * Whether to use default, system accent or custom color for lock screen clock text
          * @hide
          */

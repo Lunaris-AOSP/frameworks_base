@@ -10,17 +10,15 @@ import android.animation.AnimatorListenerAdapter
 import android.animation.Keyframe
 import android.animation.ObjectAnimator
 import android.animation.PropertyValuesHolder
+import android.app.ActivityManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.graphics.BlendMode
-import android.graphics.BlendModeColorFilter
 import android.graphics.Color
 import android.graphics.Color.colorToHSV
 import android.graphics.Color.HSVToColor
 import android.graphics.LinearGradient
-import android.graphics.RenderEffect
 import android.graphics.Shader
 import android.graphics.Typeface
 import android.media.session.PlaybackState
@@ -48,8 +46,11 @@ import com.android.systemui.res.R
 import com.android.systemui.tuner.TunerService
 import kotlin.math.abs
 import kotlin.math.cos
-import kotlin.math.roundToInt
 import kotlin.math.sin
+import org.lunaris.clockmaker.ClockDesign
+import org.lunaris.clockmaker.ClockDesignAppearance
+import org.lunaris.clockmaker.ClockDesignView
+import org.lunaris.clockmaker.ClockEffects
 
 class ClockStyle @JvmOverloads constructor(
     context: Context,
@@ -71,6 +72,8 @@ class ClockStyle @JvmOverloads constructor(
     private val hyperClocks = ArrayList<HyperClockView>()
 
     private var clockStyle = DEFAULT_STYLE
+    private var clockDesign = ClockDesign()
+    private var makerWeather = true
     private var colorMode = COLOR_MODE_DEFAULT
     private var customColor = DEFAULT_CUSTOM_COLOR
     private var clockOpacity = DEFAULT_OPACITY
@@ -191,6 +194,8 @@ class ClockStyle @JvmOverloads constructor(
         tunerService.addTunable(
             this,
             CLOCK_STYLE_KEY,
+            CLOCK_DESIGN_KEY,
+            CLOCK_MAKER_WEATHER_KEY,
             CLOCK_COLOR_MODE_KEY,
             CLOCK_CUSTOM_COLOR_KEY,
             CLOCK_TEXT_OPACITY_KEY,
@@ -258,6 +263,18 @@ class ClockStyle @JvmOverloads constructor(
 
     override fun onTuningChanged(key: String?, newValue: String?) {
         when (key) {
+            CLOCK_DESIGN_KEY -> {
+                clockDesign = ClockDesign.parse(newValue) ?: ClockDesign()
+                (currentClockView as? ClockDesignView)?.let {
+                    it.userId = ActivityManager.getCurrentUser()
+                    it.setDesign(clockDesign)
+                    applyClockColors()
+                }
+            }
+            CLOCK_MAKER_WEATHER_KEY -> {
+                makerWeather = TunerService.parseInteger(newValue, 1) != 0
+                applyClockColors()
+            }
             CLOCK_STYLE_KEY -> {
                 clockStyle = TunerService.parseInteger(newValue, DEFAULT_STYLE)
                 if (clockStyle != 0) {
@@ -463,6 +480,7 @@ class ClockStyle @JvmOverloads constructor(
 
     private fun forceTimeUpdate() {
         if (currentClockView == null) return
+        (currentClockView as? ClockDesignView)?.refreshTime()
         for (i in styledTextViews.indices) {
             val tv = styledTextViews[i]
             if (tv is TextClock) continue
@@ -512,6 +530,10 @@ class ClockStyle @JvmOverloads constructor(
             }
 
             currentClockView?.let { view ->
+                (view as? ClockDesignView)?.let {
+                    it.userId = ActivityManager.getCurrentUser()
+                    it.setDesign(clockDesign)
+                }
                 cacheClockViews(view)
                 disableClippingOnParents(view)
 
@@ -535,6 +557,7 @@ class ClockStyle @JvmOverloads constructor(
     }
 
     private fun cacheClockViews(root: View) {
+        if (root is ClockDesignView) return
         when (root) {
             is TextClock -> {
                 root.setTag(R.id.original_typeface, root.typeface)
@@ -566,7 +589,10 @@ class ClockStyle @JvmOverloads constructor(
         val params = clockFrame.layoutParams as? ViewGroup.MarginLayoutParams ?: return
         val density = resources.displayMetrics.density
         params.topMargin = (clockFrameMarginTop * density).toInt()
-        if (!isNoHorizontalMarginClock(clockStyle)) {
+        clockFrame.translationX = if (clockStyle == ClockDesign.STYLE) clockFrameMarginStart * density else 0f
+        if (clockStyle == ClockDesign.STYLE) {
+            params.marginStart = resources.getDimensionPixelSize(R.dimen.below_clock_padding_start)
+        } else if (!isNoHorizontalMarginClock(clockStyle)) {
             params.marginStart = (clockFrameMarginStart * density).toInt()
         } else {
             params.marginStart = 0
@@ -584,29 +610,15 @@ class ClockStyle @JvmOverloads constructor(
 
     private fun applyClockShadow() {
         val view = currentClockView ?: return
-        val alpha = (Color.alpha(shadowColor) * shadowOpacity / 100f).roundToInt()
-        if (!shadowEnabled || isDozing || alpha == 0) {
-            view.setRenderEffect(null)
-            return
-        }
-        val density = resources.displayMetrics.density
-        val color = Color.argb(alpha, Color.red(shadowColor), Color.green(shadowColor),
-            Color.blue(shadowColor))
-        var shadow = RenderEffect.createColorFilterEffect(
-            BlendModeColorFilter(color, BlendMode.SRC_IN))
-        val radius = shadowSoftness * density
-        if (radius > 0f) {
-            shadow = RenderEffect.createBlurEffect(radius, radius, shadow, Shader.TileMode.DECAL)
-        }
-        shadow = RenderEffect.createOffsetEffect(0f, 2f * density, shadow)
-        view.setRenderEffect(RenderEffect.createBlendModeEffect(
-            shadow, RenderEffect.createOffsetEffect(0f, 0f), BlendMode.SRC_OVER))
+        view.setRenderEffect(if (shadowEnabled && !isDozing) ClockEffects.shadow(shadowColor,
+            shadowOpacity, shadowSoftness, resources.displayMetrics.density) else null)
     }
 
     private fun applyClockAlpha() {
         val view = currentClockView ?: return
         val effective = if (isDozing && clockOpacity > AOD_OPACITY_CAP) AOD_OPACITY_CAP else clockOpacity
         view.alpha = effective / 100f
+        if (view is ClockDesignView) view.animationsEnabled = effective > 0
     }
 
     private fun resolveClockColor(): Int {
@@ -690,6 +702,10 @@ class ClockStyle @JvmOverloads constructor(
         clockSizeListener?.let { currentClockView?.removeOnLayoutChangeListener(it) }
         val listener = View.OnLayoutChangeListener { v, l, t, r, b, ol, ot, oR, ob ->
             if (r - l != oR - ol || b - t != ob - ot) {
+                if (v is ClockDesignView) {
+                    naturalClockHeight = v.height
+                    applyClockScale()
+                }
                 if (gradientEnabled) applyClockColors()
                 applyClockTransform()
             }
@@ -699,6 +715,12 @@ class ClockStyle @JvmOverloads constructor(
     }
 
     private fun applyClockColors() {
+        (currentClockView as? ClockDesignView)?.let {
+            it.setAppearance(ClockDesignAppearance(resolveClockColor(), gradientEnabled,
+                gradientColorStart, gradientColorEnd, gradientAnchorY, gradientRadius,
+                makerWeather, isDozing))
+            return
+        }
         if (isNoColorClock(clockStyle)) return
         applyHyperClockColors()
         if (styledTextViews.isEmpty()) return
@@ -1163,12 +1185,15 @@ class ClockStyle @JvmOverloads constructor(
             R.layout.keyguard_clock_graffiti_art,    // 100
             R.layout.keyguard_clock_graffiti_stack,  // 101
             R.layout.keyguard_clock_graffiti_compact, // 102
+            R.layout.keyguard_clock_maker,
         )
 
         private val NO_COLOR_CLOCKS = hashSetOf(1, 2, 25, 26)
         private val NO_HORIZONTAL_MARGIN_CLOCKS = hashSetOf(45, 73, 74)
 
         @JvmField val CLOCK_STYLE_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_STYLE
+        @JvmField val CLOCK_DESIGN_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_DESIGN
+        private const val CLOCK_MAKER_WEATHER_KEY = "custom_clock_weather"
         @JvmField val CLOCK_COLOR_MODE_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_COLOR_MODE
         @JvmField val CLOCK_CUSTOM_COLOR_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_CUSTOM_COLOR
         @JvmField val CLOCK_TEXT_OPACITY_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_OPACITY
