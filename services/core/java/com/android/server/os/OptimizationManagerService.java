@@ -72,14 +72,7 @@ public final class OptimizationManagerService extends SystemService {
             synchronized (lock) {
                 if (activeTools.contains(kind)) throw new IllegalStateException("This tool is already running");
                 if ("rare_apps".equals(kind) && !packages.isEmpty()) {
-                    Bundle prior = toolSnapshots.get(kind);
-                    ArrayList<Bundle> rows = prior == null ? null
-                            : prior.getParcelableArrayList("rows", Bundle.class);
-                    HashSet<String> allowed = new HashSet<>();
-                    if (rows != null) for (Bundle row : rows) allowed.add(row.getString("id", ""));
-                    if (!allowed.containsAll(packages)) {
-                        throw new IllegalArgumentException("Stop requests must come from the latest rare-app scan");
-                    }
+                    OptimizationTools.validateRareAppSelection(toolSnapshots.get(kind), packages);
                 }
                 activeTools.add(kind);
                 Bundle tool = new Bundle();

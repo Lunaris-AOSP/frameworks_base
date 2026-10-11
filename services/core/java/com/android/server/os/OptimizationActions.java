@@ -32,7 +32,7 @@ final class OptimizationActions {
                 IStorageManager storage = IStorageManager.Stub.asInterface(ServiceManager.getService("mount"));
                 if (storage == null) throw new UnsupportedOperationException("Storage maintenance service unavailable");
                 storage.runMaintenance();
-                return OptimizationResult.success("Storage maintenance request complete.");
+                return OptimizationResult.success("Storage maintenance queued. Android may finish it in the background.");
             case "zram":
                 File compact = new File("/sys/block/zram0/compact");
                 if (!compact.exists()) throw new UnsupportedOperationException("This kernel does not expose zRAM compaction");

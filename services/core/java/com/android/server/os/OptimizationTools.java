@@ -55,12 +55,27 @@ final class OptimizationTools {
         HashSet<String> seen = new HashSet<>();
         for (String name : requested) {
             if (name == null || name.length() > 255
-                    || !name.matches("[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)+")) {
+                    || (!"android".equals(name)
+                            && !name.matches("[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)+"))) {
                 throw new IllegalArgumentException("Invalid package name");
             }
             if (seen.add(name)) result.add(name);
         }
         return result;
+    }
+
+    static void validateRareAppSelection(Bundle prior, List<String> packages) {
+        ArrayList<Bundle> rows = prior == null || !"completed".equals(prior.getString("status"))
+                ? null : prior.getParcelableArrayList("rows", Bundle.class);
+        HashSet<String> allowed = new HashSet<>();
+        if (rows != null) {
+            for (Bundle row : rows) {
+                if (row.getBoolean("selectable", true)) allowed.add(row.getString("id", ""));
+            }
+        }
+        if (!allowed.containsAll(packages)) {
+            throw new IllegalArgumentException("Stop requests must come from the latest rare-app scan");
+        }
     }
 
     Bundle run(String kind, List<String> packages, CancellationSignal cancel,
@@ -258,12 +273,12 @@ final class OptimizationTools {
                         && process.processName.startsWith(OPTIMIZER_PACKAGE + ":"))
                 || (process.pkgList != null
                         && Arrays.asList(process.pkgList).contains(OPTIMIZER_PACKAGE)));
-        ArrayMap<Integer, Long> first = readProcessTicks(processes);
+        ArrayMap<Integer, OptimizationCpuSampler.Sample> first = readProcessTicks(processes);
         long totalFirst = readTotalCpuTicks();
         Thread.sleep(400);
         cancel.throwIfCanceled();
-        ArrayMap<Integer, Long> second = readProcessTicks(processes);
-        long totalDelta = Math.max(1, readTotalCpuTicks() - totalFirst);
+        ArrayMap<Integer, OptimizationCpuSampler.Sample> second = readProcessTicks(processes);
+        long totalDelta = readTotalCpuTicks() - totalFirst;
         int[] pids = new int[processes.size()];
         for (int i = 0; i < processes.size(); i++) pids[i] = processes.get(i).pid;
         Debug.MemoryInfo[] memory = am.getProcessMemoryInfo(pids);
@@ -271,8 +286,8 @@ final class OptimizationTools {
         int cores = Runtime.getRuntime().availableProcessors();
         for (int i = 0; i < processes.size(); i++) {
             ActivityManager.RunningAppProcessInfo process = processes.get(i);
-            long delta = Math.max(0, second.getOrDefault(process.pid, 0L) - first.getOrDefault(process.pid, 0L));
-            float cpu = Math.min(100f * cores, delta * 100f * cores / totalDelta);
+            float cpu = OptimizationCpuSampler.percent(
+                    first.get(process.pid), second.get(process.pid), totalDelta, cores);
             int memoryMb = i < memory.length ? memory[i].getTotalPss() / 1024 : 0;
             boolean background = process.importance > ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND_SERVICE;
             String packages = process.pkgList == null ? "System process" : String.join(", ", process.pkgList);
@@ -327,15 +342,13 @@ final class OptimizationTools {
         if (!file.delete() && file.exists()) throw new java.io.IOException("Cannot delete " + file);
     }
 
-    private static ArrayMap<Integer, Long> readProcessTicks(
+    private static ArrayMap<Integer, OptimizationCpuSampler.Sample> readProcessTicks(
             List<ActivityManager.RunningAppProcessInfo> processes) {
-        ArrayMap<Integer, Long> values = new ArrayMap<>();
+        ArrayMap<Integer, OptimizationCpuSampler.Sample> values = new ArrayMap<>();
         for (ActivityManager.RunningAppProcessInfo process : processes) {
             try {
                 String stat = Files.readString(new File("/proc/" + process.pid + "/stat").toPath(), StandardCharsets.US_ASCII);
-                int end = stat.lastIndexOf(')');
-                String[] fields = stat.substring(end + 2).split("\\s+");
-                values.put(process.pid, Long.parseLong(fields[11]) + Long.parseLong(fields[12]));
+                values.put(process.pid, OptimizationCpuSampler.parseProcessStat(stat));
             } catch (Exception ignored) { }
         }
         return values;
@@ -343,8 +356,6 @@ final class OptimizationTools {
 
     private static long readTotalCpuTicks() throws java.io.IOException {
         String line = Files.readAllLines(new File("/proc/stat").toPath(), StandardCharsets.US_ASCII).get(0);
-        long total = 0;
-        for (String value : line.substring(3).trim().split("\\s+")) total += Long.parseLong(value);
-        return total;
+        return OptimizationCpuSampler.parseTotalTicks(line);
     }
 }
