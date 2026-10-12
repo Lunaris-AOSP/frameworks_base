@@ -5,6 +5,7 @@ android_library {
     platform_apis: true,
     static_libs: [
         "LunarisClockFonts",
+        "axquicklook-client",
         "androidx.compose.material3_material3",
         "androidx.graphics_graphics-shapes",
     ],

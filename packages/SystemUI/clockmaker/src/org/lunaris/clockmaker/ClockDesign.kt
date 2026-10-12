@@ -13,7 +13,7 @@ import java.util.Locale
 import java.util.UUID
 import kotlin.math.roundToInt
 
-enum class ClockElementKind { TIME, DATE, WEATHER, TEXT, IMAGE }
+enum class ClockElementKind { TIME, DATE, WEATHER, TEXT, IMAGE, QUICKLOOK }
 
 enum class ClockImageFit { CROP, FIT }
 
@@ -49,6 +49,7 @@ data class ClockElement(
     val imageShape: String = "none",
     val imageBorderWidth: Int = 0,
     val imageBorderColor: Int = Color.WHITE,
+    val quickLookDateFallback: Boolean = true,
 ) {
     fun resizeImage(width: Int? = null, height: Int? = null): ClockElement {
         if (!imageAspectLocked) return copy(imageWidth = (width ?: imageWidth).coerceIn(16, 360),
@@ -73,11 +74,16 @@ data class ClockElement(
         .put("imageAspectLocked", imageAspectLocked).put("imageFit", imageFit.name)
         .put("imageShape", imageShape)
         .put("imageBorderWidth", imageBorderWidth).put("imageBorderColor", imageBorderColor)
+        .put("quickLookDateFallback", quickLookDateFallback)
 
     companion object {
         fun create(kind: ClockElementKind) = ClockElement(kind = kind,
             size = if (kind == ClockElementKind.TIME) 84 else 22,
-            y = if (kind == ClockElementKind.TIME) 0.2f else 0.45f,
+            y = when (kind) {
+                ClockElementKind.TIME -> 0.2f
+                ClockElementKind.QUICKLOOK -> 0.65f
+                else -> 0.45f
+            },
             text = if (kind == ClockElementKind.TEXT) "Text" else "")
 
         fun validFormat(value: String): Boolean = value.length <= 80 &&
@@ -119,6 +125,7 @@ data class ClockElement(
                 imageShape = j.optString("imageShape", "none").take(40),
                 imageBorderWidth = j.optInt("imageBorderWidth", 0).coerceIn(0, 24),
                 imageBorderColor = j.optInt("imageBorderColor", Color.WHITE),
+                quickLookDateFallback = j.optBoolean("quickLookDateFallback", true),
             )
         }
     }

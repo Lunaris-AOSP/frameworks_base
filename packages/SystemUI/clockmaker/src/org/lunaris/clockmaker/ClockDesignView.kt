@@ -31,6 +31,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import com.android.axion.quicklook.QuickLookAction
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -126,6 +127,7 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
                 registerObservers()
             }
             applyElements()
+            updateQuickLook()
             refreshTime()
         }
     var selectedId: String? = null
@@ -134,7 +136,10 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
     var onSelect: ((String) -> Unit)? = null
     var onMove: ((String, Float, Float) -> Unit)? = null
     var onDragFinished: (() -> Unit)? = null
+    var onQuickLookClick: ((QuickLookAction) -> Unit)? = null
+        set(value) { field = value; refreshTime() }
     private val main = Handler(Looper.getMainLooper())
+    private val quickLook = ClockQuickLook(context) { refreshTime() }
     private val selectionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val pendingFonts = mutableSetOf<String>()
     private var weather = ""
@@ -144,6 +149,7 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
     private var grabX = 0f
     private var grabY = 0f
     private var registered = false
+    private var aggregatedVisible = false
     private var screenInteractive = context.getSystemService(PowerManager::class.java).isInteractive
     private val tick = object : Runnable {
         override fun run() {
@@ -161,6 +167,7 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
             if (intent.action == Intent.ACTION_SCREEN_OFF || intent.action == Intent.ACTION_SCREEN_ON) {
                 screenInteractive = intent.action == Intent.ACTION_SCREEN_ON
                 updateImages()
+                updateQuickLook()
             }
             refreshTime()
             scheduleTick()
@@ -192,7 +199,8 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
         if (rebuild) {
             removeAllViews()
             value.elements.forEach { element ->
-                val child = if (element.kind == ClockElementKind.IMAGE) ClockImageView(context) else TextView(context).apply {
+                val child = if (element.kind == ClockElementKind.IMAGE) ClockImageView(context) else
+                    (if (element.kind == ClockElementKind.QUICKLOOK) ClockQuickLookView(context) else TextView(context)).apply {
                     gravity = Gravity.CENTER
                     includeFontPadding = false
                     maxLines = 4
@@ -203,6 +211,7 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
             }
         }
         applyElements()
+        updateQuickLook()
         refreshTime()
         scheduleTick()
     }
@@ -211,6 +220,7 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
         if (appearance == value) return
         appearance = value
         applyElements()
+        updateQuickLook()
         refreshTime()
         scheduleTick()
     }
@@ -219,6 +229,13 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
         main.removeCallbacks(tick)
         if (isAttachedToWindow && isShown && windowVisibility == VISIBLE &&
             (screenInteractive || appearance.dozing)) main.post(tick)
+    }
+
+    private fun updateQuickLook() {
+        quickLook.update(isAttachedToWindow && aggregatedVisible && isShown && windowVisibility == VISIBLE &&
+            (screenInteractive || appearance.dozing) && design.elements.any {
+                it.kind == ClockElementKind.QUICKLOOK && it.visible && it.opacity > 0
+            }, userId)
     }
 
     private fun updateImages() {
@@ -265,8 +282,20 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
         val locale = resources.configuration.locales[0]
         design.elements.forEachIndexed { index, element ->
             val view = getChildAt(index) as? TextView ?: return@forEachIndexed
+            if (view is ClockQuickLookView) {
+                val pattern = element.format.ifEmpty { DateFormat.getBestDateTimePattern(locale, "EEEMMMd") }
+                val date = runCatching { SimpleDateFormat(pattern, locale).format(now) }.getOrDefault("")
+                val allowSensitive = Settings.Secure.getIntForUser(context.contentResolver,
+                    Settings.Secure.LOCK_SCREEN_ALLOW_PRIVATE_NOTIFICATIONS, 0, userId) != 0 &&
+                    Settings.Secure.getIntForUser(context.contentResolver,
+                        Settings.Secure.LOCK_SCREEN_SHOW_NOTIFICATIONS, 1, userId) != 0
+                view.bind(ClockQuickLookContent.create(quickLook.targets, date,
+                    element.quickLookDateFallback, appearance.weather, allowSensitive), appearance.dozing,
+                    onQuickLookClick.takeIf { !appearance.dozing && onSelect == null })
+                return@forEachIndexed
+            }
             val text = when (element.kind) {
-                ClockElementKind.IMAGE -> ""
+                ClockElementKind.IMAGE, ClockElementKind.QUICKLOOK -> ""
                 ClockElementKind.TEXT -> element.text
                 ClockElementKind.WEATHER -> weather
                 ClockElementKind.TIME, ClockElementKind.DATE -> {
@@ -419,12 +448,15 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
         }, Context.RECEIVER_NOT_EXPORTED)
         registerObservers()
         registered = true
+        updateQuickLook()
         scheduleTick()
         queryWeather()
     }
 
     override fun onVisibilityAggregated(isVisible: Boolean) {
         super.onVisibilityAggregated(isVisible)
+        aggregatedVisible = isVisible
+        updateQuickLook()
         if (isVisible) scheduleTick() else main.removeCallbacks(tick)
     }
 
@@ -436,11 +468,16 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
         runCatching { context.contentResolver.registerContentObserver(
             ContentProvider.maybeAddUserId(Settings.System.getUriFor(Settings.System.TIME_12_24), userId),
             false, observer) }
+        for (key in listOf(Settings.Secure.LOCK_SCREEN_ALLOW_PRIVATE_NOTIFICATIONS,
+            Settings.Secure.LOCK_SCREEN_SHOW_NOTIFICATIONS)) {
+            context.contentResolver.registerContentObserver(Settings.Secure.getUriFor(key), false, observer, userId)
+        }
     }
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         main.removeCallbacks(tick)
+        quickLook.update(false, userId)
         if (registered) {
             context.unregisterReceiver(receiver)
             context.contentResolver.unregisterContentObserver(observer)

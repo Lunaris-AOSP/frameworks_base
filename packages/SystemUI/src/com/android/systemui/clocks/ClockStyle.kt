@@ -41,6 +41,7 @@ import android.widget.TextClock
 import android.widget.TextView
 import com.android.systemui.Dependency
 import com.android.systemui.media.MediaSessionManager
+import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.plugins.statusbar.StatusBarStateController
 import com.android.systemui.res.R
 import com.android.systemui.tuner.TunerService
@@ -533,6 +534,13 @@ class ClockStyle @JvmOverloads constructor(
                 (view as? ClockDesignView)?.let {
                     it.userId = ActivityManager.getCurrentUser()
                     it.setDesign(clockDesign)
+                    it.onQuickLookClick = { action ->
+                        val starter = Dependency.get(ActivityStarter::class.java)
+                        val pendingIntent = action.pendingIntent
+                        val intent = action.intent
+                        if (pendingIntent != null) starter.startPendingIntentDismissingKeyguard(pendingIntent)
+                        else if (intent != null) starter.startActivity(intent, true)
+                    }
                 }
                 cacheClockViews(view)
                 disableClippingOnParents(view)
