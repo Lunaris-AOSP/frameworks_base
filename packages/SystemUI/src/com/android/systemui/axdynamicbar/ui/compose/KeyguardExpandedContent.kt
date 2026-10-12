@@ -98,8 +98,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.android.systemui.axdynamicbar.shared.IslandActions
 import com.android.systemui.res.R
-import com.android.systemui.axdynamicbar.model.IslandEvent
-import com.android.systemui.axdynamicbar.model.RecordingState
+import com.android.systemui.islandevents.model.IslandEvent
+import com.android.systemui.islandevents.model.RecordingState
 import com.android.systemui.axdynamicbar.shared.*
 import com.android.systemui.haptics.slider.compose.ui.SliderHapticsViewModel
 import kotlinx.coroutines.delay
@@ -107,6 +107,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
+
+private const val KEYGUARD_MEDIA_PANEL_HEIGHT_FRACTION = 0.78f
 
 @Composable
 internal fun KeyguardExpandedContent(
@@ -169,7 +171,8 @@ internal fun KeyguardExpandedContent(
         contentAlignment = Alignment.Center,
     ) {
         when (event) {
-            is IslandEvent.Media -> KeyguardMediaPanel(event, interactor)
+            is IslandEvent.Media ->
+                KeyguardMediaPanel(event, interactor, Modifier.align(Alignment.BottomCenter))
             is IslandEvent.Timer -> KeyguardTimerPanel(event, interactor)
             is IslandEvent.Stopwatch -> KeyguardStopwatchPanel(event, interactor)
             is IslandEvent.AudioRecording -> KeyguardAudioRecordingPanel(event, interactor)
@@ -260,14 +263,19 @@ private fun TonalBanner(
 }
 
 @Composable
-private fun KeyguardMediaPanel(event: IslandEvent.Media, interactor: IslandActions) {
+private fun KeyguardMediaPanel(
+    event: IslandEvent.Media,
+    interactor: IslandActions,
+    modifier: Modifier,
+) {
     val colors = rememberMediaColors(event)
     val motionScheme = MaterialTheme.motionScheme
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .widthIn(max = ExpandedMaxWidth)
-            .fillMaxSize()
+            .fillMaxWidth()
+            .fillMaxHeight(KEYGUARD_MEDIA_PANEL_HEIGHT_FRACTION)
             .padding(horizontal = SpaceSection)
             .clip(ShapeXl)
             .background(CardBg)
@@ -288,7 +296,7 @@ private fun KeyguardMediaPanel(event: IslandEvent.Media, interactor: IslandActio
             contentKey = { it?.hashCode() ?: 0 },
             label = "kg_media_backdrop",
         ) { art ->
-            Box(modifier = Modifier.fillMaxSize()) { 
+            Box(modifier = Modifier.fillMaxSize()) {
                 if (art != null) {
                     Image(
                         bitmap = art.toScaledBitmap(350.dp),
