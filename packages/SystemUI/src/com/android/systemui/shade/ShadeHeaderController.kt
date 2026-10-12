@@ -525,6 +525,7 @@ constructor(
     }
 
     override fun onViewDetached() {
+        setShadeOverscrollAmount(0f)
         clock.setOnClickListener(null)
         privacyIconsController.chipVisibilityListener = null
         dumpManager.unregisterDumpable(this::class.java.simpleName)
@@ -534,6 +535,10 @@ constructor(
         nextAlarmController.removeCallback(nextAlarmCallback)
         systemIconsHoverContainer.setOnHoverListener(null)
         tunerService.removeTunable(this)
+    }
+
+    fun setShadeOverscrollAmount(amount: Float) {
+        header.translationY = amount
     }
 
     override fun onTuningChanged(key: String?, value: String?) {

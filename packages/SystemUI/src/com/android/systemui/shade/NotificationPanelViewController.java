@@ -260,13 +260,6 @@ public final class NotificationPanelViewController implements
     public static final float QS_PARALLAX_AMOUNT = 0.175f;
     private static final int NO_FIXED_DURATION = -1;
     private static final long SHADE_OPEN_SPRING_OUT_DURATION = 350L;
-    private static final long SHADE_OPEN_SPRING_BACK_DURATION = 400L;
-
-    /**
-     * The factor of the usual high velocity that is needed in order to reach the maximum overshoot
-     * when flinging. A low value will make it that most flings will reach the maximum overshoot.
-     */
-    private static final float FACTOR_OF_HIGH_VELOCITY_FOR_MAX_OVERSHOOT = 0.5f;
     /**
      * Maximum time before which we will expand the panel even for slow motions when getting a
      * touch passed over from launcher.
@@ -570,10 +563,8 @@ public final class NotificationPanelViewController implements
     private boolean mPanelUpdateWhenAnimatorEnds;
     private boolean mHasVibratedOnOpen = false;
     private int mFixedDuration = NO_FIXED_DURATION;
-    /** The overshoot amount when the panel flings open. */
-    private float mPanelFlingOvershootAmount;
-    /** The amount of pixels that we have overexpanded the last time with a gesture. */
-    private float mLastGesturedOverExpansion = -1;
+    /** Unresisted distance, in pixels, used by the scene shade's overscroll spring. */
+    private float mShadeOverscroll;
     /** Whether the current animator is the spring back animation. */
     private boolean mIsSpringBackAnimation;
     private float mHintDistance;
@@ -600,9 +591,9 @@ public final class NotificationPanelViewController implements
     private boolean mInstantExpanding;
     private boolean mAnimateAfterExpanding;
     private boolean mIsFlinging;
-    private boolean mIsFlingToHeightAnimator;
     private ValueAnimator mLastFlingAnimator;
     private float mLastFlingVel;
+    private float mLastFlingTarget;
     private boolean mLastFlingExpand;
     private boolean mTouchDownCancelAnimator;
     private String mViewName;
@@ -1065,7 +1056,6 @@ public final class NotificationPanelViewController implements
         mTouchSlop = configuration.getScaledTouchSlop();
         mSlopMultiplier = configuration.getScaledAmbiguousGestureMultiplier();
         mHintDistance = mResources.getDimension(R.dimen.hint_move_distance);
-        mPanelFlingOvershootAmount = mResources.getDimension(R.dimen.panel_overshoot_amount);
         mFlingAnimationUtils = mFlingAnimationUtilsBuilder.get()
                 .setMaxLengthSeconds(0.4f).build();
         mStatusBarMinHeight = SystemBarUtils.getStatusBarHeight(mView.getContext());
@@ -1145,6 +1135,9 @@ public final class NotificationPanelViewController implements
     private void onSplitShadeEnabledChanged() {
         mShadeLog.logSplitShadeChanged(mSplitShadeEnabled);
         // Reset any left over overscroll state. It is a rare corner case but can happen.
+        cancelHeightAnimator();
+        setOverExpansionInternal(0);
+        mQsController.setShadeOverScrollAmount(0);
         mQsController.setOverScrollAmount(0);
         mScrimController.setNotificationsOverScrollAmount(0);
 
@@ -1492,57 +1485,69 @@ public final class NotificationPanelViewController implements
     @VisibleForTesting
     void flingToHeight(float vel, boolean expand, float target,
             float collapseSpeedUpFactor, boolean expandBecauseOfFalsing) {
+        if (mHeightAnimator != null && mHeightAnimator == mLastFlingAnimator
+                && isSameFlingDirection(vel) && expand == mLastFlingExpand
+                && target == mLastFlingTarget
+                && mHeightAnimator.isRunning()) {
+            return;
+        }
+        float overscroll = mShadeOverscroll;
+        float overExpansion = mOverExpansion;
+        boolean expandImmediate = mQsController.isExpandImmediate();
+        if (mHeightAnimator != null) {
+            cancelHeightAnimator();
+        }
+        mShadeOverscroll = overscroll;
+        setOverExpansion(overExpansion);
+        mQsController.setExpandImmediate(expandImmediate);
+        if (!expand) {
+            setClosing(true);
+        }
         mQsController.setLastShadeFlingWasExpanding(expand);
         mHeadsUpTouchHelper.notifyFling(!expand);
         mKeyguardStateController.notifyPanelFlingStart(!expand /* flingingToDismiss */);
         setClosingWithAlphaFadeout(!expand && !isKeyguardShowing() && getFadeoutAlpha() == 1.0f);
         mNotificationStackScrollLayoutController.setPanelFlinging(true);
         mShadeRepository.setCurrentFling(new FlingInfo(expand, vel));
-        if (target == mExpandedHeight && mOverExpansion == 0.0f) {
+        if (target == mExpandedHeight && mOverExpansion == 0.0f && (!expand || vel <= 0)) {
             // We're at the target and didn't fling and there's no overshoot
             onFlingEnd(false /* cancelled */);
             return;
         }
-        boolean wasFlinging = mIsFlinging;
         mIsFlinging = true;
-        // we want to perform an overshoot animation when flinging open
-        final boolean addOverscroll =
-                expand
-                        && mStatusBarStateController.getState() != KEYGUARD
-                        && mOverExpansion == 0.0f
-                        && vel >= 0;
-        final boolean shouldSpringBack = addOverscroll || (mOverExpansion != 0.0f && expand);
-        float overshootAmount = 0.0f;
-        if (addOverscroll) {
-            // Let's overshoot depending on the amount of velocity
-            overshootAmount = MathUtils.lerp(
-                    0.2f,
-                    1.0f,
-                    MathUtils.saturate(vel
-                            / (this.mFlingAnimationUtils.getHighVelocityPxPerSecond()
-                            * FACTOR_OF_HIGH_VELOCITY_FOR_MAX_OVERSHOOT)));
-            overshootAmount += mOverExpansion / mPanelFlingOvershootAmount;
+        if (expandBecauseOfFalsing && vel < 0) {
+            vel = 0;
         }
-        ValueAnimator animator = createHeightAnimator(target, overshootAmount);
-        if (mHeightAnimator != null && mHeightAnimator == mLastFlingAnimator
-                && isSameFlingDirection(vel) && expand == mLastFlingExpand
-                && mHeightAnimator.isRunning()) {
-            mIsFlinging = wasFlinging;
-            return;
-        }
+        final boolean useSpring = mQsController.isBounceEnabled()
+                && expand && mBarState == SHADE && !mDozing;
+        ValueAnimator animator = useSpring
+                ? ShadeExpansionSpring.createAnimator(mExpandedHeight, target, mShadeOverscroll,
+                        vel, mResources.getDisplayMetrics().density, (height, amount) -> {
+                            if (height == target && !mIsSpringBackAnimation) {
+                                AxAmbientStateEx.setHideShelfForPanelAnimation(false);
+                            }
+                            mIsSpringBackAnimation = height == target;
+                            setShadeOverscroll(amount);
+                            // Content can change height while the shade is rebounding.
+                            float expandedHeight = mIsSpringBackAnimation
+                                    ? getMaxPanelTransitionDistance() : height;
+                            if (expandedHeight != mExpandedHeight) {
+                                setExpandedHeightInternal(expandedHeight);
+                            }
+                        })
+                : createHeightAnimator(target);
         mLastFlingAnimator = animator;
         mLastFlingVel = vel;
+        mLastFlingTarget = target;
         mLastFlingExpand = expand;
         if (expand) {
             maybeVibrateOnOpening(true /* openingWithTouch */);
-            if (expandBecauseOfFalsing && vel < 0) {
-                vel = 0;
-            }
-            this.mFlingAnimationUtils.apply(animator, mExpandedHeight,
-                    target + overshootAmount * mPanelFlingOvershootAmount, vel,
-                    this.mView.getHeight());
-            if (vel == 0) {
-                animator.setDuration(SHADE_OPEN_SPRING_OUT_DURATION);
+            if (!useSpring) {
+                this.mFlingAnimationUtils.apply(animator, mExpandedHeight, target, vel,
+                        this.mView.getHeight());
+                if (vel == 0) {
+                    animator.setDuration(SHADE_OPEN_SPRING_OUT_DURATION);
+                }
             }
         } else {
             mHasVibratedOnOpen = false;
@@ -1584,7 +1589,7 @@ public final class NotificationPanelViewController implements
                 if (!expand) {
                     AxAmbientStateEx.setOptimizedNotificationPanelViewCollapse(true);
                 } else {
-                    AxAmbientStateEx.setHideShelfForPanelAnimation(true);
+                    AxAmbientStateEx.setHideShelfForPanelAnimation(mExpandedHeight < target);
                 }
                 if (!mStatusBarStateController.isDozing()) {
                     mQsController.beginJankMonitoring(isFullyCollapsed());
@@ -1600,25 +1605,18 @@ public final class NotificationPanelViewController implements
 
             @Override
             public void onAnimationEnd(Animator animation) {
-                AxAmbientStateEx.setHideShelfForPanelAnimation(false);
-                if (shouldSpringBack && !mCancelled) {
-                    // After the shade is flung open to an overscrolled state, spring back
-                    // the shade by reducing section padding to 0.
-                    springBack();
-                } else {
-                    onFlingEnd(mCancelled);
+                if (mHeightAnimator != animation) {
+                    return;
                 }
+                AxAmbientStateEx.setHideShelfForPanelAnimation(false);
+                onFlingEnd(mCancelled);
             }
         });
         if (!mScrimController.isScreenOn()) {
             animator.setDuration(1);
         }
-        if (mIsFlingToHeightAnimator) {
-            stopHeightAnimator();
-        }
         setAnimator(animator);
         animator.start();
-        mIsFlingToHeightAnimator = true;
         boostInteraction((int) animator.getDuration());
     }
 
@@ -1627,7 +1625,7 @@ public final class NotificationPanelViewController implements
         AxAmbientStateEx.setHideShelfForPanelAnimation(false);
         AxAmbientStateEx.setOptimizedNotificationPanelViewCollapse(false);
         mIsFlinging = false;
-        mIsFlingToHeightAnimator = false;
+        mIsSpringBackAnimation = false;
         mExpectingSynthesizedDown = false;
         // No overshoot when the animation ends
         setOverExpansionInternal(0);
@@ -2247,13 +2245,9 @@ public final class NotificationPanelViewController implements
             return;
         }
         mOverExpansion = overExpansion;
+        mQsController.setShadeOverScrollAmount(overExpansion);
         if (mSplitShadeEnabled) {
-            mQsController.setOverScrollAmount((int) overExpansion);
             mScrimController.setNotificationsOverScrollAmount((int) overExpansion);
-        } else {
-            // Translating the quick settings by half the overexpansion to center it in the
-            // background frame
-            mQsController.updateQsFrameTranslation();
         }
         mNotificationStackScrollLayoutController.setOverExpansion(overExpansion);
     }
@@ -2589,6 +2583,10 @@ public final class NotificationPanelViewController implements
     @Override
     public void setDozing(boolean dozing, boolean animate) {
         if (dozing == mDozing) return;
+        if (dozing && mBarState == SHADE) {
+            cancelHeightAnimator();
+            setOverExpansionInternal(0);
+        }
         mView.setDozing(dozing);
         mDozing = dozing;
         // TODO (b/) make listeners for this
@@ -2827,7 +2825,7 @@ public final class NotificationPanelViewController implements
         ipw.print("mIsSpringBackAnimation="); ipw.println(mIsSpringBackAnimation);
         ipw.print("mIsGestureNavigation="); ipw.println(mIsGestureNavigation);
         ipw.print("mLastEventSynthesizedDown="); ipw.println(mLastEventSynthesizedDown);
-        ipw.print("mLastGesturedOverExpansion="); ipw.println(mLastGesturedOverExpansion);
+        ipw.print("mShadeOverscroll="); ipw.println(mShadeOverscroll);
         ipw.print("mLinearDarkAmount="); ipw.println(mLinearDarkAmount);
         ipw.print("mListenForHeadsUp="); ipw.println(mListenForHeadsUp);
         ipw.print("mMinFraction="); ipw.println(mMinFraction);
@@ -2838,7 +2836,6 @@ public final class NotificationPanelViewController implements
         ipw.print("mOverStretchAmount="); ipw.println(mOverStretchAmount);
         ipw.print("mPanelAlpha="); ipw.println(mPanelAlpha);
         ipw.print("mPanelClosedOnDown="); ipw.println(mPanelClosedOnDown);
-        ipw.print("mPanelFlingOvershootAmount="); ipw.println(mPanelFlingOvershootAmount);
         ipw.print("mPanelUpdateWhenAnimatorEnds="); ipw.println(mPanelUpdateWhenAnimatorEnds);
         ipw.print("mPulsing="); ipw.println(mPulsing);
         ipw.print("mShowIconsWhenExpanded="); ipw.println(mShowIconsWhenExpanded);
@@ -3094,7 +3091,7 @@ public final class NotificationPanelViewController implements
             mQsController.beginJankMonitoring(isFullyCollapsed());
         }
         mInitialOffsetOnTouch = expandedHeight;
-        if (!isTracking() || isFullyCollapsed()) {
+        if (!isTracking() || isFullyCollapsed() || mHandlingPointerUp) {
             mInitialExpandY = newY;
             mInitialExpandX = newX;
         } else {
@@ -3104,6 +3101,10 @@ public final class NotificationPanelViewController implements
         if (startTracking) {
             mTouchSlopExceeded = true;
             setExpandedHeight(mInitialOffsetOnTouch);
+            if (mBarState == SHADE && !mDozing) {
+                setShadeOverscroll(Math.max(0f,
+                        mInitialOffsetOnTouch - getMaxPanelTransitionDistance()));
+            }
             onTrackingStarted();
         }
     }
@@ -3130,6 +3131,7 @@ public final class NotificationPanelViewController implements
                 // keyguard is gone.
                 expand = false;
             } else if (event.getActionMasked() == MotionEvent.ACTION_CANCEL || forceCancel) {
+                vel = 0f;
                 if (onKeyguard) {
                     expand = true;
                     mShadeLog.logEndMotionEvent("endMotionEvent: cancel while on keyguard",
@@ -3232,36 +3234,6 @@ public final class NotificationPanelViewController implements
         flingToHeight(vel, expand, target, collapseSpeedUpFactor, expandBecauseOfFalsing);
     }
 
-    private void springBack() {
-        if (mOverExpansion == 0) {
-            onFlingEnd(false /* cancelled */);
-            return;
-        }
-        mIsSpringBackAnimation = true;
-        ValueAnimator animator = ValueAnimator.ofFloat(mOverExpansion, 0);
-        animator.addUpdateListener(
-                animation -> setOverExpansionInternal((float) animation.getAnimatedValue()));
-        animator.setDuration(SHADE_OPEN_SPRING_BACK_DURATION);
-        animator.setInterpolator(Interpolators.FAST_OUT_SLOW_IN);
-        animator.addListener(new AnimatorListenerAdapter() {
-            private boolean mCancelled;
-
-            @Override
-            public void onAnimationCancel(Animator animation) {
-                mCancelled = true;
-            }
-
-            @Override
-            public void onAnimationEnd(Animator animation) {
-                mIsSpringBackAnimation = false;
-                onFlingEnd(mCancelled);
-            }
-        });
-        setAnimator(animator);
-        animator.start();
-        boostInteraction(500);
-    }
-
     @VisibleForTesting
     void setExpandedHeight(float height) {
         debugLog("setExpandedHeight(%.1f)", height);
@@ -3336,8 +3308,18 @@ public final class NotificationPanelViewController implements
      * @param overExpansion the amount of overexpansion to apply
      */
     private void setOverExpansionInternal(float overExpansion) {
-        mLastGesturedOverExpansion = -1;
+        mShadeOverscroll = 0;
         setOverExpansion(overExpansion);
+    }
+
+    private void setShadeOverscroll(float overscroll) {
+        if (!mQsController.isBounceEnabled()) {
+            overscroll = 0f;
+        }
+        mShadeOverscroll = overscroll;
+        setOverExpansion(ShadeExpansionSpring.offset(overscroll,
+                mResources.getDisplayMetrics().density,
+                mSplitShadeEnabled || mQsController.getSplitShadeEnabledLegacy()));
     }
 
     /** Sets the expanded height relative to a number from 0 to 1. */
@@ -3397,6 +3379,7 @@ public final class NotificationPanelViewController implements
 
     public void instantCollapse() {
         abortAnimations();
+        setOverExpansionInternal(0);
         setExpandedFraction(0f);
         if (mExpanding) {
             notifyExpandingFinished();
@@ -3428,23 +3411,18 @@ public final class NotificationPanelViewController implements
     }
 
     /**
-     * Create an animator that can also overshoot
-     *
-     * @param targetHeight    the target height
-     * @param overshootAmount the amount of overshoot desired
+     * Create the legacy height animator for collapse and keyguard transitions.
      */
-    private ValueAnimator createHeightAnimator(float targetHeight, float overshootAmount) {
+    private ValueAnimator createHeightAnimator(float targetHeight) {
         float startExpansion = mOverExpansion;
         ValueAnimator animator = ValueAnimator.ofFloat(mExpandedHeight, targetHeight);
         registerAnimatorForTest(animator);
         animator.addUpdateListener(
                 animation -> {
-                    if (overshootAmount > 0.0f
-                            // Also remove the overExpansion when collapsing
-                            || (targetHeight == 0.0f && startExpansion != 0)) {
+                    if (startExpansion != 0) {
                         final float expansion = MathUtils.lerp(
                                 startExpansion,
-                                mPanelFlingOvershootAmount * overshootAmount,
+                                0f,
                                 Interpolators.FAST_OUT_SLOW_IN.getInterpolation(
                                         animator.getAnimatedFraction()));
                         setOverExpansionInternal(expansion);
@@ -3722,6 +3700,12 @@ public final class NotificationPanelViewController implements
             ConfigurationController.ConfigurationListener {
         @Override
         public void onConfigChanged(Configuration newConfig) {
+            if (mBarState == SHADE) {
+                cancelHeightAnimator();
+                setOverExpansionInternal(0);
+                mQsController.cancelShadeOverscroll();
+                mQsController.updateQsFrameTranslation();
+            }
             if (ShadeWindowGoesAround.isEnabled()) {
                 updateResources();
             }
@@ -3760,6 +3744,10 @@ public final class NotificationPanelViewController implements
 
             // TODO: maybe add a listener for barstate
             mBarState = statusBarState;
+            if (oldState == SHADE && statusBarState != SHADE) {
+                cancelHeightAnimator();
+                setOverExpansionInternal(0);
+            }
             ScrimUtils.get().setBarState(mBarState);
             mQsController.setBarState(statusBarState);
 
@@ -3903,6 +3891,9 @@ public final class NotificationPanelViewController implements
 
         @Override
         public void onViewDetachedFromWindow(View v) {
+            abortAnimations();
+            setOverExpansionInternal(0);
+            mQsController.cancelShadeOverscroll();
             mFragmentService.getFragmentHostManager(mView)
                     .removeTagListener(QS.TAG, mQsController.getQsFragmentListener());
             mStatusBarStateController.removeCallback(mStatusBarStateListener);
@@ -4116,7 +4107,10 @@ public final class NotificationPanelViewController implements
                 return false;
             }
 
-            mShadeLog.logMotionEvent(event, "NPVC onInterceptTouchEvent");
+            // As in the scene-shade branch, avoid formatting and buffering every MOVE event.
+            if (DEBUG_LOGCAT) {
+                mShadeLog.logMotionEvent(event, "NPVC onInterceptTouchEvent");
+            }
             if (mQsController.disallowTouches()) {
                 mShadeLog.logMotionEvent(event,
                         "NPVC not intercepting touch, panel touches disallowed");
@@ -4239,7 +4233,8 @@ public final class NotificationPanelViewController implements
                             && mBarState == StatusBarState.SHADE
                             && mQsController.isExpandImmediate()
                             && isFullyExpanded();
-                    if (isLegacySplitShadeQs && mView != null && mDownY < mView.getHeight() / 2f) {
+                    if (isLegacySplitShadeQs && !isTracking() && mView != null
+                            && mDownY < mView.getHeight() / 2f) {
                         break;
                     }
 
@@ -4254,8 +4249,10 @@ public final class NotificationPanelViewController implements
                         if ((h < -touchSlop
                                 || ((openShadeWithoutHun || mAnimatingOnDown) && hAbs > touchSlop))
                                 && hAbs > Math.abs(x - mInitialExpandX)) {
+                            float startHeight = mExpandedHeight + Math.max(0f, mShadeOverscroll);
                             cancelHeightAnimator();
-                            startExpandMotion(x, y, true /* startTracking */, mExpandedHeight);
+                            startExpandMotion(x, y, true /* startTracking */,
+                                    startHeight);
                             mShadeLog.v("NotificationPanelViewController MotionEvent"
                                     + " intercepted: startExpandMotion");
                             return true;
@@ -4489,7 +4486,8 @@ public final class NotificationPanelViewController implements
                         mQsController.updateGestureInsetsCache();
                     }
                     mShadeLog.logMotionEvent(event, "onTouch: down action");
-                    startExpandMotion(x, y, false /* startTracking */, mExpandedHeight);
+                    startExpandMotion(x, y, false /* startTracking */,
+                            mExpandedHeight + Math.max(0f, mShadeOverscroll));
                     mMinExpandHeight = 0.0f;
                     mPanelClosedOnDown = isFullyCollapsed();
                     mShadeLog.logPanelClosedOnDown("handle down touch", mPanelClosedOnDown,
@@ -4528,7 +4526,8 @@ public final class NotificationPanelViewController implements
                         final float newX = event.getX(newIndex);
                         mTrackingPointer = event.getPointerId(newIndex);
                         mHandlingPointerUp = true;
-                        startExpandMotion(newX, newY, true /* startTracking */, mExpandedHeight);
+                        startExpandMotion(newX, newY, true /* startTracking */,
+                                mExpandedHeight + Math.max(0f, mShadeOverscroll));
                         mHandlingPointerUp = false;
                     }
                     break;
@@ -4548,7 +4547,8 @@ public final class NotificationPanelViewController implements
                             && mBarState == StatusBarState.SHADE
                             && mQsController.isExpandImmediate()
                             && isFullyExpanded();
-                    if (isLegacySplitShadeQs && mView != null && mDownY < mView.getHeight() / 2f) {
+                    if (isLegacySplitShadeQs && !isTracking() && mView != null
+                            && mDownY < mView.getHeight() / 2f) {
                         break;
                     }
 
@@ -4581,7 +4581,8 @@ public final class NotificationPanelViewController implements
                                 && !isTwoFingerSwipeTrackpadEvent(event)
                         ) {
                             if (mInitialOffsetOnTouch != 0f) {
-                                startExpandMotion(x, y, false /* startTracking */, mExpandedHeight);
+                                startExpandMotion(x, y, false /* startTracking */,
+                                        mExpandedHeight + Math.max(0f, mShadeOverscroll));
                                 h = 0;
                             }
                             cancelHeightAnimator();
@@ -4602,6 +4603,10 @@ public final class NotificationPanelViewController implements
                         // wrongly enables stack height updates at the start of lockscreen swipe-up
                         mAmbientState.setSwipingUp(h <= 0);
                         stopHeightAnimator();
+                        if (mBarState == SHADE && !mDozing) {
+                            setShadeOverscroll(Math.max(0f,
+                                    newHeight - getMaxPanelTransitionDistance()));
+                        }
                         setExpandedHeightInternal(newHeight);
                     }
                     break;

@@ -461,7 +461,7 @@ internal class SwipeAnimation<T : ContentKey>(
     }
 }
 
-internal fun willDecayFasterThanAnimating(
+fun willDecayFasterThanAnimating(
     animationSpec: AnimationSpec<Float>,
     decayAnimationSpec: DecayAnimationSpec<Float>,
     initialOffset: Float,
