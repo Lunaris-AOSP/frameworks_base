@@ -81,6 +81,9 @@ interface ShadeViewController {
      */
     @Deprecated("No longer supported. Do not add new calls to this.") fun startInputFocusTransfer()
 
+    @Deprecated("No longer supported. Do not add new calls to this.")
+    fun startInputFocusTransfer(event: MotionEvent)
+
     /** Triggered when the input focus transfer was cancelled. */
     @Deprecated("No longer supported. Do not add new calls to this.") fun cancelInputFocusTransfer()
 

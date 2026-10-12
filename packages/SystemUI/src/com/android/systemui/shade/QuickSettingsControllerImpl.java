@@ -258,6 +258,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
     private boolean mExpansionEnabledPolicy = true;
     private boolean mExpansionEnabledAmbient = true;
     private float mQuickQsHeaderHeight;
+    private int mQsPanelPaddingTop;
     private boolean mLastMediaVisibility = false;
     /**
      * Determines if QS should be already expanded when expanding shade.
@@ -495,6 +496,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         mAmbientState.setStackTopMargin(topMargin);
 
         mQuickQsHeaderHeight = mLargeScreenShadeHeaderHeight;
+        mQsPanelPaddingTop = mResources.getDimensionPixelSize(R.dimen.qs_panel_padding_top);
 
         mEnableClipping = mResources.getBoolean(R.bool.qs_enable_clipping);
         updateGestureInsetsCache();
@@ -635,7 +637,10 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
                         MotionEvent.BUTTON_SECONDARY) || event.isButtonPressed(
                         MotionEvent.BUTTON_TERTIARY));
 
-        final float w = mPanelView != null ? mPanelView.getMeasuredWidth() : (mQs != null && mQs.getView() != null ? mQs.getView().getMeasuredWidth() : 0);
+        final int measuredWidth = mPanelView != null ? mPanelView.getMeasuredWidth()
+                : (mQs != null && mQs.getView() != null ? mQs.getView().getMeasuredWidth() : 0);
+        // The launcher's first gesture can arrive before the shade has been measured.
+        final float w = measuredWidth > 0 ? measuredWidth : mCachedWindowWidth;
         final float x = event.getX();
         float region = w * 1.f / 4.f; // TODO overlay region fraction?
         boolean showQsOverride = false;
@@ -757,7 +762,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         boolean keyguardShowing = mBarState == KEYGUARD;
         if (!isExpansionEnabled() || mCollapsedOnDown || (keyguardShowing
                 && mKeyguardBypassController.getBypassEnabled()) || mSplitShadeEnabled
-                || (mQsSplitShadeEnabledLegacy && mBarState == StatusBarState.SHADE)) {
+                || (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE)) {
             return false;
         }
         int headerTop, headerBottom;
@@ -1011,6 +1016,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
     private void updateQsSplitShadeState() {
         if (mQs != null) {
             mQs.setInSplitShade(mSplitShadeEnabled || (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE));
+            updateMinHeight();
         }
     }
 
@@ -1132,7 +1138,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         mQs.setExpanded(getExpanded());
 
         if (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE) {
-            boolean isQsVisible = isExpandImmediate();
+            boolean isQsVisible = isExpandImmediate() || getExpanded();
             int qsVisibility = (isQsVisible || mSwipeInProgress) ? View.VISIBLE : View.INVISIBLE;
             int nsslVisibility = (!isQsVisible || mSwipeInProgress) ? View.VISIBLE : View.INVISIBLE;
 
@@ -1241,9 +1247,11 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         float shadeExpandedFraction = mBarState == KEYGUARD
                 ? getLockscreenShadeDragProgress()
                 : mShadeExpandedFraction;
-        mShadeHeaderController.setShadeExpandedFraction(shadeExpandedFraction);
-        mShadeHeaderController.setQsExpandedFraction(qsExpansionFraction);
+        mShadeHeaderController.setQsExpandedFraction(
+                isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE
+                        ? 1f : qsExpansionFraction);
         mShadeHeaderController.setQsVisible(mVisible);
+        mShadeHeaderController.setShadeExpandedFraction(shadeExpandedFraction);
 
         // Update the light bar
         mLightBarController.setQsExpanded(mFullyExpanded);
@@ -1304,7 +1312,8 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
 
     void updateMinHeight() {
         float previousMin = mMinExpansionHeight;
-        if (mBarState == KEYGUARD || mSplitShadeEnabled) {
+        if (mBarState == KEYGUARD || mSplitShadeEnabled
+                || (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE)) {
             mMinExpansionHeight = 0;
         } else {
             mMinExpansionHeight = mQs.getQsMinExpansionHeight();
@@ -1575,7 +1584,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         float topPadding;
         boolean keyguardShowing = mBarState == KEYGUARD;
         if (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE) {
-            return mQuickQsHeaderHeight + mResources.getDimensionPixelSize(R.dimen.notification_side_paddings) * 4;
+            return mQuickQsHeaderHeight + mQsPanelPaddingTop;
         }
         if (mSplitShadeEnabled) {
             return keyguardShowing
@@ -1801,22 +1810,34 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
     /** handles touches in Qs panel area */
     boolean handleTouch(MotionEvent event, boolean isFullyCollapsed,
             boolean isShadeOrQsHeightAnimationRunning) {
-        if (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE) {
-            if (!isFullyCollapsed) {
-                return false;
-            }
+        return handleTouch(event, isFullyCollapsed, isShadeOrQsHeightAnimationRunning,
+                false /* isSynthesizedDown */);
+    }
+
+    boolean handleTouch(MotionEvent event, boolean isFullyCollapsed,
+            boolean isShadeOrQsHeightAnimationRunning, boolean isSynthesizedDown) {
+        boolean legacySplitShade = isLegacySplitShadeEligible()
+                && mBarState == StatusBarState.SHADE;
+        if (legacySplitShade && !isFullyCollapsed) {
+            return false;
         }
         boolean isSwipeDisabled = NTForbiddenSwipeDownQSController.get(mPanelView.getContext()).getForbiddenSwipeDownQS();
         if (isSplitShadeAndTouchXOutsideQs(event.getX())) {
             mShadeLog.logMotionEvent(event, "handleQsTouch: touch outside QS");
             return false;
         }
-        float statusBarThreshold = mQsSplitShadeEnabledLegacy && mBarState == StatusBarState.SHADE
+        float statusBarThreshold = legacySplitShade
                 ? mStatusBarMinHeight * 2.0f : mStatusBarMinHeight;
         boolean isInStatusBar = event.getY(event.getActionIndex()) < statusBarThreshold;
         if (ShadeExpandsOnStatusBarLongPress.isEnabled() && isInStatusBar 
                 && !isSwipeDisabled) {
             mStatusBarLongPressGestureDetector.get().handleTouch(event);
+        }
+        if (legacySplitShade) {
+            if (event.getActionMasked() == MotionEvent.ACTION_DOWN && !isSynthesizedDown) {
+                prepareLegacySplitShade(event);
+            }
+            return false;
         }
         final int action = event.getActionMasked();
         boolean collapsedQs = !getExpanded() && !mSplitShadeEnabled;
@@ -1862,14 +1883,8 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         }
         if (action == MotionEvent.ACTION_DOWN && isFullyCollapsed && isExpansionEnabled()) {
             mTwoFingerExpandPossible = true;
-            if (mQsSplitShadeEnabledLegacy) {
-                boolean shouldOpenQs = isOpenQsEvent(event) && isInStatusBar;
-                setExpandImmediate(shouldOpenQs);
-                mNotificationStackScrollLayoutController.setShouldShowShelfOnly(shouldOpenQs);
-                updateQsState();
-            }
         }
-        if (!mQsSplitShadeEnabledLegacy && mTwoFingerExpandPossible && isOpenQsEvent(event) && isInStatusBar) {
+        if (mTwoFingerExpandPossible && isOpenQsEvent(event) && isInStatusBar) {
             mMetricsLogger.count(COUNTER_PANEL_OPEN_QS, 1);
             setExpandImmediate(true);
             mNotificationStackScrollLayoutController.setShouldShowShelfOnly(!mSplitShadeEnabled);
@@ -1882,6 +1897,27 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
             setListening(true);
         }
         return false;
+    }
+
+    void prepareLegacySplitShade(MotionEvent event) {
+        if (!isLegacySplitShadeEligible() || mBarState != StatusBarState.SHADE) {
+            return;
+        }
+        closeQs();
+        setTracking(false);
+        mConflictingExpansionGesture = false;
+        mTwoFingerExpandPossible = false;
+        boolean openQs = isExpansionEnabled() && isOpenQsEvent(event)
+                && !NTForbiddenSwipeDownQSController.get(mPanelView.getContext())
+                        .getForbiddenSwipeDownQS();
+        setExpandImmediate(openQs);
+        mNotificationStackScrollLayoutController.setShouldShowShelfOnly(openQs);
+        if (openQs) {
+            setListening(true);
+        }
+        updateQsSplitShadeState();
+        updateExpansion();
+        updateQsState();
     }
 
     private void handleDown(MotionEvent event) {
@@ -1985,6 +2021,9 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
 
     /** intercepts touches on Qs panel area. */
     boolean onIntercept(MotionEvent event) {
+        if (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE) {
+            return false;
+        }
         int pointerIndex = event.findPointerIndex(mTrackingPointer);
         if (pointerIndex < 0) {
             pointerIndex = 0;

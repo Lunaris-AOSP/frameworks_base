@@ -256,11 +256,12 @@ constructor(
     /** Expansion fraction of the QQS <-> QS animation. */
     var qsExpandedFraction = -1f
         set(value) {
-            if (visible && field != value) {
+            if (field != value) {
                 field = value
-                iconContainer.setQsExpansionTransitioning(value > 0f && value < 1.0f)
-                updatePosition()
-                updateIgnoredSlots()
+                if (visible) {
+                    updatePosition()
+                    updateIgnoredSlots()
+                }
             }
         }
 
@@ -722,6 +723,11 @@ constructor(
     }
 
     private fun updatePosition() {
+        if (visible) {
+            iconContainer.setQsExpansionTransitioning(
+                qsExpandedFraction > 0f && qsExpandedFraction < 1f
+            )
+        }
         if (!largeScreenActive && visible) {
             logInstantEvent("updatePosition: $qsExpandedFraction")
             header.progress = qsExpandedFraction

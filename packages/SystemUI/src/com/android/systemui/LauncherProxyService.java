@@ -217,6 +217,7 @@ public class LauncherProxyService implements CallbackController<LauncherProxyLis
     private boolean mInputFocusTransferStarted;
     private float mInputFocusTransferStartY;
     private long mInputFocusTransferStartMillis;
+    private long mInputFocusTransferDownTime;
     private int mNavBarMode = NAV_BAR_MODE_3BUTTON;
 
     @VisibleForTesting
@@ -260,21 +261,25 @@ public class LauncherProxyService implements CallbackController<LauncherProxyLis
                         mInputFocusTransferStarted = true;
                         mInputFocusTransferStartY = event.getY();
                         mInputFocusTransferStartMillis = event.getEventTime();
+                        mInputFocusTransferDownTime = event.getDownTime();
 
                         // If scene framework is enabled, set the scene container window to
                         // visible and let the touch "slip" into that window.
                         if (SceneContainerFlag.isEnabled()) {
                             mSceneInteractor.get().onRemoteUserInputStarted("launcher swipe");
                         } else {
-                            mShadeViewControllerLazy.get().startInputFocusTransfer();
+                            mShadeViewControllerLazy.get().startInputFocusTransfer(event);
                         }
                     }
-                    if (action == ACTION_UP || action == ACTION_CANCEL) {
+                    if ((action == ACTION_UP || action == ACTION_CANCEL)
+                            && mInputFocusTransferStarted
+                            && event.getDownTime() == mInputFocusTransferDownTime) {
                         mInputFocusTransferStarted = false;
 
                         if (!SceneContainerFlag.isEnabled()) {
                             float velocity = (event.getY() - mInputFocusTransferStartY)
-                                    / (event.getEventTime() - mInputFocusTransferStartMillis);
+                                    / Math.max(1L,
+                                            event.getEventTime() - mInputFocusTransferStartMillis);
                             if (action == ACTION_CANCEL) {
                                 mShadeViewControllerLazy.get().cancelInputFocusTransfer();
                             } else {

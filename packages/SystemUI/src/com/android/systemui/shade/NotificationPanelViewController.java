@@ -1739,6 +1739,14 @@ public final class NotificationPanelViewController implements
     }
 
     @Override
+    public void startInputFocusTransfer(MotionEvent event) {
+        if (mCommandQueue.panelsEnabled() && isFullyCollapsed()) {
+            mQsController.prepareLegacySplitShade(event);
+        }
+        startInputFocusTransfer();
+    }
+
+    @Override
     public void startInputFocusTransfer() {
         if (!mCommandQueue.panelsEnabled()) {
             return;
@@ -1778,6 +1786,7 @@ public final class NotificationPanelViewController implements
             return;
         }
         if (mExpectingSynthesizedDown) {
+            mExpectingSynthesizedDown = false;
             // Window never will receive touch events that typically trigger haptic on open.
             maybeVibrateOnOpening(false /* openingWithTouch */);
             fling(velocity > 1f ? 1000f * velocity : 0  /* expand */);
@@ -4373,7 +4382,8 @@ public final class NotificationPanelViewController implements
                 return false;
             }
             if (!mHeadsUpTouchHelper.isTrackingHeadsUp() && mQsController.handleTouch(
-                    event, isFullyCollapsed(), isShadeOrQsHeightAnimationRunning())) {
+                    event, isFullyCollapsed(), isShadeOrQsHeightAnimationRunning(),
+                    mLastEventSynthesizedDown)) {
                 if (mBrightnessControl) {
                     mCentralSurfaces.cancelBrightnessControl();
                 }

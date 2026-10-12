@@ -103,6 +103,8 @@ open class ShadeViewControllerEmptyImpl @Inject constructor() :
 
     override fun startInputFocusTransfer() {}
 
+    override fun startInputFocusTransfer(event: MotionEvent) {}
+
     override fun cancelInputFocusTransfer() {}
 
     override fun finishInputFocusTransfer(velocity: Float) {}
