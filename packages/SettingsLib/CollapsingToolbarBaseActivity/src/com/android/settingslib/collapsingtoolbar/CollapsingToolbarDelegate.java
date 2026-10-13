@@ -217,6 +217,11 @@ public class CollapsingToolbarDelegate {
             }
         }
         autoSetCollapsingToolbarLayoutScrolling(appBarLayout);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA
+                && collapsingToolbarLayout != null && appBarLayout != null
+                && SettingsThemeHelper.isExpressiveTheme(collapsingToolbarLayout.getContext())) {
+            OneUiCollapsingToolbarController.attach(collapsingToolbarLayout, appBarLayout);
+        }
     }
 
     /** Initialize toolbar's primary button. */

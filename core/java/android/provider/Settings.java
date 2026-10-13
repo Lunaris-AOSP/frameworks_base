@@ -7975,6 +7975,13 @@ public final class Settings {
         public static final String WALLPAPER_ZOOM_ENABLED = "wallpaper_zoom_enabled";
 
         /**
+         * Whether SettingsLib uses One UI-style collapsing headers. Defaults to 0 (disabled).
+         * @hide
+         */
+        @Readable
+        public static final String ONEUI_COLLAPSING_TOOLBAR = "oneui_collapsing_toolbar";
+
+        /**
          * What to show at the bottom of the Ambient display
          * 0: Nothing.
          * 1: Battery Percentage.

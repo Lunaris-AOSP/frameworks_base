@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Copyright (C) 2026 Lunaris OS
+    SPDX-License-Identifier: Apache-2.0
+-->
+<resources>
+    <item type="id" name="settingslib_oneui_toolbar_controller" />
+    <dimen name="settingslib_oneui_toolbar_height">240dp</dimen>
+    <dimen name="settingslib_oneui_title_margin">24dp</dimen>
+    <dimen name="settingslib_oneui_expanded_title_size">36sp</dimen>
+    <dimen name="settingslib_oneui_collapsed_title_size">20sp</dimen>
+    <dimen name="settingslib_oneui_scrim_trigger">72dp</dimen>
+    <dimen name="settingslib_oneui_max_elevation">4dp</dimen>
+</resources>
