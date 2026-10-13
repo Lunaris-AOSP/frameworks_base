@@ -144,22 +144,31 @@ private fun EqualizerBars(
     color: Color,
     modifier: Modifier = Modifier,
 ) {
-    val inf = rememberInfiniteTransition(label = "eq")
-    val h1 by inf.animateFloat(
-        initialValue = 0.30f, targetValue = 1.00f,
-        animationSpec = infiniteRepeatable(tween(600, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "b1",
-    )
-    val h2 by inf.animateFloat(
-        initialValue = 0.80f, targetValue = 0.35f,
-        animationSpec = infiniteRepeatable(tween(450, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "b2",
-    )
-    val h3 by inf.animateFloat(
-        initialValue = 0.50f, targetValue = 0.90f,
-        animationSpec = infiniteRepeatable(tween(700, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "b3",
-    )
+    val h1: Float
+    val h2: Float
+    val h3: Float
+    if (isPlaying) {
+        val inf = rememberInfiniteTransition(label = "eq")
+        h1 = inf.animateFloat(
+            initialValue = 0.30f, targetValue = 1.00f,
+            animationSpec = infiniteRepeatable(tween(600, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+            label = "b1",
+        ).value
+        h2 = inf.animateFloat(
+            initialValue = 0.80f, targetValue = 0.35f,
+            animationSpec = infiniteRepeatable(tween(450, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+            label = "b2",
+        ).value
+        h3 = inf.animateFloat(
+            initialValue = 0.50f, targetValue = 0.90f,
+            animationSpec = infiniteRepeatable(tween(700, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+            label = "b3",
+        ).value
+    } else {
+        h1 = 0.30f
+        h2 = 0.80f
+        h3 = 0.50f
+    }
     val alpha by animateFloatAsState(
         targetValue = if (isPlaying) 1f else 0f,
         animationSpec = tween(300),
