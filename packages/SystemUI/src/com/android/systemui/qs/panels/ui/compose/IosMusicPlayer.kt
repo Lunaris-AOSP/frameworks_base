@@ -33,9 +33,11 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -119,7 +121,7 @@ fun IosMusicPlayer(modifier: Modifier = Modifier) {
 // Content
 // ---------------------------------------------------------------------------
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun IosMusicPlayerContent(
     mediaState: SharedMediaState,
@@ -196,6 +198,8 @@ private fun IosMusicPlayerContent(
     var localIsPlaying by remember(mediaState.controller, mediaState.isPlaying) {
         mutableStateOf(mediaState.isPlaying)
     }
+
+    var showExpandedPopup by remember { mutableStateOf(false) }
 
     val playSrc = remember { MutableInteractionSource() }
 
@@ -292,7 +296,11 @@ private fun IosMusicPlayerContent(
             // ---- Top row: album art thumbnail + track info + output picker ----
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.clickable(enabled = hasMedia, onClick = ::launchSessionApp),
+                modifier = Modifier.combinedClickable(
+                    enabled = hasMedia,
+                    onClick = { showExpandedPopup = true },
+                    onLongClick = ::launchSessionApp,
+                ),
             ) {
                 // Album art thumbnail or placeholder
                 if (hasAlbumArt) {
@@ -448,5 +456,12 @@ private fun IosMusicPlayerContent(
                 }
             }
         }
+    }
+
+    if (showExpandedPopup && hasMedia) {
+        MaterialMediaExpandedPopup(
+            mediaState = mediaState,
+            onDismiss = { showExpandedPopup = false },
+        )
     }
 }
