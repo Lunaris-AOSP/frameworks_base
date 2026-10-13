@@ -15216,6 +15216,15 @@ public final class Settings {
         public static final String LOCK_SCREEN_CUSTOM_CLOCK_STYLE = "lock_screen_custom_clock_style";
 
         /**
+         * Allow lock screen notifications to overlap custom clocks in the normal notification area,
+         * without reserving space for the custom clock. Bottom alignment still applies.
+         * Defaults to 0 (below the clock); 1 allows overlap.
+         * @hide
+         */
+        public static final String LOCK_SCREEN_NOTIFICATIONS_ABOVE_CLOCK =
+                "lock_screen_notifications_above_clock";
+
+        /**
          * The user's Clock Maker design, encoded as versioned JSON.
          * @hide
          */
