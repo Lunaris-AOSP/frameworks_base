@@ -2294,6 +2294,8 @@ public class WindowManagerService extends IWindowManager.Stub
 
         final DisplayContent dc = win.getDisplayContent();
 
+        dc.mWallpaperController.onWindowRemoved(win);
+
         win.resetAppOpsState();
 
         if (dc.mCurrentFocus == null) {

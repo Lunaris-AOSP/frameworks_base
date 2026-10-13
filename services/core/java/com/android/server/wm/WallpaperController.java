@@ -82,7 +82,6 @@ class WallpaperController {
     // to another, and this is the previous wallpaper target.
     private WindowState mPrevWallpaperTarget = null;
 
-    private static final float WALLPAPER_ZOOM_EPSILON = 0.003f;
     private float mLastWallpaperZoomOut = 0;
     private WindowState mMaxZoomOutWindow = null;
 
@@ -543,20 +542,31 @@ class WallpaperController {
     }
 
     void setWallpaperZoomOut(WindowState window, float zoom) {
-        if (Math.abs(window.mWallpaperZoomOut - zoom) < WALLPAPER_ZOOM_EPSILON) {
+        if (Float.compare(window.mWallpaperZoomOut, zoom) == 0) {
             return;
         }
         final float oldMaxZoom = mLastWallpaperZoomOut;
         window.mWallpaperZoomOut = zoom;
 
-        if (zoom > mLastWallpaperZoomOut + WALLPAPER_ZOOM_EPSILON) {
+        if (!window.mIsWallpaper && zoom > mLastWallpaperZoomOut) {
             mLastWallpaperZoomOut = zoom;
             mMaxZoomOutWindow = window;
         } else if (window == mMaxZoomOutWindow) {
             computeLastWallpaperZoomOut();
         }
 
-        if (Math.abs(oldMaxZoom - mLastWallpaperZoomOut) >= WALLPAPER_ZOOM_EPSILON) {
+        if (Float.compare(oldMaxZoom, mLastWallpaperZoomOut) != 0) {
+            updateWallpaperZoom();
+        }
+    }
+
+    void onWindowRemoved(WindowState window) {
+        if (window != mMaxZoomOutWindow) {
+            return;
+        }
+        final float oldMaxZoom = mLastWallpaperZoomOut;
+        computeLastWallpaperZoomOut();
+        if (Float.compare(oldMaxZoom, mLastWallpaperZoomOut) != 0) {
             updateWallpaperZoom();
         }
     }
