@@ -18,6 +18,7 @@ package com.android.systemui.screencapture.ui
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.ContextWrapper
 import android.view.Display
 import android.view.SurfaceControl
 import android.view.ViewRootImpl
@@ -106,6 +107,11 @@ constructor(
         shouldConsumeInsets = false,
     ) {
 
+    private val composeContext =
+        object : ContextWrapper(getContext()) {
+            override fun getApplicationContext(): Context = context
+        }
+
     private var composeRoot: ComposeView? = null
     var onRemoved: (() -> Unit)? = null
 
@@ -151,7 +157,7 @@ constructor(
         }
 
         composeRoot =
-            ComposeView(getContext()).also { composeView ->
+            ComposeView(composeContext).also { composeView ->
                 ComposeInitializer.onAttachedToWindow(composeView)
                 setContentView(composeView)
                 composeView.setContent {
