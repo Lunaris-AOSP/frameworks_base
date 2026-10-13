@@ -322,6 +322,8 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
     private float mQsOverScrollAmount;
     private boolean mSwipeInProgress = false;
     private boolean mBounceEnabled = true;
+    /** Coalesces QS translation while a spring frame updates height and overscroll together. */
+    private boolean mBatchingQsExpansionUpdates;
 
     private final Region mInterceptRegion = new Region();
     /** The end bounds of a clipping animation. */
@@ -1379,6 +1381,9 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
     }
 
     void updateQsFrameTranslation() {
+        if (mBatchingQsExpansionUpdates) {
+            return;
+        }
         float bounceTranslation = mBounceEnabled ? mShadeOverScrollAmount : 0f;
         if (mBounceEnabled && mQsOverscroll != 0f) {
             bounceTranslation += ShadeExpansionSpring.offset(mQsOverscroll,
@@ -2279,8 +2284,15 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
                 ? ShadeExpansionSpring.createAnimator(mExpansionHeight, target, mQsOverscroll,
                         vel, mPanelView.getContext().getResources().getDisplayMetrics().density,
                         (height, amount) -> {
-                            setQsOverscroll(amount);
-                            setExpansionHeight(height == target ? getMaxExpansionHeight() : height);
+                            mBatchingQsExpansionUpdates = true;
+                            try {
+                                setQsOverscroll(amount);
+                                setExpansionHeight(
+                                        height == target ? getMaxExpansionHeight() : height);
+                            } finally {
+                                mBatchingQsExpansionUpdates = false;
+                                updateQsFrameTranslation();
+                            }
                         })
                 : ValueAnimator.ofFloat(mExpansionHeight, target);
         if (isClick) {
