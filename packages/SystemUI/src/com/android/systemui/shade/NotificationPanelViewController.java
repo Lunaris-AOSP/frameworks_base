@@ -1626,6 +1626,7 @@ public final class NotificationPanelViewController implements
         AxAmbientStateEx.setOptimizedNotificationPanelViewCollapse(false);
         mIsFlinging = false;
         mIsSpringBackAnimation = false;
+        mUpdateFlingOnLayout = false;
         mExpectingSynthesizedDown = false;
         // No overshoot when the animation ends
         setOverExpansionInternal(0);
@@ -3176,7 +3177,8 @@ public final class NotificationPanelViewController implements
             }
             mTouchDownCancelAnimator = false;
             onTrackingStopped(expand);
-            mUpdateFlingOnLayout = expand && mPanelClosedOnDown && !mHasLayoutedSinceDown;
+            mUpdateFlingOnLayout = !mQsController.isBounceEnabled()
+                    && expand && mPanelClosedOnDown && !mHasLayoutedSinceDown;
             if (mUpdateFlingOnLayout) {
                 mUpdateFlingVelocity = vel;
             }
