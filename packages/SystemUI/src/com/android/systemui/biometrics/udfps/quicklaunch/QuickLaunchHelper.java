@@ -84,7 +84,7 @@ public class QuickLaunchHelper {
 
     public void updateQuickLaunchEnabled() {
         mQuickLaunchEnabled = Settings.Secure.getIntForUser(mContext.getContentResolver(),
-                SETTING_QUICK_LAUNCH_ENABLED, 1, UserHandle.USER_CURRENT) == 1;
+                SETTING_QUICK_LAUNCH_ENABLED, 0, UserHandle.USER_CURRENT) == 1;
     }
 
     public static synchronized QuickLaunchHelper getInstance(Context context) {
