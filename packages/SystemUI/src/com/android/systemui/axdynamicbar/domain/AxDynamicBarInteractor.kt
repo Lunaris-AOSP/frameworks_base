@@ -548,6 +548,17 @@ constructor(
 
     override fun switchToApp(taskId: Int) = repository.appTracking.switchToApp(taskId)
 
+    fun switchToPreviousApp(event: IslandEvent.AppSwitch) {
+        val previousApp = event.previousApp ?: return
+        val currentApp = event.recentApps.firstOrNull()
+        if (previousApp.taskId < 0 || previousApp.taskId == currentApp?.taskId ||
+            previousApp.packageName == currentApp?.packageName
+        ) {
+            return
+        }
+        repository.appTracking.switchToApp(previousApp.taskId)
+    }
+
     override fun killApp(taskId: Int) = repository.appTracking.killApp(taskId)
 
     fun onPanelExpandedChanged(expanded: Boolean) {

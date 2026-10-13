@@ -122,6 +122,8 @@ fun AxDynamicBarChip(
     }
 
     val touchSlop = LocalViewConfiguration.current.touchSlop
+    val longPressTimeoutMillis = LocalViewConfiguration.current.longPressTimeoutMillis
+    val currentDisplayEvent = rememberUpdatedState(displayEvent)
     val expandableController = rememberExpandableController(color = Color.Transparent, shape = ChipShape)
 
     val motionScheme = MaterialTheme.motionScheme
@@ -136,29 +138,43 @@ fun AxDynamicBarChip(
             .pointerInput(viewModel) {
                 awaitEachGesture {
                     val down = awaitFirstDown(pass = PointerEventPass.Initial)
-                    
+
                     val startX = down.position.x
                     val startY = down.position.y
                     var dragging = false
                     var totalDx = 0f
-                    var decided = false 
+                    var decided = false
+                    var longPressTriggered = false
+
                     while (true) {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
                         val change = event.changes.firstOrNull() ?: break
+                        val dx = change.position.x - startX
+                        val dy = change.position.y - startY
+                        if (currentDisplayEvent.value is IslandEvent.AppSwitch &&
+                            !longPressTriggered &&
+                            !decided &&
+                            abs(dx) <= touchSlop &&
+                            abs(dy) <= touchSlop &&
+                            change.uptimeMillis - down.uptimeMillis >= longPressTimeoutMillis
+                        ) {
+                            longPressTriggered = true
+                            viewModel.statusBarExpansion.expand()
+                        }
                         if (!change.pressed) {
-                            
                             if (dragging) {
                                 change.consume()
                                 if (totalDx > 0) viewModel.cyclePrev()
                                 else viewModel.cycleNext()
                             } else if (!decided) {
-
                                 change.consume()
-                                if (viewModel.chipTapClosesPanel(down.uptimeMillis)) {
+                                if (!longPressTriggered && viewModel.chipTapClosesPanel(down.uptimeMillis)) {
                                     viewModel.statusBarExpansion.collapse()
-                                } else {
-                                    val current = state?.event
-                                    if (current is IslandEvent.AospChip) {
+                                } else if (!longPressTriggered) {
+                                    val current = currentDisplayEvent.value
+                                    if (current is IslandEvent.AppSwitch) {
+                                        viewModel.switchToPreviousApp(current)
+                                    } else if (current is IslandEvent.AospChip) {
                                         if (!viewModel.handleAospChipTap(current, expandableController.expandable)) {
                                             viewModel.statusBarExpansion.expand()
                                             toggleCount++
@@ -169,20 +185,18 @@ fun AxDynamicBarChip(
                                     }
                                 }
                             }
-                            
                             break
                         }
-                        val dx = change.position.x - startX
-                        val dy = change.position.y - startY
-                        if (!decided && (abs(dx) > touchSlop || abs(dy) > touchSlop)) {
+
+                        if (!longPressTriggered && !decided &&
+                            (abs(dx) > touchSlop || abs(dy) > touchSlop)
+                        ) {
                             if (abs(dx) >= abs(dy)) {
-                                
                                 decided = true
                                 dragging = true
                                 totalDx = dx
                                 change.consume()
                             } else {
-                                
                                 decided = true
                                 break
                             }

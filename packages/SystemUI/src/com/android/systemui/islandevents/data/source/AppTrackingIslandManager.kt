@@ -36,13 +36,15 @@ open class AppTrackingIslandManager @Inject constructor(@Application private val
     private var switchesSincePrune = 0
 
     @Volatile private var currentForegroundPkg: String? = null
+    @Volatile private var currentForegroundTaskId = -1
+    private var pendingSwitchTaskId = -1
 
     private fun emitEvent() {
         val event =
             if (recentApps.isNotEmpty())
                 IslandEvent.AppSwitch(
                     recentApps = recentApps.toList(),
-                    previousApp = _appSwitchEvent.value?.previousApp,
+                    previousApp = findPreviousApp(),
                 )
             else null
         logEvent("emit", event)
@@ -60,6 +62,7 @@ open class AppTrackingIslandManager @Inject constructor(@Application private val
                         pkg == "com.android.launcher3"
                 ) {
                     currentForegroundPkg = null
+                    currentForegroundTaskId = -1
                     return
                 }
                 if (!hasLauncherIntent(pkg)) return
@@ -72,6 +75,7 @@ open class AppTrackingIslandManager @Inject constructor(@Application private val
 
                 val leavingPkg = currentForegroundPkg
                 currentForegroundPkg = pkg
+                currentForegroundTaskId = taskInfo.taskId
 
                 val appName =
                     try {
@@ -112,18 +116,19 @@ open class AppTrackingIslandManager @Inject constructor(@Application private val
 
                     val newPreviousApp =
                         if (leavingPkg != null && leavingPkg != pkg) {
-                            recentApps.find { it.packageName == leavingPkg }
+                            recentApps.find { it.packageName == leavingPkg } ?: findPreviousApp()
                         } else {
-                            _appSwitchEvent.value?.previousApp
+                            findPreviousApp()
                         }
 
                     val event =
                         if (recentApps.isNotEmpty())
                             IslandEvent.AppSwitch(
                                 recentApps = recentApps.toList(),
-                                previousApp = newPreviousApp,
+                                previousApp = newPreviousApp?.takeIf { it.packageName != pkg },
                             )
                         else null
+                    pendingSwitchTaskId = -1
                     logEvent("front pkg=$pkg leaving=$leavingPkg", event)
                     _appSwitchEvent.value = event
                 }
@@ -132,6 +137,11 @@ open class AppTrackingIslandManager @Inject constructor(@Application private val
             override fun onTaskRemoved(taskId: Int) {
                 synchronized(recentApps) {
                     val removed = recentApps.removeAll { it.taskId == taskId }
+                    if (taskId == currentForegroundTaskId) {
+                        currentForegroundPkg = null
+                        currentForegroundTaskId = -1
+                    }
+                    if (taskId == pendingSwitchTaskId) pendingSwitchTaskId = -1
                     if (removed) emitEvent()
                 }
             }
@@ -151,6 +161,9 @@ open class AppTrackingIslandManager @Inject constructor(@Application private val
         TaskStackChangeListeners.getInstance().unregisterTaskStackListener(listener)
         synchronized(recentApps) {
             recentApps.clear()
+            currentForegroundPkg = null
+            currentForegroundTaskId = -1
+            pendingSwitchTaskId = -1
             _appSwitchEvent.value = null
         }
     }
@@ -166,17 +179,29 @@ open class AppTrackingIslandManager @Inject constructor(@Application private val
         synchronized(recentApps) {
             val runningTaskIds = activityManager.getRunningTasks(MAX_RECENT + 4).map { it.taskId }.toSet()
             val removed = recentApps.removeAll { it.taskId !in runningTaskIds }
+            if (currentForegroundTaskId !in runningTaskIds) {
+                currentForegroundPkg = null
+                currentForegroundTaskId = -1
+            }
+            if (pendingSwitchTaskId !in runningTaskIds) pendingSwitchTaskId = -1
             if (removed) emitEvent()
         }
     }
 
     fun switchToApp(taskId: Int) {
+        synchronized(recentApps) {
+            val currentTaskId = recentApps.firstOrNull()?.taskId
+            if (taskId < 0 || taskId == currentTaskId || recentApps.none { it.taskId == taskId }) return
+            if (taskId == pendingSwitchTaskId) return
+            pendingSwitchTaskId = taskId
+        }
         try {
             activityManager.moveTaskToFront(taskId, 0)
         } catch (e: Exception) {
             Log.w(TAG, "Failed to switch to task $taskId", e)
             synchronized(recentApps) {
                 recentApps.removeAll { it.taskId == taskId }
+                if (taskId == pendingSwitchTaskId) pendingSwitchTaskId = -1
                 emitEvent()
             }
         }
@@ -204,22 +229,33 @@ open class AppTrackingIslandManager @Inject constructor(@Application private val
             }
 
             recentApps.removeAll { it.taskId == taskId }
-            if (pkg == currentForegroundPkg) currentForegroundPkg = null
-
-            val newPreviousApp =
-                if (_appSwitchEvent.value?.previousApp?.taskId == taskId) null
-                else _appSwitchEvent.value?.previousApp
+            if (pkg == currentForegroundPkg) {
+                currentForegroundPkg = null
+                currentForegroundTaskId = -1
+            }
+            if (taskId == pendingSwitchTaskId) pendingSwitchTaskId = -1
 
             val event =
                 if (recentApps.isNotEmpty())
                     IslandEvent.AppSwitch(
                         recentApps = recentApps.toList(),
-                        previousApp = newPreviousApp,
+                        previousApp = findPreviousApp(),
                     )
                 else null
             logEvent("kill task=$taskId pkg=$pkg", event)
             _appSwitchEvent.value = event
         }
+    }
+
+    private fun findPreviousApp(): IslandEvent.RecentApp? {
+        val currentPackage = recentApps.firstOrNull()?.packageName
+        val previousApp = _appSwitchEvent.value?.previousApp
+        if (previousApp != null && previousApp.packageName != currentPackage &&
+            recentApps.any { it.taskId == previousApp.taskId }
+        ) {
+            return previousApp
+        }
+        return recentApps.firstOrNull { it.packageName != currentPackage }
     }
 
     private val launcherIntentCache = HashMap<String, Boolean>()

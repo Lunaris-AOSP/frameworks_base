@@ -514,6 +514,8 @@ internal fun iconKeyFor(event: IslandEvent): Any =
 internal fun textKeyFor(event: IslandEvent): Any =
     when (event) {
         is IslandEvent.Media -> "${event.track}|${event.artist}"
+        is IslandEvent.AppSwitch ->
+            event.previousApp?.let { "${it.taskId}|${it.packageName}" } ?: event.id
         is IslandEvent.Timer,
         is IslandEvent.Stopwatch,
         is IslandEvent.AudioRecording -> "tick_text"
@@ -557,4 +559,3 @@ internal fun PendingIntent.sendWithBal(context: Context, fillIntent: Intent? = n
     )
     send(context, 0, fillIntent, null, null, null, options.toBundle())
 }
-

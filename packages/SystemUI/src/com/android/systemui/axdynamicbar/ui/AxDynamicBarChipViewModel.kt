@@ -235,6 +235,8 @@ constructor(
 
     fun cyclePrev() = interactor.cyclePrev()
 
+    fun switchToPreviousApp(event: IslandEvent.AppSwitch) = interactor.switchToPreviousApp(event)
+
     fun dismissEvent(event: IslandEvent) = interactor.dismissEvent(event)
 
     fun togglePlayPause() = interactor.togglePlayPause()

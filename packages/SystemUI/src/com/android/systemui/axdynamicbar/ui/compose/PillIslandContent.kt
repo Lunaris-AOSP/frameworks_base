@@ -1214,7 +1214,11 @@ internal fun PillEventText(
             }
         }
         is IslandEvent.AppSwitch ->
-            MarqueeLabel(stringResource(R.string.ax_dynamic_bar_recents), overrideColor ?: SubtleGray, modifier)
+            MarqueeLabel(
+                event.previousApp?.appName ?: stringResource(R.string.ax_dynamic_bar_recents),
+                overrideColor ?: SubtleGray,
+                modifier,
+            )
         is IslandEvent.Torch -> {
             val label =
                 if (event.supportsLevel)
