@@ -133,6 +133,7 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
     var selectedId: String? = null
         set(value) { field = value; invalidate() }
     var selectionColor: Int = Color.CYAN
+    val transformPivotY: Float get() = width / 2f
     var onSelect: ((String) -> Unit)? = null
     var onMove: ((String, Float, Float) -> Unit)? = null
     var onDragFinished: (() -> Unit)? = null
@@ -387,7 +388,8 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
     override fun dispatchDraw(canvas: Canvas) {
         super.dispatchDraw(canvas)
         if (onSelect == null) return
-        val child = (0 until childCount).map { getChildAt(it) }.firstOrNull { it.tag == selectedId } ?: return
+        val child = (0 until childCount).map { getChildAt(it) }
+            .firstOrNull { it.tag == selectedId && it.visibility == View.VISIBLE } ?: return
         selectionPaint.color = selectionColor
         selectionPaint.strokeWidth = maxOf(1f, width / 200f)
         canvas.save()
@@ -396,6 +398,8 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
         canvas.drawRect(0f, 0f, child.width.toFloat(), child.height.toFloat(), selectionPaint)
         canvas.restore()
     }
+
+    override fun onInterceptTouchEvent(event: MotionEvent): Boolean = onSelect != null
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (onSelect == null) return false
@@ -419,14 +423,15 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
             }
             MotionEvent.ACTION_MOVE -> {
                 val element = design.elements.firstOrNull { it.id == touchId } ?: return false
-                onMove?.invoke(element.id, ((event.x - grabX) / width).coerceIn(0f, 1f),
-                    ((event.y - grabY) / width).coerceIn(0f, 4f))
+                onMove?.invoke(element.id,
+                    ((event.x - grabX) / width).coerceIn(ClockElement.MIN_POSITION, ClockElement.MAX_POSITION),
+                    ((event.y - grabY) / width).coerceIn(ClockElement.MIN_POSITION, ClockElement.MAX_POSITION))
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 touchId = null
                 parent?.requestDisallowInterceptTouchEvent(false)
                 onDragFinished?.invoke()
-                performClick()
+                if (event.actionMasked == MotionEvent.ACTION_UP) performClick()
             }
         }
         return true

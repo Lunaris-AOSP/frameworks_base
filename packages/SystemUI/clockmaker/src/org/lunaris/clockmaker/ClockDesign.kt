@@ -77,6 +77,9 @@ data class ClockElement(
         .put("quickLookDateFallback", quickLookDateFallback)
 
     companion object {
+        const val MIN_POSITION = -4f
+        const val MAX_POSITION = 4f
+
         fun create(kind: ClockElementKind) = ClockElement(kind = kind,
             size = if (kind == ClockElementKind.TIME) 84 else 22,
             y = when (kind) {
@@ -100,7 +103,8 @@ data class ClockElement(
             return d.copy(
                 id = j.optString("id", d.id).take(80), text = j.optString("text").take(240),
                 format = j.optString("format").takeIf(::validFormat) ?: "",
-                x = number("x", d.x, 0f, 1f), y = number("y", d.y, 0f, 4f),
+                x = number("x", d.x, MIN_POSITION, MAX_POSITION),
+                y = number("y", d.y, MIN_POSITION, MAX_POSITION),
                 size = j.optInt("size", d.size).coerceIn(8, 200),
                 font = j.optString("font", d.font).take(100),
                 weight = j.optInt("weight", 400).coerceIn(100, 900),

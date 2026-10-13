@@ -841,7 +841,7 @@ class ClockStyle @JvmOverloads constructor(
         view.scaleX = scale
         view.scaleY = scale
         view.pivotX = view.width / 2f
-        view.pivotY = view.height / 2f
+        view.pivotY = (view as? ClockDesignView)?.transformPivotY ?: (view.height / 2f)
         disableClippingOnParents(view)
         applyClockTransform()
         if (naturalClockHeight == 0 && view.height > 0) {
@@ -880,8 +880,9 @@ class ClockStyle @JvmOverloads constructor(
         }
         if (view.width > 0 && view.height > 0) {
             view.pivotX = view.width / 2f
-            view.pivotY = view.height / 2f
-            val extent = maxOf(view.width, view.height).toFloat()
+            view.pivotY = (view as? ClockDesignView)?.transformPivotY ?: (view.height / 2f)
+            val extent = if (view is ClockDesignView) view.width.toFloat()
+                else maxOf(view.width, view.height).toFloat()
             view.cameraDistance = (extent * TILT_CAMERA_DISTANCE_FACTOR)
                 .coerceAtLeast(TILT_MIN_CAMERA_DISTANCE_DP * resources.displayMetrics.density)
         }
