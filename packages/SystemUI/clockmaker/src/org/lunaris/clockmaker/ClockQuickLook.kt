@@ -130,6 +130,10 @@ internal class ClockQuickLook(private val context: Context, private val onChange
 }
 
 internal data class ClockQuickLookContent(val text: String, val target: QuickLookTarget?) {
+    val isMedia: Boolean
+        get() = target?.targetType == QuickLookTarget.TYPE_MEDIA ||
+            target?.targetType == QuickLookTarget.TYPE_NOW_PLAYING
+
     companion object {
         fun create(targets: List<QuickLookTarget>, date: String, showDate: Boolean,
             showWeather: Boolean, allowSensitive: Boolean): ClockQuickLookContent {
@@ -144,7 +148,10 @@ internal data class ClockQuickLookContent(val text: String, val target: QuickLoo
                 .sortedWith(priority).firstOrNull()
             fun join(vararg parts: String?) = parts.filterNot { it.isNullOrBlank() }
                 .distinct().joinToString(" · ")
-            val text = if (update != null) {
+            val text = if (update?.targetType == QuickLookTarget.TYPE_MEDIA ||
+                update?.targetType == QuickLookTarget.TYPE_NOW_PLAYING) {
+                listOfNotNull(update.title, update.subtitle).filter { it.isNotBlank() }.joinToString(" · ")
+            } else if (update != null) {
                 listOfNotNull(update.title?.takeIf { it.isNotBlank() },
                     join(update.subtitle, weather?.title).takeIf { it.isNotBlank() }).joinToString("\n")
             } else if (showDate) {

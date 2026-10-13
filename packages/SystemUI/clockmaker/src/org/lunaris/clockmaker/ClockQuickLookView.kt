@@ -12,6 +12,7 @@ import android.graphics.Color
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.Icon
+import android.text.TextUtils
 import android.widget.TextView
 import com.android.axion.quicklook.QuickLookAction
 import com.android.axion.quicklook.QuickLookTarget
@@ -22,6 +23,8 @@ internal class ClockQuickLookView(context: Context) : TextView(context) {
     private var icon: Drawable? = null
     private var iconRequest = 0
     private var onAction: ((QuickLookAction) -> Unit)? = null
+    private var displayText = ""
+    private var isMedia = false
 
     init {
         setOnClickListener {
@@ -31,7 +34,18 @@ internal class ClockQuickLookView(context: Context) : TextView(context) {
     }
 
     fun bind(content: ClockQuickLookContent, dozing: Boolean, onAction: ((QuickLookAction) -> Unit)?) {
-        if (text.toString() != content.text) text = content.text
+        displayText = content.text
+        if (isMedia != content.isMedia) {
+            isMedia = content.isMedia
+            setSingleLine(isMedia)
+            maxLines = if (isMedia) 1 else 4
+            maxWidth = if (isMedia) (280 * resources.displayMetrics.density).roundToInt() else Int.MAX_VALUE
+            marqueeRepeatLimit = -1
+        }
+        ellipsize = if (isMedia) {
+            if (dozing) TextUtils.TruncateAt.END else TextUtils.TruncateAt.MARQUEE
+        } else null
+        isSelected = isMedia && !dozing
         this.onAction = onAction
         isClickable = onAction != null && content.target?.primaryAction != null
         isFocusable = isClickable
@@ -43,6 +57,12 @@ internal class ClockQuickLookView(context: Context) : TextView(context) {
             setCompoundDrawablesRelative(null, null, null, null)
             loadIcon()
         }
+        updateText()
+    }
+
+    private fun updateText() {
+        val value = if (isMedia && icon != null && displayText.isNotBlank()) "· $displayText" else displayText
+        if (text.toString() != value) text = value
     }
 
     private fun loadIcon() {
@@ -90,6 +110,7 @@ internal class ClockQuickLookView(context: Context) : TextView(context) {
         drawable.setBounds(0, 0, size, size)
         compoundDrawablePadding = (textSize * 0.3f).roundToInt()
         setCompoundDrawablesRelative(drawable, null, null, null)
+        updateText()
     }
 
     override fun onAttachedToWindow() {
