@@ -17,15 +17,12 @@
 package com.android.systemui.screencapture.record.ui.compose
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import com.android.systemui.lifecycle.rememberViewModel
+import com.android.systemui.screencapture.common.ScreenCapture
 import com.android.systemui.screencapture.common.ScreenCaptureUiScope
+import com.android.systemui.screencapture.common.shared.model.ScreenCaptureUiParameters
 import com.android.systemui.screencapture.common.ui.compose.ScreenCaptureContent
 import com.android.systemui.screencapture.record.largescreen.ui.compose.LargeScreenCaptureContent
 import com.android.systemui.screencapture.record.smallscreen.ui.compose.SmallScreenCaptureRecordContent
-import com.android.systemui.screencapture.record.ui.viewmodel.ScreenCaptureRecordViewModel
 import dagger.Lazy
 import javax.inject.Inject
 
@@ -34,27 +31,17 @@ import javax.inject.Inject
 class ScreenCaptureRecordContent
 @Inject
 constructor(
-    private val screenCaptureRecordViewModelFactory: ScreenCaptureRecordViewModel.Factory,
+    @ScreenCapture private val parameters: ScreenCaptureUiParameters,
     private val largeScreenCaptureContent: Lazy<LargeScreenCaptureContent>,
     private val smallScreenCaptureRecordContent: Lazy<SmallScreenCaptureRecordContent>,
 ) : ScreenCaptureContent {
 
     @Composable
     override fun Content() {
-        val viewModel =
-            rememberViewModel("ScreenCaptureRecordContent#ScreenCaptureRecordViewModel") {
-                screenCaptureRecordViewModelFactory.create()
-            }
-        val content: ScreenCaptureContent? by
-            remember(viewModel.isLargeScreen) {
-                derivedStateOf {
-                    when (viewModel.isLargeScreen) {
-                        true -> largeScreenCaptureContent.get()
-                        false -> smallScreenCaptureRecordContent.get()
-                        else -> null
-                    }
-                }
-            }
-        content?.Content()
+        if (parameters.largeScreenParameters != null) {
+            largeScreenCaptureContent.get().Content()
+        } else {
+            smallScreenCaptureRecordContent.get().Content()
+        }
     }
 }

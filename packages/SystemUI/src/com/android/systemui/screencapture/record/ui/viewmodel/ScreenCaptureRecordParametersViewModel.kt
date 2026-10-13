@@ -17,18 +17,53 @@
 package com.android.systemui.screencapture.record.ui.viewmodel
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.lifecycle.HydratedActivatable
 import com.android.systemui.screencapture.common.shared.model.ScreenCaptureTarget
 import com.android.systemui.screencapture.record.domain.interactor.ScreenCaptureRecordParametersInteractor
+import com.android.systemui.screencapture.record.shared.model.ScreenCaptureRecordParametersModel
 import com.android.systemui.screenrecord.ScreenRecordingAudioSource
+import com.android.systemui.screenrecord.domain.ScreenRecordingOptions
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
+import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.flow.map
 
 class ScreenCaptureRecordParametersViewModel
 @AssistedInject
-constructor(private val interactor: ScreenCaptureRecordParametersInteractor) :
-    HydratedActivatable() {
+constructor(
+    private val interactor: ScreenCaptureRecordParametersInteractor,
+    @Background
+    private val backgroundContext: CoroutineContext = kotlinx.coroutines.Dispatchers.Default,
+) : HydratedActivatable() {
+
+    var hasHevcEncoder by mutableStateOf(false)
+        private set
+
+    var capabilitiesLoaded by mutableStateOf(false)
+        private set
+
+    override suspend fun onActivated() {
+        hasHevcEncoder =
+            kotlinx.coroutines.withContext(backgroundContext) {
+                ScreenRecordingOptions.hasHevcEncoder()
+            }
+        capabilitiesLoaded = true
+    }
+
+    val options by
+        interactor.parameters.hydratedStateOf(
+            "ScreenCaptureRecordParametersViewModel#options",
+            interactor.parameters.value,
+        )
+
+    fun updateOptions(
+        update: (ScreenCaptureRecordParametersModel) -> ScreenCaptureRecordParametersModel
+    ) {
+        interactor.updateOptions(update)
+    }
 
     val audioSource: ScreenRecordingAudioSource? by
         interactor.parameters
@@ -67,8 +102,8 @@ constructor(private val interactor: ScreenCaptureRecordParametersInteractor) :
 
     var shouldRecordDevice: Boolean
         get() =
-            audioSource == ScreenRecordingAudioSource.MIC_AND_INTERNAL ||
-                audioSource == ScreenRecordingAudioSource.INTERNAL
+            options.audioSource == ScreenRecordingAudioSource.MIC_AND_INTERNAL ||
+                options.audioSource == ScreenRecordingAudioSource.INTERNAL
         set(value) {
             if (value) {
                 if (shouldRecordMicrophone) {
@@ -87,8 +122,8 @@ constructor(private val interactor: ScreenCaptureRecordParametersInteractor) :
 
     var shouldRecordMicrophone: Boolean
         get() =
-            audioSource == ScreenRecordingAudioSource.MIC_AND_INTERNAL ||
-                audioSource == ScreenRecordingAudioSource.MIC
+            options.audioSource == ScreenRecordingAudioSource.MIC_AND_INTERNAL ||
+                options.audioSource == ScreenRecordingAudioSource.MIC
         set(value) {
             if (value) {
                 if (shouldRecordDevice) {

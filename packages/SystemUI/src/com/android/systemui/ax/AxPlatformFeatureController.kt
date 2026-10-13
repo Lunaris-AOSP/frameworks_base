@@ -271,7 +271,7 @@ class AxPlatformFeatureController @Inject constructor(
                 } else if (screenRecordUxController.isRecording) {
                     screenRecordUxController.stopRecording(StopReason.STOP_QS_TILE)
                 } else {
-                    screenRecordUxController.createScreenRecordDialog(null).show()
+                    screenRecordUxController.onScreenRecordQsTileClick()
                 }
             }
             AxPlatformClient.FEATURE_SCREENSHOT -> {

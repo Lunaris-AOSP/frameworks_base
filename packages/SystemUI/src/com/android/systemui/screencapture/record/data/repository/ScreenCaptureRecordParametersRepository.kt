@@ -17,35 +17,58 @@
 package com.android.systemui.screencapture.record.data.repository
 
 import android.view.Display
+import com.android.systemui.screencapture.common.ScreenCaptureUi
 import com.android.systemui.screencapture.common.ScreenCaptureUiScope
 import com.android.systemui.screencapture.common.shared.model.ScreenCaptureTarget
+import com.android.systemui.screencapture.record.domain.interactor.ScreenCaptureRecordingInteractor
 import com.android.systemui.screencapture.record.shared.model.ScreenCaptureRecordParametersModel
 import com.android.systemui.screenrecord.ScreenRecordingAudioSource
+import com.android.systemui.screenrecord.domain.ScreenRecordingOptions
+import com.android.systemui.settings.UserContextProvider
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
 @ScreenCaptureUiScope
-class ScreenCaptureRecordParametersRepository @Inject constructor() {
+class ScreenCaptureRecordParametersRepository(
+    initialOptions: ScreenCaptureRecordParametersModel =
+        ScreenCaptureRecordParametersModel(
+            target = ScreenCaptureTarget.Fullscreen(Display.DEFAULT_DISPLAY),
+            audioSource = ScreenRecordingAudioSource.NONE,
+            shouldShowTaps = false,
+            shouldShowFrontCamera = false,
+            lowQuality = false,
+            longerDuration = false,
+            hevc = false,
+        ),
+    private val persistOptions: (ScreenCaptureRecordParametersModel) -> Unit = {},
+    private val canUpdate: () -> Boolean = { true },
+) {
+    @Inject
+    constructor(
+        recordingInteractor: ScreenCaptureRecordingInteractor,
+        userContextProvider: UserContextProvider,
+        @ScreenCaptureUi display: Display,
+    ) : this(
+        recordingInteractor.activeOptions
+            ?: ScreenRecordingOptions.load(userContextProvider.userContext, display.displayId),
+        userContextProvider.userContext.let { context ->
+            { options -> ScreenRecordingOptions.save(context, options) }
+        },
+        { !recordingInteractor.isBusy },
+    )
 
-    private val _parameters =
-        MutableStateFlow(
-            ScreenCaptureRecordParametersModel(
-                target = ScreenCaptureTarget.Fullscreen(Display.DEFAULT_DISPLAY),
-                audioSource = ScreenRecordingAudioSource.NONE,
-                shouldShowTaps = false,
-                shouldShowFrontCamera = false,
-                lowQuality = false,
-                longerDuration = false,
-                hevc = false,
-            )
-        )
+    private val _parameters = MutableStateFlow(initialOptions)
     val parameters = _parameters.asStateFlow()
 
     fun updateParameters(
         update: (ScreenCaptureRecordParametersModel) -> ScreenCaptureRecordParametersModel
     ) {
+        if (!canUpdate()) return
+        val previous = _parameters.value
         _parameters.update(update)
+        val updated = _parameters.value
+        if (previous != updated.copy(target = previous.target)) persistOptions(updated)
     }
 }

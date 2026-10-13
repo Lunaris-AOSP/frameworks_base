@@ -28,4 +28,10 @@ data class ScreenCaptureRecordParametersModel(
     val lowQuality: Boolean,
     val longerDuration: Boolean,
     val hevc: Boolean,
+    val skipTimer: Boolean = false,
+    val resolutionMode: Int = 0,
+    val fpsMode: Int = 0,
+    val timeLimitMs: Int = 0,
+    val fileSizeBytes: Long = 0L,
+    val bitrateMultiplier: Float = 1f,
 )

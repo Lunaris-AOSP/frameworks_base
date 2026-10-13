@@ -19,90 +19,104 @@ package com.android.systemui.screencapture.record.smallscreen.ui.viewmodel
 import android.app.ActivityOptions
 import android.app.ActivityOptions.LaunchCookie
 import android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS
-import android.app.IActivityTaskManager
-import android.media.projection.StopReason
+import android.content.Context
+import android.hardware.display.DisplayManager
+import android.os.UserHandle
+import android.util.Log
+import android.view.Display
+import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.android.app.tracing.coroutines.launchTraced
+import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.lifecycle.HydratedActivatable
 import com.android.systemui.mediaprojection.MediaProjectionCaptureTarget
+import com.android.systemui.mediaprojection.devicepolicy.ScreenCaptureDevicePolicyResolver
+import com.android.systemui.res.R
+import com.android.systemui.screencapture.common.ScreenCapture
 import com.android.systemui.screencapture.common.ScreenCaptureUiScope
 import com.android.systemui.screencapture.common.shared.model.ScreenCaptureTarget
 import com.android.systemui.screencapture.common.shared.model.ScreenCaptureType
+import com.android.systemui.screencapture.common.shared.model.ScreenCaptureUiParameters
 import com.android.systemui.screencapture.common.ui.viewmodel.DrawableLoaderViewModel
 import com.android.systemui.screencapture.common.ui.viewmodel.DrawableLoaderViewModelImpl
 import com.android.systemui.screencapture.domain.interactor.ScreenCaptureUiInteractor
+import com.android.systemui.screencapture.record.domain.interactor.ScreenCaptureRecordingInteractor
 import com.android.systemui.screencapture.record.ui.viewmodel.ScreenCaptureRecordParametersViewModel
+import com.android.systemui.screenrecord.data.model.ScreenRecordModel
+import com.android.systemui.screenrecord.domain.ScreenRecordingOptions
 import com.android.systemui.screenrecord.domain.ScreenRecordingParameters
-import com.android.systemui.screenrecord.domain.interactor.ScreenRecordingServiceInteractor
-import com.android.systemui.screenrecord.domain.interactor.Status
+import com.android.systemui.settings.UserTracker
+import com.android.systemui.shared.system.ActivityManagerWrapper
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
+import javax.inject.Provider
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 
 class SmallScreenCaptureRecordViewModel
 @AssistedInject
 constructor(
-    private val screenRecordingServiceInteractor: ScreenRecordingServiceInteractor,
+    private val recordingInteractor: ScreenCaptureRecordingInteractor,
     recordDetailsAppSelectorViewModelFactory: RecordDetailsAppSelectorViewModel.Factory,
     screenCaptureRecordParametersViewModelFactory: ScreenCaptureRecordParametersViewModel.Factory,
     recordDetailsTargetViewModelFactory: RecordDetailsTargetViewModel.Factory,
-    private val drawableLoaderViewModelImpl: DrawableLoaderViewModelImpl,
+    drawableLoaderViewModel: DrawableLoaderViewModelImpl,
     private val screenCaptureUiInteractor: ScreenCaptureUiInteractor,
-    private val activityTaskManager: IActivityTaskManager,
-) : HydratedActivatable(), DrawableLoaderViewModel by drawableLoaderViewModelImpl {
+    private val activityManager: ActivityManagerWrapper,
+    private val displayManager: DisplayManager,
+    private val context: Context,
+    private val userTracker: UserTracker,
+    private val policyResolver: Provider<ScreenCaptureDevicePolicyResolver>,
+    @ScreenCapture private val uiParameters: ScreenCaptureUiParameters,
+    @Background private val backgroundContext: CoroutineContext,
+) : HydratedActivatable(), DrawableLoaderViewModel by drawableLoaderViewModel {
+    val recordDetailsAppSelectorViewModel = recordDetailsAppSelectorViewModelFactory.create()
+    val recordDetailsParametersViewModel = screenCaptureRecordParametersViewModelFactory.create()
+    val recordDetailsTargetViewModel = recordDetailsTargetViewModelFactory.create()
 
-    val recordDetailsAppSelectorViewModel: RecordDetailsAppSelectorViewModel =
-        recordDetailsAppSelectorViewModelFactory.create()
-    val recordDetailsParametersViewModel: ScreenCaptureRecordParametersViewModel =
-        screenCaptureRecordParametersViewModelFactory.create()
-    val recordDetailsTargetViewModel: RecordDetailsTargetViewModel =
-        recordDetailsTargetViewModelFactory.create()
+    val recordingState by
+        recordingInteractor.state.hydratedStateOf("SmallScreenCaptureRecordViewModel#state")
+    val isRecording: Boolean
+        get() = recordingState is ScreenRecordModel.Recording
 
-    val isRecording: Boolean by
-        screenRecordingServiceInteractor.status
-            .map { it.isRecording }
-            .hydratedStateOf(
-                traceName = "SmallScreenCaptureRecordViewModel#isRecording",
-                initialValue = screenRecordingServiceInteractor.status.value.isRecording,
-            )
+    val isStarting: Boolean
+        get() = recordingState is ScreenRecordModel.Starting
 
-    var detailsPopup: RecordDetailsPopupType by mutableStateOf(RecordDetailsPopupType.Settings)
+    var isProcessing by mutableStateOf(false)
         private set
 
-    var shouldShowDetails: Boolean by
-        mutableStateOf(!screenRecordingServiceInteractor.status.value.isRecording)
+    var detailsPopup by mutableStateOf(RecordDetailsPopupType.Settings)
         private set
 
-    val shouldShowSettingsButton: Boolean by
-        screenRecordingServiceInteractor.status
-            .map { status ->
-                if (status.isRecording) {
-                    true
-                } else {
-                    shouldShowDetails = true
-                    false
-                }
-            }
-            .hydratedStateOf(
-                traceName = "SmallScreenCaptureRecordViewModel#shouldShowSettingsButton",
-                initialValue = !screenRecordingServiceInteractor.status.value.isRecording,
-            )
+    var shouldShowDetails by mutableStateOf(!recordingInteractor.isBusy)
+        private set
+
+    val shouldShowSettingsButton: Boolean
+        get() = isRecording
+
+    val canStart: Boolean
+        get() =
+            recordDetailsTargetViewModel.currentTarget?.screenCaptureTarget != null &&
+                recordDetailsParametersViewModel.capabilitiesLoaded &&
+                !isProcessing
 
     override suspend fun onActivated() {
         coroutineScope {
-            launchTraced("SmallScreenCaptureRecordViewModel#recordDetailsAppSelectorViewModel") {
-                recordDetailsAppSelectorViewModel.activate()
-            }
-            launchTraced(
-                "ScreenCaptureRecordSmallScreenViewModel#recordDetailsParametersViewModel"
-            ) {
-                recordDetailsParametersViewModel.activate()
-            }
-            launchTraced("ScreenCaptureRecordSmallScreenViewModel#recordDetailsTargetViewModel") {
-                recordDetailsTargetViewModel.activate()
+            launchTraced("ScreenRecord#apps") { recordDetailsAppSelectorViewModel.activate() }
+            launchTraced("ScreenRecord#options") { recordDetailsParametersViewModel.activate() }
+            launchTraced("ScreenRecord#target") { recordDetailsTargetViewModel.activate() }
+            launchTraced("ScreenRecord#state") {
+                var wasBusy = recordingInteractor.isBusy
+                recordingInteractor.state.collect {
+                    val busy = it !is ScreenRecordModel.DoingNothing
+                    if (wasBusy && !busy) dismiss()
+                    if (busy) shouldShowDetails = false
+                    wasBusy = busy
+                }
             }
         }
     }
@@ -115,80 +129,111 @@ constructor(
         detailsPopup = RecordDetailsPopupType.AppSelector
     }
 
-    fun showMarkupColorSelector() {
-        detailsPopup = RecordDetailsPopupType.MarkupColorSelector
+    fun shouldShowSettings(visible: Boolean) {
+        shouldShowDetails = visible
+        if (visible) showSettings()
     }
 
     fun dismiss() {
         screenCaptureUiInteractor.hide(ScreenCaptureType.RECORD)
     }
 
-    fun onPrimaryButtonTapped() {
-        if (screenRecordingServiceInteractor.status.value.isRecording) {
-            screenRecordingServiceInteractor.stopRecording(StopReason.STOP_HOST_APP)
-        } else {
-            startRecording()
+    suspend fun onPrimaryButtonTapped() {
+        if (isProcessing) return
+        if (recordingInteractor.isBusy) {
+            recordingInteractor.stop()
+            dismiss()
+            return
         }
-        dismiss()
-    }
-
-    private fun startRecording() {
-        val audioSource = recordDetailsParametersViewModel.audioSource ?: return
-        val target = recordDetailsTargetViewModel.currentTarget?.screenCaptureTarget ?: return
-        val lowQuality = recordDetailsParametersViewModel.lowQuality ?: return
-        val longerDuration = recordDetailsParametersViewModel.longerDuration ?: return
-        val hevc = recordDetailsParametersViewModel.hevc ?: return
-        when (target) {
-            is ScreenCaptureTarget.Fullscreen -> {
-                val shouldShowTaps = recordDetailsParametersViewModel.shouldShowTaps ?: return
-                screenRecordingServiceInteractor.startRecording(
-                    ScreenRecordingParameters(
-                        captureTarget = null,
-                        displayId = target.displayId,
-                        shouldShowTaps = shouldShowTaps,
-                        audioSource = audioSource,
-                        lowQuality = lowQuality,
-                        longerDuration = longerDuration,
-                        hevc = hevc,
-                    )
-                )
-            }
-            is ScreenCaptureTarget.App -> {
-                val cookie = LaunchCookie("screen_record")
-                activityTaskManager.startActivityFromRecents(
-                    target.taskId,
-                    ActivityOptions.makeBasic()
-                        .apply {
-                            pendingIntentBackgroundActivityStartMode =
-                                MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS
-                            setLaunchCookie(cookie)
-                        }
-                        .toBundle(),
-                )
-                screenRecordingServiceInteractor.startRecording(
-                    ScreenRecordingParameters(
-                        captureTarget =
-                            MediaProjectionCaptureTarget(
-                                launchCookie = cookie,
-                                taskId = target.taskId,
-                            ),
-                        displayId = target.displayId,
-                        shouldShowTaps = false,
-                        audioSource = audioSource,
-                        lowQuality = lowQuality,
-                        longerDuration = longerDuration,
-                        hevc = hevc,
-                    )
-                )
-            }
-            else -> error("Unsupported target=$target")
+        if (!canStart) return
+        isProcessing = true
+        try {
+            if (startRecording()) dismiss()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e("ScreenRecordToolbar", "Unable to start recording", e)
+            Toast.makeText(context, R.string.screenrecord_start_error, Toast.LENGTH_LONG).show()
+        } finally {
+            isProcessing = false
         }
     }
 
-    fun shouldShowSettings(visible: Boolean) {
-        if (shouldShowSettingsButton) {
-            shouldShowDetails = visible
-        }
+    private suspend fun startRecording(): Boolean {
+        val user = uiParameters.hostAppUserHandle
+        if (userTracker.userId != user.identifier) return false
+        val targetItem = recordDetailsTargetViewModel.currentTarget ?: return false
+        val target = targetItem.screenCaptureTarget ?: return false
+        var options = recordDetailsParametersViewModel.options.copy(target = target)
+        var captureTarget: MediaProjectionCaptureTarget? = null
+        val displayId =
+            when (target) {
+                is ScreenCaptureTarget.Fullscreen -> target.displayId
+                is ScreenCaptureTarget.App -> {
+                    val task = (targetItem as RecordDetailsTargetItemViewModel.SingleApp).task
+                    check(
+                        policyResolver
+                            .get()
+                            .isScreenCaptureAllowed(UserHandle.of(task.userId), user)
+                    )
+                    val cookie = LaunchCookie("screen_record")
+                    withContext(backgroundContext) {
+                        check(
+                            activityManager.startActivityFromRecents(
+                                target.taskId,
+                                ActivityOptions.makeBasic().apply {
+                                    pendingIntentBackgroundActivityStartMode =
+                                        MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS
+                                    setLaunchCookie(cookie)
+                                },
+                            )
+                        )
+                    }
+                    captureTarget = MediaProjectionCaptureTarget(cookie, target.taskId)
+                    withContext(backgroundContext) {
+                        activityManager
+                            .getRunningTasks(false)
+                            .firstOrNull { it.taskId == target.taskId }
+                            ?.displayId
+                            ?: target.displayId.takeUnless { it == Display.INVALID_DISPLAY }
+                            ?: Display.DEFAULT_DISPLAY
+                    }
+                }
+                else -> return false
+            }
+        val display = displayManager.getDisplay(displayId)
+        check(display?.isValid == true)
+        options =
+            options.copy(
+                resolutionMode =
+                    options.resolutionMode.takeIf {
+                        it in ScreenRecordingOptions.resolutions(display)
+                    } ?: 0,
+                fpsMode =
+                    options.fpsMode.takeIf {
+                        it in ScreenRecordingOptions.frameRates(context, display)
+                    } ?: 0,
+            )
+        recordDetailsParametersViewModel.updateOptions { options }
+        return recordingInteractor.start(
+            ScreenRecordingParameters(
+                captureTarget = captureTarget,
+                audioSource = options.audioSource,
+                displayId = displayId,
+                shouldShowTaps = captureTarget == null && options.shouldShowTaps,
+                lowQuality = options.lowQuality,
+                longerDuration = options.longerDuration,
+                hevc = options.hevc && recordDetailsParametersViewModel.hasHevcEncoder,
+                resolutionMode = options.resolutionMode,
+                fpsMode = options.fpsMode,
+                timeLimitMs = options.timeLimitMs,
+                fileSizeBytes = options.fileSizeBytes,
+                bitrateMultiplier = options.bitrateMultiplier,
+            ),
+            options.skipTimer,
+            user.identifier,
+            options,
+        )
     }
 
     @AssistedFactory
@@ -197,6 +242,3 @@ constructor(
         fun create(): SmallScreenCaptureRecordViewModel
     }
 }
-
-private val Status.isRecording
-    get() = this is Status.Started

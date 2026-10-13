@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -64,7 +65,7 @@ fun <T> CaptureTargetSelector(
     val shape = RoundedCornerShape(itemHeight / 2)
     var expanded by remember { mutableStateOf(false) }
 
-    Box(modifier = modifier.width(width)) {
+    Box(modifier = modifier.widthIn(max = width)) {
         TextButton(
             onClick = { expanded = true },
             shape = shape,
@@ -75,7 +76,7 @@ fun <T> CaptureTargetSelector(
         ) {
             if (!items.isNullOrEmpty()) {
                 Text(
-                    text = itemToString(items[selectedItemIndex]),
+                    text = itemToString(items[selectedItemIndex.coerceIn(items.indices)]),
                     style = MaterialTheme.typography.labelLarge,
                     maxLines = 1,
                     modifier = Modifier.weight(1f).basicMarquee(),
@@ -133,9 +134,9 @@ private fun Item(
     val selectedBackgroundColor = MaterialTheme.colorScheme.secondaryContainer
     val contentColor =
         if (selected) {
-            MaterialTheme.colorScheme.onSurface
-        } else {
             MaterialTheme.colorScheme.onSecondaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurface
         }
     DropdownMenuItem(
         text = {

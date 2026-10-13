@@ -40,7 +40,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -53,6 +55,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
 import com.android.compose.PlatformIconButton
 import com.android.systemui.lifecycle.rememberViewModel
@@ -70,7 +74,7 @@ fun RecordDetailsAppSelector(
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(4.dp),
-        modifier = modifier.padding(bottom = 32.dp),
+        modifier = modifier.verticalScroll(rememberScrollState()).padding(bottom = 32.dp),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -104,7 +108,10 @@ fun RecordDetailsAppSelector(
             val task = tasks?.getOrNull(index)
             val taskViewModel =
                 task?.let {
-                    rememberViewModel("RecordDetailsAppSelector#taskViewModel_$index") {
+                    rememberViewModel(
+                        "RecordDetailsAppSelector#taskViewModel_${task.taskId}",
+                        task,
+                    ) {
                         viewModel.createTaskViewModel(task)
                     }
                 }
@@ -139,6 +146,8 @@ private fun AppPreview(
             )
         }
 
+        val label = viewModel?.label?.getOrNull()?.toString().orEmpty()
+        Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 2)
         val shape = RoundedCornerShape(20.dp)
         val shadowColor =
             if (isSystemInDarkTheme()) {
@@ -155,7 +164,7 @@ private fun AppPreview(
                         ambientColor = shadowColor,
                     )
                     .clip(shape)
-                    .clickable(onClick = onClick)
+                    .clickable(enabled = viewModel != null, role = Role.Button, onClick = onClick)
                     .background(MaterialTheme.colorScheme.surfaceContainer)
                     .aspectRatio(viewModel?.thumbnail?.getOrNull().aspectRatio)
         ) {

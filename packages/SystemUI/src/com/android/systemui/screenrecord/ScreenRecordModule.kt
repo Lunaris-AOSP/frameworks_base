@@ -105,22 +105,20 @@ interface ScreenRecordModule {
                 ScreenRecordPermissionDialogDelegate.Factory,
             screenRecordPermissionContentManagerFactory:
                 ScreenRecordPermissionContentManager.Factory,
+            toolbarController: Lazy<ScreenRecordToolbarController>,
         ): ScreenRecordUxController {
-            return if (Flags.screenReactions()) {
-                ScreenRecordUxControllerImpl()
-            } else {
-                ScreenRecordLegacyUxControllerImpl(
-                    mainExecutor,
-                    broadcastDispatcher,
-                    devicePolicyResolver,
-                    userTracker,
-                    recordingControllerLogger,
-                    mediaProjectionMetricsLogger,
-                    screenCaptureDisabledDialogDelegate,
-                    screenRecordPermissionDialogDelegateFactory,
-                    screenRecordPermissionContentManagerFactory,
-                )
-            }
+            return ScreenRecordLegacyUxControllerImpl(
+                mainExecutor,
+                broadcastDispatcher,
+                devicePolicyResolver,
+                userTracker,
+                recordingControllerLogger,
+                mediaProjectionMetricsLogger,
+                screenCaptureDisabledDialogDelegate,
+                screenRecordPermissionDialogDelegateFactory,
+                screenRecordPermissionContentManagerFactory,
+                { toolbarController.get().show() },
+            )
         }
 
         @Provides

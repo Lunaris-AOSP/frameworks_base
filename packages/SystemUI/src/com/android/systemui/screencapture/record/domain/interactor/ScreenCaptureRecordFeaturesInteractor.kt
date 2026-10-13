@@ -23,7 +23,7 @@ import com.android.systemui.dagger.SysUISingleton
 object ScreenCaptureRecordFeaturesInteractor {
 
     val isNewScreenRecordToolbarEnabled: Boolean
-        get() = Flags.newScreenRecordToolbar()
+        get() = true
 
     val isLargeScreenScreencaptureEnabled: Boolean
         get() = Flags.largeScreenScreencapture()

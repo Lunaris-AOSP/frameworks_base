@@ -19,6 +19,7 @@ package com.android.systemui.screencapture.record.domain.interactor
 import com.android.systemui.screencapture.common.ScreenCaptureUiScope
 import com.android.systemui.screencapture.common.shared.model.ScreenCaptureTarget
 import com.android.systemui.screencapture.record.data.repository.ScreenCaptureRecordParametersRepository
+import com.android.systemui.screencapture.record.shared.model.ScreenCaptureRecordParametersModel
 import com.android.systemui.screenrecord.ScreenRecordingAudioSource
 import javax.inject.Inject
 
@@ -28,6 +29,12 @@ class ScreenCaptureRecordParametersInteractor
 constructor(private val repository: ScreenCaptureRecordParametersRepository) {
 
     val parameters = repository.parameters
+
+    fun updateOptions(
+        update: (ScreenCaptureRecordParametersModel) -> ScreenCaptureRecordParametersModel
+    ) {
+        repository.updateParameters(update)
+    }
 
     fun setAudioSource(audioSource: ScreenRecordingAudioSource) {
         repository.updateParameters { it.copy(audioSource = audioSource) }

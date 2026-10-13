@@ -23,10 +23,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +39,7 @@ import androidx.compose.runtime.State
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.android.systemui.common.shared.model.Icon as IconModel
 import com.android.systemui.res.R
@@ -55,6 +57,7 @@ fun RecordDetailsSettings(
     drawableLoaderViewModel: DrawableLoaderViewModel,
     onAppSelectorClicked: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
     Surface(
         modifier = modifier,
@@ -73,13 +76,16 @@ fun RecordDetailsSettings(
                     items = targetViewModel.items,
                     selectedItemIndex = targetViewModel.selectedIndex,
                     onItemSelected = { targetViewModel.select(it) },
-                    itemToString = { stringResource(it.labelRes) },
+                    itemToString = {
+                        (it as? RecordDetailsTargetItemViewModel.EntireScreen)?.displayName
+                            ?: stringResource(it.labelRes)
+                    },
                     isItemEnabled = { it.isSelectable },
                     viewModel = drawableLoaderViewModel,
                     modifier = Modifier.padding(vertical = 12.dp),
                 )
             }
-            AnimatedVisibility(visible = targetViewModel.shouldShowAppSelector) {
+            AnimatedVisibility(visible = enabled && targetViewModel.shouldShowAppSelector) {
                 AppSelectorButton(
                     appLabel = targetViewModel.selectedAppName?.getOrNull()?.toString(),
                     viewModel = drawableLoaderViewModel,
@@ -97,6 +103,7 @@ fun RecordDetailsSettings(
                 label = stringResource(R.string.screen_record_record_device_audio_label),
                 checked = parametersViewModel.shouldRecordDevice,
                 onCheckedChange = { parametersViewModel.shouldRecordDevice = it },
+                enabled = enabled,
                 modifier = Modifier,
             )
             RichSwitch(
@@ -109,18 +116,7 @@ fun RecordDetailsSettings(
                 label = stringResource(R.string.screen_record_record_microphone_label),
                 checked = parametersViewModel.shouldRecordMicrophone,
                 onCheckedChange = { parametersViewModel.shouldRecordMicrophone = it },
-                modifier = Modifier,
-            )
-            RichSwitch(
-                icon =
-                    loadIcon(
-                        viewModel = drawableLoaderViewModel,
-                        resId = R.drawable.ic_selfie_expressive,
-                        contentDescription = null,
-                    ),
-                label = stringResource(R.string.screen_record_should_show_camera_label),
-                checked = parametersViewModel.shouldShowFrontCamera == true,
-                onCheckedChange = { parametersViewModel.setShouldShowFrontCamera(it) },
+                enabled = enabled,
                 modifier = Modifier,
             )
             AnimatedVisibility(
@@ -134,24 +130,49 @@ fun RecordDetailsSettings(
                             contentDescription = null,
                         ),
                     label = stringResource(R.string.screen_record_should_show_touches_label),
-                    checked = parametersViewModel.shouldShowTaps == true,
+                    checked = parametersViewModel.options.shouldShowTaps,
                     onCheckedChange = { parametersViewModel.setShouldShowTaps(it) },
+                    enabled = enabled,
                     modifier = Modifier,
                 )
             }
+            RecordDetailsOptions(parametersViewModel, drawableLoaderViewModel, enabled)
+            Text(
+                text =
+                    stringResource(
+                        if (!enabled) R.string.screenrecord_settings_while_recording
+                        else if (
+                            targetViewModel.currentTarget
+                                is RecordDetailsTargetItemViewModel.SingleApp
+                        )
+                            R.string.screenrecord_permission_dialog_warning_single_app
+                        else R.string.screenrecord_permission_dialog_warning_entire_screen
+                    ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+            )
         }
     }
 }
 
 @Composable
-private fun RichSwitch(
+internal fun RichSwitch(
     icon: State<IconModel?>,
     label: String,
     checked: Boolean,
     onCheckedChange: (isChecked: Boolean) -> Unit,
+    enabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    SettingsRow(modifier.clickable(onClick = { onCheckedChange(!checked) })) {
+    SettingsRow(
+        modifier.toggleable(
+            value = checked,
+            enabled = enabled,
+            role = Role.Switch,
+            onValueChange = onCheckedChange,
+        )
+    ) {
         LoadingIcon(icon = icon.value, modifier = Modifier.size(40.dp).padding(8.dp))
         Text(
             text = label,
@@ -159,7 +180,7 @@ private fun RichSwitch(
             maxLines = 2,
             modifier = Modifier.padding(horizontal = 8.dp).weight(1f).basicMarquee(),
         )
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(checked = checked, onCheckedChange = null, enabled = enabled)
     }
 }
 
@@ -218,7 +239,10 @@ private fun SettingsRow(modifier: Modifier = Modifier, content: @Composable RowS
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier =
-            modifier.height(64.dp).padding(horizontal = 20.dp, vertical = 12.dp).fillMaxWidth(),
+            modifier
+                .heightIn(min = 64.dp)
+                .padding(horizontal = 20.dp, vertical = 12.dp)
+                .fillMaxWidth(),
         content = content,
     )
 }

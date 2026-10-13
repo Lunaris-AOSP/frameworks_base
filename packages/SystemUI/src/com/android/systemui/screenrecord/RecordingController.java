@@ -57,6 +57,7 @@ public class RecordingController
     private final ScreenRecordUxController mScreenRecordUxController;
     private boolean mIsStarting;
     private boolean mIsRecording;
+    private boolean mCallbacksRegistered;
     private Runnable mStop;
     private @StopReason int mStopReason = StopReason.STOP_UNKNOWN;
     private CountDownTimer mCountDownTimer = null;
@@ -81,7 +82,11 @@ public class RecordingController
             new UserTracker.Callback() {
                 @Override
                 public void onUserChanged(int newUser, @NonNull Context userContext) {
-                    stopRecording(StopReason.STOP_USER_SWITCH);
+                    if (mIsStarting) {
+                        cancelCountdown();
+                    } else {
+                        stopRecording(StopReason.STOP_USER_SWITCH);
+                    }
                 }
             };
 
@@ -193,8 +198,17 @@ public class RecordingController
      * @param stop     Runnable to stop a recording
      */
     public void startCountdown(long ms, long interval, Runnable start, Runnable stop) {
+        if (mIsStarting || mIsRecording || isScreenCaptureDisabled()) {
+            return;
+        }
         mIsStarting = true;
+        mStopReason = StopReason.STOP_UNKNOWN;
         mStop = stop;
+        mUserTracker.addCallback(mUserChangedCallback, mMainExecutor);
+        IntentFilter stateFilter = new IntentFilter(INTENT_UPDATE_STATE);
+        mBroadcastDispatcher.registerReceiver(mStateChangeReceiver, stateFilter, null,
+                UserHandle.ALL);
+        mCallbacksRegistered = true;
 
         mCountDownTimer = new CountDownTimer(ms, interval) {
             @Override
@@ -213,13 +227,9 @@ public class RecordingController
                 }
                 try {
                     start.run();
-                    mUserTracker.addCallback(mUserChangedCallback, mMainExecutor);
-
-                    IntentFilter stateFilter = new IntentFilter(INTENT_UPDATE_STATE);
-                    mBroadcastDispatcher.registerReceiver(mStateChangeReceiver, stateFilter, null,
-                            UserHandle.ALL);
                     mRecordingControllerLogger.logSentStartIntent();
                 } catch (Throwable e) {
+                    updateState(false);
                     if (e instanceof PendingIntent.CanceledException) {
                         mRecordingControllerLogger.logPendingIntentCancelled(
                                 (PendingIntent.CanceledException) e);
@@ -235,6 +245,9 @@ public class RecordingController
      * Cancel a countdown in progress. This will not stop the recording if it already started.
      */
     public void cancelCountdown() {
+        if (!mIsStarting) {
+            return;
+        }
         if (mCountDownTimer != null) {
             mRecordingControllerLogger.logCountdownCancelled();
             mCountDownTimer.cancel();
@@ -242,6 +255,9 @@ public class RecordingController
             mRecordingControllerLogger.logCountdownCancelErrorNoTimer();
         }
         mIsStarting = false;
+        mCountDownTimer = null;
+        mStop = null;
+        unregisterCallbacks();
 
         for (ScreenRecordUxController.StateChangeCallback cb : mListeners) {
             cb.onCountdownEnd();
@@ -268,6 +284,10 @@ public class RecordingController
      * @param stopReason the method of the recording stopped (i.e. QS tile, status bar chip, etc.)
      */
     public void stopRecording(@StopReason int stopReason) {
+        if (mIsStarting) {
+            cancelCountdown();
+            return;
+        }
         mStopReason = stopReason;
         try {
             if (mStop != null) {
@@ -290,10 +310,14 @@ public class RecordingController
      */
     public synchronized void updateState(boolean isRecording) {
         mRecordingControllerLogger.logStateUpdated(isRecording);
-        if (!isRecording && mIsRecording) {
-            // Unregister receivers if we have stopped recording
-            mUserTracker.removeCallback(mUserChangedCallback);
-            mBroadcastDispatcher.unregisterReceiver(mStateChangeReceiver);
+        if (!isRecording) {
+            if (mCountDownTimer != null) {
+                mCountDownTimer.cancel();
+                mCountDownTimer = null;
+            }
+            mIsStarting = false;
+            unregisterCallbacks();
+            mStop = null;
         }
         mIsRecording = isRecording;
         for (ScreenRecordUxController.StateChangeCallback cb : mListeners) {
@@ -302,6 +326,14 @@ public class RecordingController
             } else {
                 cb.onRecordingEnd();
             }
+        }
+    }
+
+    private void unregisterCallbacks() {
+        if (mCallbacksRegistered) {
+            mUserTracker.removeCallback(mUserChangedCallback);
+            mBroadcastDispatcher.unregisterReceiver(mStateChangeReceiver);
+            mCallbacksRegistered = false;
         }
     }
 

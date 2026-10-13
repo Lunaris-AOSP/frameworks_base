@@ -31,11 +31,14 @@ class LegacyScreenRecordingStartStopInteractor
 constructor(private val userContextProvider: UserContextProvider) :
     ScreenRecordingStartStopInteractor {
 
+    private var recordingContext: Context? = null
     private val options: Bundle = BroadcastOptions.makeBasic().setInteractive(true).toBundle()
     private val userContext: Context
         get() = userContextProvider.userContext
 
     override fun startRecording(parameters: ScreenRecordingParameters) {
+        val userContext = userContext
+        recordingContext = userContext
         PendingIntent.getForegroundService(
                 userContext,
                 RecordingService.REQUEST_CODE,
@@ -63,6 +66,7 @@ constructor(private val userContextProvider: UserContextProvider) :
     }
 
     override fun stopRecording(reason: Int) {
+        val userContext = recordingContext ?: userContext
         PendingIntent.getService(
                 userContext,
                 RecordingService.REQUEST_CODE,
@@ -70,5 +74,6 @@ constructor(private val userContextProvider: UserContextProvider) :
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
             .send(options)
+        recordingContext = null
     }
 }

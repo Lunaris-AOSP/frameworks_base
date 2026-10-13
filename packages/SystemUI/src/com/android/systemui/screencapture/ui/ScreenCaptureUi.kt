@@ -19,12 +19,16 @@ package com.android.systemui.screencapture.ui
 import android.annotation.SuppressLint
 import android.content.Context
 import android.view.Display
+import android.view.SurfaceControl
+import android.view.ViewRootImpl
 import android.view.Window
 import android.view.WindowManager
 import android.window.OnBackInvokedCallback
 import android.window.WindowOnBackInvokedDispatcher
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
@@ -34,6 +38,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -54,6 +60,8 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import com.android.compose.theme.PlatformTheme
 import com.android.systemui.compose.ComposeInitializer
 import com.android.systemui.dagger.qualifiers.Application
@@ -73,6 +81,7 @@ import kotlinx.coroutines.awaitCancellation
 
 private val scaleTransformOrigin = TransformOrigin(pivotFractionX = 0.5f, pivotFractionY = 0f)
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @SuppressLint("NonInjectedService")
 class ScreenCaptureUi
 @AssistedInject
@@ -80,7 +89,7 @@ constructor(
     @Assisted private val display: Display,
     @Assisted private val type: ScreenCaptureType,
     private val viewModelFactory: ScreenCaptureUiViewModel.Factory,
-    @Application private val context: Context,
+    @Application context: Context,
     userContextProvider: UserContextProvider,
     private val componentBuilders:
         Map<
@@ -98,6 +107,25 @@ constructor(
     ) {
 
     private var composeRoot: ComposeView? = null
+    var onRemoved: (() -> Unit)? = null
+
+    private val surfaceCallback =
+        object : ViewRootImpl.SurfaceChangedCallback {
+            override fun surfaceCreated(transaction: SurfaceControl.Transaction) {
+                excludeRecordingToolbar(transaction)
+            }
+
+            override fun surfaceReplaced(transaction: SurfaceControl.Transaction) {
+                excludeRecordingToolbar(transaction)
+            }
+
+            override fun surfaceDestroyed() {}
+        }
+
+    private fun excludeRecordingToolbar(transaction: SurfaceControl.Transaction) {
+        val surface = window.decorView.viewRootImpl?.surfaceControl ?: return
+        if (surface.isValid) transaction.setSkipScreenshot(surface, true)
+    }
 
     init {
         with(window) {
@@ -113,9 +141,17 @@ constructor(
 
     override fun onAttach() {
         require(composeRoot == null) { "The ui is already attached" }
+        setFocusable(true)
+        if (type == ScreenCaptureType.RECORD) {
+            window.decorView.viewRootImpl?.addSurfaceChangedCallback(surfaceCallback)
+            SurfaceControl.Transaction().use {
+                excludeRecordingToolbar(it)
+                it.apply()
+            }
+        }
 
         composeRoot =
-            ComposeView(context).also { composeView ->
+            ComposeView(getContext()).also { composeView ->
                 ComposeInitializer.onAttachedToWindow(composeView)
                 setContentView(composeView)
                 composeView.setContent {
@@ -145,14 +181,33 @@ constructor(
                         if (!visibleState.targetState && visibleState.isIdle) {
                             SideEffect { removeWindow() }
                         }
+                        val toolbarOffset = with(LocalDensity.current) { 80.dp.roundToPx() }
                         AnimatedVisibility(
                             visibleState = visibleState,
                             enter =
-                                scaleIn(transformOrigin = scaleTransformOrigin) +
-                                    slideInVertically(),
+                                if (type == ScreenCaptureType.RECORD) {
+                                    fadeIn(MaterialTheme.motionScheme.fastEffectsSpec()) +
+                                        slideInVertically(
+                                            MaterialTheme.motionScheme.fastSpatialSpec()
+                                        ) {
+                                            -toolbarOffset
+                                        }
+                                } else {
+                                    scaleIn(transformOrigin = scaleTransformOrigin) +
+                                        slideInVertically()
+                                },
                             exit =
-                                scaleOut(transformOrigin = scaleTransformOrigin) +
-                                    slideOutVertically(),
+                                if (type == ScreenCaptureType.RECORD) {
+                                    fadeOut(MaterialTheme.motionScheme.fastEffectsSpec()) +
+                                        slideOutVertically(
+                                            MaterialTheme.motionScheme.fastSpatialSpec()
+                                        ) {
+                                            -toolbarOffset
+                                        }
+                                } else {
+                                    scaleOut(transformOrigin = scaleTransformOrigin) +
+                                        slideOutVertically()
+                                },
                         ) {
                             val builder: ScreenCaptureUiComponent.Builder =
                                 componentBuilders[parameters.screenCaptureType]
@@ -169,7 +224,8 @@ constructor(
 
                             Box(
                                 modifier =
-                                    Modifier.windowInsetsPadding(WindowInsets.safeDrawing)
+                                    (if (type == ScreenCaptureType.RECORD) Modifier
+                                        else Modifier.windowInsetsPadding(WindowInsets.safeDrawing))
                                         .focusable()
                                         .onKeyEvent { event -> handleKeyEvent(event, viewModel) }
                             ) {
@@ -182,10 +238,12 @@ constructor(
     }
 
     override fun onDetach() {
-        val root = composeRoot
-        require(root != null) { "The ui is already detached" }
+        window.decorView.viewRootImpl?.removeSurfaceChangedCallback(surfaceCallback)
+        val root = composeRoot ?: return
         ComposeInitializer.onDetachedFromWindow(root)
         composeRoot = null
+        onRemoved?.invoke()
+        onRemoved = null
     }
 
     private fun handleKeyEvent(event: KeyEvent, viewModel: ScreenCaptureUiViewModel): Boolean {

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screenrecord_toolbar_settings">Screen recorder settings</string>
+    <string name="screenrecord_advanced_options">Advanced options</string>
+    <string name="screenrecord_settings_while_recording">Stop recording to change these settings.</string>
+    <string name="screenrecord_resolution_dimensions">%1$d × %2$d</string>
+    <string name="screenrecord_default_limit">Default (%1$s)</string>
+    <string name="screenrecord_size_5gb">5 GB</string>
+</resources>

@@ -42,6 +42,7 @@ class ScreenRecordLegacyUxControllerImpl(
     screenCaptureDisabledDialogDelegate: ScreenCaptureDisabledDialogDelegate,
     screenRecordPermissionDialogDelegateFactory: ScreenRecordPermissionDialogDelegate.Factory,
     screenRecordPermissionContentManagerFactory: ScreenRecordPermissionContentManager.Factory,
+    private val showToolbar: () -> Unit = {},
 ) : ScreenRecordUxController {
 
     // Instantiate RecordingController internally using the injected dependencies
@@ -79,7 +80,7 @@ class ScreenRecordLegacyUxControllerImpl(
     // --- Consolidated functions that handles UX events ---
 
     override fun onScreenRecordQsTileClick() {
-        // TODO(b/409330121): move the UX code from ScreenRecordTile to here.
+        showToolbar()
     }
 
     // --- 1:1 wrapped RecordingController Public API ---
@@ -140,7 +141,7 @@ class ScreenRecordLegacyUxControllerImpl(
     }
 
     companion object {
-        const val INTENT_UPDATE_STATE = "com.android.systemui.screenrecord.UPDATE_STATE"
+        const val INTENT_UPDATE_STATE = "UPDATE_STATE"
         const val EXTRA_STATE = "extra_state"
     }
 }

@@ -17,8 +17,8 @@
 package com.android.systemui.screencapture.domain.interactor
 
 import android.content.res.Resources
-import com.android.dream.lowlight.dagger.qualifiers.Application
 import com.android.systemui.dagger.SysUISingleton
+import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.res.R
 import com.android.systemui.screencapture.common.shared.model.ScreenCaptureType
