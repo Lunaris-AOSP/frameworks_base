@@ -75,6 +75,7 @@ constructor(
             positioningTunable,
             Settings.Secure.LOCK_SCREEN_NOTIFICATIONS_ABOVE_CLOCK,
             Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_STYLE,
+            org.lunaris.lockscreenwidgets.WidgetContract.ENABLED,
         )
     }
 
@@ -137,6 +138,10 @@ constructor(
             connect(R.id.nssl_placeholder, END, PARENT_ID, END)
 
             addNotificationPlaceholderBarrier(this)
+            if (notificationsAboveClock && secureSettings.getIntForUser(
+                    org.lunaris.lockscreenwidgets.WidgetContract.ENABLED, 0, UserHandle.USER_CURRENT) != 0) {
+                connect(R.id.nssl_placeholder, BOTTOM, R.id.keyguard_app_widgets, TOP)
+            }
         }
     }
 }

@@ -329,4 +329,7 @@
     <item type="id" name="lockscreen_stack_roundness_start_tag" />
     <item type="id" name="lockscreen_stack_roundness_end_tag" />
 
+    <item type="id" name="keyguard_app_widgets" />
+    <item type="id" name="keyguard_widget_content_bottom" />
+    <item type="id" name="keyguard_app_widget_anchor" />
 </resources>

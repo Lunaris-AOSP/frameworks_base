@@ -101,11 +101,10 @@ constructor(
             clockSection,
             keyguardWeatherViewSection,
             keyguardSliceViewSection,
-            keyguardWidgetViewSection,
             infoWidgetsSection,
             keyguardClockStyleSection,
-	        aodStyleSection,
-            keyguardWeatherViewSection,
+            aodStyleSection,
+            keyguardWidgetViewSection,
             defaultDeviceEntrySection,
             udfpsAccessibilityOverlaySection, // Add LAST: Intentionally has z-order above others
         )

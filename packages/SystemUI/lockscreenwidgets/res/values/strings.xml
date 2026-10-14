@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_widgets_title">App widgets</string>
+    <string name="app_widgets_summary">Add widgets from your apps below the clock and built-in widgets.</string>
+    <string name="app_widgets_add">Add widget</string>
+    <string name="app_widgets_edit">Edit widgets</string>
+    <string name="app_widgets_done">Done</string>
+    <string name="app_widgets_remove">Remove</string>
+    <string name="app_widgets_configure">Configure</string>
+    <string name="app_widgets_selected">Added widgets</string>
+    <string name="app_widgets_size">Size</string>
+    <string name="app_widgets_position">Position</string>
+    <string name="app_widgets_position_value">Column %1$d, row %2$d</string>
+    <string name="app_widgets_empty">No app widgets added</string>
+    <string name="app_widgets_select">Select a widget to resize, move, or remove it.</string>
+    <string name="app_widgets_unavailable">Widget unavailable</string>
+    <string name="app_widgets_failed">Could not update the widget. Please try again.</string>
+    <string name="app_widgets_host_unavailable">Could not connect to lockscreen app widgets.</string>
+    <string name="app_widgets_retry">Retry</string>
+    <string name="app_widgets_no_space">No space for this widget. Resize or remove another widget first.</string>
+    <string name="app_widgets_no_providers">No compatible widgets installed</string>
+    <string name="app_widgets_provider_size">%1$s · %2$d × %3$d</string>
+</resources>

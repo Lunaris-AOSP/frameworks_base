@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.android.systemui">
+    <application>
+        <provider
+            android:name="com.android.systemui.lockscreen.KeyguardWidgetProvider"
+            android:authorities="com.android.systemui.lockscreenwidgets"
+            android:directBootAware="true"
+            android:exported="true"
+            android:permission="android.permission.CUSTOMIZE_SYSTEM_UI" />
+        <activity
+            android:name="com.android.systemui.lockscreen.KeyguardWidgetConfigActivity"
+            android:exported="true"
+            android:permission="android.permission.CUSTOMIZE_SYSTEM_UI"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.DeviceDefault.Dialog.NoActionBar" />
+        <receiver
+            android:name="com.android.systemui.lockscreen.KeyguardWidgetRestoreReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_HOST_RESTORED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

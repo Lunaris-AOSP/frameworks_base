@@ -100,14 +100,17 @@ constructor(
     }
 
     /** Waits for a transition away from the hub to occur. */
-    private suspend fun waitForTransitionAwayFromHub() {
+    private suspend fun waitForTransitionAwayFromHub(onLockscreen: Boolean) {
         keyguardTransitionInteractor
-            .isFinishedIn(Scenes.Communal, KeyguardState.GLANCEABLE_HUB)
+            .isFinishedIn(
+                if (onLockscreen) Scenes.Lockscreen else Scenes.Communal,
+                if (onLockscreen) KeyguardState.LOCKSCREEN else KeyguardState.GLANCEABLE_HUB,
+            )
             .takeWhile { it }
             .collect {}
     }
 
-    private suspend fun waitForActivityStartWhileOnHub(): Boolean {
+    private suspend fun waitForActivityStartWhileOnHub(onLockscreen: Boolean): Boolean {
         val startTime = systemClock.currentTimeMillis()
         return try {
             return withTimeout(1.seconds) {
@@ -118,7 +121,7 @@ constructor(
                     },
                     { waitForActivityStartByPolling(startTime) },
                     {
-                        waitForTransitionAwayFromHub()
+                        waitForTransitionAwayFromHub(onLockscreen)
                         false
                     },
                 )
@@ -133,8 +136,8 @@ constructor(
      * does. This can detect activities started due to broadcast trampolines from widgets.
      */
     @SuppressLint("MissingPermission")
-    suspend fun waitForActivityStartAndDismissKeyguard() {
-        if (waitForActivityStartWhileOnHub()) {
+    suspend fun waitForActivityStartAndDismissKeyguard(onLockscreen: Boolean = false) {
+        if (waitForActivityStartWhileOnHub(onLockscreen)) {
             logger.d("Detected trampoline, requesting unlock")
             activityStarter.dismissKeyguardThenExecute(
                 /* action= */ {

@@ -509,6 +509,7 @@ filegroup {
 
 android_library {
     name: "SystemUI-core",
+    additional_manifests: ["LockscreenWidgetsManifest.xml"],
     srcs: [
         ":SystemUI-core-srcs",
         ":ReleaseJavaFiles",
@@ -524,6 +525,7 @@ android_library {
         "ax_compose",
         "lunaris_water_ripple",
         "LunarisClockMaker",
+        "LunarisLockscreenWidgets",
         "ax_blur",
         "SystemUI-res",
         "WifiTrackerLib",
