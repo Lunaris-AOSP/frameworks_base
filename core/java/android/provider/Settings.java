@@ -7736,6 +7736,13 @@ public final class Settings {
         public static final String EDGE_LIGHT_ENABLED = "edge_light_enabled";
 
         /**
+         * Edge light display mode: 0 = lockscreen/ambient/AOD (default),
+         * 1 = unlocked device (homescreen and apps), 2 = both locked and unlocked.
+         * @hide
+         */
+        public static final String EDGE_LIGHT_DISPLAY_MODE = "edge_light_display_mode";
+
+        /**
          * Color mode of edge light
          * @hide
          */
@@ -7771,11 +7778,17 @@ public final class Settings {
         */
         public static final String EDGE_LIGHT_SPREAD = "edge_light_spread";
 
-        /** 
+        /**
          * Edge light glow intensity
-         * @hide 
+         * @hide
          */
         public static final String EDGE_LIGHT_INTENSITY = "edge_light_intensity";
+
+        /**
+         * Whether edge light should only trigger on unlock (not on notifications)
+         * @hide
+         */
+        public static final String EDGE_LIGHT_TRIGGER_UNLOCK_ONLY = "edge_light_trigger_unlock_only";
 
         /**
          * Edge light animation effect type
