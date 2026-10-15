@@ -98,7 +98,7 @@ constructor(
 ) : HydratedActivatable() {
 
     private val _selectedIndex = MutableStateFlow(0)
-    private val selectedDisplayId = MutableStateFlow<Int?>(null)
+    private val selectedDisplayId = MutableStateFlow<Int?>(Display.DEFAULT_DISPLAY)
     private val selectedTask = MutableStateFlow<ScreenCaptureRecentTask?>(null)
     private val _items: MutableStateFlow<List<RecordDetailsTargetItemViewModel>?> =
         MutableStateFlow(null)
