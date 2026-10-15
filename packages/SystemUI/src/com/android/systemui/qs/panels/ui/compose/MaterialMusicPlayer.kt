@@ -202,6 +202,7 @@ private fun SkipButton(
     icon: @Composable () -> Unit,
     enabled: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
@@ -211,7 +212,7 @@ private fun SkipButton(
         label = "skipScale",
     )
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(48.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(CircleShape)
@@ -485,6 +486,7 @@ private fun MaterialMusicPlayerContent(
                     },
                     enabled = hasController,
                     onClick = { mediaState.controller?.transportControls?.skipToPrevious() },
+                    modifier = Modifier.weight(1f, fill = false),
                 )
 
                 val ringColor = if (hasAlbumArt) Color.White else MaterialTheme.colorScheme.primary
@@ -560,6 +562,7 @@ private fun MaterialMusicPlayerContent(
                     },
                     enabled = hasController,
                     onClick = { mediaState.controller?.transportControls?.skipToNext() },
+                    modifier = Modifier.weight(1f, fill = false),
                 )
             }
 
