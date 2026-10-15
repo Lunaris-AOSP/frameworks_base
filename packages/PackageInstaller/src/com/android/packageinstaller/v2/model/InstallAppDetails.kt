@@ -8,6 +8,7 @@ data class InstallAppDetails(
     val sizeBytes: Long? = null,
     val version: String? = null,
     val targetSdk: Int? = null,
+    val installedVersion: String? = null,
 ) {
     companion object {
         fun fromPackageInfo(info: PackageInfo, baseApk: File? = null): InstallAppDetails {
@@ -25,10 +26,13 @@ data class InstallAppDetails(
             return InstallAppDetails(
                 packageName = info.packageName,
                 sizeBytes = sizeBytes,
-                version = info.versionName?.takeIf { it.isNotBlank() }
-                    ?: info.longVersionCode.takeIf { it > 0 }?.toString(),
+                version = info.displayVersion(),
                 targetSdk = app?.targetSdkVersion?.takeIf { it > 0 },
             )
         }
     }
 }
+
+internal fun PackageInfo.displayVersion(): String? =
+    versionName?.takeIf { it.isNotBlank() }
+        ?: longVersionCode.takeIf { it > 0 }?.toString()

@@ -740,6 +740,7 @@ class InstallRepository(private val context: Context) : EventResultPersister.Eve
             )
         }
         isAppUpdating = isAppUpdating(newPackageInfo)
+        appDetails = appDetails?.copy(installedVersion = getInstalledVersion())
         val (existingUpdateOwner, requestedUpdateOwner) =
             getUpdateOwners(newPackageInfo, userActionReason, isAppUpdating)
 
@@ -766,6 +767,7 @@ class InstallRepository(private val context: Context) : EventResultPersister.Eve
             }
         appSnippet = getAppSnippet(context, sessionInfo)
         isAppUpdating = isAppUpdating(newPackageInfo)
+        appDetails = appDetails?.copy(installedVersion = getInstalledVersion())
         val (existingUpdateOwner, requestedUpdateOwner) =
             getUpdateOwners(newPackageInfo, userActionReason, isAppUpdating)
 
@@ -816,6 +818,19 @@ class InstallRepository(private val context: Context) : EventResultPersister.Eve
             val sourceInfo = packageManager.getInstallSourceInfo(packageName)
             sourceInfo.updateOwnerPackageName
         } catch (e: PackageManager.NameNotFoundException) {
+            null
+        }
+    }
+
+    private fun getInstalledVersion(): String? {
+        if (!isAppUpdating) return null
+        val packageName = newPackageInfo?.packageName ?: return null
+        // Capture before installation so the result screen keeps the original version.
+        return try {
+            packageManager.getPackageInfo(
+                packageName, PackageManager.MATCH_UNINSTALLED_PACKAGES
+            ).displayVersion()
+        } catch (_: PackageManager.NameNotFoundException) {
             null
         }
     }

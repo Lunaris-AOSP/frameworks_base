@@ -3,6 +3,10 @@
     <string name="installer_package_id">Package ID</string>
     <string name="installer_size">Package size</string>
     <string name="installer_version">Version</string>
+    <!-- Installed version followed by the version being installed. -->
+    <string name="installer_version_change" translatable="false">%1$s → %2$s</string>
+    <!-- Accessibility description of the installed and incoming app versions. -->
+    <string name="installer_version_change_description">Version %1$s to %2$s</string>
     <string name="installer_target_sdk">Target Android</string>
     <string name="installer_sdk_value">API %1$d</string>
     <string name="installer_detail_unavailable">Not available</string>

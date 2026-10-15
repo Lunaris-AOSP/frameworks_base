@@ -6,7 +6,9 @@ import android.app.Dialog
 import android.content.DialogInterface
 import android.graphics.drawable.Drawable
 import android.os.Bundle
+import android.text.BidiFormatter
 import android.text.Html
+import android.text.TextDirectionHeuristics
 import android.text.format.Formatter
 import android.text.style.StyleSpan
 import android.text.style.URLSpan
@@ -79,6 +81,8 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.paneTitle
@@ -418,16 +422,22 @@ private fun AppDetailsCard(label: String?, icon: Drawable?, details: InstallAppD
             SelectionContainer {
                 DetailValue(stringResource(R.string.installer_package_id), app.packageName)
             }
+            val installedVersion = app.installedVersion
+            if (installedVersion != null) {
+                VersionChange(installedVersion, app.version ?: unknown)
+            }
             BoxWithConstraints {
                 when {
                     LocalDensity.current.fontScale > 1.3f -> {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             DetailValue(stringResource(R.string.installer_size), size)
-                            DetailValue(stringResource(R.string.installer_version), app.version ?: unknown)
+                            if (installedVersion == null) {
+                                DetailValue(stringResource(R.string.installer_version), app.version ?: unknown)
+                            }
                             DetailValue(stringResource(R.string.installer_target_sdk), target)
                         }
                     }
-                    maxWidth < 300.dp -> {
+                    maxWidth < 300.dp && installedVersion == null -> {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 DetailValue(
@@ -449,11 +459,13 @@ private fun AppDetailsCard(label: String?, icon: Drawable?, details: InstallAppD
                             DetailValue(
                                 stringResource(R.string.installer_size), size, Modifier.weight(1f)
                             )
-                            DetailValue(
-                                stringResource(R.string.installer_version),
-                                app.version ?: unknown,
-                                Modifier.weight(1f),
-                            )
+                            if (installedVersion == null) {
+                                DetailValue(
+                                    stringResource(R.string.installer_version),
+                                    app.version ?: unknown,
+                                    Modifier.weight(1f),
+                                )
+                            }
                             DetailValue(
                                 stringResource(R.string.installer_target_sdk),
                                 target,
@@ -465,6 +477,23 @@ private fun AppDetailsCard(label: String?, icon: Drawable?, details: InstallAppD
             }
         }
     }
+}
+
+@Composable
+private fun VersionChange(installedVersion: String, newVersion: String) {
+    val versionChange = stringResource(
+        R.string.installer_version_change, installedVersion, newVersion,
+    )
+    val description = stringResource(
+        R.string.installer_version_change_description, installedVersion, newVersion,
+    )
+    DetailValue(
+        label = stringResource(R.string.installer_version),
+        value = BidiFormatter.getInstance().unicodeWrap(versionChange, TextDirectionHeuristics.LTR),
+        modifier = Modifier.fillMaxWidth().clearAndSetSemantics {
+            contentDescription = description
+        },
+    )
 }
 
 @Composable

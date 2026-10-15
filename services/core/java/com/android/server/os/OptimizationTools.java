@@ -42,7 +42,7 @@ final class OptimizationTools {
             "/data/resources_cache", "/data/system/package_cache"
     };
     private static final int MAX_PACKAGES = 1000;
-    private static final long RARE_AGE_MS = DateUtils.DAY_IN_MILLIS;
+    private static final long RARE_AGE_MS = 6 * DateUtils.HOUR_IN_MILLIS;
     private static final String OPTIMIZER_PACKAGE = "com.lunaris.optimizer";
     private final Context context;
 
@@ -199,7 +199,7 @@ final class OptimizationTools {
             UsageStats item = history.get(app.packageName);
             long lastUsed = item == null ? 0 : item.getLastTimeUsed();
             if (lastUsed != 0 && now - lastUsed < RARE_AGE_MS) continue;
-            String detail = lastUsed == 0 ? "No foreground use recorded in the last 24 hours"
+            String detail = lastUsed == 0 ? "No foreground use recorded in the last 6 hours"
                     : "Last used " + DateUtils.getRelativeTimeSpanString(lastUsed, now, DateUtils.HOUR_IN_MILLIS);
             Bundle row = row(app.packageName, app.loadLabel(pm).toString(), detail, 0);
             row.putBoolean("background", true);
