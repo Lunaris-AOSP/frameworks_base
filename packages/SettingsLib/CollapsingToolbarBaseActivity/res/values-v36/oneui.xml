@@ -9,6 +9,9 @@
     <dimen name="settingslib_oneui_title_margin">24dp</dimen>
     <dimen name="settingslib_oneui_expanded_title_size">36sp</dimen>
     <dimen name="settingslib_oneui_collapsed_title_size">20sp</dimen>
-    <dimen name="settingslib_oneui_scrim_trigger">72dp</dimen>
+    <!-- Fade mode derives title alpha from the scrim trigger. Start fading as soon as the
+         app bar scrolls, so the expanded title disappears before reaching the status bar.
+         Referencing the toolbar height also keeps the fade in sync in landscape. -->
+    <dimen name="settingslib_oneui_scrim_trigger">@dimen/settingslib_oneui_toolbar_height</dimen>
     <dimen name="settingslib_oneui_max_elevation">4dp</dimen>
 </resources>
