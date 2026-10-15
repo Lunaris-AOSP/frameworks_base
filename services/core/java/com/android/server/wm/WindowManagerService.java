@@ -809,6 +809,9 @@ public class WindowManagerService extends IWindowManager.Stub
     @GuardedBy("mGlobalLock")
     boolean mWallpaperZoomEnabled = true;
 
+    @GuardedBy("mGlobalLock")
+    boolean mLockscreenWallpaperZoomEnabled = true;
+
     final EmbeddedWindowController mEmbeddedWindowController;
     final AnrController mAnrController;
 
@@ -844,6 +847,8 @@ public class WindowManagerService extends IWindowManager.Stub
                 Settings.Global.getUriFor(Settings.Global.ANIMATOR_DURATION_SCALE);
         private final Uri mWallpaperZoomEnabledUri =
                 Settings.System.getUriFor(Settings.System.WALLPAPER_ZOOM_ENABLED);
+        private final Uri mLockscreenWallpaperZoomEnabledUri =
+                Settings.System.getUriFor(Settings.System.LOCKSCREEN_WALLPAPER_ZOOM_ENABLED);
         private final Uri mImmersiveModeConfirmationsUri =
                 Settings.Secure.getUriFor(Settings.Secure.IMMERSIVE_MODE_CONFIRMATIONS);
         private final Uri mDisableSecureWindowsUri =
@@ -881,6 +886,8 @@ public class WindowManagerService extends IWindowManager.Stub
             resolver.registerContentObserver(mAnimationDurationScaleUri, false, this,
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(mWallpaperZoomEnabledUri, false, this,
+                    UserHandle.USER_ALL);
+            resolver.registerContentObserver(mLockscreenWallpaperZoomEnabledUri, false, this,
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(mImmersiveModeConfirmationsUri, false, this,
                     UserHandle.USER_ALL);
@@ -953,7 +960,8 @@ public class WindowManagerService extends IWindowManager.Stub
                 return;
             }
 
-            if (mWallpaperZoomEnabledUri.equals(uri)) {
+            if (mWallpaperZoomEnabledUri.equals(uri)
+                    || mLockscreenWallpaperZoomEnabledUri.equals(uri)) {
                 updateWallpaperZoomEnabled();
                 return;
             }
@@ -995,10 +1003,16 @@ public class WindowManagerService extends IWindowManager.Stub
                 final boolean enabled = Settings.System.getIntForUser(
                         mContext.getContentResolver(), Settings.System.WALLPAPER_ZOOM_ENABLED,
                         1, mCurrentUserId) != 0;
-                if (mWallpaperZoomEnabled == enabled) {
+                final boolean lockscreenEnabled = Settings.System.getIntForUser(
+                        mContext.getContentResolver(),
+                        Settings.System.LOCKSCREEN_WALLPAPER_ZOOM_ENABLED,
+                        1, mCurrentUserId) != 0;
+                if (mWallpaperZoomEnabled == enabled
+                        && mLockscreenWallpaperZoomEnabled == lockscreenEnabled) {
                     return;
                 }
                 mWallpaperZoomEnabled = enabled;
+                mLockscreenWallpaperZoomEnabled = lockscreenEnabled;
                 mRoot.forAllDisplays(display -> display.mWallpaperController.updateWallpaperZoom());
             }
         }

@@ -7988,6 +7988,15 @@ public final class Settings {
         public static final String WALLPAPER_ZOOM_ENABLED = "wallpaper_zoom_enabled";
 
         /**
+         * Whether lockscreen wallpaper zoom effects are enabled. Defaults to 1 (enabled).
+         * Also requires {@link #WALLPAPER_ZOOM_ENABLED} to be enabled.
+         * @hide
+         */
+        @Readable
+        public static final String LOCKSCREEN_WALLPAPER_ZOOM_ENABLED =
+                "lockscreen_wallpaper_zoom_enabled";
+
+        /**
          * Whether SettingsLib uses One UI-style collapsing headers. Defaults to 0 (disabled).
          * @hide
          */

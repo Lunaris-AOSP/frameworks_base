@@ -116,6 +116,8 @@ class WallpaperController {
 
     private boolean mShouldOffsetWallpaperCenter;
 
+    private boolean mLastKeyguardLockedOrAodShowing;
+
     // This is for WallpaperCropper, which has cropping logic for the default display only.
     // This is lazily initialization by getOrCreateDefaultDisplayInfo. DO NOT use this member
     // variable directly.
@@ -442,12 +444,15 @@ class WallpaperController {
         }
 
         // Keep caller requests so they can be restored when wallpaper zoom is enabled again.
-        final float zoomOut = mService.mWallpaperZoomEnabled ? mLastWallpaperZoomOut : 1f;
+        final boolean zoomEnabled = mService.mWallpaperZoomEnabled
+                && (mService.mLockscreenWallpaperZoomEnabled || !token.canShowWhenLocked()
+                        || !mDisplayContent.isKeyguardLockedOrAodShowing());
+        final float zoomOut = zoomEnabled ? mLastWallpaperZoomOut : 1f;
         if (Float.compare(wallpaperWin.mWallpaperZoomOut, zoomOut) != 0) {
             wallpaperWin.mWallpaperZoomOut = zoomOut;
             rawChanged = true;
         }
-        zoom = wallpaperWin.mShouldScaleWallpaper && mService.mWallpaperZoomEnabled
+        zoom = wallpaperWin.mShouldScaleWallpaper && zoomEnabled
                 ? zoomOutToScale(wallpaperWin.mWallpaperZoomOut) : 1f;
         final float totalZoom = zoom * cropZoom;
         boolean changed = wallpaperWin.setWallpaperOffset(offsetX, offsetY, totalZoom);
@@ -881,6 +886,14 @@ class WallpaperController {
                 mService.mFlags.mAodTransition
                         ? mDisplayContent.isKeyguardLockedOrAodShowing()
                         : mDisplayContent.isKeyguardLocked());
+
+        final boolean keyguardLockedOrAodShowing = mDisplayContent.isKeyguardLockedOrAodShowing();
+        if (mLastKeyguardLockedOrAodShowing != keyguardLockedOrAodShowing) {
+            mLastKeyguardLockedOrAodShowing = keyguardLockedOrAodShowing;
+            if (!mService.mLockscreenWallpaperZoomEnabled) {
+                updateWallpaperZoom();
+            }
+        }
 
         ProtoLog.v(WM_DEBUG_WALLPAPER,
                 "Wallpaper at display %d - visibility: %b, keyguardLocked: %b",
