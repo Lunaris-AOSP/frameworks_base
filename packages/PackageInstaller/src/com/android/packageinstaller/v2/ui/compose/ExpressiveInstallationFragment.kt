@@ -2,6 +2,10 @@ package com.android.packageinstaller.v2.ui.compose
 
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandIn
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkOut
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,9 +17,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import com.android.packageinstaller.R
@@ -88,15 +94,30 @@ class ExpressiveInstallationFragment : InstallerDialogFragment() {
                         },
                         enabled = enabled,
                     ) {
-                        Text(stringResource(R.string.more_details))
+                        Text(
+                            stringResource(R.string.more_details),
+                            textAlign = if (isBottomSheet) TextAlign.Center else TextAlign.Start,
+                        )
                     }
                 }
-                AnimatedVisibility(expanded) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        InstallerMessage(stringResource(
-                            if (confirmation.isAppUpdating) R.string.more_details_expanded_update_summary
-                            else R.string.more_details_expanded_install_summary
-                        ))
+                AnimatedVisibility(
+                    expanded,
+                    enter = if (isBottomSheet) fadeIn() else fadeIn() + expandIn(),
+                    exit = if (isBottomSheet) fadeOut() else shrinkOut() + fadeOut(),
+                ) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        horizontalAlignment = if (isBottomSheet) Alignment.CenterHorizontally
+                            else Alignment.Start,
+                    ) {
+                        InstallerMessage(
+                            stringResource(
+                                if (confirmation.isAppUpdating) R.string.more_details_expanded_update_summary
+                                else R.string.more_details_expanded_install_summary
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = if (isBottomSheet) TextAlign.Center else TextAlign.Start,
+                        )
                         ExpressiveInstallerButton(
                             label = stringResource(if (confirmation.isAppUpdating) R.string.update_without_verifying else R.string.install_without_verifying),
                             primary = false,

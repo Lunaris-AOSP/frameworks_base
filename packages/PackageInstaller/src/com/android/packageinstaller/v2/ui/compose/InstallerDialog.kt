@@ -20,7 +20,6 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -92,6 +91,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
@@ -165,7 +165,8 @@ abstract class InstallerDialogFragment : DialogFragment() {
                     MaterialExpressiveTheme(
                         colorScheme = if (dark) dynamicDarkColorScheme(context)
                             else dynamicLightColorScheme(context),
-                        motionScheme = MotionScheme.expressive(),
+                        motionScheme = if (isBottomSheet) MotionScheme.standard()
+                            else MotionScheme.expressive(),
                     ) {
                         if (isBottomSheet) {
                             if (sheetVisible) {
@@ -260,12 +261,24 @@ fun InstallerDialogContent(
 ) {
     var submitted by remember(state.key, actionsEnabled) { mutableStateOf(false) }
     val enabled = actionsEnabled && !submitted
+    val onAction: (InstallerAction) -> Unit = { action ->
+        if (actionsEnabled && !submitted) {
+            submitted = true
+            action.onClick()
+        }
+    }
+    if (isBottomSheet) {
+        InstallerBottomSheetContent(state, enabled, onAction, extraContent)
+        return
+    }
     val colors = MaterialTheme.colorScheme
     val maxHeight = (LocalConfiguration.current.screenHeightDp - 48).coerceAtLeast(160).dp
-    InstallerContentSurface(
-        isBottomSheet = isBottomSheet,
+    AxBlurSurface(
         modifier = Modifier.fillMaxWidth().heightIn(max = maxHeight)
             .semantics { paneTitle = state.title },
+        shape = RoundedCornerShape(32.dp),
+        cornerRadius = 32.dp,
+        surfaceColor = colors.surfaceContainerHigh,
     ) {
         Column(
             Modifier.fillMaxWidth().padding(24.dp),
@@ -343,40 +356,8 @@ fun InstallerDialogContent(
                 extraContent(enabled)
             }
             if (state.primary != null || state.secondary != null) {
-                InstallerActions(state, enabled) { action ->
-                    if (actionsEnabled && !submitted) {
-                        submitted = true
-                        action.onClick()
-                    }
-                }
+                InstallerActions(state, enabled, onAction)
             }
-        }
-    }
-}
-
-@Composable
-private fun InstallerContentSurface(
-    isBottomSheet: Boolean,
-    modifier: Modifier,
-    content: @Composable () -> Unit,
-) {
-    if (isBottomSheet) {
-        Box(
-            modifier.animateContentSize(
-                animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
-                alignment = Alignment.BottomCenter,
-            ),
-        ) {
-            content()
-        }
-    } else {
-        AxBlurSurface(
-            modifier = modifier,
-            shape = RoundedCornerShape(32.dp),
-            cornerRadius = 32.dp,
-            surfaceColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        ) {
-            content()
         }
     }
 }
@@ -480,7 +461,11 @@ private fun AppDetailsCard(label: String?, icon: Drawable?, details: InstallAppD
 }
 
 @Composable
-private fun VersionChange(installedVersion: String, newVersion: String) {
+internal fun VersionChange(
+    installedVersion: String,
+    newVersion: String,
+    textAlign: TextAlign = TextAlign.Start,
+) {
     val versionChange = stringResource(
         R.string.installer_version_change, installedVersion, newVersion,
     )
@@ -493,28 +478,42 @@ private fun VersionChange(installedVersion: String, newVersion: String) {
         modifier = Modifier.fillMaxWidth().clearAndSetSemantics {
             contentDescription = description
         },
+        textAlign = textAlign,
     )
 }
 
 @Composable
-private fun DetailValue(label: String, value: String, modifier: Modifier = Modifier) {
+private fun DetailValue(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    textAlign: TextAlign = TextAlign.Start,
+) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
             label,
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = textAlign,
+            modifier = Modifier.fillMaxWidth(),
         )
         Text(
             value,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurface,
+            textAlign = textAlign,
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }
 
 @Composable
-fun InstallerMessage(message: String) {
+fun InstallerMessage(
+    message: String,
+    modifier: Modifier = Modifier,
+    textAlign: TextAlign = TextAlign.Start,
+) {
     val linkColor = MaterialTheme.colorScheme.primary
     val text = remember(message, linkColor) {
         val spanned = Html.fromHtml(message, Html.FROM_HTML_MODE_LEGACY)
@@ -547,6 +546,8 @@ fun InstallerMessage(message: String) {
         text,
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier,
+        textAlign = textAlign,
     )
 }
 
@@ -623,6 +624,6 @@ fun ExpressiveInstallerButton(
         interactionSource = interactions,
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
     ) {
-        Text(label, style = MaterialTheme.typography.labelLarge)
+        Text(label, style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center)
     }
 }

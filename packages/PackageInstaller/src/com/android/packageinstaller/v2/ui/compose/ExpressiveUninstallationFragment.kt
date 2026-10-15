@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import com.android.packageinstaller.R
@@ -142,34 +143,64 @@ class ExpressiveUninstallationFragment : InstallerDialogFragment() {
                     color = MaterialTheme.colorScheme.surfaceContainerHighest,
                     shape = RoundedCornerShape(20.dp),
                 ) {
-                    Row(
-                        Modifier.fillMaxWidth().selectable(
-                            selected = keepData,
-                            enabled = enabled,
-                            role = Role.RadioButton,
-                            onClick = {
-                                view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
-                                keepData = !keepData
-                            },
-                        ).padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        RadioButton(selected = keepData, onClick = null, enabled = enabled)
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                getString(R.string.message_uninstall_keep_data),
-                                style = MaterialTheme.typography.titleSmall,
-                            )
-                            Text(
-                                Formatter.formatFileSize(context, confirmation.appDataSize),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    val optionModifier = Modifier.fillMaxWidth().selectable(
+                        selected = keepData,
+                        enabled = enabled,
+                        role = Role.RadioButton,
+                        onClick = {
+                            view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                            keepData = !keepData
+                        },
+                    ).padding(16.dp)
+                    val label = getString(R.string.message_uninstall_keep_data)
+                    val size = Formatter.formatFileSize(context, confirmation.appDataSize)
+                    if (isBottomSheet) {
+                        Column(
+                            optionModifier,
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            RadioButton(selected = keepData, onClick = null, enabled = enabled)
+                            KeepDataDescription(label, size, Modifier.fillMaxWidth(), TextAlign.Center)
+                        }
+                    } else {
+                        Row(
+                            optionModifier,
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            RadioButton(selected = keepData, onClick = null, enabled = enabled)
+                            KeepDataDescription(
+                                label, size, Modifier.weight(1f), TextAlign.Start,
                             )
                         }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun KeepDataDescription(
+    label: String,
+    size: String,
+    modifier: Modifier,
+    textAlign: TextAlign,
+) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            label,
+            modifier = Modifier.fillMaxWidth(),
+            style = MaterialTheme.typography.titleSmall,
+            textAlign = textAlign,
+        )
+        Text(
+            size,
+            modifier = Modifier.fillMaxWidth(),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = textAlign,
+        )
     }
 }

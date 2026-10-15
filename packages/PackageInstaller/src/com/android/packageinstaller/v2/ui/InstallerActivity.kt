@@ -24,6 +24,12 @@ abstract class InstallerActivity : FragmentActivity() {
             }
         }
         super.onCreate(savedInstanceState)
+        if (installerStyle == InstallerStyle.COMPOSE_BOTTOM_SHEET) {
+            // Compose owns the sheet and scrim animation; moving the translucent activity
+            // as well makes the popup appear to jump on entrance and dismissal.
+            overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0)
+            overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
+        }
     }
 
     protected fun showInstallerDialog(fragment: DialogFragment?, tag: String) {
