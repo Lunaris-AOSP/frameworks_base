@@ -84,7 +84,6 @@ public class WallpaperDepthUtils {
     private float mWallpaperZoomScale = 1f;
     private float mWallpaperZoomPivotX;
     private float mWallpaperZoomPivotY;
-    private final int[] mParentLocation = new int[2];
 
     private boolean mDWallpaperEnabled;
     private boolean mSpatialEffectEnabled;
@@ -112,7 +111,13 @@ public class WallpaperDepthUtils {
         mTunerService = Dependency.get(TunerService.class);
         mSpatialEffectController = new SpatialEffectController(mContext);
 
-        mLockScreenBackground = new FrameLayout(mContext);
+        mLockScreenBackground = new FrameLayout(mContext) {
+            @Override
+            protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+                super.onLayout(changed, left, top, right, bottom);
+                applyWallpaperZoom();
+            }
+        };
         FrameLayout.LayoutParams bgLp = new FrameLayout.LayoutParams(-1, -1);
         mLockScreenBackground.setLayoutParams(bgLp);
         mLockScreenBackground.setClickable(false);
@@ -124,6 +129,8 @@ public class WallpaperDepthUtils {
             @Override
             protected void onAttachedToWindow() {
                 super.onAttachedToWindow();
+                mSpatialEffectController.attachBackgroundView(mLockScreenBackground);
+                mSpatialEffectController.attachSubjectView(mLockScreenSubject);
                 registerTunable();
                 updateWallpaperZoomListener();
             }
@@ -167,8 +174,6 @@ public class WallpaperDepthUtils {
         mLockScreenSubject.setFocusable(false);
         mLockScreenSubject.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         mLockScreenSubject.setVisibility(View.GONE);
-        mSpatialEffectController.attachBackgroundView(mLockScreenBackground);
-        mSpatialEffectController.attachSubjectView(mLockScreenSubject);
         registerTunable();
     }
 
@@ -434,15 +439,9 @@ public class WallpaperDepthUtils {
     }
 
     private void applyWallpaperZoom() {
-        if (!mHasWallpaperZoom || !(mLockScreenSubject.getParent() instanceof View)) return;
-        View parent = (View) mLockScreenSubject.getParent();
-        parent.getLocationOnScreen(mParentLocation);
-        mLockScreenSubject.setPivotX(
-                mWallpaperZoomPivotX - mParentLocation[0] - mLockScreenSubject.getLeft());
-        mLockScreenSubject.setPivotY(
-                mWallpaperZoomPivotY - mParentLocation[1] - mLockScreenSubject.getTop());
-        mLockScreenSubject.setScaleX(mWallpaperZoomScale);
-        mLockScreenSubject.setScaleY(mWallpaperZoomScale);
+        if (!mHasWallpaperZoom) return;
+        mSpatialEffectController.setWallpaperZoom(
+                mWallpaperZoomScale, mWallpaperZoomPivotX, mWallpaperZoomPivotY);
     }
 
     public FrameLayout getBackgroundView() {

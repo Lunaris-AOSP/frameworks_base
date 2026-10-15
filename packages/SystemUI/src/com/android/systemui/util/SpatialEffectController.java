@@ -15,6 +15,9 @@
  */
 package com.android.systemui.util;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
@@ -59,9 +62,16 @@ public final class SpatialEffectController implements SensorEventListener {
     private final SensorManager mSensorManager;
     private final WindowManager mWindowManager;
     private final TunerService mTunerService;
+    private boolean mTunableRegistered;
 
     private View mBackgroundView;
     private View mSubjectView;
+    private boolean mHasWallpaperZoom;
+    private float mWallpaperZoomScale = 1f;
+    private float mWallpaperZoomPivotX;
+    private float mWallpaperZoomPivotY;
+    private float mSpatialScale = 1f;
+    private final int[] mParentLocation = new int[2];
 
     private Sensor mActiveSensor;
     private int mSensorMode = SENSOR_MODE_NONE;
@@ -97,7 +107,7 @@ public final class SpatialEffectController implements SensorEventListener {
     private float mMaxXPx;
     private float mMaxYPx;
 
-    private boolean mResetAnimating = false;
+    private ValueAnimator mResetAnimator;
 
     private final TunerService.Tunable mTunable = (key, newValue) -> {
         if (SPATIAL_SENSITIVITY_KEY.equals(key)) {
@@ -108,7 +118,7 @@ public final class SpatialEffectController implements SensorEventListener {
 
     private final Choreographer.FrameCallback mSpringCallback = frameTimeNanos -> {
         mFrameScheduled = false;
-        if (mResetAnimating) {
+        if (mResetAnimator != null) {
             return;
         }
         float bgTargetX = mTargetTransX * BACKGROUND_MULTIPLIER;
@@ -121,14 +131,7 @@ public final class SpatialEffectController implements SensorEventListener {
         mFgCurrentTransX += (fgTargetX - mFgCurrentTransX) * SPRING_FACTOR;
         mFgCurrentTransY += (fgTargetY - mFgCurrentTransY) * SPRING_FACTOR;
 
-        if (mBackgroundView != null) {
-            mBackgroundView.setTranslationX(mBgCurrentTransX);
-            mBackgroundView.setTranslationY(mBgCurrentTransY);
-        }
-        if (mSubjectView != null) {
-            mSubjectView.setTranslationX(mFgCurrentTransX);
-            mSubjectView.setTranslationY(mFgCurrentTransY);
-        }
+        applyTranslations();
 
         boolean bgSettled = Math.abs(bgTargetX - mBgCurrentTransX) <= SETTLE_THRESHOLD_PX
                 && Math.abs(bgTargetY - mBgCurrentTransY) <= SETTLE_THRESHOLD_PX;
@@ -145,9 +148,6 @@ public final class SpatialEffectController implements SensorEventListener {
         mSensorManager = (SensorManager) mContext.getSystemService(Context.SENSOR_SERVICE);
         mWindowManager = (WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE);
         mTunerService = Dependency.get(TunerService.class);
-        if (mTunerService != null) {
-            mTunerService.addTunable(mTunable, SPATIAL_SENSITIVITY_KEY);
-        }
         updateSensitivityScale();
         recalculateMaxOffsets();
         selectBestSensor();
@@ -165,12 +165,26 @@ public final class SpatialEffectController implements SensorEventListener {
 
     public void attachBackgroundView(View view) {
         mBackgroundView = view;
+        applyScale(view);
         recalculateMaxOffsets();
     }
 
     public void attachSubjectView(View view) {
         mSubjectView = view;
+        if (!mTunableRegistered && mTunerService != null) {
+            mTunerService.addTunable(mTunable, SPATIAL_SENSITIVITY_KEY);
+            mTunableRegistered = true;
+        }
+        applyScale(view);
         recalculateMaxOffsets();
+    }
+
+    public void setWallpaperZoom(float scale, float pivotX, float pivotY) {
+        mHasWallpaperZoom = true;
+        mWallpaperZoomScale = scale;
+        mWallpaperZoomPivotX = pivotX;
+        mWallpaperZoomPivotY = pivotY;
+        applyScale();
     }
 
     public void onDisplayRotationChanged(int rotation) {
@@ -183,22 +197,17 @@ public final class SpatialEffectController implements SensorEventListener {
         }
         mActive = active;
         if (mActive) {
+            cancelResetAnimation();
             mBgCurrentTransX = 0f;
             mBgCurrentTransY = 0f;
             mFgCurrentTransX = 0f;
             mFgCurrentTransY = 0f;
             mTargetTransX = 0f;
             mTargetTransY = 0f;
-            if (mBackgroundView != null) {
-                mBackgroundView.setTranslationX(0f);
-                mBackgroundView.setTranslationY(0f);
-            }
-            if (mSubjectView != null) {
-                mSubjectView.setTranslationX(0f);
-                mSubjectView.setTranslationY(0f);
-            }
+            applyTranslations();
             refreshCachedDisplayRotation();
-            applyOverscanScale();
+            mSpatialScale = OVERSCAN_SCALE;
+            applyScale();
             startSensing();
         } else {
             stopSensingAndReset();
@@ -207,10 +216,20 @@ public final class SpatialEffectController implements SensorEventListener {
 
     public void destroy() {
         mActive = false;
+        cancelResetAnimation();
+        cancelScheduledFrame();
         stopSensing();
-        if (mTunerService != null) {
+        if (mTunableRegistered) {
             mTunerService.removeTunable(mTunable);
+            mTunableRegistered = false;
         }
+        mSpatialScale = 1f;
+        mBgCurrentTransX = 0f;
+        mBgCurrentTransY = 0f;
+        mFgCurrentTransX = 0f;
+        mFgCurrentTransY = 0f;
+        applyTranslations();
+        applyScale();
         mBackgroundView = null;
         mSubjectView = null;
     }
@@ -265,76 +284,73 @@ public final class SpatialEffectController implements SensorEventListener {
 
     private void stopSensingAndReset() {
         stopSensing();
+        cancelScheduledFrame();
+        cancelResetAnimation();
         mTargetTransX = 0f;
         mTargetTransY = 0f;
-        mResetAnimating = true;
-        final Runnable onEnd = () -> {
-            mBgCurrentTransX = 0f;
-            mBgCurrentTransY = 0f;
-            mFgCurrentTransX = 0f;
-            mFgCurrentTransY = 0f;
-            mResetAnimating = false;
-        };
-        int pendingAnimations = 0;
-        if (mBackgroundView != null) {
-            pendingAnimations++;
-        }
-        if (mSubjectView != null) {
-            pendingAnimations++;
-        }
-        if (pendingAnimations == 0) {
-            mBgCurrentTransX = 0f;
-            mBgCurrentTransY = 0f;
-            mFgCurrentTransX = 0f;
-            mFgCurrentTransY = 0f;
-            mResetAnimating = false;
-            return;
-        }
-        final int[] remaining = {pendingAnimations};
-        final Runnable sharedEnd = () -> {
-            remaining[0]--;
-            if (remaining[0] <= 0) {
-                onEnd.run();
+        final float startBgX = mBgCurrentTransX;
+        final float startBgY = mBgCurrentTransY;
+        final float startFgX = mFgCurrentTransX;
+        final float startFgY = mFgCurrentTransY;
+        final float startScale = mSpatialScale;
+        mResetAnimator = ValueAnimator.ofFloat(0f, 1f);
+        mResetAnimator.setDuration(RESET_DURATION_MS);
+        mResetAnimator.addUpdateListener(animation -> {
+            float remaining = 1f - (float) animation.getAnimatedValue();
+            mBgCurrentTransX = startBgX * remaining;
+            mBgCurrentTransY = startBgY * remaining;
+            mFgCurrentTransX = startFgX * remaining;
+            mFgCurrentTransY = startFgY * remaining;
+            mSpatialScale = 1f + (startScale - 1f) * remaining;
+            applyTranslations();
+            // Wallpaper zoom can change while the spatial effect is settling.
+            applyScale();
+        });
+        mResetAnimator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                mResetAnimator = null;
             }
-        };
-        if (mBackgroundView != null) {
-            mBackgroundView.animate()
-                    .translationX(0f)
-                    .translationY(0f)
-                    .scaleX(1.0f)
-                    .scaleY(1.0f)
-                    .setDuration(RESET_DURATION_MS)
-                    .withEndAction(sharedEnd)
-                    .start();
-        }
-        if (mSubjectView != null) {
-            mSubjectView.animate()
-                    .translationX(0f)
-                    .translationY(0f)
-                    .scaleX(1.0f)
-                    .scaleY(1.0f)
-                    .setDuration(RESET_DURATION_MS)
-                    .withEndAction(sharedEnd)
-                    .start();
+        });
+        mResetAnimator.start();
+    }
+
+    private void cancelResetAnimation() {
+        if (mResetAnimator != null) {
+            mResetAnimator.cancel();
         }
     }
 
-    private void applyOverscanScale() {
-        DisplayMetrics dm = mContext.getResources().getDisplayMetrics();
-        float pivotX = dm.widthPixels / 2f;
-        float pivotY = dm.heightPixels / 2f;
+    private void applyTranslations() {
         if (mBackgroundView != null) {
-            mBackgroundView.setPivotX(mBackgroundView.getWidth() > 0 ? mBackgroundView.getWidth() / 2f : pivotX);
-            mBackgroundView.setPivotY(mBackgroundView.getHeight() > 0 ? mBackgroundView.getHeight() / 2f : pivotY);
-            mBackgroundView.setScaleX(OVERSCAN_SCALE);
-            mBackgroundView.setScaleY(OVERSCAN_SCALE);
+            mBackgroundView.setTranslationX(mBgCurrentTransX);
+            mBackgroundView.setTranslationY(mBgCurrentTransY);
         }
         if (mSubjectView != null) {
-            mSubjectView.setPivotX(mSubjectView.getWidth() > 0 ? mSubjectView.getWidth() / 2f : pivotX);
-            mSubjectView.setPivotY(mSubjectView.getHeight() > 0 ? mSubjectView.getHeight() / 2f : pivotY);
-            mSubjectView.setScaleX(OVERSCAN_SCALE);
-            mSubjectView.setScaleY(OVERSCAN_SCALE);
+            mSubjectView.setTranslationX(mFgCurrentTransX);
+            mSubjectView.setTranslationY(mFgCurrentTransY);
         }
+    }
+
+    private void applyScale() {
+        applyScale(mBackgroundView);
+        applyScale(mSubjectView);
+    }
+
+    private void applyScale(View view) {
+        if (view == null) {
+            return;
+        }
+        if (mHasWallpaperZoom && view.getParent() instanceof View) {
+            View parent = (View) view.getParent();
+            parent.getLocationOnScreen(mParentLocation);
+            view.setPivotX(mWallpaperZoomPivotX - mParentLocation[0] - view.getLeft());
+            view.setPivotY(mWallpaperZoomPivotY - mParentLocation[1] - view.getTop());
+        }
+        // Both layers share one scale; spatial overscan must not replace wallpaper zoom.
+        float scale = mWallpaperZoomScale * mSpatialScale;
+        view.setScaleX(scale);
+        view.setScaleY(scale);
     }
 
     private void refreshCachedDisplayRotation() {
@@ -355,7 +371,7 @@ public final class SpatialEffectController implements SensorEventListener {
 
     @Override
     public void onSensorChanged(SensorEvent event) {
-        if (!mActive || mResetAnimating) {
+        if (!mActive || mResetAnimator != null) {
             return;
         }
         if (mBackgroundView == null && mSubjectView == null) {
@@ -477,6 +493,13 @@ public final class SpatialEffectController implements SensorEventListener {
         if (!mFrameScheduled) {
             mFrameScheduled = true;
             Choreographer.getInstance().postFrameCallback(mSpringCallback);
+        }
+    }
+
+    private void cancelScheduledFrame() {
+        if (mFrameScheduled) {
+            Choreographer.getInstance().removeFrameCallback(mSpringCallback);
+            mFrameScheduled = false;
         }
     }
 }
