@@ -1186,6 +1186,12 @@
                 android:resource="@xml/fileprovider" />
         </provider>
 
+        <provider
+            android:name=".smartspace.SmartspaceBluetoothProvider"
+            android:authorities="com.android.systemui.smartspace.bluetooth"
+            android:permission="android.permission.MANAGE_SMARTSPACE"
+            android:exported="true" />
+
         <provider android:name=".keyguard.KeyguardSliceProvider"
                   android:authorities="com.android.systemui.keyguard"
                   android:grantUriPermissions="true"
