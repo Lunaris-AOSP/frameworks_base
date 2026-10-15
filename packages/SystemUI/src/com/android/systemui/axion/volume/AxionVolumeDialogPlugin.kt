@@ -40,6 +40,7 @@ class AxionVolumeDialogPlugin @Inject constructor(
     private var callback: VolumeDialog.Callback? = null
     
     private lateinit var dialog: AxionVolumeDialog
+    private lateinit var component: AxionVolumeComponent
     private lateinit var viewModel: AxionVolumeDialogViewModel
     private var autoDismissJob: Job? = null
     private var previousVisibilityState: VisibilityState? = null
@@ -98,7 +99,7 @@ class AxionVolumeDialogPlugin @Inject constructor(
         this.callback = callback
         pluginScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
         
-        val component = componentFactory.create(pluginScope!!)
+        component = componentFactory.create(pluginScope!!)
         dialog = component.volumeDialog()
         viewModel = component.viewModel()
 
@@ -166,6 +167,7 @@ class AxionVolumeDialogPlugin @Inject constructor(
                                     
                                     controller.notifyVisible(false)
                                     runCatching { dialog.dismiss() }
+                                    recreateDialog()
 
                                     viewModel.resetState()
                                 }
@@ -177,6 +179,7 @@ class AxionVolumeDialogPlugin @Inject constructor(
                                 viewModel.isInteracting = false
                                 controller.notifyVisible(false)
                                 runCatching { dialog.dismiss() }
+                                recreateDialog()
                                 viewModel.resetState()
                             }
                             autoDismissJob?.cancel()
@@ -187,6 +190,11 @@ class AxionVolumeDialogPlugin @Inject constructor(
         }
     }
     
+    private fun recreateDialog() {
+        dialog.isWakeLockAcquired = false
+        dialog = component.volumeDialog()
+    }
+
     fun rescheduleAutoDismiss() {
         autoDismissJob?.cancel()
         val timeout = if (viewModel.expansionState == ExpansionState.EXPANDED) {
