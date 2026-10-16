@@ -569,7 +569,12 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
     boolean isExpansionEnabled() {
         return mExpansionEnabledPolicy && mExpansionEnabledAmbient
             && !isRemoteInputActiveWithKeyboardUp()
-            && !NTForbiddenSwipeDownQSController.get(mPanelView.getContext()).getForbiddenSwipeDownQS();
+            && !isLockscreenQsDisabled();
+    }
+
+    private boolean isLockscreenQsDisabled() {
+        return NTForbiddenSwipeDownQSController.get(mPanelView.getContext())
+                .getForbiddenSwipeDownQS();
     }
 
     /** */
@@ -907,6 +912,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
 
     @VisibleForTesting
     void setExpanded(boolean expanded) {
+        expanded = expanded && !isLockscreenQsDisabled();
         boolean changed = getExpanded() != expanded;
         if (changed) {
             mShadeRepository.setLegacyIsQsExpanded(expanded);
@@ -925,10 +931,12 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
 
     /** update Qs height state */
     void setExpansionHeight(float height) {
+        boolean qsAllowed = !isLockscreenQsDisabled();
         int maxHeight = getMaxExpansionHeight();
-        height = Math.min(Math.max(
-                height, getMinExpansionHeight()), maxHeight);
-        boolean fullyExpanded = height == maxHeight && maxHeight != 0;
+        height = qsAllowed
+                ? Math.min(Math.max(height, getMinExpansionHeight()), maxHeight)
+                : getMinExpansionHeight();
+        boolean fullyExpanded = qsAllowed && height == maxHeight && maxHeight != 0;
         if (mExpansionHeight == height && mFullyExpanded == fullyExpanded) {
             return;
         }
@@ -1195,11 +1203,13 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
 
     void updateQsState() {
         if (mQs == null) return;
-        mQs.setExpanded(getExpanded());
+        boolean qsAllowed = !isLockscreenQsDisabled();
+        mQs.setExpanded(qsAllowed && getExpanded());
 
         if (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE) {
-            boolean isQsVisible = isExpandImmediate() || getExpanded();
-            int qsVisibility = (isQsVisible || mSwipeInProgress) ? View.VISIBLE : View.INVISIBLE;
+            boolean isQsVisible = qsAllowed && (isExpandImmediate() || getExpanded());
+            int qsVisibility = qsAllowed && (isQsVisible || mSwipeInProgress)
+                    ? View.VISIBLE : View.INVISIBLE;
             int nsslVisibility = (!isQsVisible || mSwipeInProgress) ? View.VISIBLE : View.INVISIBLE;
 
             if (mQsFrame != null && mQsFrame.getVisibility() != qsVisibility) {
@@ -1216,14 +1226,15 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
                 mNotificationStackScrollLayoutController.getView().setVisibility(nsslVisibility);
             }
         } else {
-            if (mQsFrame != null && mQsFrame.getVisibility() != View.VISIBLE) {
-                mQsFrame.setVisibility(View.VISIBLE);
+            int qsVisibility = qsAllowed ? View.VISIBLE : View.INVISIBLE;
+            if (mQsFrame != null && mQsFrame.getVisibility() != qsVisibility) {
+                mQsFrame.setVisibility(qsVisibility);
             }
-            if (mQs.getView() != null && mQs.getView().getVisibility() != View.VISIBLE) {
-                mQs.getView().setVisibility(View.VISIBLE);
+            if (mQs.getView() != null && mQs.getView().getVisibility() != qsVisibility) {
+                mQs.getView().setVisibility(qsVisibility);
             }
-            if (mQs.getHeader() != null && mQs.getHeader().getVisibility() != View.VISIBLE) {
-                mQs.getHeader().setVisibility(View.VISIBLE);
+            if (mQs.getHeader() != null && mQs.getHeader().getVisibility() != qsVisibility) {
+                mQs.getHeader().setVisibility(qsVisibility);
             }
             if (mNotificationStackScrollLayoutController.getView() != null
                     && mNotificationStackScrollLayoutController.getView().getVisibility() != View.VISIBLE) {
@@ -1354,6 +1365,9 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
 
     /** Calculate fraction of current QS expansion state */
     float computeExpansionFraction() {
+        if (isLockscreenQsDisabled()) {
+            return 0.0f;
+        }
         if (mAnimatingHiddenFromCollapsed) {
             // When hiding QS from collapsed state, the expansion can sometimes temporarily
             // be larger than 0 because of the timing, leading to flickers.
@@ -1517,6 +1531,13 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
 
     private void applyClippingImmediately(int left, int top, int right, int bottom,
             boolean qsVisible) {
+        // Notification taps and their animations can update QS without a swipe gesture.
+        if (isLockscreenQsDisabled()) {
+            qsVisible = false;
+            if (mQsFrame != null) {
+                mQsFrame.setVisibility(View.INVISIBLE);
+            }
+        }
         int radius = mScrimCornerRadius;
         boolean clipStatusView = false;
         mLastClipBounds.set(left, top, right, bottom);
@@ -1897,7 +1918,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         if (legacySplitShade && !isFullyCollapsed) {
             return false;
         }
-        boolean isSwipeDisabled = NTForbiddenSwipeDownQSController.get(mPanelView.getContext()).getForbiddenSwipeDownQS();
+        boolean isSwipeDisabled = isLockscreenQsDisabled();
         if (isSplitShadeAndTouchXOutsideQs(event.getX())) {
             mShadeLog.logMotionEvent(event, "handleQsTouch: touch outside QS");
             return false;
@@ -1984,8 +2005,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         mConflictingExpansionGesture = false;
         mTwoFingerExpandPossible = false;
         boolean openQs = isExpansionEnabled() && isOpenQsEvent(event)
-                && !NTForbiddenSwipeDownQSController.get(mPanelView.getContext())
-                        .getForbiddenSwipeDownQS();
+                && !isLockscreenQsDisabled();
         setExpandImmediate(openQs);
         mNotificationStackScrollLayoutController.setShouldShowShelfOnly(openQs);
         if (openQs) {
@@ -2230,7 +2250,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
      */
     private void flingQs(float vel, int type, final Runnable onFinishRunnable,
             boolean isClick) {
-        if (type == 0 && NTForbiddenSwipeDownQSController.get(mPanelView.getContext()).getForbiddenSwipeDownQS()) {
+        if (type == FLING_EXPAND && isLockscreenQsDisabled()) {
             Log.i(TAG, " can't expand qs since forbidden wipe down QS:" + isExpansionEnabled());
             setQsOverscroll(0f);
             traceQsJank(false, false);
