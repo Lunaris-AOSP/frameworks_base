@@ -567,8 +567,7 @@ public class NotificationChildrenContainer extends ViewGroup
         boolean shouldBlur = mBundleHeaderBlurEnabled;
         mBundleHeaderBlurView.setAxBlurEnabled(shouldBlur);
 
-        boolean canBlur = shouldBlur && mBundleHeaderBlurView.isCrossWindowBlurActive();
-        mBundleHeaderViewModel.setUseBlurBackground(canBlur);
+        mBundleHeaderViewModel.setUseBlurBackground(mBundleHeaderBlurView.isBackgroundActive());
     }
 
     private void initBundleDimens() {

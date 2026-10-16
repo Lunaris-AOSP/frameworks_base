@@ -49,6 +49,7 @@ class ScrimUtils private constructor(context: Context?) {
         fun onNotificationRemoved(sbn: StatusBarNotification) {}
         fun onKeyguardLayoutChanged() {}
         fun onKeyguardAlphaChanged(alpha: Float) {}
+        fun onMediaArtVisibilityChanged(visible: Boolean) {}
     }
 
     private val listeners = WeakListenerManager<ScrimEventListener>()
@@ -56,6 +57,7 @@ class ScrimUtils private constructor(context: Context?) {
 
     private val mQsVisible = AtomicBoolean()
     private val mPulsing = AtomicBoolean()
+    private var mMediaArtVisible = false
     private val mFadingAwayDuration = 500L
 
     private val mContext: Context by lazy {
@@ -132,6 +134,14 @@ class ScrimUtils private constructor(context: Context?) {
 
     fun addListener(listener: ScrimEventListener) = listeners.addListener(listener)
     fun removeListener(listener: ScrimEventListener) = listeners.removeListener(listener)
+
+    fun setMediaArtVisible(visible: Boolean) {
+        if (mMediaArtVisible == visible) return
+        mMediaArtVisible = visible
+        listeners.notifyOnMain { it.onMediaArtVisibilityChanged(visible) }
+    }
+
+    fun isMediaArtVisible(): Boolean = mMediaArtVisible
 
     fun setKeyguardShowing(showing: Boolean) {
         if (mKeyguardShowing == null || mKeyguardShowing != showing) {

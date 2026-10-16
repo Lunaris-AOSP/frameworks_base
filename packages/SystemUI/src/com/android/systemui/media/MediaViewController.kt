@@ -96,6 +96,11 @@ class MediaViewController @Inject constructor(
 
     private var mediaArtJob: Job? = null
     private var isAlbumArtVisible = false
+        set(visible) {
+            if (field == visible) return
+            field = visible
+            ScrimUtils.get().setMediaArtVisible(visible)
+        }
     private var dismissingKeyguard = false
     private var retryRunnable: Runnable? = null
     private var coalesceJob: Job? = null
