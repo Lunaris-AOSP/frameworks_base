@@ -10,6 +10,7 @@ import android.app.AlertDialog
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
 import android.content.Intent
+import android.content.ComponentName
 import android.os.Bundle
 import android.widget.Toast
 import org.lunaris.lockscreenwidgets.R
@@ -43,9 +44,31 @@ class KeyguardWidgetConfigActivity : Activity() {
                 configure()
             } else {
                 store.reconcile()
-                showPicker()
+                if (intent.hasExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER)) {
+                    selectProvider()
+                } else {
+                    showPicker()
+                }
             }
         } catch (e: RuntimeException) { fail() }
+    }
+
+    private fun selectProvider() {
+        val component = intent.getParcelableExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER,
+            ComponentName::class.java) ?: return fail()
+        val info = store.manager.getInstalledProvidersForProfile(
+            AppWidgetProviderInfo.WIDGET_CATEGORY_HOME_SCREEN or AppWidgetProviderInfo.WIDGET_CATEGORY_KEYGUARD,
+            android.os.Process.myUserHandle(), null)
+            .firstOrNull { it.provider == component } ?: return fail()
+        spanX = intent.getIntExtra("width", 0)
+        spanY = intent.getIntExtra("height", 0)
+        if ((spanX to spanY) !in WidgetSizes(this, store.gridWidth).allowed(info)) return fail()
+        if (WidgetEntry.place(Int.MAX_VALUE, spanX, spanY, store.entries) == null) {
+            Toast.makeText(this, R.string.app_widgets_no_space, Toast.LENGTH_LONG).show()
+            finish()
+            return
+        }
+        bind(info)
     }
 
     private fun showPicker() {

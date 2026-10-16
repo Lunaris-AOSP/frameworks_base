@@ -24,6 +24,7 @@ import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.plugins.keyguard.ui.clocks.ClockViewIds
 import com.android.systemui.res.R
 import com.android.systemui.settings.UserTracker
+import com.android.systemui.statusbar.phone.SystemUIDialogFactory
 import com.android.systemui.statusbar.policy.KeyguardStateController
 import javax.inject.Inject
 import com.android.systemui.shared.R as SharedR
@@ -35,6 +36,7 @@ class KeyguardWidgetViewSection @Inject constructor(
     private val userTracker: UserTracker,
     private val keyguardStateController: KeyguardStateController,
     private val trampolineInteractor: WidgetTrampolineInteractor,
+    private val dialogFactory: SystemUIDialogFactory,
 ) : KeyguardSection() {
     private var widgetView: LockScreenWidgets? = null
     private var appWidgets: WidgetViewport? = null
@@ -74,7 +76,7 @@ class KeyguardWidgetViewSection @Inject constructor(
     override fun bindData(constraintLayout: ConstraintLayout) {
         val viewport = appWidgets ?: return
         controller = KeyguardWidgetHostController(context, viewport, activityStarter, falsingManager,
-            userTracker, keyguardStateController, trampolineInteractor).also { it.attach() }
+            userTracker, keyguardStateController, trampolineInteractor, dialogFactory).also { it.attach() }
         val listener = ViewTreeObserver.OnGlobalLayoutListener {
             if (viewport.visibility != View.VISIBLE) return@OnGlobalLayoutListener
             val density = context.resources.displayMetrics.density

@@ -32,20 +32,25 @@ import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
 import android.view.MotionEvent
-import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.RemoteViews
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.settings.UserTracker
+import com.android.systemui.statusbar.phone.SystemUIDialog
+import com.android.systemui.statusbar.phone.SystemUIDialogFactory
+import com.android.systemui.statusbar.phone.create
 import com.android.systemui.statusbar.policy.KeyguardStateController
 import com.android.systemui.util.ScrimUtils
 import org.lunaris.lockscreenwidgets.viewKey
 import org.lunaris.lockscreenwidgets.WidgetClient
 import org.lunaris.lockscreenwidgets.WidgetContract
-import org.lunaris.lockscreenwidgets.WidgetEditorView
 import org.lunaris.lockscreenwidgets.WidgetEntry
 import org.lunaris.lockscreenwidgets.WidgetGridView
 import org.lunaris.lockscreenwidgets.WidgetTouchFrame
@@ -59,6 +64,7 @@ class KeyguardWidgetHostController(
     private val userTracker: UserTracker,
     private val keyguardStateController: KeyguardStateController,
     private val trampolineInteractor: WidgetTrampolineInteractor,
+    private val dialogFactory: SystemUIDialogFactory,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var trampolineJob: Job? = null
@@ -66,15 +72,15 @@ class KeyguardWidgetHostController(
     private val scrim = ScrimUtils.get()
     private var attached = false
     private var switchingUser = false
-    private var editing = false
+    private var widgetDialog: SystemUIDialog? = null
+    private var selectedId by mutableIntStateOf(-1)
     private var awake = context.getSystemService(PowerManager::class.java).isInteractive
     private var bouncer = false
     private var qsVisible = false
     private var grid = WidgetGridView(context)
-    private var editor: WidgetEditorView? = null
     private val body = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
     private var client: WidgetClient? = null
-    private var snapshot = Bundle()
+    private var snapshot by mutableStateOf(Bundle())
     private var providerKeys = emptyMap<Int, String>()
     private val views = mutableMapOf<Int, AppWidgetHostView>()
     private val remoteViews = mutableMapOf<Int, RemoteViews?>()
@@ -112,7 +118,6 @@ class KeyguardWidgetHostController(
             switchingUser = false
             snapshot = Bundle()
             remoteViews.clear()
-            editing = false
             rebuild()
             updateVisibility()
         }
@@ -124,7 +129,7 @@ class KeyguardWidgetHostController(
         override fun onKeyguardShowingChanged(showing: Boolean) { updateVisibility() }
         override fun onDozingChanged(dozing: Boolean) { updateVisibility() }
         override fun onStartedWakingUp() { awake = true; updateVisibility() }
-        override fun onScreenTurnedOff() { awake = false; editing = false; rebuild(); updateVisibility() }
+        override fun onScreenTurnedOff() { awake = false; updateVisibility() }
         override fun onKeyguardGoingAwayChanged(goingAway: Boolean) { updateVisibility() }
         override fun onKeyguardFadingAwayChanged(fadingAway: Boolean) { updateVisibility() }
         override fun onPrimaryBouncerShowingChanged(showing: Boolean) { bouncer = showing; updateVisibility() }
@@ -135,7 +140,7 @@ class KeyguardWidgetHostController(
         if (attached) return
         attached = true
         container.addView(body)
-        container.onConfigurationChanged = { rebuild(); render(); client?.refresh() }
+        container.onConfigurationChanged = { dismissWidgetDialog(); rebuild(); render(); client?.refresh() }
         for (key in listOf(WidgetContract.CONFIG, WidgetContract.ENABLED)) {
             context.contentResolver.registerContentObserver(Settings.Secure.getUriFor(key), false,
                 observer, UserHandle.USER_ALL)
@@ -168,13 +173,14 @@ class KeyguardWidgetHostController(
                 remoteViews[id] = remote
                 views[id]?.updateAppWidget(remote)
             }, onDataChanged = { id, viewId -> views[id]?.onViewDataChanged(viewId) }, onError = { error ->
-                if (editing) android.widget.Toast.makeText(context, error.messageResId,
+                if (widgetDialog != null) android.widget.Toast.makeText(context, error.messageResId,
                     android.widget.Toast.LENGTH_SHORT).show()
             }).also { it.start() }
         } else if (!show) disconnect()
     }
 
     private fun disconnect() {
+        dismissWidgetDialog()
         trampolineJob?.cancel()
         client?.close()
         client = null
@@ -183,43 +189,27 @@ class KeyguardWidgetHostController(
     private fun rebuild() {
         views.clear()
         body.removeAllViews()
-        if (editing) {
-            body.addView(Button(context).apply {
-                setText(WidgetR.string.app_widgets_done)
-                setOnClickListener { editing = false; rebuild(); render() }
-            })
-            editor = WidgetEditorView(context).apply {
-                onAdd = { configure(-1) }
-                onConfigure = ::configure
-                onRemove = { id -> client?.change("remove", id.toString()) }
-                onChange = { entry -> client?.change("change", extras = entry.bundle()) }
-            }
-            grid = editor!!.grid
-            body.addView(editor)
-        } else {
-            editor = null
-            grid = WidgetGridView(context)
-            body.addView(grid)
-        }
-    }
-
-    private fun configure(id: Int) {
-        activityStarter.startActivity(Intent().setClassName("com.android.systemui", WidgetContract.ACTIVITY)
-            .putExtra("id", id).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), true)
+        grid = WidgetGridView(context)
+        body.addView(grid)
     }
 
     private fun render() {
         if (!attached) return
         val entries = WidgetEntry.decode(snapshot.getString("config"))
-        if (entries.isEmpty() && !editing) {
+        if (entries.isEmpty()) {
+            dismissWidgetDialog()
+            grid.clearWidgets()
+            views.clear()
+            remoteViews.clear()
+            providerKeys = emptyMap()
             body.removeAllViews()
-            body.addView(Button(context).apply {
-                setText(WidgetR.string.app_widgets_add)
-                setOnClickListener { configure(-1) }
-            })
             return
         }
-        if (!editing && grid.parent == null) { body.removeAllViews(); body.addView(grid) }
+        if (grid.parent == null) { body.removeAllViews(); body.addView(grid) }
+        if (widgetDialog != null && entries.none { it.id == selectedId }) {
+            dismissWidgetDialog()
+        }
+        grid.selectedId = selectedId
         val infos = entries.mapNotNull { entry ->
             snapshot.getParcelable(entry.id.toString(), AppWidgetProviderInfo::class.java)?.let { entry.id to it }
         }.toMap()
@@ -233,7 +223,7 @@ class KeyguardWidgetHostController(
             if (info == null) {
                 TextView(context).apply {
                     setText(WidgetR.string.app_widgets_unavailable)
-                    setOnLongClickListener { beginEditing(); true }
+                    setOnLongClickListener { showWidgetDialog(entry.id); true }
                 }
             } else {
                 val hostView = object : AppWidgetHostView(context, interaction) {
@@ -256,24 +246,60 @@ class KeyguardWidgetHostController(
                     updateAppWidget(remoteViews[entry.id])
                 }
                 views[entry.id] = hostView
-                WidgetTouchFrame(context, ::beginEditing).apply {
+                WidgetTouchFrame(context, { showWidgetDialog(entry.id) }).apply {
                     isLongClickable = true
                     contentDescription = info.loadLabel(context.packageManager)
                     addView(hostView, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT))
-                    setOnLongClickListener { beginEditing(); true }
                 }
             }
         }
-        editor?.sizingWidth = snapshot.getInt("gridWidth")
-        editor?.update(entries, infos, create) ?: grid.setWidgets(entries, create)
+        grid.setWidgets(entries, create)
     }
 
-    private fun beginEditing() {
+    private fun showWidgetDialog(id: Int) {
         if (!canShow() || falsingManager.isFalseLongTap(FalsingManager.LOW_PENALTY)) return
-        editing = true
-        rebuild()
-        render()
+        if (client == null || WidgetEntry.decode(snapshot.getString("config")).none { it.id == id }) return
+        dismissWidgetDialog()
+        selectedId = id
+        grid.selectedId = id
+        val dialog = dialogFactory.create(
+            context = context,
+            content = { actions ->
+                val entries = WidgetEntry.decode(snapshot.getString("config"))
+                val entry = entries.firstOrNull { it.id == selectedId }
+                if (entry != null) KeyguardWidgetActions(
+                    entry = entry,
+                    entries = entries,
+                    info = snapshot.getParcelable(entry.id.toString(), AppWidgetProviderInfo::class.java),
+                    gridWidth = snapshot.getInt("gridWidth").takeIf { it > 0 } ?: grid.width,
+                    onChange = { changed ->
+                        if (canShow()) client?.change("change", extras = changed.bundle())
+                    },
+                    onRemove = {
+                        if (canShow()) client?.change("remove", entry.id.toString())
+                    },
+                    onDismiss = { actions.dismiss() },
+                )
+            },
+        )
+        widgetDialog = dialog
+        dialog.setOnDismissListener {
+            if (widgetDialog === dialog) {
+                widgetDialog = null
+                selectedId = -1
+                grid.selectedId = -1
+            }
+        }
+        dialog.show()
+    }
+
+    private fun dismissWidgetDialog() {
+        val dialog = widgetDialog
+        widgetDialog = null
+        selectedId = -1
+        grid.selectedId = -1
+        dialog?.dismiss()
     }
 
     fun detach() {

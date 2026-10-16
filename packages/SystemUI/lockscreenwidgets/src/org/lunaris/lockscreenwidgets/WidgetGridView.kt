@@ -72,16 +72,18 @@ class WidgetGridView(context: Context) : ViewGroup(context) {
 
     override fun dispatchDraw(canvas: Canvas) {
         super.dispatchDraw(canvas)
-        if (!editing) return
+        if (!editing && selectedId < 0) return
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = density
         paint.color = Color.GRAY
         val sizes = WidgetSizes(context, width)
-        for (y in 0..3) for (x in 0..3) {
-            val left = sizes.offset(x).toFloat()
-            val top = sizes.offset(y).toFloat()
-            rect.set(left, top, left + sizes.pixels(1), top + sizes.pixels(1))
-            canvas.drawRoundRect(rect, 12 * density, 12 * density, paint)
+        if (editing) {
+            for (y in 0..3) for (x in 0..3) {
+                val left = sizes.offset(x).toFloat()
+                val top = sizes.offset(y).toFloat()
+                rect.set(left, top, left + sizes.pixels(1), top + sizes.pixels(1))
+                canvas.drawRoundRect(rect, 12 * density, 12 * density, paint)
+            }
         }
         val index = entries.indexOfFirst { it.id == selectedId }
         if (index >= 0) {
@@ -117,28 +119,44 @@ class WidgetGridView(context: Context) : ViewGroup(context) {
 class WidgetTouchFrame(context: Context, private val onEdit: () -> Unit) : FrameLayout(context) {
     private var downX = 0f
     private var downY = 0f
+    private var touchActive = false
     private var longPressed = false
     private val slop = ViewConfiguration.get(context).scaledTouchSlop
     private val edit = Runnable {
-        if (longPressed) return@Runnable
-        val cancel = MotionEvent.obtain(0, android.os.SystemClock.uptimeMillis(), MotionEvent.ACTION_CANCEL, 0f, 0f, 0)
-        super.dispatchTouchEvent(cancel)
-        cancel.recycle()
-        performLongClick()
+        if (touchActive) performLongClick()
     }
 
     override fun performLongClick(): Boolean {
-        if (!longPressed) {
+        if (touchActive) {
+            if (longPressed) return true
             longPressed = true
-            performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
-            onEdit()
+            removeCallbacks(edit)
+            val cancel = MotionEvent.obtain(0, android.os.SystemClock.uptimeMillis(),
+                MotionEvent.ACTION_CANCEL, 0f, 0f, 0)
+            super.dispatchTouchEvent(cancel)
+            cancel.recycle()
         }
+        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+        onEdit()
         return true
+    }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean = isLongClickable
+
+    override fun onInitializeAccessibilityNodeInfo(info: android.view.accessibility.AccessibilityNodeInfo) {
+        super.onInitializeAccessibilityNodeInfo(info)
+        if (isLongClickable) info.addAction(
+            android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction(
+                android.view.accessibility.AccessibilityNodeInfo.ACTION_LONG_CLICK,
+                context.getString(R.string.app_widgets_edit),
+            )
+        )
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                touchActive = true
                 longPressed = false
                 downX = event.x
                 downY = event.y
@@ -146,15 +164,19 @@ class WidgetTouchFrame(context: Context, private val onEdit: () -> Unit) : Frame
                 while (ancestor != null && ancestor !is android.widget.ScrollView) ancestor = ancestor.parent
                 ancestor?.parent?.requestDisallowInterceptTouchEvent(true)
                 if (hasScrollableChild(this)) parent?.requestDisallowInterceptTouchEvent(true)
-                postDelayed(edit, ViewConfiguration.getLongPressTimeout().toLong())
+                removeCallbacks(edit)
+                if (isLongClickable) postDelayed(edit, ViewConfiguration.getLongPressTimeout().toLong())
             }
             MotionEvent.ACTION_MOVE -> if (kotlin.math.abs(event.x - downX) > slop ||
                 kotlin.math.abs(event.y - downY) > slop) removeCallbacks(edit)
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> removeCallbacks(edit)
+            MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> removeCallbacks(edit)
         }
         val handled = if (longPressed) true else super.dispatchTouchEvent(event)
-        if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL)
+        if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
             parent?.requestDisallowInterceptTouchEvent(false)
+            touchActive = false
+            longPressed = false
+        }
         return handled || isLongClickable
     }
 
@@ -166,6 +188,8 @@ class WidgetTouchFrame(context: Context, private val onEdit: () -> Unit) : Frame
 
     override fun onDetachedFromWindow() {
         removeCallbacks(edit)
+        touchActive = false
+        longPressed = false
         super.onDetachedFromWindow()
     }
 }

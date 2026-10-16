@@ -5,6 +5,9 @@
     <string name="app_widgets_edit">Edit widgets</string>
     <string name="app_widgets_done">Done</string>
     <string name="app_widgets_remove">Remove</string>
+    <string name="app_widgets_remove_widget">Remove widget</string>
+    <string name="app_widgets_close">Close</string>
+    <string name="app_widgets_dimensions">%1$d × %2$d</string>
     <string name="app_widgets_configure">Configure</string>
     <string name="app_widgets_selected">Added widgets</string>
     <string name="app_widgets_size">Size</string>
