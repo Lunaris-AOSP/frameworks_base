@@ -459,7 +459,8 @@ public class ScrimView extends View {
             Settings.System.SINGLE_QS_TONE_ENABLED, 0, UserHandle.USER_CURRENT) == 1;
         boolean splitShade = Settings.System.getIntForUser(resolver,
             Settings.System.QS_SPLIT_SHADE, 0, UserHandle.USER_CURRENT) == 1;
-        return singleQsTone || splitShade;
+        return singleQsTone || (splitShade
+                && !com.android.systemui.qs.flags.MistQsMode.isEnabled());
     }
 
     private void updateNotificationScrimState() {

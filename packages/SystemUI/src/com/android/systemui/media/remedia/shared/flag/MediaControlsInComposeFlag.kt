@@ -18,6 +18,7 @@ package com.android.systemui.media.remedia.shared.flag
 
 import com.android.systemui.Flags.mediaControlsInCompose
 import com.android.systemui.flags.RefactorFlagUtils
+import com.android.systemui.qs.flags.MistQsMode
 import com.android.systemui.scene.shared.flag.SceneContainerFlag
 
 object MediaControlsInComposeFlag {
@@ -26,7 +27,9 @@ object MediaControlsInComposeFlag {
 
     @JvmStatic
     inline val isEnabled: Boolean
-        get() = mediaControlsInCompose() || SceneContainerFlag.isEnabled
+        // Mist's player uses MediaRepository and MediaCarouselInteractor. Select their complete
+        // pipeline for the lifetime of the process, along with the Mist QS fragment.
+        get() = mediaControlsInCompose() || SceneContainerFlag.isEnabled || MistQsMode.isEnabled
 
     /**
      * Called to ensure code is only run when the flag is disabled. This will throw an exception if

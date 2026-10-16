@@ -1,4 +1,7 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/*
+ * Copyright (C) 2026 Lunaris-AOSP
+ * SPDX-License-Identifier: Apache-2.0
+ */
 package com.android.systemui.lockscreen
 
 import android.appwidget.AppWidgetHost

@@ -353,6 +353,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
     private final QS.ScrollListener mQsScrollListener = this::onScroll;
 
     private final WindowManagerProvider mWindowManagerProvider;
+    @Inject Lazy<AxQsShadePolicy> mAxQsShadePolicy;
 
     @Inject
     public QuickSettingsControllerImpl(
@@ -661,7 +662,9 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
 
         final boolean isRtl = mPanelView != null && mPanelView.isLayoutRtl();
 
-        if (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE) {
+        if (isMistSeparateShade() && mBarState == StatusBarState.SHADE) {
+            showQsOverride = mAxQsShadePolicy.get().isSeparateQuickPanelGesture(x, w);
+        } else if (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE) {
             float halfRegion = w * 1.f / 2.f;
             showQsOverride = isRtl ? x < halfRegion : w - halfRegion < x;
         } else {
@@ -687,8 +690,16 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         return isLegacySplitShadeEligible();
     }
 
+    private boolean isMistQsEnabled() {
+        return com.android.systemui.qs.flags.MistQsMode.isEnabled();
+    }
+
+    private boolean isMistSeparateShade() {
+        return isMistQsEnabled() && mAxQsShadePolicy.get().isSeparateShade();
+    }
+
     private boolean isLegacySplitShadeEligible() {
-        return mQsSplitShadeEnabledLegacy
+        return !isMistQsEnabled() && mQsSplitShadeEnabledLegacy
                 && mResources.getConfiguration().orientation
                         == Configuration.ORIENTATION_PORTRAIT;
     }
@@ -777,6 +788,9 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         if (!isExpansionEnabled() || mCollapsedOnDown || (keyguardShowing
                 && mKeyguardBypassController.getBypassEnabled()) || mSplitShadeEnabled
                 || (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE)) {
+            return false;
+        }
+        if (getExpanded() && yDiff < 0 && isMistSeparateShade()) {
             return false;
         }
         int headerTop, headerBottom;
@@ -1156,6 +1170,10 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
             mShadeLog.logQsExpandImmediateChanged(expandImmediate);
             mShadeRepository.setLegacyExpandImmediate(expandImmediate);
         }
+        if (isMistQsEnabled()) {
+            mNotificationStackScrollLayoutController.setQuickQsHidden(
+                    expandImmediate && !mSplitShadeEnabled);
+        }
     }
 
     void setTwoFingerExpandPossible(boolean expandPossible) {
@@ -1375,6 +1393,9 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         }
         if (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE) {
             return (getExpanded() || isExpandImmediate()) ? mShadeExpandedFraction : 0.0f;
+        }
+        if (isMistQsEnabled() && mMaxExpansionHeight - mMinExpansionHeight <= 0.001f) {
+            return 0.0f;
         }
         return Math.min(
                 1f, (mExpansionHeight - mMinExpansionHeight) / (mMaxExpansionHeight
@@ -1873,11 +1894,18 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         if (mSplitShadeEnabled) {
             return; // QS is always expanded in split shade
         }
+        if (getExpanded() && isMistSeparateShade()
+                && mAxQsShadePolicy.get().collapseSeparateShade()) {
+            return;
+        }
         onExpansionStarted();
         if (getExpanded()) {
             flingQs(0, FLING_COLLAPSE, null, true);
         } else if (isExpansionEnabled()) {
             mLockscreenGestureLogger.write(MetricsProto.MetricsEvent.ACTION_SHADE_QS_TAP, 0, 0);
+            if (isMistQsEnabled() && mQs != null) {
+                mQs.setForceQsEvent(true);
+            }
             flingQs(0, FLING_EXPAND, null, true);
         }
     }
@@ -1976,13 +2004,16 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         }
         if (action == MotionEvent.ACTION_CANCEL || action == MotionEvent.ACTION_UP) {
             mConflictingExpansionGesture = false;
-            resetEarlyExpansion();
+            maybeResetEarlyExpansion();
         }
         if (action == MotionEvent.ACTION_DOWN && isFullyCollapsed && isExpansionEnabled()) {
             mTwoFingerExpandPossible = true;
         }
         if (mTwoFingerExpandPossible && isOpenQsEvent(event) && isInStatusBar) {
             mMetricsLogger.count(COUNTER_PANEL_OPEN_QS, 1);
+            if (isMistQsEnabled() && mQs != null) {
+                mQs.setForceQsEvent(true);
+            }
             setExpandImmediate(true);
             mNotificationStackScrollLayoutController.setShouldShowShelfOnly(!mSplitShadeEnabled);
             if (mExpansionHeightSetToMaxListener != null) {
@@ -2103,7 +2134,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
                     flingQsWithCurrentVelocity(y,
                             event.getActionMasked() == MotionEvent.ACTION_CANCEL);
                 } else {
-                    resetEarlyExpansion();
+                    maybeResetEarlyExpansion();
                     traceQsJank(false,
                             event.getActionMasked() == MotionEvent.ACTION_CANCEL);
                 }
@@ -2409,6 +2440,14 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         if (QSComposeFragment.isEnabled() && mQs != null) {
             mQs.setExpanded(true);
             mMediaHierarchyManager.setQsExpanded(true);
+        }
+    }
+
+    private void maybeResetEarlyExpansion() {
+        if (isMistQsEnabled()) {
+            updateQsState();
+        } else {
+            resetEarlyExpansion();
         }
     }
 

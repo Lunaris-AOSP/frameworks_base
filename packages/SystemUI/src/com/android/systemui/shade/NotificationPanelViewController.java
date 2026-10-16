@@ -3922,7 +3922,8 @@ public final class NotificationPanelViewController implements
                     break;
                 case STATUS_BAR_CUSTOM_HEADER:
                     mHeaderImageEnabled =
-                            TunerService.parseIntegerSwitch(newValue, false);
+                            !com.android.systemui.qs.flags.MistQsMode.isEnabled()
+                            && TunerService.parseIntegerSwitch(newValue, false);
                     if (!mHeaderImageEnabled) {
                         mQsHeaderLayout.setVisibility(View.GONE);
                     } else {

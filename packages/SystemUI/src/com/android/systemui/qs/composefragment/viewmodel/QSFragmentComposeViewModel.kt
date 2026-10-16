@@ -173,6 +173,16 @@ constructor(
 
     val isQsFullyCollapsed by derivedStateOf { qsExpansion <= 0f }
 
+    /** Clear transient expansion only when the Mist panel has completely closed. */
+    fun resetCollapsedExpansionState() {
+        isQsExpanded = false
+        isStackScrollerOverscrolling = false
+        setQsExpansionValue(0f)
+        panelExpansionFraction = 0f
+        squishinessFraction = 1f
+        proposedTranslation = 0f
+    }
+
     var panelExpansionFraction by mutableStateOf(0f)
 
     var squishinessFraction by mutableStateOf(1f)

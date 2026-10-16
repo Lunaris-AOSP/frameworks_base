@@ -1664,7 +1664,9 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces,
 
     protected QS createDefaultQSFragment() {
         Class<? extends QS> klass;
-        if (QSComposeFragment.isEnabled()) {
+        if (com.android.systemui.qs.flags.MistQsMode.isEnabled()) {
+            klass = com.android.systemui.qs.composefragment.mist.MistQSFragmentCompose.class;
+        } else if (QSComposeFragment.isEnabled()) {
             klass = QSFragmentCompose.class;
         } else {
             klass = QSFragmentLegacy.class;

@@ -80,6 +80,7 @@ import com.android.systemui.qs.flags.QSComposeFragment;
 import com.android.systemui.res.R;
 import com.android.systemui.scene.shared.flag.SceneContainerFlag;
 import com.android.systemui.scene.ui.view.WindowRootView;
+import com.android.systemui.shade.AxNotificationStackVisibility;
 import com.android.systemui.shade.QSHeaderBoundsProvider;
 import com.android.systemui.shade.ShadeController;
 import com.android.systemui.shade.ShadeDisplayAware;
@@ -175,6 +176,8 @@ public class NotificationStackScrollLayoutController implements Dumpable {
     private final ConfigurationController mConfigurationController;
     private final MetricsLogger mMetricsLogger;
     private final ColorUpdateLogger mColorUpdateLogger;
+    private final AxNotificationStackVisibility mAxNotificationStackVisibility =
+            new AxNotificationStackVisibility();
 
     private final DumpManager mDumpManager;
     private final FalsingCollector mFalsingCollector;
@@ -1650,7 +1653,19 @@ public class NotificationStackScrollLayoutController implements Dumpable {
      * @param visible either the view is visible or not.
      */
     public void updateVisibility(boolean visible) {
-        mView.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
+        if (com.android.systemui.qs.flags.MistQsMode.isEnabled()) {
+            mAxNotificationStackVisibility.update(mView, visible);
+        } else {
+            mView.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
+        }
+    }
+
+    public void setQuickQsHidden(boolean hidden) {
+        mAxNotificationStackVisibility.setQuickQsHidden(mView, hidden);
+    }
+
+    public void setSeparateShadeCollapsing(boolean collapsing) {
+        mAxNotificationStackVisibility.setSeparateShadeCollapsing(mView, collapsing);
     }
 
     public boolean isShowingEmptyShadeView() {
