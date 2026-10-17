@@ -78,26 +78,14 @@ enum class AxQsControl(
     BRIGHTNESS(
         id = "control:brightness",
         defaultSpan = AxQsSpan(1, 2),
-        minSpan = AxQsSpan(1, 2),
-        maxSpan = AxQsSpan(1, AxQsSpan.MAX_ROWS),
-    ),
-    BRIGHTNESS_HORIZONTAL(
-        id = "control:brightness_horizontal",
-        defaultSpan = AxQsSpan.TileWideDefault,
-        minSpan = AxQsSpan.TileWideDefault,
-        maxSpan = AxQsSpan(AxQsSpan.MAX_COLUMNS, 1),
+        minSpan = AxQsSpan.TileDefault,
+        maxSpan = AxQsSpan(AxQsSpan.MAX_COLUMNS, AxQsSpan.MAX_ROWS),
     ),
     VOLUME(
         id = "control:volume",
         defaultSpan = AxQsSpan(1, 2),
-        minSpan = AxQsSpan(1, 2),
-        maxSpan = AxQsSpan(1, AxQsSpan.MAX_ROWS),
-    ),
-    VOLUME_HORIZONTAL(
-        id = "control:volume_horizontal",
-        defaultSpan = AxQsSpan.TileWideDefault,
-        minSpan = AxQsSpan.TileWideDefault,
-        maxSpan = AxQsSpan(AxQsSpan.MAX_COLUMNS, 1),
+        minSpan = AxQsSpan.TileDefault,
+        maxSpan = AxQsSpan(AxQsSpan.MAX_COLUMNS, AxQsSpan.MAX_ROWS),
     ),
     AUTO_BRIGHTNESS(
         id = "control:auto_brightness",
@@ -126,7 +114,7 @@ enum class AxQsControl(
 
     fun spans(columns: Int): AxQsControlSpans {
         val resolvedMax =
-            if (this == MEDIA || this == RINGER || isHorizontalSlider) {
+            if (this == MEDIA || this == RINGER || isSlider) {
                 maxSpan.copy(columns = columns.coerceIn(minSpan.columns, AxQsSpan.MAX_COLUMNS))
             } else {
                 maxSpan
@@ -135,16 +123,14 @@ enum class AxQsControl(
     }
 
     fun isSpanAllowed(span: AxQsSpan, columns: Int): Boolean {
-        val spans = spans(columns)
-        return span == span.coerceIn(spans.min, spans.max)
+        return span == coerceSpan(span, columns)
     }
 
     fun coerceSpan(span: AxQsSpan, columns: Int): AxQsSpan {
         val spans = spans(columns)
         return when {
-            isVerticalSlider -> AxQsSpan(1, span.rows.coerceIn(spans.min.rows, spans.max.rows))
-            isHorizontalSlider ->
-                AxQsSpan(span.columns.coerceIn(spans.min.columns, spans.max.columns), 1)
+            isSlider && span.columns == 1 -> AxQsSpan(1, span.rows.coerceIn(2, spans.max.rows))
+            isSlider -> AxQsSpan(span.columns.coerceIn(2, spans.max.columns), 1)
             else -> span.coerceIn(spans.min, spans.max)
         }
     }
@@ -152,12 +138,12 @@ enum class AxQsControl(
     fun nextSpan(span: AxQsSpan, columns: Int): AxQsSpan {
         if (!isSlider) return span
         val spans = spans(columns)
-        return if (isVerticalSlider) {
-            val rows = if (span.rows < spans.max.rows) span.rows + 1 else spans.min.rows
+        return if (span.columns == 1) {
+            val rows = if (span.rows < spans.max.rows) span.rows + 1 else 2
             AxQsSpan(1, rows)
         } else {
             val width =
-                if (span.columns < spans.max.columns) span.columns + 1 else spans.min.columns
+                if (span.columns < spans.max.columns) span.columns + 1 else 2
             AxQsSpan(width, 1)
         }
     }
@@ -174,12 +160,12 @@ enum class AxQsControl(
             )
         }
         val spans = spans(columns)
-        return if (isVerticalSlider) {
-            AxQsSpan(1, (startSpan.rows + rowDelta).coerceIn(spans.min.rows, spans.max.rows))
+        return if (startSpan.columns == 1) {
+            AxQsSpan(1, (startSpan.rows + rowDelta).coerceIn(2, spans.max.rows))
         } else {
             AxQsSpan(
                 (startSpan.columns + columnDelta).coerceIn(
-                    spans.min.columns,
+                    2,
                     spans.max.columns,
                 ),
                 1,
@@ -187,14 +173,17 @@ enum class AxQsControl(
         }
     }
 
-    val isVerticalSlider: Boolean
-        get() = this == BRIGHTNESS || this == VOLUME
-
-    val isHorizontalSlider: Boolean
-        get() = this == BRIGHTNESS_HORIZONTAL || this == VOLUME_HORIZONTAL
+    fun rotateSpan(span: AxQsSpan, columns: Int): AxQsSpan {
+        if (!isSlider) return span
+        return if (span.columns == 1) {
+            AxQsSpan(span.rows.coerceIn(2, columns), 1)
+        } else {
+            AxQsSpan(1, span.columns.coerceIn(2, AxQsSpan.MAX_ROWS))
+        }
+    }
 
     val isSlider: Boolean
-        get() = isVerticalSlider || isHorizontalSlider
+        get() = this == BRIGHTNESS || this == VOLUME
 
     /**
      * Whether this control should appear in the QS Edit grid.
@@ -290,20 +279,6 @@ enum class AxQsPanelMode(val settingValue: Int) {
     }
 }
 
-enum class AxQsVerticalSliderStyle(val settingValue: Int) {
-    M3_EXPRESSIVE(0),
-    PLATFORM(1),
-    ROUNDED_SQUARE(2);
-
-    val usesPlatformSlider: Boolean
-        get() = this != M3_EXPRESSIVE
-
-    companion object {
-        fun fromSetting(value: Int): AxQsVerticalSliderStyle =
-            entries.firstOrNull { it.settingValue == value } ?: M3_EXPRESSIVE
-    }
-}
-
 enum class AxQsTileStyle(val settingValue: Int) {
     PILL(0),
     ROUNDED_SQUARE(1),
@@ -314,8 +289,6 @@ enum class AxQsTileStyle(val settingValue: Int) {
             entries.firstOrNull { it.settingValue == value } ?: PILL
     }
 }
-
-data class AxQsVerticalSliderKey(val layout: AxQsLayout, val control: AxQsControl)
 
 object AxQsLayoutPadding {
     const val PORTRAIT_SIDE_FRACTION = 0.0637f

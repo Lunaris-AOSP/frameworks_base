@@ -46,7 +46,7 @@ import com.android.systemui.brightness.ui.viewmodel.BrightnessSliderViewModel
 import com.android.systemui.common.ui.compose.Icon
 import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
-import com.android.systemui.qs.panels.shared.model.AxQsVerticalSliderStyle
+import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.qs.panels.ui.media.AxMediaPanel
 import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.qs.tiles.ringer.RingerSliderTileContent
@@ -162,7 +162,7 @@ fun AxQsControlPreview(
     control: AxQsControl,
     span: AxQsSpan,
     maxColumns: Int,
-    verticalSliderStyle: AxQsVerticalSliderStyle,
+    sliderStyle: LunarisQsSliderStyle,
     brightnessViewModel: BrightnessSliderViewModel,
     volumeViewModel: AudioStreamSliderViewModel? = null,
     mediaViewModel: AxMediaViewModel,
@@ -170,12 +170,11 @@ fun AxQsControlPreview(
 ) {
     when (control) {
         AxQsControl.BRIGHTNESS,
-        AxQsControl.BRIGHTNESS_HORIZONTAL,
-        AxQsControl.VOLUME,
-        AxQsControl.VOLUME_HORIZONTAL ->
+        AxQsControl.VOLUME ->
             AxQsSliderPreview(
                 control = control,
-                verticalStyle = verticalSliderStyle,
+                span = span,
+                sliderStyle = sliderStyle,
                 brightnessViewModel = brightnessViewModel,
                 volumeViewModel = volumeViewModel,
                 modifier = modifier,

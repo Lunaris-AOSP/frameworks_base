@@ -73,13 +73,14 @@ import com.android.settingslib.notification.modes.ZenMode
 import com.android.systemui.common.ui.compose.load
 import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
-import com.android.systemui.qs.panels.shared.model.AxQsVerticalSliderStyle
+import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.qs.panels.ui.compose.AxLargeTileContent
 import com.android.systemui.qs.panels.ui.compose.AxQsPagerIndicator
 import com.android.systemui.qs.panels.ui.compose.AxTileDefaults
 import com.android.systemui.qs.panels.ui.compose.LocalAxQsTileStyle
 import com.android.systemui.qs.panels.ui.compose.LocalTileScale
 import com.android.systemui.qs.panels.ui.compose.LunarisModesTile
+import com.android.systemui.qs.panels.ui.compose.LunarisQsSliderOrientationButton
 import com.android.systemui.qs.panels.ui.compose.axQsControlShape
 import com.android.systemui.qs.panels.ui.compose.axQsGridCellWidth
 import com.android.systemui.qs.panels.ui.compose.axQsTileShape
@@ -118,6 +119,7 @@ internal sealed interface AxAddItem : CategoryAndName {
         val control: AxQsControl,
         override val label: String,
         override val isAdded: Boolean,
+        val span: AxQsSpan = control.defaultSpan,
     ) : AxAddItem {
         override val id = control.id
         override val category = TileCategory.UTILITIES
@@ -133,9 +135,11 @@ internal fun AxAvailableControls(
     currentIds: Set<String>,
     controlColumns: Int,
     tileColumns: Int,
-    verticalSliderStyle: (AxQsControl) -> AxQsVerticalSliderStyle,
-    onVerticalSliderStyleChanged: (AxQsControl, AxQsVerticalSliderStyle) -> Unit,
-    controlPreview: @Composable (AxQsControl, AxQsSpan, AxQsVerticalSliderStyle) -> Unit,
+    sliderStyle: (AxQsControl) -> LunarisQsSliderStyle,
+    onSliderStyleChanged: (AxQsControl, LunarisQsSliderStyle) -> Unit,
+    sliderSpan: (AxQsControl) -> AxQsSpan,
+    onSliderSpanChanged: (AxQsControl, AxQsSpan) -> Unit,
+    controlPreview: @Composable (AxQsControl, AxQsSpan, LunarisQsSliderStyle) -> Unit,
     canAdd: (AxAddItem) -> Boolean,
     onAdd: (AxAddItem) -> Unit,
     spacing: Dp,
@@ -144,10 +148,6 @@ internal fun AxAvailableControls(
 ) {
     val controls: List<AxAddItem> =
         listOf(
-                AxQsControl.BRIGHTNESS_HORIZONTAL to
-                    axString("ax_qs_brightness_horizontal", "Brightness (Horizontal)"),
-                AxQsControl.VOLUME_HORIZONTAL to
-                    axString("ax_qs_volume_horizontal", "Volume (Horizontal)"),
                 AxQsControl.AUTO_BRIGHTNESS to
                     axString("ax_qs_auto_brightness", "Auto brightness"),
                 AxQsControl.VOLUME_MUTE to
@@ -155,13 +155,23 @@ internal fun AxAvailableControls(
                 AxQsControl.RINGER to
                     stringResource(R.string.volume_ringer_mode),
                 AxQsControl.BRIGHTNESS to
-                    axString("ax_qs_brightness_vertical", "Brightness"),
+                    stringResource(R.string.lunaris_qs_brightness_slider),
                 AxQsControl.VOLUME to
-                    axString("ax_qs_volume_vertical", "Volume"),
+                    stringResource(R.string.lunaris_qs_volume_slider),
                 AxQsControl.MEDIA to
                     axString("ax_qs_media", "Media player"),
             )
-            .map { (control, label) -> AxAddItem.Control(control, label, control.id in currentIds) }
+            .map { (control, label) ->
+                AxAddItem.Control(
+                    control,
+                    label,
+                    control.id in currentIds,
+                    if (control.isSlider) sliderSpan(control) else control.defaultSpan,
+                )
+            }
+    val onRotateSlider: (AxAddItem.Control) -> Unit = { item ->
+        onSliderSpanChanged(item.control, item.control.rotateSpan(item.span, controlColumns))
+    }
     val tiles: List<AxAddItem> = allTiles.map { AxAddItem.Tile(it, it.tileSpec.spec in currentIds) }
     val tileGroups = remember(tiles) { groupAndSort(tiles).entries.toList() }
     PreferenceGroup(modifier = modifier.fillMaxWidth(), spacing = 2.dp) {
@@ -174,8 +184,9 @@ internal fun AxAvailableControls(
                 iconId = TileCategory.UTILITIES.iconId,
                 items = controls,
                 columns = controlColumns,
-                verticalSliderStyle = verticalSliderStyle,
-                onVerticalSliderStyleChanged = onVerticalSliderStyleChanged,
+                sliderStyle = sliderStyle,
+                onSliderStyleChanged = onSliderStyleChanged,
+                onRotateSlider = onRotateSlider,
                 spacing = spacing,
                 controlPreview = controlPreview,
                 canAdd = canAdd,
@@ -189,8 +200,9 @@ internal fun AxAvailableControls(
                     iconId = category.iconId,
                     items = items,
                     columns = tileColumns,
-                    verticalSliderStyle = verticalSliderStyle,
-                    onVerticalSliderStyleChanged = onVerticalSliderStyleChanged,
+                    sliderStyle = sliderStyle,
+                    onSliderStyleChanged = onSliderStyleChanged,
+                    onRotateSlider = onRotateSlider,
                     spacing = spacing,
                     controlPreview = controlPreview,
                     canAdd = canAdd,
@@ -221,10 +233,11 @@ private fun AxAvailableItemGroup(
     iconId: Int,
     items: List<AxAddItem>,
     columns: Int,
-    verticalSliderStyle: (AxQsControl) -> AxQsVerticalSliderStyle,
-    onVerticalSliderStyleChanged: (AxQsControl, AxQsVerticalSliderStyle) -> Unit,
+    sliderStyle: (AxQsControl) -> LunarisQsSliderStyle,
+    onSliderStyleChanged: (AxQsControl, LunarisQsSliderStyle) -> Unit,
+    onRotateSlider: (AxAddItem.Control) -> Unit,
     spacing: Dp,
-    controlPreview: @Composable (AxQsControl, AxQsSpan, AxQsVerticalSliderStyle) -> Unit,
+    controlPreview: @Composable (AxQsControl, AxQsSpan, LunarisQsSliderStyle) -> Unit,
     canAdd: (AxAddItem) -> Boolean,
     onAdd: (AxAddItem) -> Unit,
 ) {
@@ -278,8 +291,9 @@ private fun AxAvailableItemGroup(
                                 rowHeight = itemRowHeight,
                                 spacing = spacing,
                                 circleCells = circleCells,
-                                verticalSliderStyle = verticalSliderStyle,
-                                onVerticalSliderStyleChanged = onVerticalSliderStyleChanged,
+                                sliderStyle = sliderStyle,
+                                onSliderStyleChanged = onSliderStyleChanged,
+                                onRotateSlider = onRotateSlider,
                                 controlPreview = controlPreview,
                                 canAdd = canAdd(item),
                                 onAdd = onAdd,
@@ -338,12 +352,12 @@ private fun AvailableItemHeader(title: String, iconId: Int, modifier: Modifier =
 }
 
 @Composable
-private fun VerticalSliderStylePager(
+private fun LunarisSliderStylePager(
     control: AxQsControl,
     span: AxQsSpan,
-    selectedStyle: AxQsVerticalSliderStyle,
-    onStyleSelected: (AxQsVerticalSliderStyle) -> Unit,
-    controlPreview: @Composable (AxQsControl, AxQsSpan, AxQsVerticalSliderStyle) -> Unit,
+    selectedStyle: LunarisQsSliderStyle,
+    onStyleSelected: (LunarisQsSliderStyle) -> Unit,
+    controlPreview: @Composable (AxQsControl, AxQsSpan, LunarisQsSliderStyle) -> Unit,
     canAdd: Boolean,
     canChangeStyle: Boolean,
     clickLabel: String,
@@ -351,10 +365,11 @@ private fun VerticalSliderStylePager(
     previewHeight: Dp,
     modifier: Modifier = Modifier,
 ) {
-    val styles = AxQsVerticalSliderStyle.entries
+    val styles = LunarisQsSliderStyle.entries
     val pagerState = rememberPagerState(initialPage = selectedStyle.ordinal) { styles.size }
     val currentStyle = rememberUpdatedState(selectedStyle)
     val currentCanChangeStyle = rememberUpdatedState(canChangeStyle)
+    val currentOnStyleSelected = rememberUpdatedState(onStyleSelected)
     LaunchedEffect(selectedStyle) {
         if (!pagerState.isScrollInProgress && pagerState.settledPage != selectedStyle.ordinal) {
             pagerState.scrollToPage(selectedStyle.ordinal)
@@ -366,7 +381,7 @@ private fun VerticalSliderStylePager(
             .distinctUntilChanged()
             .collect { style ->
                 if (currentCanChangeStyle.value && style != currentStyle.value) {
-                    onStyleSelected(style)
+                    currentOnStyleSelected.value(style)
                 }
             }
     }
@@ -429,9 +444,10 @@ private fun AxAddItemCell(
     span: AxQsSpan,
     rowHeight: Dp,
     spacing: Dp,
-    verticalSliderStyle: (AxQsControl) -> AxQsVerticalSliderStyle,
-    onVerticalSliderStyleChanged: (AxQsControl, AxQsVerticalSliderStyle) -> Unit,
-    controlPreview: @Composable (AxQsControl, AxQsSpan, AxQsVerticalSliderStyle) -> Unit,
+    sliderStyle: (AxQsControl) -> LunarisQsSliderStyle,
+    onSliderStyleChanged: (AxQsControl, LunarisQsSliderStyle) -> Unit,
+    onRotateSlider: (AxAddItem.Control) -> Unit,
+    controlPreview: @Composable (AxQsControl, AxQsSpan, LunarisQsSliderStyle) -> Unit,
     canAdd: Boolean,
     onAdd: (AxAddItem) -> Unit,
     circleCells: Boolean = false,
@@ -456,15 +472,15 @@ private fun AxAddItemCell(
             null
         }
     val previewHeight = rowHeight * span.rows + spacing * (span.rows - 1)
-    val verticalSlider = item is AxAddItem.Control && item.control.isVerticalSlider
-    val sliderStyle =
-        (item as? AxAddItem.Control)?.control?.let(verticalSliderStyle)
-            ?: AxQsVerticalSliderStyle.M3_EXPRESSIVE
+    val slider = item is AxAddItem.Control && item.control.isSlider
+    val controlStyle =
+        (item as? AxAddItem.Control)?.control?.let(sliderStyle)
+            ?: LunarisQsSliderStyle.M3_EXPRESSIVE
     val previewShape =
         when (item) {
             is AxAddItem.Tile -> axQsTileShape(span, LocalAxQsTileStyle.current)
             is AxAddItem.Control ->
-                axQsControlShape(item.control, span, sliderStyle)
+                axQsControlShape(item.control, span, controlStyle)
         }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -478,13 +494,13 @@ private fun AxAddItemCell(
                     if (fullDescription != null) stateDescription = fullDescription
                 },
     ) {
-        if (item is AxAddItem.Control && verticalSlider) {
-            VerticalSliderStylePager(
+        if (item is AxAddItem.Control && slider) {
+            LunarisSliderStylePager(
                 control = item.control,
                 span = span,
-                selectedStyle = sliderStyle,
+                selectedStyle = controlStyle,
                 onStyleSelected = { style ->
-                    onVerticalSliderStyleChanged(item.control, style)
+                    onSliderStyleChanged(item.control, style)
                 },
                 controlPreview = controlPreview,
                 canAdd = !item.isAdded && canAdd,
@@ -493,6 +509,11 @@ private fun AxAddItemCell(
                 onAdd = { onAdd(item) },
                 previewHeight = previewHeight,
                 modifier = Modifier.fillMaxWidth(),
+            )
+            LunarisQsSliderOrientationButton(
+                vertical = span.columns == 1,
+                enabled = !item.isAdded,
+                onClick = { onRotateSlider(item) },
             )
         } else {
             Box(modifier = Modifier.fillMaxWidth().height(previewHeight)) {
@@ -506,7 +527,7 @@ private fun AxAddItemCell(
                                 modifier = Modifier.fillMaxSize(),
                             )
                         is AxAddItem.Control ->
-                            controlPreview(item.control, span, sliderStyle)
+                            controlPreview(item.control, span, controlStyle)
                     }
                 }
                 Box(
@@ -545,7 +566,7 @@ private fun AxAddItem.pickerSpan(columns: Int): AxQsSpan {
                 if (control == AxQsControl.RINGER) {
                     AxQsSpan.TileWideDefault
                 } else {
-                    control.spans(columns).default
+                    control.coerceSpan(this.span, columns)
                 }
             span.copy(columns = span.columns.coerceAtMost(columns))
         }

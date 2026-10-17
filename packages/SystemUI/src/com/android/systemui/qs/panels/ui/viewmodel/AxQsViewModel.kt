@@ -38,8 +38,8 @@ import com.android.systemui.qs.panels.shared.model.AxQsLayout
 import com.android.systemui.qs.panels.shared.model.AxQsLayoutPadding
 import com.android.systemui.qs.panels.shared.model.AxQsPanelMode
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
-import com.android.systemui.qs.panels.shared.model.AxQsVerticalSliderKey
-import com.android.systemui.qs.panels.shared.model.AxQsVerticalSliderStyle
+import com.android.systemui.qs.panels.shared.model.LunarisQsSliderKey
+import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.res.R
 import com.android.systemui.shade.ShadeDisplayAware
 import com.android.systemui.shade.domain.interactor.ShadeInteractor
@@ -272,11 +272,11 @@ constructor(
             initialValue = repository.tileStyle.value,
             source = repository.tileStyle,
         )
-    private val verticalSliderStyles by
+    private val sliderStyles by
         hydrator.hydratedStateOf(
-            traceName = "verticalSliderStyles",
+            traceName = "sliderStyles",
             initialValue = emptyMap(),
-            source = repository.verticalSliderStyles,
+            source = repository.sliderStyles,
         )
     private val gridColumns by
         hydrator.hydratedStateOf(
@@ -419,6 +419,14 @@ constructor(
         repository.setOrder(order, layout, section)
     }
 
+    fun saveLayout(
+        layout: AxQsLayout,
+        controls: List<String>,
+        tiles: List<String>,
+        controlSpans: Map<String, AxQsSpan>,
+        positions: Map<String, AxQsGridPosition>,
+    ) = repository.saveLayout(layout, controls, tiles, controlSpans, positions)
+
     fun controlPositions(layout: AxQsLayout): Map<String, AxQsGridPosition> {
         return when (layout) {
             AxQsLayout.QQS -> qqsControlPositions
@@ -457,18 +465,18 @@ constructor(
 
     fun setQuickPanelOnLeft(onLeft: Boolean) = repository.setQuickPanelOnLeft(onLeft)
 
-    fun verticalSliderStyle(
+    fun sliderStyle(
         layout: AxQsLayout,
         control: AxQsControl,
-    ): AxQsVerticalSliderStyle =
-        verticalSliderStyles[AxQsVerticalSliderKey(layout, control)]
-            ?: AxQsVerticalSliderStyle.M3_EXPRESSIVE
+    ): LunarisQsSliderStyle =
+        sliderStyles[LunarisQsSliderKey(layout, control)]
+            ?: LunarisQsSliderStyle.M3_EXPRESSIVE
 
-    fun setVerticalSliderStyle(
+    fun setSliderStyle(
         layout: AxQsLayout,
         control: AxQsControl,
-        style: AxQsVerticalSliderStyle,
-    ) = repository.setVerticalSliderStyle(layout, control, style)
+        style: LunarisQsSliderStyle,
+    ) = repository.setSliderStyle(layout, control, style)
 
     fun setColumns(layout: AxQsGridLayout, columns: Int) {
         repository.setColumns(layout, columns.coerceIn(columnRange(layout)))

@@ -56,7 +56,7 @@ import com.android.systemui.qs.panels.shared.model.AxQsGridValue
 import com.android.systemui.qs.panels.shared.model.AxQsLayout
 import com.android.systemui.qs.panels.shared.model.AxQsPanelMode
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
-import com.android.systemui.qs.panels.shared.model.AxQsVerticalSliderStyle
+import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.qs.panels.ui.media.AxMediaPanel
 import com.android.systemui.qs.panels.ui.media.nonQsGridMediaHeight
 import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
@@ -220,8 +220,8 @@ internal fun ContentScope.AxQsMixedGrid(
                     mediaViewModelFactory = viewModel.mediaViewModelFactory,
                     brightnessSliderViewModel = brightnessSliderViewModel,
                     volumeSliderViewModel = volumeSliderViewModel,
-                    verticalSliderStyle =
-                        axQsViewModel.verticalSliderStyle(layout, value.control),
+                    sliderStyle =
+                        axQsViewModel.sliderStyle(layout, value.control),
                     entranceProgress = {
                         viewModel.quickQuickSettingsViewModel.squishinessViewModel.squishiness.value
                     },
@@ -251,8 +251,8 @@ internal fun ContentScope.AxQsMixedGrid(
                     mediaViewModelFactory = viewModel.mediaViewModelFactory,
                     brightnessSliderViewModel = brightnessSliderViewModel,
                     volumeSliderViewModel = volumeSliderViewModel,
-                    verticalSliderStyle =
-                        axQsViewModel.verticalSliderStyle(layout, value.control),
+                    sliderStyle =
+                        axQsViewModel.sliderStyle(layout, value.control),
                     entranceProgress = {
                         viewModel.quickQuickSettingsViewModel.squishinessViewModel.squishiness.value
                     },
@@ -462,27 +462,25 @@ private fun AxLiveControl(
     mediaViewModelFactory: MediaViewModel.Factory,
     brightnessSliderViewModel: BrightnessSliderViewModel,
     volumeSliderViewModel: AudioStreamSliderViewModel?,
-    verticalSliderStyle: AxQsVerticalSliderStyle,
+    sliderStyle: LunarisQsSliderStyle,
     entranceProgress: () -> Float,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier, contentAlignment = Alignment.Center) {
         when (control) {
-            AxQsControl.BRIGHTNESS,
-            AxQsControl.BRIGHTNESS_HORIZONTAL ->
+            AxQsControl.BRIGHTNESS ->
                 AxQsBrightnessControl(
-                    vertical = control.isVerticalSlider,
-                    verticalStyle = verticalSliderStyle,
+                    vertical = span.columns == 1,
+                    sliderStyle = sliderStyle,
                     viewModel = brightnessSliderViewModel,
                     entranceProgress = entranceProgress,
                     modifier = Modifier.fillMaxSize(),
                 )
-            AxQsControl.VOLUME,
-            AxQsControl.VOLUME_HORIZONTAL ->
+            AxQsControl.VOLUME ->
                 if (volumeSliderViewModel != null) {
                     AxQsVolumeControl(
-                        vertical = control.isVerticalSlider,
-                        verticalStyle = verticalSliderStyle,
+                        vertical = span.columns == 1,
+                        sliderStyle = sliderStyle,
                         viewModel = volumeSliderViewModel,
                         modifier = Modifier.fillMaxSize(),
                     )

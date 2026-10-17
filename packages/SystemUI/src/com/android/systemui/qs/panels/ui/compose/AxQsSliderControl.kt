@@ -106,7 +106,7 @@ import com.android.systemui.haptics.slider.compose.ui.SliderHapticsViewModel
 import com.android.systemui.lifecycle.rememberViewModel
 import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
-import com.android.systemui.qs.panels.shared.model.AxQsVerticalSliderStyle
+import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.res.R
 import com.android.systemui.utils.PolicyRestriction
 import com.android.systemui.volume.dialog.sliders.ui.compose.SliderTrack
@@ -160,8 +160,8 @@ private fun AxQsSliderControl(
             contentAlignment = Alignment.Center,
         ) {
             val sliderWidth = if (vertical) maxHeight else maxWidth
-            val availableHeight = if (vertical) maxWidth else HorizontalSliderThumbHeight
-            val sliderHeight = axQsSliderTrackHeight(availableHeight, vertical)
+            val availableHeight = if (vertical) maxWidth else maxHeight
+            val sliderHeight = axQsSliderTrackHeight(availableHeight)
             val sliderLayoutDirection = if (vertical) LayoutDirection.Ltr else layoutDirection
             Box(
                 modifier =
@@ -200,43 +200,32 @@ private fun Modifier.interceptParentScroll(enabled: Boolean, view: View): Modifi
 internal fun axQsControlShape(
     control: AxQsControl,
     span: AxQsSpan,
-    verticalStyle: AxQsVerticalSliderStyle = AxQsVerticalSliderStyle.M3_EXPRESSIVE,
+    sliderStyle: LunarisQsSliderStyle = LunarisQsSliderStyle.M3_EXPRESSIVE,
 ): Shape {
     return when {
         control == AxQsControl.RINGER -> CircleShape
-        control.isVerticalSlider ->
-            when (verticalStyle) {
-                AxQsVerticalSliderStyle.M3_EXPRESSIVE -> VerticalSliderShape
-                AxQsVerticalSliderStyle.PLATFORM -> CircleShape
-                AxQsVerticalSliderStyle.ROUNDED_SQUARE -> RoundedCornerShape(AxQsControlCornerRadius)
+        control.isSlider ->
+            when (sliderStyle) {
+                LunarisQsSliderStyle.M3_EXPRESSIVE -> ExpressiveSliderShape
+                LunarisQsSliderStyle.PLATFORM -> CircleShape
+                LunarisQsSliderStyle.ROUNDED_SQUARE -> RoundedCornerShape(AxQsControlCornerRadius)
             }
-        control.isHorizontalSlider -> HorizontalSliderShape
         span == AxQsSpan.TileDefault && control != AxQsControl.MEDIA -> CircleShape
         else -> RoundedCornerShape(AxQsControlCornerRadius)
     }
 }
 
 internal val AxQsControlCornerRadius = 24.dp
-private val HorizontalSliderCornerRadius = 12.dp
-private val VerticalSliderShape = RoundedCornerShape(30)
-private val HorizontalSliderShape = RoundedCornerShape(HorizontalSliderCornerRadius)
+private val ExpressiveSliderShape = RoundedCornerShape(30)
 private val AxSliderTrackHeight = 64.dp
 private val AxSliderTrackInsideCornerRadius = 2.dp
 private val AxSliderThumbWidth = 4.dp
 private val AxSliderThumbTrackGap = 6.dp
 private val AxSliderIconSize = 20.dp
-private val HorizontalSliderTrackHeight = 40.dp
-private val HorizontalSliderThumbHeight = 52.dp
-private val HorizontalSliderIconSize = 28.dp
-private const val VERTICAL_SLIDER_CORNER_DIVISOR = 3.333f
+private const val SLIDER_CORNER_DIVISOR = 3.333f
 
-internal fun axQsSliderTrackHeight(availableHeight: Dp, vertical: Boolean): Dp {
-    return if (vertical) {
-        AxSliderTrackHeight * (availableHeight / AxTileDefaults.TileHeight)
-    } else {
-        HorizontalSliderTrackHeight
-    }
-}
+internal fun axQsSliderTrackHeight(availableHeight: Dp): Dp =
+    AxSliderTrackHeight * (availableHeight / AxTileDefaults.TileHeight)
 
 @Composable
 private fun AxQsSlider(
@@ -248,16 +237,16 @@ private fun AxQsSlider(
     interactionSource: MutableInteractionSource,
     sliderHeight: Dp,
     vertical: Boolean,
-    verticalStyle: AxQsVerticalSliderStyle,
+    sliderStyle: LunarisQsSliderStyle,
     trackBackgroundColor: Color = Color.Transparent,
     icon: @Composable (Modifier) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val inactiveTrackColor = AxTileDefaults.backgroundColor()
-    val sliderScale = if (vertical) sliderHeight / AxSliderTrackHeight else 1f
-    val iconSize = if (vertical) AxSliderIconSize * sliderScale else HorizontalSliderIconSize
-    if (vertical && verticalStyle.usesPlatformSlider) {
-        val roundedSquare = verticalStyle == AxQsVerticalSliderStyle.ROUNDED_SQUARE
+    val sliderScale = sliderHeight / AxSliderTrackHeight
+    val iconSize = AxSliderIconSize * sliderScale
+    if (sliderStyle.usesPlatformSlider) {
+        val roundedSquare = sliderStyle == LunarisQsSliderStyle.ROUNDED_SQUARE
         val trackHeight = AxTileDefaults.TileHeight * sliderScale
         val platformTrackColor =
             if (trackBackgroundColor == Color.Transparent) {
@@ -290,7 +279,7 @@ private fun AxQsSlider(
             draggingCornersRadius =
                 if (roundedSquare) AxQsControlCornerRadius
                 else PlatformSliderDefaults.DefaultPlatformSliderDraggingCornerRadius * sliderScale,
-            icon = { icon(Modifier.size(iconSize).rotate(90f)) },
+            icon = { icon(Modifier.size(iconSize).rotate(if (vertical) 90f else 0f)) },
             sliderHeight = trackHeight,
             trackCornerRadius = if (roundedSquare) AxQsControlCornerRadius else null,
             modifier = modifier.fillMaxWidth(),
@@ -311,18 +300,11 @@ private fun AxQsSlider(
             disabledInactiveTickColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
         )
     val thumbSize =
-        if (vertical) {
-            DpSize(
-                width = AxSliderThumbWidth * sliderScale,
-                height = AxTileDefaults.TileHeight * sliderScale,
-            )
-        } else {
-            DpSize(width = AxSliderThumbWidth, height = HorizontalSliderThumbHeight)
-        }
-    val trackCornerSize =
-        if (vertical) sliderHeight / VERTICAL_SLIDER_CORNER_DIVISOR
-        else HorizontalSliderCornerRadius
-    val trackShape = if (vertical) VerticalSliderShape else HorizontalSliderShape
+        DpSize(
+            width = AxSliderThumbWidth * sliderScale,
+            height = AxTileDefaults.TileHeight * sliderScale,
+        )
+    val trackCornerSize = sliderHeight / SLIDER_CORNER_DIVISOR
     Slider(
         value = value,
         onValueChange = onValueChange,
@@ -349,7 +331,7 @@ private fun AxQsSlider(
                 trackInsideCornerSize = AxSliderTrackInsideCornerRadius,
                 thumbTrackGapSize = AxSliderThumbTrackGap,
                 trackSize = sliderHeight,
-                modifier = Modifier.background(trackBackgroundColor, trackShape),
+                modifier = Modifier.background(trackBackgroundColor, ExpressiveSliderShape),
                 activeTrackEndIcon = { iconsState ->
                     AxQsSliderIcon(
                         visible =
@@ -397,37 +379,36 @@ private fun AxQsSliderIcon(
 @Composable
 internal fun AxQsSliderPreview(
     control: AxQsControl,
-    verticalStyle: AxQsVerticalSliderStyle,
+    span: AxQsSpan,
+    sliderStyle: LunarisQsSliderStyle,
     brightnessViewModel: BrightnessSliderViewModel,
     volumeViewModel: AudioStreamSliderViewModel? = null,
     modifier: Modifier = Modifier,
 ) {
     AxQsSliderControl(
-        vertical = control.isVerticalSlider,
+        vertical = span.columns == 1,
         modifier = modifier,
         interceptParentScroll = false,
     ) { sliderHeight, vertical ->
         Box(Modifier.fillMaxSize().gesturesDisabled().clearAndSetSemantics {}) {
             when (control) {
-                AxQsControl.BRIGHTNESS,
-                AxQsControl.BRIGHTNESS_HORIZONTAL ->
+                AxQsControl.BRIGHTNESS ->
                     AxBrightnessSlider(
                         viewModel = brightnessViewModel,
                         sliderHeight = sliderHeight,
                         vertical = vertical,
-                        verticalStyle = verticalStyle,
+                        sliderStyle = sliderStyle,
                         interactive = false,
                         modifier = Modifier.fillMaxSize(),
                     )
-                AxQsControl.VOLUME,
-                AxQsControl.VOLUME_HORIZONTAL ->
+                AxQsControl.VOLUME ->
                     if (volumeViewModel != null) {
                         AxVolumeSlider(
                             viewModel = volumeViewModel,
                             interactive = false,
                             sliderHeight = sliderHeight,
                             vertical = vertical,
-                            verticalStyle = verticalStyle,
+                            sliderStyle = sliderStyle,
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -443,7 +424,7 @@ internal fun AxQsSliderPreview(
 @Composable
 internal fun AxQsBrightnessControl(
     vertical: Boolean,
-    verticalStyle: AxQsVerticalSliderStyle,
+    sliderStyle: LunarisQsSliderStyle,
     viewModel: BrightnessSliderViewModel,
     entranceProgress: () -> Float,
     modifier: Modifier = Modifier,
@@ -461,7 +442,7 @@ internal fun AxQsBrightnessControl(
             onDraggingChanged = { dragging = it },
             sliderHeight = sliderHeight,
             vertical = verticalSlider,
-            verticalStyle = verticalStyle,
+            sliderStyle = sliderStyle,
             mirrorInOverlay = mirrorInOverlay,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -473,7 +454,7 @@ private fun AxBrightnessSlider(
     viewModel: BrightnessSliderViewModel,
     sliderHeight: Dp,
     vertical: Boolean,
-    verticalStyle: AxQsVerticalSliderStyle,
+    sliderStyle: LunarisQsSliderStyle,
     interactive: Boolean = true,
     mirrorInOverlay: Boolean = false,
     onDraggingChanged: (Boolean) -> Unit = {},
@@ -599,7 +580,7 @@ private fun AxBrightnessSlider(
         interactionSource = interactionSource,
         sliderHeight = sliderHeight,
         vertical = vertical,
-        verticalStyle = verticalStyle,
+        sliderStyle = sliderStyle,
         trackBackgroundColor = if (mirrorInOverlay) mirrorBackgroundColor else Color.Transparent,
         icon = { iconModifier ->
             Icon(
@@ -619,7 +600,7 @@ private fun AxBrightnessSlider(
 @Composable
 internal fun AxQsVolumeControl(
     vertical: Boolean,
-    verticalStyle: AxQsVerticalSliderStyle,
+    sliderStyle: LunarisQsSliderStyle,
     viewModel: AudioStreamSliderViewModel,
     modifier: Modifier = Modifier,
 ) {
@@ -633,7 +614,7 @@ internal fun AxQsVolumeControl(
             viewModel = viewModel,
             sliderHeight = sliderHeight,
             vertical = rotated,
-            verticalStyle = verticalStyle,
+            sliderStyle = sliderStyle,
             modifier = Modifier.fillMaxWidth(),
         )
     }
@@ -644,7 +625,7 @@ private fun AxVolumeSlider(
     viewModel: AudioStreamSliderViewModel,
     sliderHeight: Dp,
     vertical: Boolean,
-    verticalStyle: AxQsVerticalSliderStyle,
+    sliderStyle: LunarisQsSliderStyle,
     interactive: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
@@ -654,7 +635,7 @@ private fun AxVolumeSlider(
         viewModel = viewModel,
         sliderHeight = sliderHeight,
         vertical = vertical,
-        verticalStyle = verticalStyle,
+        sliderStyle = sliderStyle,
         interactive = interactive,
         modifier = modifier,
     )
@@ -666,7 +647,7 @@ private fun AxVolumeSliderContent(
     viewModel: AudioStreamSliderViewModel,
     sliderHeight: Dp,
     vertical: Boolean,
-    verticalStyle: AxQsVerticalSliderStyle,
+    sliderStyle: LunarisQsSliderStyle,
     interactive: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
@@ -695,7 +676,7 @@ private fun AxVolumeSliderContent(
         interactionSource = interactionSource,
         sliderHeight = sliderHeight,
         vertical = vertical,
-        verticalStyle = verticalStyle,
+        sliderStyle = sliderStyle,
         icon = { iconModifier ->
             val icon = state.icon
             if (icon != null) {

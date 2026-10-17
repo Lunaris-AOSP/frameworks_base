@@ -27,8 +27,8 @@ import com.android.systemui.qs.panels.shared.model.AxQsLayout
 import com.android.systemui.qs.panels.shared.model.AxQsPanelMode
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
-import com.android.systemui.qs.panels.shared.model.AxQsVerticalSliderKey
-import com.android.systemui.qs.panels.shared.model.AxQsVerticalSliderStyle
+import com.android.systemui.qs.panels.shared.model.LunarisQsSliderKey
+import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsSpacing
 import com.android.systemui.user.data.repository.UserRepository
 import android.provider.Settings
@@ -49,6 +49,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 @SysUISingleton
 class AxQsSettingsRepository
@@ -60,6 +62,7 @@ constructor(
     @Application private val applicationScope: CoroutineScope,
     @Background private val backgroundDispatcher: CoroutineDispatcher,
 ) {
+    private val spansMutex = Mutex()
     val defaultControlSpans: Map<String, AxQsSpan> = parseSpans(DEFAULT_SPANS_STRING)
     val defaultControls: List<String> = DEFAULT_CONTROLS_LIST
 
@@ -125,8 +128,8 @@ constructor(
         }.distinctUntilChanged()
             .stateIn(applicationScope, SharingStarted.Eagerly, LunarisQsSpacing())
 
-    val verticalSliderStyles: StateFlow<Map<AxQsVerticalSliderKey, AxQsVerticalSliderStyle>> =
-        verticalSliderStyleSettings()
+    val sliderStyles: StateFlow<Map<LunarisQsSliderKey, LunarisQsSliderStyle>> =
+        sliderStyleSettings()
 
     val gridColumns: StateFlow<Map<AxQsGridLayout, Int>> =
         gridSettings(AxQsGridLayout.entries, ::gridColumnsKey)
@@ -144,16 +147,50 @@ constructor(
         val userId = userRepository.getSelectedUserInfo().id
         val key = spansKey(layout)
         applicationScope.launch(backgroundDispatcher) {
-            val spans = parseSpans(secureSettings.getStringForUser(key, userId)).toMutableMap()
-            spans[id] = span
-            val value = spans.entries.sortedBy { it.key }.joinToString(",") { "${it.key}=${it.value}" }
-            secureSettings.putStringForUser(key, value, null, false, userId, true)
+            spansMutex.withLock {
+                val order = controlOrderKeys(key).firstNotNullOfOrNull {
+                    secureSettings.getStringForUser(it, userId)
+                }
+                val spans = parseSpans(secureSettings.getStringForUser(key, userId), order).toMutableMap()
+                spans[id] = span
+                val value = spans.entries.sortedBy { it.key }.joinToString(",") { "${it.key}=${it.value}" }
+                secureSettings.putStringForUser(key, value, null, false, userId, true)
+            }
         }
     }
 
     fun setControlPositions(positions: Map<String, AxQsGridPosition>, layout: AxQsLayout) {
         val value = positions.entries.sortedBy { it.key }.joinToString(",") { "${it.key}=${it.value}" }
         putString(controlPositionsKey(layout), value)
+    }
+
+    fun saveLayout(
+        layout: AxQsLayout,
+        controls: List<String>,
+        tiles: List<String>,
+        controlSpans: Map<String, AxQsSpan>,
+        positions: Map<String, AxQsGridPosition>,
+    ) {
+        val userId = userRepository.getSelectedUserInfo().id
+        applicationScope.launch(backgroundDispatcher) {
+            spansMutex.withLock {
+                val key = spansKey(layout)
+                val order = controlOrderKeys(key).firstNotNullOfOrNull {
+                    secureSettings.getStringForUser(it, userId)
+                }
+                val spans = parseSpans(secureSettings.getStringForUser(key, userId), order) + controlSpans
+                val values = mapOf(
+                    key to spans.entries.sortedBy { it.key }.joinToString(",") { "${it.key}=${it.value}" },
+                    controlPositionsKey(layout) to positions.entries.sortedBy { it.key }
+                        .joinToString(",") { "${it.key}=${it.value}" },
+                    sectionOrderKey(layout, AxQsGridSection.CONTROLS) to controls.distinct().joinToString(","),
+                    sectionOrderKey(layout, AxQsGridSection.TILES) to tiles.distinct().joinToString(","),
+                )
+                values.forEach { (setting, value) ->
+                    secureSettings.putStringForUser(setting, value, null, false, userId, true)
+                }
+            }
+        }
     }
 
     fun setPanelMode(mode: AxQsPanelMode) {
@@ -167,12 +204,12 @@ constructor(
         putInt(QUICK_PANEL_ON_LEFT, onLeft.toSetting())
     }
 
-    fun setVerticalSliderStyle(
+    fun setSliderStyle(
         layout: AxQsLayout,
         control: AxQsControl,
-        style: AxQsVerticalSliderStyle,
+        style: LunarisQsSliderStyle,
     ) {
-        putInt(verticalSliderStyleKey(AxQsVerticalSliderKey(layout, control)), style.settingValue)
+        putInt(sliderStyleKey(LunarisQsSliderKey(layout, control)), style.settingValue)
     }
 
     fun setColumns(layout: AxQsGridLayout, columns: Int) {
@@ -233,17 +270,40 @@ constructor(
             .distinctUntilChanged()
             .stateIn(applicationScope, SharingStarted.Eagerly, parseOrder(default))
 
-    private fun spansSetting(key: String): StateFlow<Map<String, AxQsSpan>> =
-        stringSetting(key, DEFAULT_SPANS_STRING)
-            .map(::parseSpans)
+    private fun spansSetting(key: String): StateFlow<Map<String, AxQsSpan>> {
+        val values =
+            if (key == SPLIT_SHADE_SPANS) {
+                combine(stringSetting(LANDSCAPE_SPANS, DEFAULT_SPANS_STRING), stringSetting(key)) {
+                    inherited, current -> listOfNotNull(inherited, current).joinToString(",")
+                }
+            } else {
+                stringSetting(key, DEFAULT_SPANS_STRING)
+            }
+        return combine(values, controlOrderSetting(key), ::parseSpans)
             .distinctUntilChanged()
             .stateIn(applicationScope, SharingStarted.Eagerly, defaultControlSpans)
+    }
 
     private fun positionsSetting(key: String): StateFlow<Map<String, AxQsGridPosition>> =
-        stringSetting(key)
-            .map(::parsePositions)
+        combine(stringSetting(key), controlOrderSetting(key), ::parsePositions)
             .distinctUntilChanged()
             .stateIn(applicationScope, SharingStarted.Eagerly, emptyMap())
+
+    private fun controlOrderKeys(key: String): List<String> =
+        when (key) {
+            QQS_SPANS, QQS_CONTROL_POSITIONS -> listOf(QQS_CONTROL_ORDER, QQS_ORDER)
+            QS_SPANS, QS_CONTROL_POSITIONS -> listOf(QS_CONTROL_ORDER, QS_ORDER)
+            LANDSCAPE_SPANS, LANDSCAPE_CONTROL_POSITIONS ->
+                listOf(LANDSCAPE_CONTROL_ORDER, LANDSCAPE_ORDER)
+            SPLIT_SHADE_SPANS, SPLIT_SHADE_CONTROL_POSITIONS ->
+                listOf(SPLIT_SHADE_CONTROL_ORDER, LANDSCAPE_CONTROL_ORDER, LANDSCAPE_ORDER)
+            else -> error("Unknown control layout setting: $key")
+        }
+
+    private fun controlOrderSetting(key: String): Flow<String?> =
+        combine(controlOrderKeys(key).map { stringSetting(it) }) { orders ->
+            orders.firstOrNull { it != null }
+        }
 
     private fun stringSetting(key: String, default: String? = null): Flow<String?> {
         return userRepository.selectedUserInfo
@@ -324,22 +384,22 @@ constructor(
             .stateIn(applicationScope, SharingStarted.Eagerly, emptyMap())
     }
 
-    private fun verticalSliderStyleSettings():
-        StateFlow<Map<AxQsVerticalSliderKey, AxQsVerticalSliderStyle>> {
+    private fun sliderStyleSettings():
+        StateFlow<Map<LunarisQsSliderKey, LunarisQsSliderStyle>> {
         return userRepository.selectedUserInfo
             .flatMapLatest { user ->
                 combine(
-                    VERTICAL_SLIDER_KEYS.map { slider ->
-                        val key = verticalSliderStyleKey(slider)
+                    SLIDER_KEYS.map { slider ->
+                        val key = sliderStyleKey(slider)
                         secureSettings
                             .observerFlow(user.id, key)
                             .onStart { emit(Unit) }
                             .map {
                                 slider to
-                                    AxQsVerticalSliderStyle.fromSetting(
+                                    LunarisQsSliderStyle.fromSetting(
                                         secureSettings.getIntForUser(
                                             key,
-                                            AxQsVerticalSliderStyle.M3_EXPRESSIVE.settingValue,
+                                            LunarisQsSliderStyle.M3_EXPRESSIVE.settingValue,
                                             user.id,
                                         )
                                     )
@@ -383,14 +443,18 @@ constructor(
             .distinct()
     }
 
-    private fun parseSpans(value: String?): Map<String, AxQsSpan> {
-        if (value.isNullOrBlank()) return emptyMap()
-        return parseKeyValuePairs(value, AxQsSpan::parse)
+    private fun parseSpans(value: String?, order: String? = null): Map<String, AxQsSpan> {
+        val spans = parseKeyValuePairs(value.orEmpty(), AxQsSpan::parse)
+        return normalizeControlValues(spans, order) { id ->
+            if (id in LEGACY_HORIZONTAL_SLIDER_IDS) AxQsSpan.TileWideDefault else null
+        }
     }
 
-    private fun parsePositions(value: String?): Map<String, AxQsGridPosition> {
-        if (value.isNullOrBlank()) return emptyMap()
-        return parseKeyValuePairs(value, AxQsGridPosition::parse)
+    private fun parsePositions(value: String?, order: String?): Map<String, AxQsGridPosition> {
+        return normalizeControlValues(
+            parseKeyValuePairs(value.orEmpty(), AxQsGridPosition::parse),
+            order,
+        )
     }
 
     private inline fun <V> parseKeyValuePairs(value: String, parseValue: (String) -> V?): Map<String, V> {
@@ -398,17 +462,45 @@ constructor(
             value.split(',').forEach { entry ->
                 val separator = entry.lastIndexOf('=')
                 if (separator <= 0 || separator == entry.lastIndex) return@forEach
-                val id = normalizeControlId(entry.substring(0, separator).trim())
+                val id = entry.substring(0, separator).trim()
                 val parsed = parseValue(entry.substring(separator + 1).trim())
                 if (id.isNotEmpty() && parsed != null) put(id, parsed)
             }
         }
     }
 
+    private fun <V> normalizeControlValues(
+        values: Map<String, V>,
+        order: String?,
+        defaultValue: (String) -> V? = { null },
+    ): Map<String, V> {
+        val result = values.mapKeys { normalizeControlId(it.key) }.toMutableMap()
+        val ids = order?.split(',')?.map(String::trim) ?: values.keys.toList()
+        listOf(AxQsControl.BRIGHTNESS, AxQsControl.VOLUME).forEach { control ->
+            val aliases = ids.filter { normalizeControlId(it) == control.id }
+            val preferred =
+                aliases.firstOrNull { it == control.id }
+                    ?: aliases.firstOrNull { it !in LEGACY_HORIZONTAL_SLIDER_IDS }
+                    ?: aliases.firstOrNull()
+            if (preferred != null) {
+                result.remove(control.id)
+                val resolved =
+                    values[preferred]
+                        ?: if (preferred in LEGACY_HORIZONTAL_SLIDER_IDS) {
+                            defaultValue(preferred)
+                        } else {
+                            values[control.id]
+                        }
+                resolved?.let { result[control.id] = it }
+            }
+        }
+        return result
+    }
+
     private fun normalizeControlId(id: String): String {
         return when (id) {
-            LEGACY_BRIGHTNESS_VERTICAL_ID -> AxQsControl.BRIGHTNESS.id
-            LEGACY_VOLUME_VERTICAL_ID -> AxQsControl.VOLUME.id
+            LEGACY_BRIGHTNESS_VERTICAL_ID, LEGACY_BRIGHTNESS_HORIZONTAL_ID -> AxQsControl.BRIGHTNESS.id
+            LEGACY_VOLUME_VERTICAL_ID, LEGACY_VOLUME_HORIZONTAL_ID -> AxQsControl.VOLUME.id
             LEGACY_RINGER_TILE_ID -> AxQsControl.RINGER.id
             else -> id
         }
@@ -427,7 +519,7 @@ constructor(
 
     private fun gridRowsKey(layout: AxQsGridLayout): String = GRID_ROWS_KEYS.getValue(layout)
 
-    private fun verticalSliderStyleKey(slider: AxQsVerticalSliderKey): String {
+    private fun sliderStyleKey(slider: LunarisQsSliderKey): String {
         val prefix =
             when (slider.layout) {
                 AxQsLayout.QQS -> "ax_qqs"
@@ -437,7 +529,7 @@ constructor(
         return when (slider.control) {
             AxQsControl.BRIGHTNESS -> "${prefix}_brightness_vertical_slider_style"
             AxQsControl.VOLUME -> "${prefix}_volume_vertical_slider_style"
-            else -> error("Only vertical slider controls have style settings")
+            else -> error("Only slider controls have style settings")
         }
     }
 
@@ -475,10 +567,10 @@ constructor(
         const val SPLIT_SHADE_TILE_LABELS = "ax_qs_split_shade_show_tile_labels"
         const val SHOW_WEATHER = "ax_qs_show_weather"
 
-        val VERTICAL_SLIDER_KEYS =
+        val SLIDER_KEYS =
             AxQsLayout.entries.flatMap { layout ->
                 listOf(AxQsControl.BRIGHTNESS, AxQsControl.VOLUME).map { control ->
-                    AxQsVerticalSliderKey(layout, control)
+                    LunarisQsSliderKey(layout, control)
                 }
             }
 
@@ -546,6 +638,10 @@ constructor(
 
         const val LEGACY_BRIGHTNESS_VERTICAL_ID = "control:brightness_vertical"
         const val LEGACY_VOLUME_VERTICAL_ID = "control:volume_vertical"
+        const val LEGACY_BRIGHTNESS_HORIZONTAL_ID = "control:brightness_horizontal"
+        const val LEGACY_VOLUME_HORIZONTAL_ID = "control:volume_horizontal"
+        val LEGACY_HORIZONTAL_SLIDER_IDS =
+            setOf(LEGACY_BRIGHTNESS_HORIZONTAL_ID, LEGACY_VOLUME_HORIZONTAL_ID)
         const val LEGACY_RINGER_TILE_ID = "sound"
 
         const val DEFAULT_NETWORK_ID = "internet"

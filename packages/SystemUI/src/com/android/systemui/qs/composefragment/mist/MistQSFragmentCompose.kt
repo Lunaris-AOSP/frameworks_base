@@ -1003,7 +1003,7 @@ constructor(
                     control = control,
                     span = span,
                     maxColumns = columns,
-                    verticalSliderStyle = style,
+                    sliderStyle = style,
                     brightnessViewModel = viewModel.containerViewModel.brightnessSliderViewModel,
                     volumeViewModel = volumeSliderViewModel,
                     mediaViewModel = axMediaViewModel,
