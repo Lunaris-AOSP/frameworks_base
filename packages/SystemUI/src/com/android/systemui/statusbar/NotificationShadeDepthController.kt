@@ -269,7 +269,13 @@ constructor(
             scheduleUpdate()
         }
 
-    private fun computeBlurAndZoomOut(): Pair<Int, Float> {
+    private fun computeShadeBlurRadius(): Float {
+        if (Flags.notificationShadeBlur()) {
+            val shadeBlurProgress = if (shouldApplyShadeBlur()) shadeExpansion else 0f
+            val qsBlurProgress = MathUtils.saturate(qsPanelExpansion) * shadeExpansion
+            return maxBlurRadiusPx * max(shadeBlurProgress, qsBlurProgress)
+        }
+
         val animationRadius =
             MathUtils.constrain(
                 shadeAnimation.radius,
@@ -282,13 +288,20 @@ constructor(
                     if (shouldApplyShadeBlur()) shadeExpansion else 0f
                 )
             )
-        var combinedBlur =
+        val combinedBlur =
             (expansionRadius * INTERACTION_BLUR_FRACTION +
                 animationRadius * ANIMATION_BLUR_FRACTION)
         val qsExpandedRatio =
             ShadeInterpolation.getNotificationScrimAlpha(qsPanelExpansion) * shadeExpansion
-        combinedBlur = max(combinedBlur, blurUtils.blurRadiusOfRatio(qsExpandedRatio))
-        combinedBlur = max(combinedBlur, blurUtils.blurRadiusOfRatio(transitionToFullShadeProgress))
+        return max(combinedBlur, blurUtils.blurRadiusOfRatio(qsExpandedRatio))
+    }
+
+    private fun computeBlurAndZoomOut(): Pair<Int, Float> {
+        val combinedBlur =
+            max(
+                computeShadeBlurRadius(),
+                blurUtils.blurRadiusOfRatio(transitionToFullShadeProgress),
+            )
         var shadeRadius = max(combinedBlur, wakeAndUnlockBlurRadius)
 
         if (areBlursDisabledForAppLaunch || blursDisabledForUnlock) {
