@@ -134,7 +134,7 @@ internal fun Modifier.axQsEntrance(progress: () -> Float): Modifier {
 }
 
 @Composable
-private fun AxQsSliderControl(
+internal fun AxQsSliderControl(
     vertical: Boolean,
     modifier: Modifier = Modifier,
     interceptParentScroll: Boolean = true,
@@ -237,7 +237,7 @@ internal fun axQsSliderTrackHeight(availableHeight: Dp): Dp =
     AxSliderTrackHeight * (availableHeight / AxTileDefaults.TileHeight)
 
 @Composable
-private fun AxQsSlider(
+internal fun AxQsSlider(
     value: Float,
     onValueChange: (Float) -> Unit,
     onValueChangeFinished: (() -> Unit)?,
@@ -251,8 +251,13 @@ private fun AxQsSlider(
     icon: @Composable (Modifier) -> Unit,
     modifier: Modifier = Modifier,
     onLongPress: (() -> Unit)? = null,
+    active: Boolean = true,
 ) {
     val inactiveTrackColor = AxTileDefaults.backgroundColor()
+    val activeTrackColor =
+        if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+    val activeContentColor =
+        if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
     val sliderModifier =
         modifier.lunarisSliderLongPress(
             vertical = vertical,
@@ -280,9 +285,9 @@ private fun AxQsSlider(
             colors =
                 PlatformSliderColors(
                     trackColor = platformTrackColor,
-                    indicatorColor = MaterialTheme.colorScheme.primary,
-                    iconColor = MaterialTheme.colorScheme.onPrimary,
-                    labelColorOnIndicator = MaterialTheme.colorScheme.onPrimary,
+                    indicatorColor = activeTrackColor,
+                    iconColor = activeContentColor,
+                    labelColorOnIndicator = activeContentColor,
                     labelColorOnTrack = MaterialTheme.colorScheme.onSurface,
                     disabledTrackColor = platformTrackColor.copy(alpha = 0.38f),
                     disabledIndicatorColor =
@@ -304,9 +309,9 @@ private fun AxQsSlider(
     }
     val colors =
         SliderDefaults.colors(
-            thumbColor = MaterialTheme.colorScheme.primary,
-            activeTrackColor = MaterialTheme.colorScheme.primary,
-            activeTickColor = MaterialTheme.colorScheme.onPrimary,
+            thumbColor = activeTrackColor,
+            activeTrackColor = activeTrackColor,
+            activeTickColor = activeContentColor,
             inactiveTrackColor = inactiveTrackColor,
             inactiveTickColor = MaterialTheme.colorScheme.onSurface,
             disabledThumbColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
@@ -429,6 +434,7 @@ internal fun AxQsSliderPreview(
                         )
                     }
                 AxQsControl.AUTO_BRIGHTNESS,
+                AxQsControl.FLASHLIGHT,
                 AxQsControl.VOLUME_MUTE,
                 AxQsControl.RINGER,
                 AxQsControl.MEDIA -> Unit

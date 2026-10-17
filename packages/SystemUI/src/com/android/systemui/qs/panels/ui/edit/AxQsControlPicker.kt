@@ -89,6 +89,7 @@ import com.android.systemui.qs.panels.ui.compose.infinitegrid.SmallTileContent
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.TileColors
 import com.android.systemui.qs.panels.ui.compose.useAxQsCircleCells
 import com.android.systemui.qs.panels.ui.viewmodel.EditTileViewModel
+import com.android.systemui.qs.panels.ui.viewmodel.LocalLunarisFlashlightSliderViewModel
 import com.android.systemui.qs.shared.model.CategoryAndName
 import com.android.systemui.qs.shared.model.TileCategory
 import com.android.systemui.qs.shared.model.groupAndSort
@@ -146,6 +147,7 @@ internal fun AxAvailableControls(
     settings: @Composable (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    val hasFlashlight = LocalLunarisFlashlightSliderViewModel.current.hasFlashlight
     val controls: List<AxAddItem> =
         listOf(
                 AxQsControl.AUTO_BRIGHTNESS to
@@ -158,9 +160,14 @@ internal fun AxAvailableControls(
                     stringResource(R.string.lunaris_qs_brightness_slider),
                 AxQsControl.VOLUME to
                     stringResource(R.string.lunaris_qs_volume_slider),
+                AxQsControl.FLASHLIGHT to
+                    stringResource(R.string.lunaris_qs_flashlight_slider),
                 AxQsControl.MEDIA to
                     axString("ax_qs_media", "Media player"),
             )
+            .filter { (control, _) ->
+                control != AxQsControl.FLASHLIGHT || hasFlashlight
+            }
             .map { (control, label) ->
                 AxAddItem.Control(
                     control,
@@ -555,6 +562,15 @@ private fun AxAddItemCell(
             style = MaterialTheme.typography.labelMedium,
             modifier = Modifier.fillMaxWidth(),
         )
+        if (item is AxAddItem.Control && item.control == AxQsControl.FLASHLIGHT) {
+            Text(
+                text = stringResource(R.string.lunaris_qs_flashlight_slider_hint),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 

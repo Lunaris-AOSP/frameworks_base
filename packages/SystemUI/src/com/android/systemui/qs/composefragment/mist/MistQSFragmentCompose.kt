@@ -177,6 +177,8 @@ import com.android.systemui.qs.panels.domain.interactor.EditTilesResetInteractor
 import com.android.systemui.qs.panels.ui.edit.AxQsEditUi
 import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.AxQsViewModel
+import com.android.systemui.qs.panels.ui.viewmodel.LocalLunarisFlashlightSliderViewModel
+import com.android.systemui.qs.panels.ui.viewmodel.LunarisFlashlightSliderViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.toolbar.ToolbarViewModel
 import com.android.systemui.window.domain.interactor.WindowRootViewBlurInteractor
 import android.media.AudioManager
@@ -202,6 +204,7 @@ constructor(
     private val windowRootViewBlurInteractor: WindowRootViewBlurInteractor,
     private val editTilesResetInteractor: EditTilesResetInteractor,
     private val ringerSliderViewModel: RingerSliderViewModel,
+    private val flashlightSliderViewModel: LunarisFlashlightSliderViewModel,
     private val audioStreamSliderViewModelFactory: AudioStreamSliderViewModel.Factory,
     private val shadeHeaderController: ShadeHeaderController,
     private val tintedIconManagerFactory: TintedIconManager.Factory,
@@ -345,6 +348,7 @@ constructor(
                         LocalBlurEnabled provides blurEnabled,
                         LocalAxQsTileStyle provides axQsViewModel.tileStyle,
                         LocalRingerSliderViewModel provides ringerSliderViewModel,
+                        LocalLunarisFlashlightSliderViewModel provides flashlightSliderViewModel,
                     ) {
                         WithStatusIconContext(tintedIconManagerFactory) {
                             CollapsableQuickSettingsSTL()

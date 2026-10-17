@@ -169,6 +169,13 @@ fun AxQsControlPreview(
     modifier: Modifier = Modifier,
 ) {
     when (control) {
+        AxQsControl.FLASHLIGHT ->
+            LunarisFlashlightSlider(
+                vertical = span.columns == 1,
+                sliderStyle = sliderStyle,
+                interactive = false,
+                modifier = modifier,
+            )
         AxQsControl.BRIGHTNESS,
         AxQsControl.VOLUME ->
             AxQsSliderPreview(

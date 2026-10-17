@@ -7,6 +7,8 @@
 
     <string name="lunaris_qs_brightness_slider">Brightness</string>
     <string name="lunaris_qs_volume_slider">Volume</string>
+    <string name="lunaris_qs_flashlight_slider">Flashlight slider</string>
+    <string name="lunaris_qs_flashlight_slider_hint">Tap to toggle. Hold and drag to adjust strength.</string>
     <string name="lunaris_qs_slider_rotate_horizontal">Make slider horizontal</string>
     <string name="lunaris_qs_slider_rotate_vertical">Make slider vertical</string>
     <string name="lunaris_qs_slider_manual_brightness">Switch to manual brightness</string>

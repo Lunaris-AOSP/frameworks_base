@@ -87,6 +87,12 @@ enum class AxQsControl(
         minSpan = AxQsSpan.TileDefault,
         maxSpan = AxQsSpan(AxQsSpan.MAX_COLUMNS, AxQsSpan.MAX_ROWS),
     ),
+    FLASHLIGHT(
+        id = "control:flashlight",
+        defaultSpan = AxQsSpan(1, 2),
+        minSpan = AxQsSpan.TileDefault,
+        maxSpan = AxQsSpan(AxQsSpan.MAX_COLUMNS, AxQsSpan.MAX_ROWS),
+    ),
     AUTO_BRIGHTNESS(
         id = "control:auto_brightness",
         defaultSpan = AxQsSpan.TileDefault,
@@ -183,7 +189,7 @@ enum class AxQsControl(
     }
 
     val isSlider: Boolean
-        get() = this == BRIGHTNESS || this == VOLUME
+        get() = this == BRIGHTNESS || this == VOLUME || this == FLASHLIGHT
 
     /**
      * Whether this control should appear in the QS Edit grid.

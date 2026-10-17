@@ -529,6 +529,7 @@ constructor(
         return when (slider.control) {
             AxQsControl.BRIGHTNESS -> "${prefix}_brightness_vertical_slider_style"
             AxQsControl.VOLUME -> "${prefix}_volume_vertical_slider_style"
+            AxQsControl.FLASHLIGHT -> "${prefix}_flashlight_slider_style"
             else -> error("Only slider controls have style settings")
         }
     }
@@ -569,7 +570,7 @@ constructor(
 
         val SLIDER_KEYS =
             AxQsLayout.entries.flatMap { layout ->
-                listOf(AxQsControl.BRIGHTNESS, AxQsControl.VOLUME).map { control ->
+                AxQsControl.entries.filter { it.isSlider }.map { control ->
                     LunarisQsSliderKey(layout, control)
                 }
             }

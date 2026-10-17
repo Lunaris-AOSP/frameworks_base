@@ -468,6 +468,12 @@ private fun AxLiveControl(
 ) {
     Box(modifier, contentAlignment = Alignment.Center) {
         when (control) {
+            AxQsControl.FLASHLIGHT ->
+                LunarisFlashlightSlider(
+                    vertical = span.columns == 1,
+                    sliderStyle = sliderStyle,
+                    modifier = Modifier.fillMaxSize(),
+                )
             AxQsControl.BRIGHTNESS ->
                 AxQsBrightnessControl(
                     vertical = span.columns == 1,
