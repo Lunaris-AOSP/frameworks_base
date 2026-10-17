@@ -19,7 +19,6 @@ package com.android.systemui.statusbar.notification.emptyshade.ui.viewbinder
 import android.view.View
 import com.android.app.tracing.coroutines.launchTraced as launch
 import com.android.systemui.statusbar.notification.NotificationActivityStarter
-import com.android.systemui.statusbar.notification.emptyshade.ui.shared.flag.ShowIconInEmptyShade
 import com.android.systemui.statusbar.notification.emptyshade.ui.view.EmptyShadeIconView
 import com.android.systemui.statusbar.notification.emptyshade.ui.view.EmptyShadeView
 import com.android.systemui.statusbar.notification.emptyshade.ui.viewmodel.EmptyShadeViewModel
@@ -32,9 +31,7 @@ object EmptyShadeViewBinder {
         viewModel: EmptyShadeViewModel,
         notificationActivityStarter: NotificationActivityStarter,
     ) = coroutineScope {
-        if (ShowIconInEmptyShade.isEnabled) {
-            require(view is EmptyShadeIconView)
-
+        if (view is EmptyShadeIconView) {
             launch {
                 viewModel.message.collect {
                     view.setText(it.message)

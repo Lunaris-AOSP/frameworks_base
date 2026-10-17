@@ -26,18 +26,10 @@ import com.android.systemui.animation.LaunchableView
 import com.android.systemui.animation.LaunchableViewDelegate
 import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.res.R
-import com.android.systemui.statusbar.notification.emptyshade.ui.shared.flag.ShowIconInEmptyShade
 import com.android.systemui.statusbar.notification.row.StackScrollerDecorView
 import com.android.systemui.statusbar.notification.stack.ExpandableViewState
 
-/**
- * View representing the content in the notification shade when there are no notifications.
- *
- * This is forked from EmptyShadeView, and replaces that view when [ShowIconInEmptyShade] is
- * enabled.
- *
- * TODO: b/388472403 - This should be renamed to EmptyShadeView when the flag is inlined.
- */
+/** View representing the content in the notification shade when there are no notifications. */
 class EmptyShadeIconView @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) :
     StackScrollerDecorView(context, attrs), LaunchableView {
 
@@ -48,7 +40,6 @@ class EmptyShadeIconView @JvmOverloads constructor(context: Context, attrs: Attr
         LaunchableViewDelegate(this) { visibility: Int? -> super.setVisibility(visibility!!) }
 
     override fun onFinishInflate() {
-        /* Check if */ ShowIconInEmptyShade.isUnexpectedlyInLegacyMode()
         super.onFinishInflate()
         textView = findViewById(R.id.text)
         iconView = findViewById(R.id.icon)
@@ -71,16 +62,20 @@ class EmptyShadeIconView @JvmOverloads constructor(context: Context, attrs: Attr
     }
 
     fun setText(text: String) {
-        textView.text = text
+        if (textView.text != text) {
+            textView.text = text
+        }
     }
 
-    fun setIcon(icon: Icon) {
+    fun setIcon(icon: Icon?) {
         val drawable =
             when (icon) {
                 is Icon.Loaded -> icon.drawable.mutate()
                 is Icon.Resource -> context.getDrawable(icon.resId)
+                null -> null
             }
         iconView.setImageDrawable(drawable)
+        iconView.visibility = if (icon == null) View.GONE else View.VISIBLE
     }
 
     /** Update view color. */

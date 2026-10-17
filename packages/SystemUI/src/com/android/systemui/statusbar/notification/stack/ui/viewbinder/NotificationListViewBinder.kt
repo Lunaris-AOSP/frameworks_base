@@ -38,9 +38,7 @@ import com.android.systemui.statusbar.notification.OnboardingAffordanceManager
 import com.android.systemui.statusbar.notification.Summarization
 import com.android.systemui.statusbar.notification.collection.render.SectionHeaderController
 import com.android.systemui.statusbar.notification.dagger.SilentHeader
-import com.android.systemui.statusbar.notification.emptyshade.ui.shared.flag.ShowIconInEmptyShade
 import com.android.systemui.statusbar.notification.emptyshade.ui.view.EmptyShadeIconView
-import com.android.systemui.statusbar.notification.emptyshade.ui.view.EmptyShadeView
 import com.android.systemui.statusbar.notification.emptyshade.ui.viewbinder.EmptyShadeViewBinder
 import com.android.systemui.statusbar.notification.emptyshade.ui.viewmodel.EmptyShadeViewModel
 import com.android.systemui.statusbar.notification.footer.shared.NotifRedesignFooter
@@ -77,6 +75,7 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
@@ -255,41 +254,32 @@ constructor(
     ) {
         // The empty shade needs to be re-inflated every time the theme or the font size
         // changes.
-        if (ShowIconInEmptyShade.isEnabled) {
-            configuration
-                .inflateLayout<EmptyShadeIconView>(
-                    R.layout.empty_shade_view,
-                    parentView,
-                    attachToRoot = false,
-                )
-                .flowOn(inflationDispatcher)
-                .collectLatest { emptyShadeView: EmptyShadeIconView ->
-                    traceAsync("bind EmptyShadeIconView") {
-                        parentView.setEmptyShadeView(emptyShadeView)
-                        bindEmptyShade(emptyShadeView, emptyShadeViewModel)
-                    }
+        configuration
+            .inflateLayout<EmptyShadeIconView>(
+                R.layout.empty_shade_view,
+                parentView,
+                attachToRoot = false,
+            )
+            .flowOn(inflationDispatcher)
+            .collectLatest { emptyShadeView: EmptyShadeIconView ->
+                traceAsync("bind EmptyShadeIconView") {
+                    parentView.setEmptyShadeView(emptyShadeView)
+                    bindEmptyShade(emptyShadeView, emptyShadeViewModel)
                 }
-        } else {
-            configuration
-                .inflateLayout<EmptyShadeView>(
-                    R.layout.status_bar_no_notifications,
-                    parentView,
-                    attachToRoot = false,
-                )
-                .flowOn(inflationDispatcher)
-                .collectLatest { emptyShadeView: EmptyShadeView ->
-                    traceAsync("bind EmptyShadeView") {
-                        parentView.setEmptyShadeView(emptyShadeView)
-                        bindEmptyShade(emptyShadeView, emptyShadeViewModel)
-                    }
-                }
-        }
+            }
     }
 
     private suspend fun bindEmptyShade(
         emptyShadeView: StackScrollerDecorView,
         emptyShadeViewModel: EmptyShadeViewModel,
     ): Unit = coroutineScope {
+        launch {
+            viewModel.isShadeAnyExpanded.drop(1).collect { expanded ->
+                if (expanded) {
+                    emptyShadeViewModel.onShadeOpened()
+                }
+            }
+        }
         launch {
             emptyShadeView.repeatWhenAttachedToWindow {
                 EmptyShadeViewBinder.bind(

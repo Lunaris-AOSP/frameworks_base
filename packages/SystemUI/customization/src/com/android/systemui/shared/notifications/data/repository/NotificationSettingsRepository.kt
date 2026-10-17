@@ -38,6 +38,9 @@ class NotificationSettingsRepository(
     private val secureSettingsRepository: SecureSettingsRepository,
     systemSettingsRepository: SystemSettingsRepository,
 ) {
+    val areEmptyShadeMessagesEnabled: Flow<Boolean> =
+        secureSettingsRepository.boolSetting(name = "empty_shade_messages", defaultValue = true)
+
     val isNotificationHistoryEnabled: Flow<Boolean> =
         secureSettingsRepository
             .intSetting(name = Settings.Secure.NOTIFICATION_HISTORY_ENABLED)

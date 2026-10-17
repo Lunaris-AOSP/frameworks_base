@@ -21,6 +21,8 @@ import kotlinx.coroutines.flow.StateFlow
 
 /** Encapsulates business logic for interacting with notification settings. */
 class NotificationSettingsInteractor(private val repository: NotificationSettingsRepository) {
+    val areEmptyShadeMessagesEnabled = repository.areEmptyShadeMessagesEnabled
+
     val isNotificationHistoryEnabled = repository.isNotificationHistoryEnabled
 
     /** Should notifications be visible on the lockscreen? */

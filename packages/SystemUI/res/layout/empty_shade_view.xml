@@ -14,7 +14,6 @@
   ~ limitations under the License
   -->
 
-<!-- This layout replaces status_bar_no_notifications when ShowIconInEmptyShade is turned on. -->
 <!-- Extends FrameLayout -->
 <com.android.systemui.statusbar.notification.emptyshade.ui.view.EmptyShadeIconView
     xmlns:android="http://schemas.android.com/apk/res/android"
@@ -41,14 +40,14 @@
             android:scaleType="fitCenter"
             android:tint="@androidprv:color/materialColorOnSurface"
             android:importantForAccessibility="no"
-            android:src="@drawable/ic_trophy"></ImageView>
+            android:src="@drawable/ic_trophy" />
 
         <TextView
             android:id="@+id/text"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center"
-            android:text="@string/empty_shade_text"
+            android:text="@string/caught_up_shade_text"
             android:textAppearance="@style/TextAppearance.NotificationShadeText" />
     </LinearLayout>
 </com.android.systemui.statusbar.notification.emptyshade.ui.view.EmptyShadeIconView>

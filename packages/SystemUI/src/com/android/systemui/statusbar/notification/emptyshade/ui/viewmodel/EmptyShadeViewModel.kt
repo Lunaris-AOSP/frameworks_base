@@ -39,10 +39,10 @@ import dagger.assisted.AssistedInject
 import java.util.Locale
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
@@ -63,6 +63,27 @@ constructor(
     @Background bgDispatcher: CoroutineDispatcher,
     dumpManager: DumpManager,
 ) : FlowDumperImpl(dumpManager) {
+    private val emptyMessageIndex = MutableStateFlow(0)
+
+    private companion object {
+        val EMPTY_MESSAGES =
+            arrayOf(
+                R.string.caught_up_shade_text to R.drawable.ic_trophy,
+                R.string.empty_shade_all_clear to R.drawable.ic_empty_shade_task_alt,
+                R.string.empty_shade_breathe to R.drawable.ic_empty_shade_spa,
+                R.string.empty_shade_break to R.drawable.ic_empty_shade_coffee,
+                R.string.empty_shade_enjoy_day to R.drawable.ic_empty_shade_wb_sunny,
+                R.string.empty_shade_quiet_moment to R.drawable.ic_empty_shade_bedtime,
+                R.string.empty_shade_nothing_waiting to
+                    R.drawable.ic_empty_shade_sentiment_satisfied,
+                R.string.empty_shade_nice_and_clear to R.drawable.ic_empty_shade_auto_awesome,
+            )
+    }
+
+    fun onShadeOpened() {
+        emptyMessageIndex.value = (emptyMessageIndex.value + 1) % EMPTY_MESSAGES.size
+    }
+
     val areNotificationsHiddenInShade: Flow<Boolean> by lazy {
         zenModeInteractor.areNotificationsHiddenInShade
             .dumpWhileCollecting("areNotificationsHiddenInShade")
@@ -86,40 +107,40 @@ constructor(
      * footer that shows an icon.
      */
     val message: Flow<IconMessageModel> by lazy {
-        if (ShowIconInEmptyShade.isUnexpectedlyInLegacyMode()) {
-            flowOf(
-                IconMessageModel(
-                    message = "Something went wrong",
-                    icon = Icon.Resource(R.drawable.ic_error_outline, null),
-                )
-            )
-        } else {
-            combine(
-                    zenModeInteractor.modesHidingNotifications,
-                    primaryLocale,
-                    hasFilteredOutSeenNotifications,
-                ) { modes, locale, hasFilteredOutSeenNotificationsValue ->
-                    when {
-                        hasFilteredOutSeenNotificationsValue ->
-                            IconMessageModel(
-                                message = context.getString(R.string.unlock_to_see_notif_text),
-                                icon = Icon.Resource(R.drawable.ic_friction_lock_closed, null),
-                            )
-                        modes.main == null ->
-                            IconMessageModel(
-                                message = context.getString(R.string.caught_up_shade_text),
-                                icon = Icon.Resource(R.drawable.ic_trophy, null),
-                            )
-                        else ->
-                            IconMessageModel(
-                                message = formatModesString(locale, modes),
-                                icon = modes.main.icon,
-                            )
+        combine(
+                zenModeInteractor.modesHidingNotifications,
+                primaryLocale,
+                hasFilteredOutSeenNotifications,
+                notificationSettingsInteractor.areEmptyShadeMessagesEnabled,
+                emptyMessageIndex,
+            ) { modes, locale, hasFilteredOutSeenNotificationsValue, messagesEnabled, index ->
+                when {
+                    hasFilteredOutSeenNotificationsValue ->
+                        IconMessageModel(
+                            message = context.getString(R.string.unlock_to_see_notif_text),
+                            icon = Icon.Resource(R.drawable.ic_friction_lock_closed, null),
+                        )
+                    modes.main != null ->
+                        IconMessageModel(
+                            message = formatModesString(locale, modes),
+                            icon = modes.main.icon,
+                        )
+                    !messagesEnabled ->
+                        IconMessageModel(
+                            message = context.getString(R.string.empty_shade_text),
+                            icon = null,
+                        )
+                    else -> {
+                        val (text, icon) = EMPTY_MESSAGES[index]
+                        IconMessageModel(
+                            message = context.getString(text),
+                            icon = Icon.Resource(icon, null),
+                        )
                     }
                 }
-                .distinctUntilChanged()
-                .flowOn(bgDispatcher)
-        }
+            }
+            .distinctUntilChanged()
+            .flowOn(bgDispatcher)
     }
 
     val text: Flow<String> by lazy {

@@ -5,6 +5,14 @@
 -->
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
 
+    <string name="empty_shade_all_clear">All clear</string>
+    <string name="empty_shade_breathe">Take a breath</string>
+    <string name="empty_shade_break">Time for a little break</string>
+    <string name="empty_shade_enjoy_day">Go enjoy your day</string>
+    <string name="empty_shade_quiet_moment">A little moment of quiet</string>
+    <string name="empty_shade_nothing_waiting">Nothing waiting on you</string>
+    <string name="empty_shade_nice_and_clear">Nice and clear</string>
+
     <!-- Statusbar Icons -->
     <string name="status_bar_nfc">NFC</string>
     <string name="status_bar_data_saver">Data saver</string>

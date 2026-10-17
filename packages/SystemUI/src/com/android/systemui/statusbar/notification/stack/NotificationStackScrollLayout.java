@@ -115,7 +115,6 @@ import com.android.systemui.statusbar.notification.PhysicsPropertyAnimator;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.render.GroupExpansionManager;
 import com.android.systemui.statusbar.notification.collection.render.GroupMembershipManager;
-import com.android.systemui.statusbar.notification.emptyshade.ui.shared.flag.ShowIconInEmptyShade;
 import com.android.systemui.statusbar.notification.emptyshade.ui.view.EmptyShadeIconView;
 import com.android.systemui.statusbar.notification.emptyshade.ui.view.EmptyShadeView;
 import com.android.systemui.statusbar.notification.footer.ui.view.FooterView;
@@ -5366,8 +5365,8 @@ public class NotificationStackScrollLayout
         }
 
         if (mEmptyShadeView != null) {
-            if (ShowIconInEmptyShade.isEnabled()) {
-                ((EmptyShadeIconView) mEmptyShadeView).setContentColor(onSurface);
+            if (mEmptyShadeView instanceof EmptyShadeIconView emptyShadeIconView) {
+                emptyShadeIconView.setContentColor(onSurface);
             } else {
                 ((EmptyShadeView) mEmptyShadeView).setTextColors(onSurface, onSurfaceVariant);
             }

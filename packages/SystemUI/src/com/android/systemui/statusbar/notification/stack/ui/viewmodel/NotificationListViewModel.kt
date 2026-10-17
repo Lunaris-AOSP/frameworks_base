@@ -83,6 +83,8 @@ constructor(
     @Background bgDispatcher: CoroutineDispatcher,
     dumpManager: DumpManager,
 ) : FlowDumperImpl(dumpManager) {
+    val isShadeAnyExpanded = shadeInteractor.isShadeAnyExpanded
+
     private val hideFooterForQsFullscreen: Flow<Boolean> =
         shadeInteractor.isQsFullscreen.combine(
             activeNotificationsInteractor.hasEssentialNotifications
