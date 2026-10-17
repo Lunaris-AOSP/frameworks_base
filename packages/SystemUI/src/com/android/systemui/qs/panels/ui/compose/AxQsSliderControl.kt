@@ -18,6 +18,8 @@
 
 package com.android.systemui.qs.panels.ui.compose
 
+import android.media.AudioManager
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import androidx.compose.animation.core.Animatable
@@ -78,6 +80,7 @@ import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
@@ -108,6 +111,7 @@ import com.android.systemui.qs.panels.shared.model.AxMediaSurface
 import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
+import com.android.systemui.qs.tiles.ringer.LocalRingerSliderViewModel
 import com.android.systemui.res.R
 import com.android.systemui.utils.PolicyRestriction
 import com.android.systemui.volume.dialog.sliders.ui.compose.SliderTrack
@@ -246,8 +250,15 @@ private fun AxQsSlider(
     trackBackgroundColor: Color = Color.Transparent,
     icon: @Composable (Modifier) -> Unit,
     modifier: Modifier = Modifier,
+    onLongPress: (() -> Unit)? = null,
 ) {
     val inactiveTrackColor = AxTileDefaults.backgroundColor()
+    val sliderModifier =
+        modifier.lunarisSliderLongPress(
+            vertical = vertical,
+            sliderStyle = sliderStyle,
+            onLongPress = onLongPress.takeIf { enabled },
+        )
     val sliderScale = sliderHeight / AxSliderTrackHeight
     val iconSize = AxSliderIconSize * sliderScale
     if (sliderStyle.usesPlatformSlider) {
@@ -287,7 +298,7 @@ private fun AxQsSlider(
             icon = { icon(Modifier.size(iconSize).rotate(if (vertical) 90f else 0f)) },
             sliderHeight = trackHeight,
             trackCornerRadius = if (roundedSquare) AxQsControlCornerRadius else null,
-            modifier = modifier.fillMaxWidth(),
+            modifier = sliderModifier.fillMaxWidth(),
         )
         return
     }
@@ -318,7 +329,7 @@ private fun AxQsSlider(
         enabled = enabled,
         interactionSource = interactionSource,
         colors = colors,
-        modifier = modifier,
+        modifier = sliderModifier,
         thumb = {
             SliderDefaults.Thumb(
                 interactionSource = interactionSource,
@@ -502,6 +513,17 @@ private fun AxBrightnessSlider(
     val restricted = restriction as? PolicyRestriction.Restricted
     val enabled = restricted == null
     val overriddenByApp by viewModel.brightnessOverriddenByWindow.collectAsStateWithLifecycle()
+    val canToggleMode = interactive && enabled && !overriddenByApp
+    val view = LocalView.current
+    val toggleMode: () -> Unit = {
+        viewModel.onIconClick()
+        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+    }
+    val longPressLabel =
+        stringResource(
+            if (viewModel.autoMode) R.string.lunaris_qs_slider_manual_brightness
+            else R.string.lunaris_qs_slider_auto_brightness
+        )
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     val contentDescription = stringResource(R.string.accessibility_brightness)
@@ -514,6 +536,12 @@ private fun AxBrightnessSlider(
             Modifier
                 .semantics(mergeDescendants = true) {
                     text = AnnotatedString(contentDescription)
+                    if (canToggleMode) {
+                        onLongClick(label = longPressLabel) {
+                            toggleMode()
+                            true
+                        }
+                    }
                 }
                 .sliderPercentage {
                     (value - valueRange.start) / (valueRange.endInclusive - valueRange.start)
@@ -587,6 +615,7 @@ private fun AxBrightnessSlider(
         vertical = vertical,
         sliderStyle = sliderStyle,
         trackBackgroundColor = if (mirrorInOverlay) mirrorBackgroundColor else Color.Transparent,
+        onLongPress = toggleMode.takeIf { canToggleMode },
         icon = { iconModifier ->
             Icon(
                 painter = painterResource(iconRes),
@@ -657,6 +686,29 @@ private fun AxVolumeSliderContent(
     modifier: Modifier = Modifier,
 ) {
     val value by axVolumeValueState(state)
+    val ringerViewModel = LocalRingerSliderViewModel.current
+    val ringerMode by
+        ringerViewModel.ringerModeChanges.collectAsStateWithLifecycle(
+            initialValue = ringerViewModel.currentMode
+        )
+    val isZenMuted by ringerViewModel.isZenMuted.collectAsStateWithLifecycle()
+    val canToggleMode = interactive && state.isEnabled && !isZenMuted
+    val view = LocalView.current
+    val toggleMode: () -> Unit = {
+        val modes = ringerViewModel.availableModes
+        val index = modes.indexOfFirst { it.mode == ringerViewModel.currentMode }
+        ringerViewModel.setRingerMode(modes[(index + 1) % modes.size].mode)
+        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+    }
+    val longPressLabel = stringResource(R.string.lunaris_qs_slider_ringer_mode)
+    val ringerDescription =
+        stringResource(
+            when (ringerMode) {
+                AudioManager.RINGER_MODE_VIBRATE -> R.string.ax_dynamic_bar_vibrate
+                AudioManager.RINGER_MODE_SILENT -> R.string.ax_dynamic_bar_silent
+                else -> R.string.ax_dynamic_bar_ring
+            }
+        )
     val interactionSource = remember { MutableInteractionSource() }
     val hapticsViewModel =
         axVolumeHapticsViewModel(
@@ -682,9 +734,22 @@ private fun AxVolumeSliderContent(
         sliderHeight = sliderHeight,
         vertical = vertical,
         sliderStyle = sliderStyle,
+        onLongPress = toggleMode.takeIf { canToggleMode },
         icon = { iconModifier ->
             val icon = state.icon
-            if (icon != null) {
+            val ringerIcon =
+                when (ringerMode) {
+                    AudioManager.RINGER_MODE_VIBRATE -> R.drawable.ic_volume_ringer_vibrate
+                    AudioManager.RINGER_MODE_SILENT -> R.drawable.ic_volume_off
+                    else -> null
+                }
+            if (ringerIcon != null) {
+                Icon(
+                    painter = painterResource(ringerIcon),
+                    contentDescription = null,
+                    modifier = iconModifier,
+                )
+            } else if (icon != null) {
                 SystemUiIcon(icon = icon, modifier = iconModifier)
             } else {
                 Icon(
@@ -698,9 +763,16 @@ private fun AxVolumeSliderContent(
             modifier.sysuiResTag("ax_volume_slider").clearAndSetSemantics {
                 if (state.isEnabled) {
                     contentDescription = state.a11yContentDescription
-                    state.a11yStateDescription?.let { stateDescription = it }
+                    stateDescription =
+                        listOfNotNull(state.a11yStateDescription, ringerDescription).joinToString(", ")
                     progressBarRangeInfo = ProgressBarRangeInfo(state.value, state.valueRange)
                     if (interactive) {
+                        if (canToggleMode) {
+                            onLongClick(label = longPressLabel) {
+                                toggleMode()
+                                true
+                            }
+                        }
                         setProgress { targetValue ->
                             val direction =
                                 when {
