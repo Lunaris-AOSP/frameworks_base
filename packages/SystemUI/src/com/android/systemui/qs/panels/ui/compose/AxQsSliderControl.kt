@@ -24,6 +24,7 @@ import android.view.MotionEvent
 import android.view.View
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
@@ -32,6 +33,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -41,9 +43,12 @@ import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -61,16 +66,20 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.pointerInteropFilter
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
@@ -87,10 +96,13 @@ import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.compose.PlatformSlider
 import com.android.compose.PlatformSliderColors
@@ -119,11 +131,15 @@ import com.android.systemui.volume.haptics.ui.VolumeHapticsConfigsProvider
 import com.android.systemui.volume.panel.component.volume.slider.ui.viewmodel.AudioStreamSliderViewModel
 import com.android.systemui.volume.panel.component.volume.slider.ui.viewmodel.SliderState
 import com.android.systemui.volume.ui.compose.slider.SliderIcon
+import java.text.NumberFormat
 import kotlin.math.round
+import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+
+internal val LocalShowQsSliderPercentage = staticCompositionLocalOf { false }
 
 internal fun Modifier.axQsEntrance(progress: () -> Float): Modifier {
     return graphicsLayer {
@@ -236,6 +252,12 @@ private const val SLIDER_CORNER_DIVISOR = 3.333f
 internal fun axQsSliderTrackHeight(availableHeight: Dp): Dp =
     AxSliderTrackHeight * (availableHeight / AxTileDefaults.TileHeight)
 
+internal fun axQsSliderPercentage(value: Float, valueRange: ClosedFloatingPointRange<Float>): Float {
+    val range = valueRange.endInclusive - valueRange.start
+    if (!value.isFinite() || !range.isFinite() || range <= 0f) return 0f
+    return ((value - valueRange.start) / range * 100f).coerceIn(0f, 100f)
+}
+
 @Composable
 internal fun AxQsSlider(
     value: Float,
@@ -253,11 +275,19 @@ internal fun AxQsSlider(
     modifier: Modifier = Modifier,
     onLongPress: (() -> Unit)? = null,
     active: Boolean = true,
+    percentage: Float = axQsSliderPercentage(value, valueRange),
 ) {
+    val percentageLabel =
+        if (LocalShowQsSliderPercentage.current) {
+            val locale = LocalConfiguration.current.locales[0]
+            val formatter = remember(locale) { NumberFormat.getPercentInstance(locale) }
+            formatter.format(percentage.coerceIn(0f, 100f).roundToInt() / 100.0)
+        } else {
+            null
+        }
     val activeTrackColor =
-        if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-    val activeContentColor =
-        if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+        MaterialTheme.colorScheme.primary.copy(alpha = if (active) 1f else 0.7f)
+    val activeContentColor = MaterialTheme.colorScheme.onPrimary
     val sliderModifier =
         modifier.lunarisSliderLongPress(
             vertical = vertical,
@@ -275,36 +305,54 @@ internal fun AxQsSlider(
             } else {
                 trackBackgroundColor
             }
-        PlatformSlider(
-            value = value,
-            onValueChange = onValueChange,
-            onValueChangeFinished = onValueChangeFinished,
-            valueRange = valueRange,
-            enabled = enabled,
-            interactionSource = interactionSource,
-            colors =
-                PlatformSliderColors(
-                    trackColor = platformTrackColor,
-                    indicatorColor = activeTrackColor,
-                    iconColor = activeContentColor,
-                    labelColorOnIndicator = activeContentColor,
-                    labelColorOnTrack = MaterialTheme.colorScheme.onSurface,
-                    disabledTrackColor = platformTrackColor.copy(alpha = 0.38f),
-                    disabledIndicatorColor =
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.38f),
-                    disabledIconColor =
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
-                    disabledLabelColor =
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
-                ),
-            draggingCornersRadius =
-                if (roundedSquare) AxQsControlCornerRadius
-                else PlatformSliderDefaults.DefaultPlatformSliderDraggingCornerRadius * sliderScale,
-            icon = { icon(Modifier.size(iconSize).rotate(if (vertical) 90f else 0f)) },
-            sliderHeight = trackHeight,
-            trackCornerRadius = if (roundedSquare) AxQsControlCornerRadius else null,
-            modifier = sliderModifier.fillMaxWidth(),
-        )
+        Box(modifier = sliderModifier.fillMaxWidth()) {
+            PlatformSlider(
+                value = value,
+                onValueChange = onValueChange,
+                onValueChangeFinished = onValueChangeFinished,
+                valueRange = valueRange,
+                enabled = enabled,
+                interactionSource = interactionSource,
+                colors =
+                    PlatformSliderColors(
+                        trackColor = platformTrackColor,
+                        indicatorColor = activeTrackColor,
+                        iconColor = activeContentColor,
+                        labelColorOnIndicator = activeContentColor,
+                        labelColorOnTrack = MaterialTheme.colorScheme.onSurface,
+                        disabledTrackColor = platformTrackColor.copy(alpha = 0.38f),
+                        disabledIndicatorColor =
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.38f),
+                        disabledIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                        disabledLabelColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                    ),
+                draggingCornersRadius =
+                    if (roundedSquare) AxQsControlCornerRadius
+                    else
+                        PlatformSliderDefaults.DefaultPlatformSliderDraggingCornerRadius *
+                            sliderScale,
+                icon = {
+                    if (percentageLabel == null) {
+                        icon(Modifier.size(iconSize).rotate(if (vertical) 90f else 0f))
+                    }
+                },
+                sliderHeight = trackHeight,
+                trackCornerRadius = if (roundedSquare) AxQsControlCornerRadius else null,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (percentageLabel != null) {
+                AxQsSliderReadout(
+                    percentage = percentageLabel,
+                    vertical = vertical,
+                    platform = true,
+                    fraction = axQsSliderPercentage(value, valueRange) / 100f,
+                    sliderScale = sliderScale,
+                    enabled = enabled,
+                    activeColor = activeContentColor,
+                    icon = icon,
+                )
+            }
+        }
         return
     }
     val colors =
@@ -326,62 +374,80 @@ internal fun AxQsSlider(
             height = AxTileDefaults.TileHeight * sliderScale,
         )
     val trackCornerSize = sliderHeight / SLIDER_CORNER_DIVISOR
-    Slider(
-        value = value,
-        onValueChange = onValueChange,
-        onValueChangeFinished = onValueChangeFinished,
-        valueRange = valueRange,
-        enabled = enabled,
-        interactionSource = interactionSource,
-        colors = colors,
-        modifier = sliderModifier,
-        thumb = {
-            SliderDefaults.Thumb(
-                interactionSource = interactionSource,
+    Box(modifier = sliderModifier) {
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            onValueChangeFinished = onValueChangeFinished,
+            valueRange = valueRange,
+            enabled = enabled,
+            interactionSource = interactionSource,
+            colors = colors,
+            modifier = Modifier.fillMaxWidth(),
+            thumb = {
+                SliderDefaults.Thumb(
+                    interactionSource = interactionSource,
+                    enabled = enabled,
+                    colors = colors,
+                    thumbSize = thumbSize,
+                )
+            },
+            track = { sliderState ->
+                SliderTrack(
+                    sliderState = sliderState,
+                    isEnabled = enabled,
+                    colors = colors,
+                    trackCornerSize = trackCornerSize,
+                    trackInsideCornerSize = AxSliderTrackInsideCornerRadius,
+                    thumbTrackGapSize = AxSliderThumbTrackGap,
+                    trackSize = sliderHeight,
+                    modifier = Modifier.background(trackBackgroundColor, ExpressiveSliderShape),
+                    activeTrackEndIcon = { iconsState ->
+                        if (percentageLabel == null) {
+                            AxQsSliderIcon(
+                                visible =
+                                    if (vertical) {
+                                        iconsState.isActiveTrackEndIconVisible
+                                    } else {
+                                        !iconsState.isInactiveTrackEndIconVisible
+                                    },
+                                vertical = vertical,
+                                size = iconSize,
+                                icon = icon,
+                            )
+                        }
+                    },
+                    inactiveTrackEndIcon = { iconsState ->
+                        if (percentageLabel == null) {
+                            AxQsSliderIcon(
+                                visible =
+                                    if (vertical) {
+                                        !iconsState.isActiveTrackEndIconVisible
+                                    } else {
+                                        iconsState.isInactiveTrackEndIconVisible
+                                    },
+                                vertical = vertical,
+                                size = iconSize,
+                                icon = icon,
+                            )
+                        }
+                    },
+                )
+            },
+        )
+        if (percentageLabel != null) {
+            AxQsSliderReadout(
+                percentage = percentageLabel,
+                vertical = vertical,
+                platform = false,
+                fraction = axQsSliderPercentage(value, valueRange) / 100f,
+                sliderScale = sliderScale,
                 enabled = enabled,
-                colors = colors,
-                thumbSize = thumbSize,
+                activeColor = activeContentColor,
+                icon = icon,
             )
-        },
-        track = { sliderState ->
-            SliderTrack(
-                sliderState = sliderState,
-                isEnabled = enabled,
-                colors = colors,
-                trackCornerSize = trackCornerSize,
-                trackInsideCornerSize = AxSliderTrackInsideCornerRadius,
-                thumbTrackGapSize = AxSliderThumbTrackGap,
-                trackSize = sliderHeight,
-                modifier = Modifier.background(trackBackgroundColor, ExpressiveSliderShape),
-                activeTrackEndIcon = { iconsState ->
-                    AxQsSliderIcon(
-                        visible =
-                            if (vertical) {
-                                iconsState.isActiveTrackEndIconVisible
-                            } else {
-                                !iconsState.isInactiveTrackEndIconVisible
-                            },
-                        vertical = vertical,
-                        size = iconSize,
-                        icon = icon,
-                    )
-                },
-                inactiveTrackEndIcon = { iconsState ->
-                    AxQsSliderIcon(
-                        visible =
-                            if (vertical) {
-                                !iconsState.isActiveTrackEndIconVisible
-                            } else {
-                                iconsState.isInactiveTrackEndIconVisible
-                            },
-                        vertical = vertical,
-                        size = iconSize,
-                        icon = icon,
-                    )
-                },
-            )
-        },
-    )
+        }
+    }
 }
 
 @Composable
@@ -395,6 +461,92 @@ private fun AxQsSliderIcon(
         isVisible = visible,
         icon = { icon(Modifier.size(size).rotate(if (vertical) 90f else 0f)) },
     )
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun BoxScope.AxQsSliderReadout(
+    percentage: String,
+    vertical: Boolean,
+    platform: Boolean,
+    fraction: Float,
+    sliderScale: Float,
+    enabled: Boolean,
+    activeColor: Color,
+    icon: @Composable (Modifier) -> Unit,
+) {
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val inactiveColor = MaterialTheme.colorScheme.onSurface
+    val alpha = if (enabled) 1f else 0.38f
+    BoxWithConstraints(Modifier.matchParentSize().clearAndSetSemantics {}) {
+        val slotSize = minOf(maxHeight, maxWidth / 2)
+        val scale = sliderScale.coerceAtLeast(0.1f)
+        val content: @Composable BoxScope.() -> Unit = {
+            Box(
+                modifier =
+                    Modifier.align(if (vertical) Alignment.CenterEnd else Alignment.CenterStart)
+                        .size(slotSize)
+                        .rotate(if (vertical) 90f else 0f)
+                        .padding(horizontal = 4.dp * scale),
+                contentAlignment = Alignment.Center,
+            ) {
+                BasicText(
+                    text = percentage,
+                    style =
+                        MaterialTheme.typography.labelLarge.copy(
+                            color = LocalContentColor.current,
+                            fontSize = 14.sp * scale,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
+                        ),
+                    maxLines = 1,
+                    softWrap = false,
+                    autoSize =
+                        TextAutoSize.StepBased(
+                            minFontSize = 8.sp * scale,
+                            maxFontSize = 14.sp * scale,
+                        ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            Box(
+                modifier =
+                    Modifier.align(if (vertical) Alignment.CenterStart else Alignment.CenterEnd)
+                        .size(slotSize),
+                contentAlignment = Alignment.Center,
+            ) {
+                icon(
+                    Modifier.size(AxSliderIconSize * sliderScale).rotate(if (vertical) 90f else 0f)
+                )
+            }
+        }
+        val contentModifier: (Boolean) -> Modifier = { activeTrack ->
+            Modifier.fillMaxSize().drawWithContent {
+                val fill =
+                    if (platform) {
+                            size.width * fraction
+                        } else {
+                            (size.width - AxSliderThumbWidth.toPx() * sliderScale) * fraction -
+                                AxSliderThumbTrackGap.toPx()
+                        }
+                        .coerceIn(0f, size.width)
+                val boundary = if (rtl) size.width - fill else fill
+                val drawLeft = activeTrack != rtl
+                clipRect(
+                    left = if (drawLeft) 0f else boundary,
+                    right = if (drawLeft) boundary else size.width,
+                ) {
+                    this@drawWithContent.drawContent()
+                }
+            }
+        }
+        CompositionLocalProvider(LocalContentColor provides inactiveColor.copy(alpha = alpha)) {
+            Box(contentModifier(false), content = content)
+        }
+        CompositionLocalProvider(LocalContentColor provides activeColor.copy(alpha = alpha)) {
+            Box(contentModifier(true), content = content)
+        }
+    }
 }
 
 @Composable
@@ -490,11 +642,7 @@ private fun AxBrightnessSlider(
         animateFloatAsState(targetValue = value.toFloat(), label = "AxBrightnessSliderValue")
     val valueRange =
         viewModel.minBrightness.value.toFloat()..viewModel.maxBrightness.value.toFloat()
-    val percentage =
-        ((value - valueRange.start) * 100f / (valueRange.endInclusive - valueRange.start)).coerceIn(
-            0f,
-            100f,
-        )
+    val percentage = axQsSliderPercentage(value.toFloat(), valueRange)
     val iconRes =
         if (viewModel.autoMode) {
             R.drawable.ic_qs_brightness_auto_on
@@ -591,6 +739,7 @@ private fun AxBrightnessSlider(
 
     AxQsSlider(
         value = animatedValue,
+        percentage = percentage,
         onValueChange = { newValue ->
             if (interactive && enabled && !overriddenByApp) {
                 hapticsViewModel.onValueChange(newValue)
@@ -727,6 +876,7 @@ private fun AxVolumeSliderContent(
     AxQsSlider(
         value = value,
         valueRange = state.valueRange,
+        percentage = axQsSliderPercentage(state.value, state.valueRange),
         onValueChange = { newValue ->
             hapticsViewModel?.addVelocityDataPoint(newValue)
             if (interactive) viewModel.onValueChanged(state, newValue)

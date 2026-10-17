@@ -185,7 +185,7 @@ private fun Track(
         content = {
             TrackBackground(
                 modifier = Modifier.layoutId(TrackComponent.Background),
-                drawingState = drawingState,
+                drawingState = { drawingState },
                 enabled = enabled,
                 colors = colors,
                 draggingCornersRadiusActive = draggingCornersRadius,
@@ -258,7 +258,7 @@ private fun Track(
 
 @Composable
 private fun TrackBackground(
-    drawingState: DrawingState,
+    drawingState: () -> DrawingState,
     enabled: Boolean,
     colors: PlatformSliderColors,
     draggingCornersRadiusActive: Dp,
@@ -291,6 +291,9 @@ private fun TrackBackground(
             Modifier
                 .fillMaxSize()
                 .drawWithCache {
+                    // Read measured geometry here so moving a slider invalidates its cached paths
+                    // without waiting for another composition.
+                    val measuredState = drawingState()
                     val radius =
                         (trackCornerRadius?.toPx() ?: (size.height / 2))
                             .coerceIn(0f, size.height / 2)
@@ -301,8 +304,8 @@ private fun TrackBackground(
                                 RoundRect(
                                     left = 0f,
                                     top = 0f,
-                                    right = drawingState.totalWidth,
-                                    bottom = drawingState.totalHeight,
+                                    right = size.width,
+                                    bottom = size.height,
                                     cornerRadius = trackCorners,
                                 )
                             )
@@ -314,10 +317,10 @@ private fun TrackBackground(
                             Path().apply {
                                 addRoundRect(
                                     RoundRect(
-                                        left = drawingState.indicatorLeft,
-                                        top = drawingState.indicatorTop,
-                                        right = drawingState.indicatorRight,
-                                        bottom = drawingState.indicatorBottom,
+                                        left = measuredState.indicatorLeft,
+                                        top = measuredState.indicatorTop,
+                                        right = measuredState.indicatorRight,
+                                        bottom = measuredState.indicatorBottom,
                                         topLeftCornerRadius = trackCorners,
                                         topRightCornerRadius = indicatorCornerRadius,
                                         bottomRightCornerRadius = indicatorCornerRadius,
@@ -339,33 +342,33 @@ private fun TrackBackground(
                 }
         )
 
-        if (
-            indicatorBackground != null &&
-                drawingState.indicatorRight > drawingState.indicatorLeft
-        ) {
-            val density = LocalDensity.current
-            indicatorBackground(
-                Modifier
-                    .offset {
-                        IntOffset(
-                            drawingState.indicatorLeft.toInt(),
-                            drawingState.indicatorTop.toInt(),
-                        )
-                    }
-                    .size(
-                        with(density) {
-                            (drawingState.indicatorRight - drawingState.indicatorLeft)
-                                .coerceAtLeast(0f)
-                                .toDp()
-                        },
-                        with(density) {
-                            (drawingState.indicatorBottom - drawingState.indicatorTop)
-                                .coerceAtLeast(0f)
-                                .toDp()
-                        },
-                    ),
-                indicatorRadiusDp,
-            )
+        if (indicatorBackground != null) {
+            val measuredState = drawingState()
+            if (measuredState.indicatorRight > measuredState.indicatorLeft) {
+                val density = LocalDensity.current
+                indicatorBackground(
+                    Modifier
+                        .offset {
+                            IntOffset(
+                                measuredState.indicatorLeft.toInt(),
+                                measuredState.indicatorTop.toInt(),
+                            )
+                        }
+                        .size(
+                            with(density) {
+                                (measuredState.indicatorRight - measuredState.indicatorLeft)
+                                    .coerceAtLeast(0f)
+                                    .toDp()
+                            },
+                            with(density) {
+                                (measuredState.indicatorBottom - measuredState.indicatorTop)
+                                    .coerceAtLeast(0f)
+                                    .toDp()
+                            },
+                        ),
+                    indicatorRadiusDp,
+                )
+            }
         }
     }
 }
@@ -421,8 +424,6 @@ private class TrackMeasurePolicy(
             if (isRtl) {
                 DrawingState(
                     isRtl = true,
-                    totalWidth = desiredWidth.toFloat(),
-                    totalHeight = desiredHeight.toFloat(),
                     indicatorLeft =
                         desiredWidth * (1 - sliderState.coercedNormalizedValue),
                     indicatorTop = 0f,
@@ -434,8 +435,6 @@ private class TrackMeasurePolicy(
             } else {
                 DrawingState(
                     isRtl = false,
-                    totalWidth = desiredWidth.toFloat(),
-                    totalHeight = desiredHeight.toFloat(),
                     indicatorLeft = 0f,
                     indicatorTop = 0f,
                     indicatorRight =
@@ -459,8 +458,6 @@ private class TrackMeasurePolicy(
 
 private data class DrawingState(
     val isRtl: Boolean = false,
-    val totalWidth: Float = 0f,
-    val totalHeight: Float = 0f,
     val indicatorLeft: Float = 0f,
     val indicatorTop: Float = 0f,
     val indicatorRight: Float = 0f,

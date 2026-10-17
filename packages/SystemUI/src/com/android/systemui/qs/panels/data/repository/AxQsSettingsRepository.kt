@@ -107,6 +107,7 @@ constructor(
 
     val quickPanelOnLeft: StateFlow<Boolean> = boolSetting(QUICK_PANEL_ON_LEFT, false)
     val showWeather: StateFlow<Boolean> = boolSetting(SHOW_WEATHER, true)
+    val showSliderPercentage: StateFlow<Boolean> = boolSetting(SHOW_SLIDER_PERCENTAGE, false)
 
     val tileStyle: StateFlow<AxQsTileStyle> =
         intSetting("ax_qs_tile_style", AxQsTileStyle.PILL.settingValue)
@@ -567,6 +568,7 @@ constructor(
         const val PORTRAIT_QS_TILE_LABELS = "ax_qs_show_tile_labels"
         const val SPLIT_SHADE_TILE_LABELS = "ax_qs_split_shade_show_tile_labels"
         const val SHOW_WEATHER = "ax_qs_show_weather"
+        const val SHOW_SLIDER_PERCENTAGE = "ax_qs_show_slider_percentage"
 
         val SLIDER_KEYS =
             AxQsLayout.entries.flatMap { layout ->

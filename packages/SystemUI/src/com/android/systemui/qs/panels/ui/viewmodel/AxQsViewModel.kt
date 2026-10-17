@@ -260,6 +260,12 @@ constructor(
             initialValue = true,
             source = repository.showWeather,
         )
+    val showSliderPercentage by
+        hydrator.hydratedStateOf(
+            traceName = "showSliderPercentage",
+            initialValue = repository.showSliderPercentage.value,
+            source = repository.showSliderPercentage,
+        )
     val spacing by
         hydrator.hydratedStateOf(
             traceName = "spacing",
