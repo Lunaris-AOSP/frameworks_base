@@ -16,6 +16,7 @@
 
 package com.android.systemui.qs.panels.ui.media
 
+import android.content.res.Configuration
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -54,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
@@ -79,6 +81,9 @@ import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.ui.compose.axQsControlShape
 import com.android.systemui.qs.panels.ui.compose.AxTileDefaults
+import com.android.systemui.qs.panels.ui.compose.MaterialMediaExpandedPopup
+import com.android.systemui.qs.panels.ui.compose.SharedMediaState
+import com.android.systemui.qs.panels.ui.compose.rememberMediaState
 import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.res.R
 
@@ -119,6 +124,7 @@ fun AxMediaPanel(
     val sessions = viewModel.visibleSessions(surface)
     val currentSession = viewModel.currentSession?.takeIf { viewModel.isSessionVisible(it.key, surface) }
     val lastMediaPackage by viewModel.lastMediaPackage.collectAsStateWithLifecycle()
+    val expandedMediaState = rememberMediaState()
     val hasVisibleMedia = sessions.isNotEmpty() || showPlaceholder
 
     LaunchedEffect(viewModel, currentSession?.key) {
@@ -132,6 +138,7 @@ fun AxMediaPanel(
         AxMediaCard(
             viewModel = viewModel,
             session = currentSession,
+            expandedMediaState = expandedMediaState,
             lastMediaPackage = lastMediaPackage,
             span = span,
             interactive = interactive,
@@ -194,6 +201,7 @@ fun AxMediaPanel(
                 AxMediaCard(
                     viewModel = viewModel,
                     session = session,
+                    expandedMediaState = expandedMediaState,
                     lastMediaPackage = lastMediaPackage,
                     span = span,
                     interactive = interactive,
@@ -221,6 +229,7 @@ fun AxMediaPanel(
 private fun AxMediaCard(
     viewModel: AxMediaViewModel,
     session: MediaSessionModel?,
+    expandedMediaState: SharedMediaState,
     lastMediaPackage: String?,
     span: AxQsSpan,
     interactive: Boolean,
@@ -237,6 +246,8 @@ private fun AxMediaCard(
             span.columns >= 3 -> AxMediaLayout.Expanded
             else -> AxMediaLayout.Compact
         }
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    var showExpandedPopup by remember(session?.key, isLandscape) { mutableStateOf(false) }
     val gutsVisible = allowGuts && session?.let(viewModel::isGutsVisible) == true
     val artwork = session?.background?.takeIf { span.columns > 1 }
     val tileBackground = AxTileDefaults.backgroundColor()
@@ -314,27 +325,24 @@ private fun AxMediaCard(
                 Modifier.fillMaxSize().combinedClickable(
                     enabled = interactive && (session != null || lastMediaPackage != null),
                     onClick = {
-                        if (!gutsVisible) {
-                            if (session != null) {
-                                viewModel.openSession(session, expandable)
-                            } else {
-                                viewModel.openLastMediaApp(expandable)
-                            }
+                        if (gutsVisible) {
+                            viewModel.closeGuts()
+                        } else if (session != null && isLandscape) {
+                            viewModel.openSession(session, expandable)
+                        } else if (session != null && expandedMediaState.controller != null) {
+                            showExpandedPopup = true
+                        } else if (session == null) {
+                            viewModel.openLastMediaApp(expandable)
                         }
                     },
                     onClickLabel = clickLabel,
-                    onLongClick =
-                        if (allowGuts) {
-                            {
-                                if (gutsVisible) {
-                                    viewModel.closeGuts()
-                                } else if (session != null) {
-                                    viewModel.showGuts(session)
-                                }
-                            }
+                    onLongClick = {
+                        if (session != null) {
+                            viewModel.openSession(session, expandable)
                         } else {
-                            null
-                        },
+                            viewModel.openLastMediaApp(expandable)
+                        }
+                    },
                 )
             )
             AnimatedContent(
@@ -415,6 +423,12 @@ private fun AxMediaCard(
                 }
             }
         }
+    }
+    if (!isLandscape && showExpandedPopup && session != null && expandedMediaState.controller != null) {
+        MaterialMediaExpandedPopup(
+            mediaState = expandedMediaState,
+            onDismiss = { showExpandedPopup = false },
+        )
     }
 }
 
