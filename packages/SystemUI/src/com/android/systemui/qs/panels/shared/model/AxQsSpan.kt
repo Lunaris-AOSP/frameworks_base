@@ -292,11 +292,26 @@ enum class AxQsPanelMode(val settingValue: Int) {
 
 enum class AxQsVerticalSliderStyle(val settingValue: Int) {
     M3_EXPRESSIVE(0),
-    PLATFORM(1);
+    PLATFORM(1),
+    ROUNDED_SQUARE(2);
+
+    val usesPlatformSlider: Boolean
+        get() = this != M3_EXPRESSIVE
 
     companion object {
         fun fromSetting(value: Int): AxQsVerticalSliderStyle =
             entries.firstOrNull { it.settingValue == value } ?: M3_EXPRESSIVE
+    }
+}
+
+enum class AxQsTileStyle(val settingValue: Int) {
+    PILL(0),
+    ROUNDED_SQUARE(1),
+    DYNAMIC(2);
+
+    companion object {
+        fun fromSetting(value: Int): AxQsTileStyle =
+            entries.firstOrNull { it.settingValue == value } ?: PILL
     }
 }
 

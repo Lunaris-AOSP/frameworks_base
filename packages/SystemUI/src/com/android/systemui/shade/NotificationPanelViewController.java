@@ -1740,7 +1740,7 @@ public final class NotificationPanelViewController implements
     @Override
     public void startInputFocusTransfer(MotionEvent event) {
         if (mCommandQueue.panelsEnabled() && isFullyCollapsed()) {
-            mQsController.prepareLegacySplitShade(event);
+            mQsController.prepareSplitShade(event);
         }
         startInputFocusTransfer();
     }

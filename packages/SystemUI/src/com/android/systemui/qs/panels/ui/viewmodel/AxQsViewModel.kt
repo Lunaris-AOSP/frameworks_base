@@ -21,11 +21,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.android.keyguard.CarrierTextManager
+import com.android.systemui.classifier.domain.interactor.FalsingInteractor
+import com.android.systemui.classifier.domain.interactor.runIfNotFalseTap
 import com.android.systemui.common.ui.domain.interactor.ConfigurationInteractor
 import com.android.systemui.lifecycle.ExclusiveActivatable
 import com.android.systemui.lifecycle.Hydrator
 import com.android.systemui.qs.QSHost
 import com.android.systemui.qs.panels.data.repository.AxQsSettingsRepository
+import com.android.systemui.qs.panels.data.repository.LunarisBluetoothArtworkRepository
 import com.android.systemui.qs.panels.data.repository.QSColumnsRepository
 import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsGridLayout
@@ -40,6 +43,8 @@ import com.android.systemui.qs.panels.shared.model.AxQsVerticalSliderStyle
 import com.android.systemui.res.R
 import com.android.systemui.shade.ShadeDisplayAware
 import com.android.systemui.shade.domain.interactor.ShadeInteractor
+import com.android.systemui.statusbar.policy.ui.dialog.viewmodel.ModeTileViewModel
+import com.android.systemui.statusbar.policy.ui.dialog.viewmodel.ModesDialogViewModel
 import com.android.systemui.utils.coroutines.flow.conflatedCallbackFlow
 import javax.inject.Inject
 import kotlinx.coroutines.channels.awaitClose
@@ -53,8 +58,22 @@ constructor(
     shadeInteractor: ShadeInteractor,
     columnsRepository: QSColumnsRepository,
     carrierTextManagerBuilder: CarrierTextManager.Builder,
+    bluetoothArtworkRepository: LunarisBluetoothArtworkRepository,
+    modesDialogViewModel: ModesDialogViewModel,
+    private val falsingInteractor: FalsingInteractor,
     @ShadeDisplayAware private val context: Context,
 ) : ExclusiveActivatable() {
+    val bluetoothArtwork = bluetoothArtworkRepository.artwork
+    val modes = modesDialogViewModel.tiles
+
+    fun onModeClick(mode: ModeTileViewModel) {
+        falsingInteractor.runIfNotFalseTap { mode.onClick() }
+    }
+
+    fun onModeLongClick(mode: ModeTileViewModel) {
+        falsingInteractor.runIfNotFalseTap { mode.onLongClick() }
+    }
+
     private val hydrator = Hydrator("AxQsViewModel")
     val carrierText: String by
         hydrator.hydratedStateOf(
@@ -241,6 +260,18 @@ constructor(
             initialValue = true,
             source = repository.showWeather,
         )
+    val spacing by
+        hydrator.hydratedStateOf(
+            traceName = "spacing",
+            initialValue = repository.spacing.value,
+            source = repository.spacing,
+        )
+    val tileStyle by
+        hydrator.hydratedStateOf(
+            traceName = "tileStyle",
+            initialValue = repository.tileStyle.value,
+            source = repository.tileStyle,
+        )
     private val verticalSliderStyles by
         hydrator.hydratedStateOf(
             traceName = "verticalSliderStyles",
@@ -303,11 +334,11 @@ constructor(
     ): List<String> {
         val available = availableIds.toSet()
         val saved = configuredSectionOrder(layout, section)?.filter(available::contains)
-        if (!saved.isNullOrEmpty()) return saved
+        if (saved != null) return saved
         val legacy = configuredOrder(layout)?.filter { id ->
             id in available && sectionForLegacyId(id, layout) == section
         }
-        if (!legacy.isNullOrEmpty()) return legacy
+        if (legacy != null) return legacy
         val controlDefaults = defaultControlIds(available)
         return if (section == AxQsGridSection.CONTROLS) {
             controlDefaults
@@ -319,10 +350,9 @@ constructor(
     }
 
     fun order(layout: AxQsLayout, section: AxQsGridSection): List<String>? {
-        return configuredSectionOrder(layout, section)?.takeIf { it.isNotEmpty() }
+        return configuredSectionOrder(layout, section)
             ?: configuredOrder(layout)
                 ?.filter { sectionForLegacyId(it, layout) == section }
-                ?.takeIf { it.isNotEmpty() }
     }
 
     fun isInGrid(id: String, layout: AxQsLayout, section: AxQsGridSection): Boolean {
@@ -336,7 +366,7 @@ constructor(
             AxQsLayout.QQS -> qqsOrder
             AxQsLayout.QS -> qsOrder
             AxQsLayout.SPLIT_SHADE -> landscapeOrder
-        }
+        }?.takeIf { it.isNotEmpty() }
     }
 
     private fun configuredSectionOrder(
@@ -510,27 +540,20 @@ constructor(
         splitShadeControlOrder != null || splitShadeTileOrder != null
 
     private fun maxColumnsForWidth(layout: AxQsGridLayout): Int {
-        val sideFraction =
-            if (layout.isSplitShade) {
-                AxQsLayoutPadding.LANDSCAPE_SIDE_FRACTION
-            } else {
-                AxQsLayoutPadding.PORTRAIT_SIDE_FRACTION
-            }
-        val contentWidth = screenWidthDp * (1f - sideFraction * 2f)
+        val contentWidth = (screenWidthDp - spacing.sidePadding * 2).toFloat()
         val gridWidth =
             if (layout.isSplitShade) {
                 (contentWidth - AxQsLayoutPadding.LANDSCAPE_SPLIT_GRID_SPACING_DP) / 2f
             } else {
                 contentWidth
             }
-        return ((gridWidth + GRID_SPACING_DP) / (MIN_TILE_WIDTH_DP + GRID_SPACING_DP))
+        return ((gridWidth + spacing.tileGap) / (MIN_TILE_WIDTH_DP + spacing.tileGap))
             .toInt()
             .coerceAtLeast(1)
     }
 
     private companion object {
         const val MIN_TILE_WIDTH_DP = 56f
-        const val GRID_SPACING_DP = 16f
         const val MIN_TILE_GRID_ROWS = 1
         const val MAX_TILE_GRID_ROWS = 3
         const val DEFAULT_CONTROL_COLUMNS = 4

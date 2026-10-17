@@ -117,7 +117,6 @@ public class SystemUIApplicationImpl extends SystemUIApplication implements
     @Override
     public void onCreate() {
         super.onCreate();
-        com.android.systemui.qs.flags.MistQsMode.initialize(this);
         Log.v(TAG, "SystemUIApplication created.");
         // This line is used to setup Dagger's dependency injection and should be kept at the
         // top of this method.

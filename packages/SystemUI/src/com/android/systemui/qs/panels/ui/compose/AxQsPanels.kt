@@ -26,7 +26,6 @@ import android.util.Log
 import android.widget.ImageView
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clipScrollableContainer
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.layout.Arrangement
@@ -35,12 +34,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -88,6 +85,7 @@ import com.android.systemui.animation.Expandable as SystemUiExpandable
 import com.android.systemui.common.ui.compose.Icon as SystemUiIcon
 import com.android.systemui.common.ui.compose.PagerDots
 import com.android.systemui.compose.modifiers.sysuiResTag
+import com.android.systemui.development.ui.compose.QsDataUsage
 import com.android.systemui.lifecycle.rememberViewModel
 import com.android.systemui.qs.composefragment.ui.axQuickSettingsSceneMotion
 import com.android.systemui.qs.footer.ui.viewmodel.FooterActionsButtonViewModel
@@ -99,9 +97,6 @@ import com.android.systemui.shade.ui.viewmodel.ShadeHeaderViewModel
 import com.android.internal.util.lunaris.OmniJawsClient
 
 val LocalAxQsExpansionProgress = compositionLocalOf<() -> Float> { { 1f } }
-
-private val DragHandleWidth = 56.dp
-private val DragHandleHeight = 4.dp
 
 @Composable
 internal fun <T> ContentScope.AxQQS(
@@ -164,19 +159,6 @@ internal fun <T> ContentScope.AxQQS(
                     pagerState = pagerState,
                     modifier = Modifier.fillMaxWidth(),
                     content = tileContent,
-                )
-            }
-            Box(
-                Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    Modifier.width(DragHandleWidth)
-                        .height(DragHandleHeight)
-                        .background(
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                            RoundedCornerShape(2.dp),
-                        )
                 )
             }
         }
@@ -288,14 +270,18 @@ internal fun AxQsDateHeader(
     modifier: Modifier = Modifier,
 ) {
     Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Row(
-            modifier = Modifier.weight(1f),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        Column(
+            modifier = Modifier.weight(1f).padding(end = 8.dp),
+            horizontalAlignment = Alignment.Start,
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             if (showDate) {
                 AxQuickSettingsDate(viewModel = shadeHeaderViewModel)
             }
+            QsDataUsage(
+                textColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                compact = true,
+            )
             if (showWeather) {
                 AxQsWeather()
             }
@@ -430,7 +416,7 @@ fun AxQsWeather(
                         context.startActivity(intent)
                     } catch (_: Exception) {}
                 }
-                .padding(horizontal = 6.dp, vertical = 4.dp),
+                .padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -471,6 +457,13 @@ internal fun AxQsHeaderActions(
         if (showEdit) {
             AxEditButton(viewModel, isFullyVisible, editButtonProgress)
         }
+        FooterIconButton(
+            model = viewModel.userSwitcherViewModel,
+            containerColor = AxTileDefaults.backgroundColor(),
+            iconColor = Color.Unspecified,
+            modifier =
+                Modifier.sysuiResTag("multi_user_switch").minimumInteractiveComponentSize(),
+        )
         FooterIconButton(
             model = viewModel.settingsButtonViewModel,
             containerColor = AxTileDefaults.backgroundColor(),
@@ -607,6 +600,7 @@ private fun FooterIconButton(
     model: FooterActionsButtonViewModel?,
     containerColor: Color,
     modifier: Modifier = Modifier,
+    iconColor: Color = MaterialTheme.colorScheme.onSurface,
 ) {
     if (model == null) return
     Expandable(
@@ -619,7 +613,7 @@ private fun FooterIconButton(
         Box(modifier = Modifier.size(36.dp), contentAlignment = Alignment.Center) {
             SystemUiIcon(
                 icon = model.icon,
-                tint = MaterialTheme.colorScheme.onSurface,
+                tint = iconColor,
                 modifier = Modifier.size(20.dp),
             )
         }

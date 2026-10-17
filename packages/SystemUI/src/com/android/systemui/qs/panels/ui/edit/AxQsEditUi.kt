@@ -122,16 +122,17 @@ import com.android.systemui.qs.panels.shared.model.AxQsVerticalSliderStyle
 import com.android.systemui.qs.panels.ui.compose.AX_QS_CONTROL_MAX_ROWS
 import com.android.systemui.qs.panels.ui.compose.AxInteractiveTileContainer
 import com.android.systemui.qs.panels.ui.compose.AxQuickSettingsLayoutDefaults
-import com.android.systemui.qs.panels.ui.compose.AxQsControlCornerRadius
 import com.android.systemui.qs.panels.ui.compose.AxQsGrid
 import com.android.systemui.qs.panels.ui.compose.AxTileDefaults
 import com.android.systemui.qs.panels.ui.compose.LocalTileScale
+import com.android.systemui.qs.panels.ui.compose.LocalAxQsTileStyle
 import com.android.systemui.qs.panels.ui.compose.axQsControlShape
 import com.android.systemui.qs.panels.ui.compose.axQsGridCellWidth
 import com.android.systemui.qs.panels.ui.compose.axQsGridRowCount
 import com.android.systemui.qs.panels.ui.compose.axQsResizeHandle
 import com.android.systemui.qs.panels.ui.compose.axQsSharedGridRows
 import com.android.systemui.qs.panels.ui.compose.axQsSliderTrackHeight
+import com.android.systemui.qs.panels.ui.compose.axQsTileShape
 import com.android.systemui.qs.panels.ui.compose.canFitAxQsGridItems
 import com.android.systemui.qs.panels.ui.compose.canFitAxQsSharedGrid
 import com.android.systemui.qs.panels.ui.compose.fitAxQsGridItems
@@ -142,6 +143,7 @@ import com.android.systemui.qs.panels.ui.viewmodel.EditModeViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.EditTileViewModel
 import com.android.systemui.qs.ui.composable.QuickSettingsShade
 import com.android.systemui.res.R
+import com.android.systemui.statusbar.policy.ui.dialog.viewmodel.ModeTileViewModel
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
@@ -217,7 +219,7 @@ fun AxQsEditUi(
         Column(
             modifier =
                 Modifier.fillMaxSize()
-                    .padding(horizontal = QuickSettingsShade.Dimensions.Padding)
+                    .padding(horizontal = axQsViewModel.spacing.sidePadding.dp)
                     .onGloballyPositioned { viewportBounds = it.boundsInRoot() }
                     .verticalScroll(scrollState),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -456,6 +458,7 @@ private fun AxEditableGrid(
     val savedControlOrder = axQsViewModel.order(layout, AxQsGridSection.CONTROLS)
     val savedTileOrder = axQsViewModel.order(layout, AxQsGridSection.TILES)
     val savedSpans = axQsViewModel.spans(layout)
+    val modes by axQsViewModel.modes.collectAsStateWithLifecycle(emptyList())
     val savedControlPositions = axQsViewModel.controlPositions(layout)
     val sourceItems =
         remember(
@@ -537,7 +540,7 @@ private fun AxEditableGrid(
 
     val scale = LocalTileScale.current
     val rowHeight = AxTileDefaults.TileHeight * scale
-    val spacing = AxTileDefaults.TileSpacing * scale
+    val spacing = axQsViewModel.spacing.tileGap.dp * scale
     val fitsLayout: (List<AxQsGridItem<AxEditGridValue>>) -> Boolean = { items ->
         val controls = items.filter { it.section == AxQsGridSection.CONTROLS }
         val tileCount = items.count { it.section == AxQsGridSection.TILES }
@@ -641,6 +644,7 @@ private fun AxEditableGrid(
                     controlPreview = controlPreview,
                     verticalSliderStyle = verticalSliderStyle,
                     hapticFeedback = hapticFeedback,
+                    modes = modes,
                 )
             }
         }
@@ -668,6 +672,7 @@ private fun AxEditableGrid(
                     controlPreview = controlPreview,
                     verticalSliderStyle = verticalSliderStyle,
                     hapticFeedback = hapticFeedback,
+                    modes = modes,
                 )
             }
         }
@@ -710,6 +715,7 @@ private fun AxEditableGrid(
             currentIds = listState.items.mapTo(mutableSetOf()) { it.id },
             controlColumns = pickerControlColumns,
             tileColumns = pickerTileColumns,
+            spacing = spacing,
             verticalSliderStyle = verticalSliderStyle,
             onVerticalSliderStyleChanged = { control, style ->
                 axQsViewModel.setVerticalSliderStyle(layout, control, style)
@@ -777,6 +783,7 @@ private fun AxEditableGridSection(
         @Composable (AxQsControl, AxQsSpan, Int, AxQsVerticalSliderStyle) -> Unit,
     verticalSliderStyle: (AxQsControl) -> AxQsVerticalSliderStyle,
     hapticFeedback: HapticFeedback,
+    modes: List<ModeTileViewModel>,
 ) {
     val items = listState.items.filter { it.section == section }
     BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -904,11 +911,7 @@ private fun AxEditableGridSection(
                 val selectionShape =
                     when (value) {
                         is AxEditGridValue.Tile ->
-                            if (item.span.columns > 1 || item.span.rows > 1) {
-                                RoundedCornerShape(AxQsControlCornerRadius)
-                            } else {
-                                RoundedCornerShape(AxTileDefaults.InactiveCornerRadius)
-                            }
+                            axQsTileShape(item.span, LocalAxQsTileStyle.current)
                         is AxEditGridValue.Control ->
                             axQsControlShape(value.control, item.span, controlStyle)
                     }
@@ -923,7 +926,11 @@ private fun AxEditableGridSection(
                         val availableThickness =
                             if (verticalSlider) cellWidth else measuredRowHeight
                         val trackHeight =
-                            axQsSliderTrackHeight(availableThickness, verticalSlider)
+                            if (verticalSlider && controlStyle.usesPlatformSlider) {
+                                availableThickness
+                            } else {
+                                axQsSliderTrackHeight(availableThickness, verticalSlider)
+                            }
                         ((availableThickness - trackHeight) / 2 - SliderSelectionGap)
                             .coerceAtLeast(0.dp)
                     } else {
@@ -1092,6 +1099,7 @@ private fun AxEditableGridSection(
                                             tile = value.viewModel,
                                             span = item.span,
                                             circleCells = circleCells,
+                                            modes = modes,
                                             modifier = Modifier.fillMaxSize(),
                                         )
                                     is AxEditGridValue.Control ->

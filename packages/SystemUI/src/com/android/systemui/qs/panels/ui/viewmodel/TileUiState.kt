@@ -44,6 +44,7 @@ data class TileUiState(
     val handlesSecondaryClick: Boolean,
     val sideDrawable: Drawable?,
     val accessibilityUiState: AccessibilityUiState,
+    val showDialogIndicator: Boolean = false,
 ) {
     val isToggleable: Boolean
         get() = accessibilityUiState.toggleableState != null
@@ -113,6 +114,8 @@ fun QSTile.State.toUiState(resources: Resources): TileUiState {
                 .getString(R.string.accessibility_tile_disabled_by_policy_action_description)
                 .takeIf { disabledByPolicy },
         ),
+        showDialogIndicator =
+            if (this is QSTile.AdapterState) forceExpandIcon else handlesSecondaryClick,
     )
 }
 

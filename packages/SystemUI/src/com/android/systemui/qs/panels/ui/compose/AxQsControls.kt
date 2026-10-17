@@ -17,8 +17,10 @@
 package com.android.systemui.qs.panels.ui.compose
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -118,6 +120,7 @@ private fun AxQsButtonControl(
     modifier: Modifier = Modifier,
     icon: @Composable (Color) -> Unit,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
     val background by
         animateColorAsState(
             targetValue =
@@ -136,9 +139,16 @@ private fun AxQsButtonControl(
         modifier =
             modifier
                 .fillMaxSize()
+                .lunarisTilePressAnimation(interactionSource, interactive)
                 .clip(CircleShape)
                 .background(background)
-                .clickable(enabled = interactive, role = Role.Switch, onClick = onClick)
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = LocalIndication.current,
+                    enabled = interactive,
+                    role = Role.Switch,
+                    onClick = onClick,
+                )
                 .semantics { contentDescription = description },
     ) {
         icon(foreground)

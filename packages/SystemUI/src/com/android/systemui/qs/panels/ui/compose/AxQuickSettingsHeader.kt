@@ -19,7 +19,6 @@
 package com.android.systemui.qs.panels.ui.compose
 
 import android.content.Intent
-import android.content.res.Configuration
 import android.database.ContentObserver
 import android.graphics.Typeface
 import android.os.Handler
@@ -109,21 +108,13 @@ fun AxQuickSettingsHeader(
     viewModel: ShadeHeaderViewModel,
     isTransitioning: Boolean,
     carrierText: String,
+    sidePadding: Dp,
     modifier: Modifier = Modifier,
 ) {
     val foregroundColor = MaterialTheme.colorScheme.onSurface
     val clockStyle = rememberClockStyle()
     val clockHasEmbeddedDate = clockStyle in 1..3
     BoxWithConstraints(modifier.fillMaxWidth()) {
-        val landscape =
-            LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-        val sidePadding =
-            maxWidth *
-                if (landscape) {
-                    AxQuickSettingsLayoutDefaults.LANDSCAPE_SIDE_PADDING_FRACTION
-                } else {
-                    AxQuickSettingsLayoutDefaults.PORTRAIT_SIDE_PADDING_FRACTION
-                }
         val startContent: @Composable () -> Unit = {
             Column(
                 modifier = Modifier.padding(start = sidePadding),

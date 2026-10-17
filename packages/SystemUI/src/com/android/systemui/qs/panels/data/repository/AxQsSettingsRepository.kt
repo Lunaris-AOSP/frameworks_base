@@ -26,8 +26,10 @@ import com.android.systemui.qs.panels.shared.model.AxQsGridSection
 import com.android.systemui.qs.panels.shared.model.AxQsLayout
 import com.android.systemui.qs.panels.shared.model.AxQsPanelMode
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
+import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
 import com.android.systemui.qs.panels.shared.model.AxQsVerticalSliderKey
 import com.android.systemui.qs.panels.shared.model.AxQsVerticalSliderStyle
+import com.android.systemui.qs.panels.shared.model.LunarisQsSpacing
 import com.android.systemui.user.data.repository.UserRepository
 import android.provider.Settings
 import com.android.systemui.util.settings.SystemSettings
@@ -102,6 +104,26 @@ constructor(
 
     val quickPanelOnLeft: StateFlow<Boolean> = boolSetting(QUICK_PANEL_ON_LEFT, false)
     val showWeather: StateFlow<Boolean> = boolSetting(SHOW_WEATHER, true)
+
+    val tileStyle: StateFlow<AxQsTileStyle> =
+        intSetting("ax_qs_tile_style", AxQsTileStyle.PILL.settingValue)
+            .map(AxQsTileStyle::fromSetting)
+            .distinctUntilChanged()
+            .stateIn(applicationScope, SharingStarted.Eagerly, AxQsTileStyle.PILL)
+
+    val spacing: StateFlow<LunarisQsSpacing> =
+        combine(
+            intSetting("ax_qs_tile_gap", LunarisQsSpacing().tileGap),
+            intSetting("ax_qs_side_padding", LunarisQsSpacing().sidePadding),
+            intSetting("ax_qs_top_padding", LunarisQsSpacing().topPadding),
+        ) { tileGap, sidePadding, topPadding ->
+            LunarisQsSpacing(
+                tileGap = tileGap.coerceIn(8, 28),
+                sidePadding = sidePadding.coerceIn(8, 40),
+                topPadding = topPadding.coerceIn(0, 32),
+            )
+        }.distinctUntilChanged()
+            .stateIn(applicationScope, SharingStarted.Eagerly, LunarisQsSpacing())
 
     val verticalSliderStyles: StateFlow<Map<AxQsVerticalSliderKey, AxQsVerticalSliderStyle>> =
         verticalSliderStyleSettings()
@@ -352,14 +374,13 @@ constructor(
     }
 
     private fun parseOrder(value: String?): List<String>? {
-        if (value.isNullOrBlank()) return null
+        if (value == null) return null
         return value
             .split(',')
             .map(String::trim)
             .filter(String::isNotEmpty)
             .map(::normalizeControlId)
             .distinct()
-            .takeIf { it.isNotEmpty() }
     }
 
     private fun parseSpans(value: String?): Map<String, AxQsSpan> {

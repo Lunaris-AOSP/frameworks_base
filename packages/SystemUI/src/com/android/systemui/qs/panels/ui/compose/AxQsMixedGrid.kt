@@ -16,6 +16,7 @@
 
 package com.android.systemui.qs.panels.ui.compose
 
+import android.service.quicksettings.Tile.STATE_UNAVAILABLE
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -25,8 +26,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height as layoutHeight
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,6 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.compose.animation.scene.ContentScope
+import com.android.settingslib.notification.modes.ZenMode
 import com.android.systemui.brightness.ui.viewmodel.BrightnessSliderViewModel
 import com.android.systemui.media.remedia.ui.viewmodel.MediaViewModel
 import com.android.systemui.qs.composefragment.viewmodel.QSFragmentComposeViewModel
@@ -68,7 +68,6 @@ import com.android.systemui.qs.tiles.ringer.RingerSliderTileContent
 import com.android.systemui.qs.ui.composable.QuickSettingsTheme
 import com.android.systemui.res.R
 import com.android.systemui.volume.panel.component.volume.slider.ui.viewmodel.AudioStreamSliderViewModel
-import kotlin.math.abs
 
 @Composable
 internal fun ContentScope.AxQsMixedGrid(
@@ -191,7 +190,7 @@ internal fun ContentScope.AxQsMixedGrid(
             (it.value as? AxQsGridValue.Tile)?.viewModel
         }
     val rowHeight = AxTileDefaults.TileHeight * LocalTileScale.current
-    val spacing = AxTileDefaults.TileSpacing * LocalTileScale.current
+    val spacing = axQsViewModel.spacing.tileGap.dp * LocalTileScale.current
     val qsEntranceProgress = {
         ((viewModel.expansionState.progress - QS_ENTRANCE_START) / (1f - QS_ENTRANCE_START))
             .coerceIn(0f, 1f)
@@ -210,7 +209,7 @@ internal fun ContentScope.AxQsMixedGrid(
                     separateQqs = separateQqs,
                     listening = listening,
                     detailsViewModel = detailsViewModel,
-                    viewModel = viewModel,
+                    axQsViewModel = axQsViewModel,
                     modifier = Modifier.fillMaxSize(),
                 )
             is AxQsGridValue.Control ->
@@ -241,7 +240,7 @@ internal fun ContentScope.AxQsMixedGrid(
                     separateQqs = separateQqs,
                     listening = listening,
                     detailsViewModel = detailsViewModel,
-                    viewModel = viewModel,
+                    axQsViewModel = axQsViewModel,
                     modifier = Modifier.fillMaxSize(),
                 )
             is AxQsGridValue.Control ->
@@ -267,11 +266,7 @@ internal fun ContentScope.AxQsMixedGrid(
 
     QuickSettingsTheme {
         BoxWithConstraints(modifier) {
-            val portraitPadding =
-                maxWidth * AxQuickSettingsLayoutDefaults.PORTRAIT_SIDE_PADDING_FRACTION
-            val splitShadePadding =
-                maxWidth * AxQuickSettingsLayoutDefaults.LANDSCAPE_SIDE_PADDING_FRACTION
-            val contentPadding = if (splitShade) splitShadePadding else portraitPadding
+            val contentPadding = axQsViewModel.spacing.sidePadding.dp
             val gridWidth = (maxWidth - contentPadding * 2).coerceAtLeast(0.dp)
             val circleCells =
                 useAxQsCircleCells(
@@ -411,32 +406,46 @@ private fun ContentScope.AxLiveTile(
     separateQqs: Boolean,
     listening: () -> Boolean,
     detailsViewModel: DetailsViewModel?,
-    viewModel: QSFragmentComposeViewModel,
+    axQsViewModel: AxQsViewModel,
     modifier: Modifier = Modifier,
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val large = item.span.columns > 1 && item.span.rows > 1
+    if (large && tile.spec.spec == "dnd") {
+        val modes by axQsViewModel.modes.collectAsStateWithLifecycle(emptyList())
+        val state by tile.state.collectAsStateWithLifecycle(tile.currentState)
+        if (modes.any { it.id == ZenMode.MANUAL_DND_MODE_ID }) {
+            LunarisModesTile(
+                modes = modes,
+                span = item.span,
+                enabled = state.state != STATE_UNAVAILABLE && !state.disabledByPolicy,
+                onModeClick = axQsViewModel::onModeClick,
+                onModeLongClick = axQsViewModel::onModeLongClick,
+                onClick = { tile.mainClick(null) },
+                onLongClick = { tile.settingsClick(null) },
+                modifier = modifier,
+            )
+            return
+        }
+    }
+    val deviceArtwork =
+        if (large && tile.spec.spec == "bt" && listening()) {
+            val artwork by axQsViewModel.bluetoothArtwork.collectAsStateWithLifecycle()
+            artwork
+        } else {
+            null
+        }
     BoxWithConstraints(modifier, contentAlignment = Alignment.Center) {
-        val isSquare = abs(maxWidth.value - maxHeight.value) < 1f
-        val shapeOverride =
-            when {
-                item.span == AxQsSpan.TileDefault && isSquare -> CircleShape
-                item.span.columns > 1 || item.span.rows > 1 ->
-                    RoundedCornerShape(AxQsControlCornerRadius)
-                else -> null
-            }
         this@AxLiveTile.AxTile(
             tile = tile,
             iconOnly = iconOnly,
             span = item.span,
             fillHeight = true,
             compactIconSize = axQsTileIconSize(minOf(maxWidth, maxHeight)),
-            tileShapeOverride = shapeOverride,
+            deviceArtwork = deviceArtwork,
             squishiness = { 1f },
             coroutineScope = coroutineScope,
             bounceableInfo = null,
-            tileHapticsViewModelFactory =
-                viewModel.quickQuickSettingsViewModel.tileHapticsViewModelFactoryProvider
-                    .getHapticsViewModelFactory(),
             interactionSource = null,
             modifier = Modifier.fillMaxSize(),
             isVisible = if (separateQqs) ({ false }) else listening,

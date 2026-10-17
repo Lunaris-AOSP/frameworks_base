@@ -16,8 +16,10 @@
 
 package com.android.systemui.qs.composefragment.ui
 
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.dp
 import com.android.compose.animation.scene.ContentKey
 import com.android.compose.animation.scene.ElementKey
 import com.android.compose.animation.scene.SceneTransitionLayoutState
@@ -112,15 +114,8 @@ internal fun Modifier.axQsEntrance(progress: () -> Float): Modifier {
 internal fun Modifier.axQuickSettingsSceneMotion(progress: () -> Float): Modifier {
     return graphicsLayer {
         val expansion = progress().coerceIn(0f, 1f)
-        alpha =
-            ((expansion - AX_QS_SCENE_FADE_START) / (1f - AX_QS_SCENE_FADE_START))
-                .coerceIn(0f, 1f)
-        translationY =
-            if (expansion == 0f) {
-                AX_QS_SCENE_HIDDEN_TRANSLATION_PX
-            } else {
-                -(1f - expansion) * AX_QS_SCENE_TRANSLATION_PX
-            }
+        val motionProgress = FastOutSlowInEasing.transform(expansion)
+        translationY = (1f - motionProgress) * AxQsSceneTranslation.toPx()
     }
 }
 
@@ -131,6 +126,4 @@ private fun ContentKey.isAxQsScene(): Boolean {
 private const val AX_QS_ENTRANCE_ALPHA_START = 0.89f
 private const val AX_QS_ENTRANCE_TRANSLATION_PX = 300f
 private const val AX_QS_ENTRANCE_HIDDEN_TRANSLATION_PX = -5000f
-private const val AX_QS_SCENE_FADE_START = 0.50f
-private const val AX_QS_SCENE_TRANSLATION_PX = 300f
-private const val AX_QS_SCENE_HIDDEN_TRANSLATION_PX = -5000f
+private val AxQsSceneTranslation = 24.dp

@@ -208,6 +208,7 @@ internal fun axQsControlShape(
             when (verticalStyle) {
                 AxQsVerticalSliderStyle.M3_EXPRESSIVE -> VerticalSliderShape
                 AxQsVerticalSliderStyle.PLATFORM -> CircleShape
+                AxQsVerticalSliderStyle.ROUNDED_SQUARE -> RoundedCornerShape(AxQsControlCornerRadius)
             }
         control.isHorizontalSlider -> HorizontalSliderShape
         span == AxQsSpan.TileDefault && control != AxQsControl.MEDIA -> CircleShape
@@ -220,7 +221,6 @@ private val HorizontalSliderCornerRadius = 12.dp
 private val VerticalSliderShape = RoundedCornerShape(30)
 private val HorizontalSliderShape = RoundedCornerShape(HorizontalSliderCornerRadius)
 private val AxSliderTrackHeight = 64.dp
-private val PlatformSliderFramePadding = 4.dp
 private val AxSliderTrackInsideCornerRadius = 2.dp
 private val AxSliderThumbWidth = 4.dp
 private val AxSliderThumbTrackGap = 6.dp
@@ -256,53 +256,45 @@ private fun AxQsSlider(
     val inactiveTrackColor = AxTileDefaults.backgroundColor()
     val sliderScale = if (vertical) sliderHeight / AxSliderTrackHeight else 1f
     val iconSize = if (vertical) AxSliderIconSize * sliderScale else HorizontalSliderIconSize
-    if (vertical && verticalStyle == AxQsVerticalSliderStyle.PLATFORM) {
+    if (vertical && verticalStyle.usesPlatformSlider) {
+        val roundedSquare = verticalStyle == AxQsVerticalSliderStyle.ROUNDED_SQUARE
+        val trackHeight = AxTileDefaults.TileHeight * sliderScale
         val platformTrackColor =
             if (trackBackgroundColor == Color.Transparent) {
                 inactiveTrackColor
             } else {
                 trackBackgroundColor
             }
-        val framePadding = PlatformSliderFramePadding * sliderScale
-        val frameHeight = AxTileDefaults.TileHeight * sliderScale
-        val platformSliderHeight = (frameHeight - framePadding * 2).coerceAtLeast(0.dp)
-        Box(
-            modifier =
-                modifier
-                    .requiredHeight(frameHeight)
-                    .clip(RoundedCornerShape(frameHeight / 2))
-                    .background(platformTrackColor)
-                    .padding(framePadding),
-            contentAlignment = Alignment.Center,
-        ) {
-            PlatformSlider(
-                value = value,
-                onValueChange = onValueChange,
-                onValueChangeFinished = onValueChangeFinished,
-                valueRange = valueRange,
-                enabled = enabled,
-                interactionSource = interactionSource,
-                colors =
-                    PlatformSliderColors(
-                        trackColor = platformTrackColor,
-                        indicatorColor = MaterialTheme.colorScheme.primary,
-                        iconColor = MaterialTheme.colorScheme.onPrimary,
-                        labelColorOnIndicator = MaterialTheme.colorScheme.onPrimary,
-                        labelColorOnTrack = MaterialTheme.colorScheme.onSurface,
-                        disabledTrackColor = platformTrackColor.copy(alpha = 0.38f),
-                        disabledIndicatorColor =
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.38f),
-                        disabledIconColor =
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
-                        disabledLabelColor =
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
-                    ),
-                draggingCornersRadius =
-                    PlatformSliderDefaults.DefaultPlatformSliderDraggingCornerRadius * sliderScale,
-                icon = { icon(Modifier.size(iconSize).rotate(90f)) },
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
+        PlatformSlider(
+            value = value,
+            onValueChange = onValueChange,
+            onValueChangeFinished = onValueChangeFinished,
+            valueRange = valueRange,
+            enabled = enabled,
+            interactionSource = interactionSource,
+            colors =
+                PlatformSliderColors(
+                    trackColor = platformTrackColor,
+                    indicatorColor = MaterialTheme.colorScheme.primary,
+                    iconColor = MaterialTheme.colorScheme.onPrimary,
+                    labelColorOnIndicator = MaterialTheme.colorScheme.onPrimary,
+                    labelColorOnTrack = MaterialTheme.colorScheme.onSurface,
+                    disabledTrackColor = platformTrackColor.copy(alpha = 0.38f),
+                    disabledIndicatorColor =
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.38f),
+                    disabledIconColor =
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                    disabledLabelColor =
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                ),
+            draggingCornersRadius =
+                if (roundedSquare) AxQsControlCornerRadius
+                else PlatformSliderDefaults.DefaultPlatformSliderDraggingCornerRadius * sliderScale,
+            icon = { icon(Modifier.size(iconSize).rotate(90f)) },
+            sliderHeight = trackHeight,
+            trackCornerRadius = if (roundedSquare) AxQsControlCornerRadius else null,
+            modifier = modifier.fillMaxWidth(),
+        )
         return
     }
     val colors =

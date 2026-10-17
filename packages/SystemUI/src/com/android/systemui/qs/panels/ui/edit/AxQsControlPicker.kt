@@ -38,7 +38,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Icon
@@ -69,17 +68,21 @@ import androidx.compose.ui.zIndex
 import com.android.axion.compose.preferences.LocalPreferencePosition
 import com.android.axion.compose.preferences.PreferenceGroup
 import com.android.axion.compose.preferences.preferenceShape
+import com.android.compose.gesture.gesturesDisabled
+import com.android.settingslib.notification.modes.ZenMode
 import com.android.systemui.common.ui.compose.load
 import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.AxQsVerticalSliderStyle
 import com.android.systemui.qs.panels.ui.compose.AxLargeTileContent
-import com.android.systemui.qs.panels.ui.compose.AxQsControlCornerRadius
 import com.android.systemui.qs.panels.ui.compose.AxQsPagerIndicator
 import com.android.systemui.qs.panels.ui.compose.AxTileDefaults
+import com.android.systemui.qs.panels.ui.compose.LocalAxQsTileStyle
 import com.android.systemui.qs.panels.ui.compose.LocalTileScale
+import com.android.systemui.qs.panels.ui.compose.LunarisModesTile
 import com.android.systemui.qs.panels.ui.compose.axQsControlShape
 import com.android.systemui.qs.panels.ui.compose.axQsGridCellWidth
+import com.android.systemui.qs.panels.ui.compose.axQsTileShape
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.SmallTileContent
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.TileColors
@@ -89,6 +92,7 @@ import com.android.systemui.qs.shared.model.CategoryAndName
 import com.android.systemui.qs.shared.model.TileCategory
 import com.android.systemui.qs.shared.model.groupAndSort
 import com.android.systemui.res.R
+import com.android.systemui.statusbar.policy.ui.dialog.viewmodel.ModeTileViewModel
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
@@ -134,6 +138,7 @@ internal fun AxAvailableControls(
     controlPreview: @Composable (AxQsControl, AxQsSpan, AxQsVerticalSliderStyle) -> Unit,
     canAdd: (AxAddItem) -> Boolean,
     onAdd: (AxAddItem) -> Unit,
+    spacing: Dp,
     settings: @Composable (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -159,7 +164,6 @@ internal fun AxAvailableControls(
             .map { (control, label) -> AxAddItem.Control(control, label, control.id in currentIds) }
     val tiles: List<AxAddItem> = allTiles.map { AxAddItem.Tile(it, it.tileSpec.spec in currentIds) }
     val tileGroups = remember(tiles) { groupAndSort(tiles).entries.toList() }
-    val spacing = AxTileDefaults.TileSpacing * LocalTileScale.current
     PreferenceGroup(modifier = modifier.fillMaxWidth(), spacing = 2.dp) {
         settings?.let { settingsContent ->
             item { AxPickerSettingsCard(settingsContent) }
@@ -272,6 +276,7 @@ private fun AxAvailableItemGroup(
                                 item = item,
                                 span = span,
                                 rowHeight = itemRowHeight,
+                                spacing = spacing,
                                 circleCells = circleCells,
                                 verticalSliderStyle = verticalSliderStyle,
                                 onVerticalSliderStyleChanged = onVerticalSliderStyleChanged,
@@ -423,6 +428,7 @@ private fun AxAddItemCell(
     item: AxAddItem,
     span: AxQsSpan,
     rowHeight: Dp,
+    spacing: Dp,
     verticalSliderStyle: (AxQsControl) -> AxQsVerticalSliderStyle,
     onVerticalSliderStyleChanged: (AxQsControl, AxQsVerticalSliderStyle) -> Unit,
     controlPreview: @Composable (AxQsControl, AxQsSpan, AxQsVerticalSliderStyle) -> Unit,
@@ -449,7 +455,6 @@ private fun AxAddItemCell(
         } else {
             null
         }
-    val spacing = AxTileDefaults.TileSpacing * LocalTileScale.current
     val previewHeight = rowHeight * span.rows + spacing * (span.rows - 1)
     val verticalSlider = item is AxAddItem.Control && item.control.isVerticalSlider
     val sliderStyle =
@@ -457,7 +462,7 @@ private fun AxAddItemCell(
             ?: AxQsVerticalSliderStyle.M3_EXPRESSIVE
     val previewShape =
         when (item) {
-            is AxAddItem.Tile -> RoundedCornerShape(AxTileDefaults.InactiveCornerRadius)
+            is AxAddItem.Tile -> axQsTileShape(span, LocalAxQsTileStyle.current)
             is AxAddItem.Control ->
                 axQsControlShape(item.control, span, sliderStyle)
         }
@@ -575,7 +580,26 @@ fun AxQsEditTile(
     span: AxQsSpan,
     circleCells: Boolean = false,
     modifier: Modifier = Modifier,
+    modes: List<ModeTileViewModel> = emptyList(),
 ) {
+    if (
+        tile.tileSpec.spec == "dnd" && span.columns > 1 && span.rows > 1 &&
+            modes.any { it.id == ZenMode.MANUAL_DND_MODE_ID }
+    ) {
+        Box(modifier.gesturesDisabled().clearAndSetSemantics {}) {
+            LunarisModesTile(
+                modes = modes,
+                span = span,
+                enabled = false,
+                onModeClick = {},
+                onModeLongClick = {},
+                onClick = {},
+                onLongClick = {},
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        return
+    }
     val tileBg = AxTileDefaults.backgroundColor()
     val colors =
         TileColors(
@@ -586,12 +610,7 @@ fun AxQsEditTile(
             icon = MaterialTheme.colorScheme.onSurface,
             outline = MaterialTheme.colorScheme.onSurface,
         )
-    val shape =
-        when {
-            circleCells && span == AxQsSpan.TileDefault -> CircleShape
-            span.columns > 1 || span.rows > 1 -> RoundedCornerShape(AxQsControlCornerRadius)
-            else -> RoundedCornerShape(AxTileDefaults.InactiveCornerRadius)
-        }
+    val shape = axQsTileShape(span, LocalAxQsTileStyle.current)
     BoxWithConstraints(
         modifier = modifier.clip(shape).background(colors.background),
         contentAlignment = Alignment.Center,

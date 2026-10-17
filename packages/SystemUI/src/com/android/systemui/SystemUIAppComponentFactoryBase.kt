@@ -28,6 +28,7 @@ import com.android.systemui.application.ApplicationContextInitializer
 import com.android.systemui.application.ContentProviderContextInitializer
 import com.android.systemui.dagger.ContextComponentHelper
 import com.android.systemui.dagger.SysUIComponent
+import com.android.systemui.qs.flags.MistQsMode
 import com.android.tools.r8.keepanno.annotations.KeepTarget
 import com.android.tools.r8.keepanno.annotations.UsesReflection
 import java.lang.reflect.InvocationTargetException
@@ -63,6 +64,7 @@ abstract class SystemUIAppComponentFactoryBase : AppComponentFactory() {
     private fun createSystemUIInitializerInternal(context: Context): SystemUIInitializer {
         return systemUIInitializer
             ?: run {
+                MistQsMode.initialize(context)
                 val initializer = createSystemUIInitializer(context.applicationContext)
                 try {
                     initializer.init(false)

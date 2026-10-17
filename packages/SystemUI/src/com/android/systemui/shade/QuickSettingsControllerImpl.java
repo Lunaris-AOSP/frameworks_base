@@ -1960,7 +1960,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         }
         if (legacySplitShade) {
             if (event.getActionMasked() == MotionEvent.ACTION_DOWN && !isSynthesizedDown) {
-                prepareLegacySplitShade(event);
+                prepareSplitShade(event);
             }
             return false;
         }
@@ -2007,7 +2007,8 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
             maybeResetEarlyExpansion();
         }
         if (action == MotionEvent.ACTION_DOWN && isFullyCollapsed && isExpansionEnabled()) {
-            mTwoFingerExpandPossible = true;
+            mTwoFingerExpandPossible = !isSynthesizedDown
+                    || mBarState != StatusBarState.SHADE || !isMistSeparateShade();
         }
         if (mTwoFingerExpandPossible && isOpenQsEvent(event) && isInStatusBar) {
             mMetricsLogger.count(COUNTER_PANEL_OPEN_QS, 1);
@@ -2027,8 +2028,10 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         return false;
     }
 
-    void prepareLegacySplitShade(MotionEvent event) {
-        if (!isLegacySplitShadeEligible() || mBarState != StatusBarState.SHADE) {
+    void prepareSplitShade(MotionEvent event) {
+        boolean mistSeparateShade = isMistSeparateShade();
+        if ((!isLegacySplitShadeEligible() && !mistSeparateShade)
+                || mBarState != StatusBarState.SHADE) {
             return;
         }
         closeQs();
@@ -2037,9 +2040,15 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         mTwoFingerExpandPossible = false;
         boolean openQs = isExpansionEnabled() && isOpenQsEvent(event)
                 && !isLockscreenQsDisabled();
+        if (mistSeparateShade && mQs != null) {
+            mQs.setForceQsEvent(openQs);
+        }
         setExpandImmediate(openQs);
         mNotificationStackScrollLayoutController.setShouldShowShelfOnly(openQs);
         if (openQs) {
+            if (mistSeparateShade && mExpansionHeightSetToMaxListener != null) {
+                mExpansionHeightSetToMaxListener.onExpansionHeightSetToMax(false);
+            }
             setListening(true);
         }
         updateQsSplitShadeState();

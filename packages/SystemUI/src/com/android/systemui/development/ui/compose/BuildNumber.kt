@@ -100,6 +100,15 @@ fun BuildNumber(
     modifier: Modifier = Modifier,
     textColor: Color = MaterialTheme.colorScheme.onSurface,
 ) {
+    QsDataUsage(modifier = modifier, textColor = textColor)
+}
+
+@Composable
+fun QsDataUsage(
+    modifier: Modifier = Modifier,
+    textColor: Color = MaterialTheme.colorScheme.onSurface,
+    compact: Boolean = false,
+) {
     val context = LocalContext.current
     val view = LocalView.current
     val haptics = LocalHapticFeedback.current
@@ -276,6 +285,7 @@ fun BuildNumber(
 
     val textToShow = if (showDataUsage) usageText.orEmpty() else ""
     val currentText by rememberUpdatedState(textToShow)
+    if (compact && textToShow.isEmpty()) return
 
     val base = modifier
         .borderOnFocus(
@@ -284,7 +294,7 @@ fun BuildNumber(
         )
         .focusable()
         .wrapContentWidth()
-        .minimumInteractiveComponentSize()
+        .then(if (compact) Modifier else Modifier.minimumInteractiveComponentSize())
         .pointerInput(Unit) {
             detectTapGestures(
                 onTap = {

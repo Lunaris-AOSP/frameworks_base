@@ -99,8 +99,9 @@ fun PlatformSlider(
     icon: (@Composable (isDragging: Boolean) -> Unit)? = null,
     label: (@Composable (isDragging: Boolean) -> Unit)? = null,
     indicatorBackground: (@Composable (Modifier, Dp) -> Unit)? = null,
+    sliderHeight: Dp = 64.dp,
+    trackCornerRadius: Dp? = null,
 ) {
-    val sliderHeight: Dp = 64.dp
     val thumbSize: Dp = sliderHeight
     var isDragging by remember { mutableStateOf(false) }
     LaunchedEffect(interactionSource) {
@@ -132,6 +133,7 @@ fun PlatformSlider(
                     enabled = enabled,
                     colors = colors,
                     draggingCornersRadius = draggingCornersRadius,
+                    trackCornerRadius = trackCornerRadius,
                     sliderHeight = sliderHeight,
                     thumbSize = thumbSize,
                     isDragging = isDragging,
@@ -167,6 +169,7 @@ private fun Track(
     enabled: Boolean,
     colors: PlatformSliderColors,
     draggingCornersRadius: Dp,
+    trackCornerRadius: Dp?,
     sliderHeight: Dp,
     thumbSize: Dp,
     isDragging: Boolean,
@@ -186,7 +189,8 @@ private fun Track(
                 enabled = enabled,
                 colors = colors,
                 draggingCornersRadiusActive = draggingCornersRadius,
-                draggingCornersRadiusIdle = sliderHeight / 2,
+                draggingCornersRadiusIdle = trackCornerRadius ?: sliderHeight / 2,
+                trackCornerRadius = trackCornerRadius,
                 isDragging = isDragging,
                 indicatorBackground = indicatorBackground,
             )
@@ -259,6 +263,7 @@ private fun TrackBackground(
     colors: PlatformSliderColors,
     draggingCornersRadiusActive: Dp,
     draggingCornersRadiusIdle: Dp,
+    trackCornerRadius: Dp?,
     isDragging: Boolean,
     indicatorBackground: (@Composable (Modifier, Dp) -> Unit)?,
     modifier: Modifier = Modifier,
@@ -286,7 +291,10 @@ private fun TrackBackground(
             Modifier
                 .fillMaxSize()
                 .drawWithCache {
-                    val trackCornerRadius = CornerRadius(size.height / 2, size.height / 2)
+                    val radius =
+                        (trackCornerRadius?.toPx() ?: (size.height / 2))
+                            .coerceIn(0f, size.height / 2)
+                    val trackCorners = CornerRadius(radius, radius)
                     val trackPath =
                         Path().apply {
                             addRoundRect(
@@ -295,7 +303,7 @@ private fun TrackBackground(
                                     top = 0f,
                                     right = drawingState.totalWidth,
                                     bottom = drawingState.totalHeight,
-                                    cornerRadius = trackCornerRadius,
+                                    cornerRadius = trackCorners,
                                 )
                             )
                         }
@@ -310,10 +318,10 @@ private fun TrackBackground(
                                         top = drawingState.indicatorTop,
                                         right = drawingState.indicatorRight,
                                         bottom = drawingState.indicatorBottom,
-                                        topLeftCornerRadius = trackCornerRadius,
+                                        topLeftCornerRadius = trackCorners,
                                         topRightCornerRadius = indicatorCornerRadius,
                                         bottomRightCornerRadius = indicatorCornerRadius,
-                                        bottomLeftCornerRadius = trackCornerRadius,
+                                        bottomLeftCornerRadius = trackCorners,
                                     )
                                 )
                             }

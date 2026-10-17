@@ -172,6 +172,7 @@ import com.android.systemui.qs.composefragment.ui.shouldComposeLiveAxQs
 import com.android.systemui.qs.composefragment.ui.toAxEditMode
 import com.android.systemui.qs.panels.ui.compose.AxQsControlPreview
 import com.android.systemui.qs.panels.ui.compose.AxQsMixedGrid
+import com.android.systemui.qs.panels.ui.compose.LocalAxQsTileStyle
 import com.android.systemui.qs.panels.domain.interactor.EditTilesResetInteractor
 import com.android.systemui.qs.panels.ui.edit.AxQsEditUi
 import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
@@ -342,6 +343,7 @@ constructor(
                 ) {
                     CompositionLocalProvider(
                         LocalBlurEnabled provides blurEnabled,
+                        LocalAxQsTileStyle provides axQsViewModel.tileStyle,
                         LocalRingerSliderViewModel provides ringerSliderViewModel,
                     ) {
                         WithStatusIconContext(tintedIconManagerFactory) {
@@ -1063,6 +1065,7 @@ constructor(
         AxQuickSettingsHeader(
             viewModel = headerViewModel,
             carrierText = axQsViewModel.carrierText,
+            sidePadding = axQsViewModel.spacing.sidePadding.dp,
             isTransitioning = isTransitioning,
             modifier =
                 modifier
@@ -1087,7 +1090,7 @@ constructor(
             } else {
                 statusBarHeight + 24.dp
             }
-        return headerHeight + QuickSettingsShade.Dimensions.ShortPadding
+        return headerHeight + axQsViewModel.spacing.topPadding.dp
     }
 
     private fun useOverlayShadeHeader() = true
