@@ -23,6 +23,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -135,6 +136,7 @@ internal fun LunarisFlashlightSlider(
                 sliderHeight = sliderHeight,
                 vertical = rotated,
                 sliderStyle = sliderStyle,
+                inactiveTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
                 icon = { iconModifier ->
                     Icon(
                         painter =

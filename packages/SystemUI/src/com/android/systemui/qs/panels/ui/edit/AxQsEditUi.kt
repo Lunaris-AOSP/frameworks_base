@@ -1055,18 +1055,28 @@ private fun AxEditableGridSection(
                             .onSizeChanged { itemSize = it }
                 ) {
                     if (listState.draggedId == item.id) {
-                        Box(
-                            Modifier.fillMaxSize()
-                                .padding(
-                                    horizontal = selectionHorizontalPadding,
-                                    vertical = selectionVerticalPadding,
+                        Box(Modifier.fillMaxSize()) {
+                            if (sliderControl != null) {
+                                controlPreview(
+                                    sliderControl,
+                                    item.span,
+                                    columns,
+                                    controlStyle,
                                 )
-                                .border(
-                                    width = 3.dp,
-                                    color = selectionColor,
-                                    shape = selectionShape,
-                                )
-                        )
+                            }
+                            Box(
+                                Modifier.fillMaxSize()
+                                    .padding(
+                                        horizontal = selectionHorizontalPadding,
+                                        vertical = selectionVerticalPadding,
+                                    )
+                                    .border(
+                                        width = 3.dp,
+                                        color = selectionColor,
+                                        shape = selectionShape,
+                                    )
+                            )
+                        }
                     } else {
                         AxInteractiveTileContainer(
                             tileState = tileState,

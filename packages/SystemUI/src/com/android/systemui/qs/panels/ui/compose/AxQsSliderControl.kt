@@ -248,12 +248,12 @@ internal fun AxQsSlider(
     vertical: Boolean,
     sliderStyle: LunarisQsSliderStyle,
     trackBackgroundColor: Color = Color.Transparent,
+    inactiveTrackColor: Color = AxTileDefaults.backgroundColor(),
     icon: @Composable (Modifier) -> Unit,
     modifier: Modifier = Modifier,
     onLongPress: (() -> Unit)? = null,
     active: Boolean = true,
 ) {
-    val inactiveTrackColor = AxTileDefaults.backgroundColor()
     val activeTrackColor =
         if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
     val activeContentColor =

@@ -424,7 +424,7 @@ private class TrackMeasurePolicy(
                     totalWidth = desiredWidth.toFloat(),
                     totalHeight = desiredHeight.toFloat(),
                     indicatorLeft =
-                        (desiredWidth - iconSize) * (1 - sliderState.coercedNormalizedValue),
+                        desiredWidth * (1 - sliderState.coercedNormalizedValue),
                     indicatorTop = 0f,
                     indicatorRight = desiredWidth.toFloat(),
                     indicatorBottom = desiredHeight.toFloat(),
@@ -439,7 +439,7 @@ private class TrackMeasurePolicy(
                     indicatorLeft = 0f,
                     indicatorTop = 0f,
                     indicatorRight =
-                        iconSize + (desiredWidth - iconSize) * sliderState.coercedNormalizedValue,
+                        desiredWidth * sliderState.coercedNormalizedValue,
                     indicatorBottom = desiredHeight.toFloat(),
                     iconWidth = iconSize.toFloat(),
                     labelWidth = labelPlaceable?.width?.toFloat() ?: 0f,
