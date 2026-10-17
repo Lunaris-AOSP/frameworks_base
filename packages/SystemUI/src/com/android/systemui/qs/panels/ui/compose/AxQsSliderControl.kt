@@ -104,6 +104,7 @@ import com.android.systemui.haptics.slider.SeekableSliderTrackerConfig
 import com.android.systemui.haptics.slider.SliderHapticFeedbackConfig
 import com.android.systemui.haptics.slider.compose.ui.SliderHapticsViewModel
 import com.android.systemui.lifecycle.rememberViewModel
+import com.android.systemui.qs.panels.shared.model.AxMediaSurface
 import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
@@ -201,8 +202,12 @@ internal fun axQsControlShape(
     control: AxQsControl,
     span: AxQsSpan,
     sliderStyle: LunarisQsSliderStyle = LunarisQsSliderStyle.M3_EXPRESSIVE,
+    mediaSurface: AxMediaSurface = AxMediaSurface.CONTROL,
 ): Shape {
     return when {
+        control == AxQsControl.MEDIA && span == AxQsSpan.MediaDefault &&
+            mediaSurface == AxMediaSurface.CONTROL ->
+            RoundedCornerShape(28.dp)
         control == AxQsControl.RINGER -> CircleShape
         control.isSlider ->
             when (sliderStyle) {

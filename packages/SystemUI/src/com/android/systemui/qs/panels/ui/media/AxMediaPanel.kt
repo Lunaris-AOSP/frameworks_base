@@ -84,6 +84,7 @@ import com.android.systemui.res.R
 
 private enum class AxMediaLayout {
     OneRow,
+    Box,
     Compact,
     Expanded,
 }
@@ -141,7 +142,7 @@ fun AxMediaPanel(
         return
     }
 
-    val shape = axQsControlShape(AxQsControl.MEDIA, span)
+    val shape = axQsControlShape(AxQsControl.MEDIA, span, mediaSurface = surface)
     val gesturesEnabled = !viewModel.hasVisibleGuts()
     val carouselScrollingEnabled =
         gesturesEnabled && (surface != AxMediaSurface.LOCKSCREEN || sessions.size > 1)
@@ -228,9 +229,10 @@ private fun AxMediaCard(
     hasMultipleSessions: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    val shape = axQsControlShape(AxQsControl.MEDIA, span)
+    val shape = axQsControlShape(AxQsControl.MEDIA, span, mediaSurface = surface)
     val layout =
         when {
+            surface == AxMediaSurface.CONTROL && span == AxQsSpan.MediaDefault -> AxMediaLayout.Box
             span.rows == 1 -> AxMediaLayout.OneRow
             span.columns >= 3 -> AxMediaLayout.Expanded
             else -> AxMediaLayout.Compact
@@ -245,6 +247,7 @@ private fun AxMediaCard(
         animateColorAsState(
             targetValue =
                 when {
+                    layout == AxMediaLayout.Box && !gutsVisible -> tileBackground
                     artwork != null && !gutsVisible -> Color.Transparent
                     session != null -> mediaBackground
                     else -> tileBackground
@@ -350,7 +353,7 @@ private fun AxMediaCard(
                     )
                 } else {
                     Box(Modifier.fillMaxSize()) {
-                        if (session != null) {
+                        if (session != null && layout != AxMediaLayout.Box) {
                             val songKey = "${session.appName}:${session.title}:${session.subtitle}"
                             MediaArtwork(
                                 artwork = artwork,
@@ -373,6 +376,13 @@ private fun AxMediaCard(
                             modifier = Modifier.fillMaxSize(),
                         ) { mediaLayout ->
                             when (mediaLayout) {
+                                AxMediaLayout.Box ->
+                                    LunarisBoxMediaPlayer(
+                                        session = session,
+                                        viewModel = viewModel,
+                                        interactive = interactive,
+                                        hasMultipleSessions = hasMultipleSessions,
+                                    )
                                 AxMediaLayout.OneRow ->
                                     OneRowMediaContent(
                                         session = session,

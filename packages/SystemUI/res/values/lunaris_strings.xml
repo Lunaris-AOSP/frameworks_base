@@ -9,6 +9,7 @@
     <string name="lunaris_qs_volume_slider">Volume</string>
     <string name="lunaris_qs_slider_rotate_horizontal">Make slider horizontal</string>
     <string name="lunaris_qs_slider_rotate_vertical">Make slider vertical</string>
+    <string name="lunaris_qs_media_not_playing">No media playing</string>
 
     <string name="empty_shade_all_clear">All clear</string>
     <string name="empty_shade_breathe">Take a breath</string>
