@@ -45,7 +45,7 @@ public final class DuckRkpManager {
     private static final String TAG = "DuckRkp";
     private static final String SOURCE_KEY = "spoof_trickystore_keybox_source";
     private static final String MASTER_KEY = "spoof_trickystore_enabled";
-    private static final long TIMEOUT_MS = 90000;
+    private static final long TIMEOUT_MS = TimeUnit.MINUTES.toMillis(4);
     private static final long COOLDOWN_MS = 60000;
     private static final long RETRY_MS = TimeUnit.MINUTES.toMillis(30);
     private static final long MAX_RETRY_MS = TimeUnit.HOURS.toMillis(6);
@@ -121,6 +121,14 @@ public final class DuckRkpManager {
                 mAutomaticPaused = saved.getBoolean("paused");
                 mFailure = saved.getString("error");
                 mDetail = saved.getInt("detail");
+                if (mAutomaticPaused && (mFailure.equals("hal_unsupported")
+                        || mFailure.equals("hal_rejected")) && DuckRkpNative.available()) {
+                    mAutomaticPaused = false;
+                    mFailure = "";
+                    mDetail = 0;
+                    mFailures = 0;
+                    mNextAttempt = 0;
+                }
             }
         } catch (Exception e) {
             mAutomaticPaused = true;
@@ -154,7 +162,7 @@ public final class DuckRkpManager {
         boolean imported = hasImportedKeybox();
         boolean enabled = isEnabled();
         state.putBoolean("available", mLoaded && isQualcomm()
-                && ServiceManager.isDeclared(DuckRkpV1.SERVICE));
+                && (ServiceManager.isDeclared(DuckRkpV1.SERVICE) || DuckRkpNative.available()));
         state.putBoolean("enabled", enabled);
         state.putBoolean("busy", mBusy);
         state.putBoolean("imported", imported);
@@ -394,7 +402,8 @@ public final class DuckRkpManager {
         try {
             if (!mLoaded || mBusy || mAutomaticPaused || !isEnabled() || !masterEnabled()
                     || hasImportedKeybox() || !isQualcomm()
-                    || !ServiceManager.isDeclared(DuckRkpV1.SERVICE)) return;
+                    || !(ServiceManager.isDeclared(DuckRkpV1.SERVICE)
+                            || DuckRkpNative.available())) return;
             long now = System.currentTimeMillis();
             long cooldown = Math.max(0,
                     COOLDOWN_MS - (SystemClock.elapsedRealtime() - mLastAttempt));
@@ -457,6 +466,8 @@ public final class DuckRkpManager {
 
     static boolean isRetryable(String error, int detail) {
         return "network_error".equals(error) || "hal_unavailable".equals(error)
+                || "native_unavailable".equals(error) || "native_transport".equals(error)
+                || "native_timeout".equals(error)
                 || ("http_error".equals(error)
                     && (detail == 408 || detail == 429 || (detail >= 500 && detail <= 599)));
     }
