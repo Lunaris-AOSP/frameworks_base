@@ -484,7 +484,7 @@ private fun AxHeaderDate(
     }
 }
 
-private const val AX_CLOCK_TEXT_SIZE = 22f
+private const val AX_CLOCK_TEXT_SIZE = 30f
 private const val AX_DATE_TEXT_SIZE = 18f
 
 object AxQuickSettingsLayoutDefaults {
