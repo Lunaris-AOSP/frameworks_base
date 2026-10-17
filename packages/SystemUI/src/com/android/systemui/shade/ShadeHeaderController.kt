@@ -182,6 +182,8 @@ constructor(
     private var qsClockStyle = 0
 
     private lateinit var iconManager: TintedIconManager
+    private var viewAttached = false
+    private var iconGroupAttached = false
     private lateinit var carrierIconSlots: List<String>
     private lateinit var mShadeCarrierGroupController: ShadeCarrierGroupController
 
@@ -497,6 +499,7 @@ constructor(
     }
 
     override fun onViewAttached() {
+        viewAttached = true
         privacyIconsController.chipVisibilityListener = chipVisibilityListener
         updateVisibility()
         updateTransition()
@@ -514,7 +517,10 @@ constructor(
         dumpManager.registerDumpable(this)
         configurationController.addCallback(configurationControllerListener)
         demoModeController.addCallback(demoModeReceiver)
-        statusBarIconController.addIconGroup(iconManager)
+        if (!composeOverlayHeaderActive) {
+            statusBarIconController.addIconGroup(iconManager)
+            iconGroupAttached = true
+        }
         nextAlarmController.addCallback(nextAlarmCallback)
         systemIconsHoverContainer.setOnHoverListener(
             statusOverlayHoverListenerFactory.createListener(systemIconsHoverContainer)
@@ -525,13 +531,17 @@ constructor(
     }
 
     override fun onViewDetached() {
+        viewAttached = false
         setShadeOverscrollAmount(0f)
         clock.setOnClickListener(null)
         privacyIconsController.chipVisibilityListener = null
         dumpManager.unregisterDumpable(this::class.java.simpleName)
         configurationController.removeCallback(configurationControllerListener)
         demoModeController.removeCallback(demoModeReceiver)
-        statusBarIconController.removeIconGroup(iconManager)
+        if (iconGroupAttached) {
+            statusBarIconController.removeIconGroup(iconManager)
+            iconGroupAttached = false
+        }
         nextAlarmController.removeCallback(nextAlarmCallback)
         systemIconsHoverContainer.setOnHoverListener(null)
         tunerService.removeTunable(this)
@@ -689,7 +699,15 @@ constructor(
         }
 
     fun setOverlayShadeHeaderActive(active: Boolean) {
+        if (composeOverlayHeaderActive == active) return
         composeOverlayHeaderActive = active
+        if (iconGroupAttached && active) {
+            statusBarIconController.removeIconGroup(iconManager)
+            iconGroupAttached = false
+        } else if (viewAttached && !iconGroupAttached && !active && ::iconManager.isInitialized) {
+            statusBarIconController.addIconGroup(iconManager)
+            iconGroupAttached = true
+        }
     }
 
     private fun onShadeExpandedChanged() {

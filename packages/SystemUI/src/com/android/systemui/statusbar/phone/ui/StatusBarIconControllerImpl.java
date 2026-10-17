@@ -453,7 +453,7 @@ public class StatusBarIconControllerImpl implements Tunable,
 
     public void handleSet(String slotName, StatusBarIconHolder holder) {
         int viewIndex = mStatusBarIconList.getViewIndex(slotName, holder.getTag());
-        mIconGroups.forEach(l -> l.onSetIconHolder(viewIndex, holder));
+        new ArrayList<>(mIconGroups).forEach(l -> l.onSetIconHolder(viewIndex, holder));
     }
 
     /**  */

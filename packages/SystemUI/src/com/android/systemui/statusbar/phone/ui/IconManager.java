@@ -27,6 +27,7 @@ import android.content.Context;
 import android.os.Bundle;
 import android.os.UserHandle;
 import android.provider.Settings;
+import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
@@ -79,6 +80,8 @@ import java.util.Map;
  */
 @OptIn(markerClass = ExperimentalKairosApi.class)
 public class IconManager implements DemoModeCommandReceiver {
+    private static final String TAG = "IconManager";
+
     protected final ViewGroup mGroup;
     private final MobileContextProvider mMobileContextProvider;
     private final LocationBasedWifiViewModel mWifiViewModel;
@@ -335,7 +338,18 @@ public class IconManager implements DemoModeCommandReceiver {
 
     /** Called once an icon has been set. */
     public void onSetIcon(int viewIndex, StatusBarIcon icon) {
-        StatusBarIconView view = (StatusBarIconView) mGroup.getChildAt(viewIndex);
+        View child = viewIndex >= 0 && viewIndex < mGroup.getChildCount()
+                ? mGroup.getChildAt(viewIndex) : null;
+        if (!(child instanceof StatusBarIconView)) {
+            Log.w(TAG, "Icon group out of sync; rebuilding before updating icon at index "
+                    + viewIndex + " (child="
+                    + (child == null ? "null" : child.getClass().getName()) + ")");
+            if (mController != null) {
+                mController.refreshIconGroup(this);
+            }
+            return;
+        }
+        StatusBarIconView view = (StatusBarIconView) child;
         ViewGroup.LayoutParams current = view.getLayoutParams();
         ViewGroup.LayoutParams desired = onCreateLayoutParams(icon.shape);
         if (desired.width != current.width || desired.height != current.height) {
