@@ -691,6 +691,7 @@ fun AxQsEditTile(
                     squishiness = { 1f },
                     tileState = STATE_INACTIVE,
                     span = span,
+                    isDualTarget = tile.isDualTarget,
                     modifier = Modifier.fillMaxSize(),
                 )
             }

@@ -160,6 +160,7 @@ fun AxLargeTileContent(
     squishiness: () -> Float,
     tileState: Int,
     span: AxQsSpan,
+    isDualTarget: Boolean,
     modifier: Modifier = Modifier,
     isVisible: () -> Boolean = { true },
     accessibilityUiState: AccessibilityUiState? = null,
@@ -171,9 +172,21 @@ fun AxLargeTileContent(
     showDialogIndicator: Boolean = false,
     deviceArtwork: Drawable? = null,
 ) {
+    val animatedIconBackgroundColor by
+        animateColorAsState(
+            targetValue = colors.iconBackground,
+            label = "AxQsDualTargetIconBackgroundColor",
+        )
+
     if (span.rows == 1) {
-        val isDualTarget = toggleClick != null
+        val useDualTargetStyle = isDualTarget && colors.iconBackground != Color.Transparent
         val scale = LocalTileScale.current
+        val iconTargetModifier =
+            if (useDualTargetStyle) {
+                Modifier.size(CommonTileDefaults.ToggleTargetSize * scale)
+            } else {
+                Modifier.fillMaxHeight().width(48.dp)
+            }
         val longPressLabel = longPressLabelSettings().takeIf { onLongClick != null }
         val focusBorderColor = MaterialTheme.colorScheme.secondary
         Row(
@@ -186,9 +199,12 @@ fun AxLargeTileContent(
         ) {
             Box(
                 modifier =
-                    Modifier.fillMaxHeight()
-                        .width(48.dp)
-                        .thenIf(isDualTarget) {
+                    iconTargetModifier
+                        .thenIf(useDualTargetStyle) {
+                            Modifier.clip(iconShape)
+                                .background(animatedIconBackgroundColor, iconShape)
+                        }
+                        .thenIf(toggleClick != null) {
                             Modifier.borderOnFocus(color = focusBorderColor, iconShape.topEnd)
                                 .combinedClickable(
                                     interactionSource = toggleInteractionSource,
@@ -207,11 +223,13 @@ fun AxLargeTileContent(
                 )
             }
 
-            Box(
-                Modifier.width(AxTileDefaults.DividerWidth)
-                    .height(AxTileDefaults.DividerHeight * scale)
-                    .background(AxTileDefaults.dividerColor(tileState))
-            )
+            if (isDualTarget && !useDualTargetStyle) {
+                Box(
+                    Modifier.width(AxTileDefaults.DividerWidth)
+                        .height(AxTileDefaults.DividerHeight * scale)
+                        .background(AxTileDefaults.dividerColor(tileState))
+                )
+            }
             Spacer(Modifier.width(AxTileDefaults.DividerLabelSpacing * scale))
 
             LargeTileLabels(

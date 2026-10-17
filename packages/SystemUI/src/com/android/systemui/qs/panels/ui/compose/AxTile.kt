@@ -88,9 +88,11 @@ import com.android.systemui.qs.panels.ui.compose.BounceableInfo
 import com.android.systemui.qs.panels.ui.compose.AxTileDefaults.InactiveCornerRadius
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults.longPressLabelMoreDetails
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults.longPressLabelSettings
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.DualTargetTileStyle
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.SmallTileContent
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.TileColors
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.bounceScale
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberDualTargetTileStyle
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberTileHaptic
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.verticalSquish
 import com.android.systemui.qs.panels.ui.viewmodel.AccessibilityUiState
@@ -147,7 +149,18 @@ fun ContentScope.AxTile(
                 tile.state.collect { value = it.toIconProvider() }
             }
 
-        val colors = AxTileColorsDefaults.getColorForState(uiState, compact)
+        val dualTargetTileStyle = rememberDualTargetTileStyle()
+        val useDualTargetStyle =
+            dualTargetTileStyle == DualTargetTileStyle.DUAL &&
+                !compact &&
+                span.rows == 1 &&
+                uiState.handlesSecondaryClick
+        val colors =
+            AxTileColorsDefaults.getColorForState(
+                uiState = uiState,
+                iconOnly = compact,
+                useDualTargetStyle = useDualTargetStyle,
+            )
         val view = LocalView.current
         val hapticEnabled = rememberTileHaptic()
 
@@ -269,7 +282,12 @@ fun ContentScope.AxTile(
                                     },
                             )
                         } else {
-                            val iconShape by AxTileColorsDefaults.animateIconShapeAsState(uiState.state)
+                            val iconShape =
+                                if (useDualTargetStyle) {
+                                    tileShape
+                                } else {
+                                    AxTileColorsDefaults.animateIconShapeAsState(uiState.state).value
+                                }
                             val secondaryClick: (() -> Unit)? =
                                 {
                                     if (hapticEnabled) {
@@ -294,6 +312,7 @@ fun ContentScope.AxTile(
                                 accessibilityUiState = uiState.accessibilityUiState,
                                 squishiness = squishiness,
                                 span = span,
+                                isDualTarget = isDualTarget,
                                 isVisible = isVisible,
                                 textScale = { contentBounceable.textBounceScale },
                                 modifier = Modifier.fillMaxSize(),
@@ -441,6 +460,30 @@ object AxTileColorsDefaults {
 
     @Composable
     @ReadOnlyComposable
+    fun activeDualTargetTileColors(): TileColors =
+        TileColors(
+            background = backgroundTileColors(),
+            iconBackground = MaterialTheme.colorScheme.primary,
+            label = MaterialTheme.colorScheme.onSurface,
+            secondaryLabel = MaterialTheme.colorScheme.onSurface,
+            icon = MaterialTheme.colorScheme.onPrimary,
+            outline = MaterialTheme.colorScheme.primary,
+        )
+
+    @Composable
+    @ReadOnlyComposable
+    fun inactiveDualTargetTileColors(): TileColors =
+        TileColors(
+            background = backgroundTileColors(),
+            iconBackground = LocalAndroidColorScheme.current.surfaceEffect2,
+            label = MaterialTheme.colorScheme.onSurface,
+            secondaryLabel = MaterialTheme.colorScheme.onSurface,
+            icon = MaterialTheme.colorScheme.onSurface,
+            outline = MaterialTheme.colorScheme.primary,
+        )
+
+    @Composable
+    @ReadOnlyComposable
     fun unavailableTileColors(): TileColors {
         val blurEnabled = LocalBlurEnabled.current
         if (blurEnabled) {
@@ -471,10 +514,24 @@ object AxTileColorsDefaults {
 
     @Composable
     @ReadOnlyComposable
-    fun getColorForState(uiState: TileUiState, iconOnly: Boolean): TileColors {
+    fun getColorForState(
+        uiState: TileUiState,
+        iconOnly: Boolean,
+        useDualTargetStyle: Boolean = false,
+    ): TileColors {
         return when (uiState.state) {
-            STATE_ACTIVE -> activeTileColors()
-            STATE_INACTIVE -> inactiveTileColors()
+            STATE_ACTIVE ->
+                if (useDualTargetStyle && uiState.handlesSecondaryClick && !iconOnly) {
+                    activeDualTargetTileColors()
+                } else {
+                    activeTileColors()
+                }
+            STATE_INACTIVE ->
+                if (useDualTargetStyle && uiState.handlesSecondaryClick && !iconOnly) {
+                    inactiveDualTargetTileColors()
+                } else {
+                    inactiveTileColors()
+                }
             else -> unavailableTileColors()
         }
     }
