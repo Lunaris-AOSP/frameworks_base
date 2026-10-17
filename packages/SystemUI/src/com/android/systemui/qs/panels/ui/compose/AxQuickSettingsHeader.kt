@@ -248,6 +248,7 @@ private fun AxPrivacyChip(
     AndroidView(
         factory = { context ->
             OngoingPrivacyChip(context, null).also { chip ->
+                chip.useGroupedStyle = true
                 chip.privacyList = privacyList
                 chip.setOnClickListener { onClick(chip) }
             }

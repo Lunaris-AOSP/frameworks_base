@@ -346,6 +346,7 @@ fun ContentScope.OverlayShadeHeader(
     quickSettingsHighlight: ChipHighlightModel,
     showClock: Boolean,
     modifier: Modifier = Modifier,
+    showPrivacyChip: Boolean = true,
 ) {
     val horizontalPadding =
         max(LocalScreenCornerRadius.current / 2f, Shade.Dimensions.HorizontalPadding)
@@ -423,7 +424,7 @@ fun ContentScope.OverlayShadeHeader(
                         isHighlighted = isHighlighted,
                     )
                 }
-                if (viewModel.isPrivacyChipVisible) {
+                if (showPrivacyChip && viewModel.isPrivacyChipVisible) {
                     Box(modifier = Modifier.fillMaxSize().padding(horizontal = horizontalPadding)) {
                         PrivacyChip(
                             privacyList = viewModel.privacyItems,
@@ -447,6 +448,23 @@ fun QuickSettingsOverlayHeader(viewModel: ShadeHeaderViewModel, modifier: Modifi
     ) {
         ShadeCarrierGroup(viewModel = viewModel)
         BatteryInfo(viewModel = viewModel, showIcon = false, useExpandedFormat = true)
+    }
+}
+
+@Composable
+fun ContentScope.QuickSettingsOverlayPrivacyChip(
+    viewModel: ShadeHeaderViewModel,
+    modifier: Modifier = Modifier,
+) {
+    if (viewModel.isPrivacyChipVisible) {
+        Box(modifier = modifier.height(48.dp).fillMaxWidth()) {
+            PrivacyChip(
+                privacyList = viewModel.privacyItems,
+                onClick = viewModel::onPrivacyChipClicked,
+                showPrivacyText = true,
+                modifier = Modifier.align(Alignment.Center),
+            )
+        }
     }
 }
 
@@ -762,17 +780,23 @@ private fun ContentScope.PrivacyChip(
     privacyList: List<PrivacyItem>,
     onClick: (OngoingPrivacyChip) -> Unit,
     modifier: Modifier = Modifier,
+    showPrivacyText: Boolean = false,
 ) {
     AndroidView(
         factory = { context ->
             val view =
                 OngoingPrivacyChip(context, null).also { privacyChip ->
+                    privacyChip.useGroupedStyle = true
+                    privacyChip.showPrivacyText = showPrivacyText
                     privacyChip.privacyList = privacyList
                     privacyChip.setOnClickListener { onClick(privacyChip) }
                 }
             view
         },
-        update = { it.privacyList = privacyList },
+        update = {
+            it.showPrivacyText = showPrivacyText
+            it.privacyList = privacyList
+        },
         modifier = modifier.element(ShadeHeader.Elements.PrivacyChip),
     )
 }

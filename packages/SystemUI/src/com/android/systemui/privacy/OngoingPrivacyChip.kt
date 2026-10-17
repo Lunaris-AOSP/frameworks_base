@@ -31,8 +31,14 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import androidx.annotation.VisibleForTesting
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ComposeView
 import com.android.settingslib.Utils
 import com.android.systemui.Flags
+import com.android.systemui.animation.Expandable
+import com.android.systemui.privacy.ui.compose.PrivacyChipContainer
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.events.BackgroundAnimatableView
 import java.time.Duration
@@ -56,6 +62,23 @@ constructor(
     val launchableContentView
         get() = iconsContainer
 
+    var useGroupedStyle = false
+        set(value) {
+            if (field == value) return
+            field = value
+            updateResources()
+            updateView(PrivacyChipBuilder(context, privacyList))
+        }
+
+    var showPrivacyText by mutableStateOf(false)
+
+    var expandable: Expandable? = null
+        private set
+
+    private var privacyTypes by mutableStateOf(emptySet<PrivacyType>())
+    private var groupedChipView: ComposeView? = null
+    private val onExpandableChanged: (Expandable?) -> Unit = { expandable = it }
+
     private val locationIndicatorsEnabled
         get() = Settings.Secure.getIntForUser(context.contentResolver,
             Settings.Secure.ENABLE_LOCATION_PRIVACY_INDICATOR, 1,
@@ -63,9 +86,10 @@ constructor(
 
     var privacyList = emptyList<PrivacyItem>()
         set(value) {
+            if (useGroupedStyle && field == value) return
             field = value
             updateView(PrivacyChipBuilder(context, field))
-            if (locationIndicatorsEnabled) {
+            if (!useGroupedStyle && locationIndicatorsEnabled) {
                 updateResources()
             }
         }
@@ -131,12 +155,21 @@ constructor(
                 accessibilityLiveRegion = ACCESSIBILITY_LIVE_REGION_POLITE
             }
             generateContentDescription(builder)
-            setIcons(builder, iconsContainer)
+            if (useGroupedStyle) {
+                privacyTypes = builder.types.toSet()
+            } else {
+                setIcons(builder, iconsContainer)
+            }
         } else {
             if (Flags.privacyDotLiveRegion()) {
                 accessibilityLiveRegion = ACCESSIBILITY_LIVE_REGION_NONE
             }
-            iconsContainer.removeAllViews()
+            if (useGroupedStyle) {
+                privacyTypes = emptySet()
+            } else {
+                iconsContainer.removeAllViews()
+            }
+            contentDescription = null
         }
         requestLayout()
     }
@@ -152,13 +185,49 @@ constructor(
         if (newConfig != null) {
             val diff = newConfig.diff(configuration)
             configuration.setTo(newConfig)
-            if (diff.and(ActivityInfo.CONFIG_DENSITY.or(ActivityInfo.CONFIG_FONT_SCALE)) != 0) {
+            if (useGroupedStyle) {
+                updateResources()
+                updateView(PrivacyChipBuilder(context, privacyList))
+            } else if (diff.and(ActivityInfo.CONFIG_DENSITY.or(ActivityInfo.CONFIG_FONT_SCALE)) != 0) {
                 updateResources()
             }
         }
     }
 
     private fun updateResources() {
+        if (useGroupedStyle) {
+            iconsContainer.layoutParams.height = WRAP_CONTENT
+            iconsContainer.minimumWidth = 0
+            iconsContainer.setPaddingRelative(0, 0, 0, 0)
+            iconsContainer.background = null
+            iconsContainer.clipToOutline = false
+            iconsContainer.importantForAccessibility =
+                IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            chipDrawable = null
+            if (groupedChipView == null) {
+                iconsContainer.removeAllViews()
+                groupedChipView =
+                    ComposeView(context).apply {
+                        setContent {
+                            PrivacyChipContainer(
+                                privacyTypes = privacyTypes,
+                                showPrivacyText = showPrivacyText,
+                                onExpandableChanged = onExpandableChanged,
+                            )
+                        }
+                        iconsContainer.addView(this, WRAP_CONTENT, WRAP_CONTENT)
+                    }
+            }
+            return
+        }
+        groupedChipView?.let {
+            it.disposeComposition()
+            iconsContainer.removeView(it)
+            groupedChipView = null
+            expandable = null
+        }
+        iconsContainer.clipToOutline = true
+        iconsContainer.importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_AUTO
         iconMargin =
             context.resources.getDimensionPixelSize(R.dimen.ongoing_appops_chip_icon_margin)
         iconSize = context.resources.getDimensionPixelSize(R.dimen.ongoing_appops_chip_icon_size)

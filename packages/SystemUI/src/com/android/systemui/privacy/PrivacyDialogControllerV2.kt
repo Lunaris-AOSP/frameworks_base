@@ -311,10 +311,14 @@ class PrivacyDialogControllerV2(
         source: OngoingPrivacyChip
     ): DialogTransitionAnimator.Controller? {
         val delegate =
-            DialogTransitionAnimator.Controller.fromView(source.launchableContentView)
-                ?: return null
+            if (source.useGroupedStyle) {
+                source.expandable?.dialogTransitionController()
+            } else {
+                DialogTransitionAnimator.Controller.fromView(source.launchableContentView)
+            } ?: return null
         return object : DialogTransitionAnimator.Controller by delegate {
-            override fun shouldAnimateExit() = source.isVisible
+            override fun shouldAnimateExit() =
+                source.isVisible && (!source.useGroupedStyle || delegate.shouldAnimateExit())
         }
     }
 

@@ -183,7 +183,11 @@ constructor(
                 activityStarter.startActivity(
                     startSafetyCenter,
                     true,
-                    ActivityTransitionAnimator.Controller.fromView(privacyChip),
+                    if (privacyChip.useGroupedStyle) {
+                        privacyChip.expandable?.activityTransitionController()
+                    } else {
+                        ActivityTransitionAnimator.Controller.fromView(privacyChip)
+                    },
                 )
             }
         }

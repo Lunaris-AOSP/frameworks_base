@@ -105,6 +105,7 @@ import com.android.systemui.shade.ui.composable.ChipHighlightModel
 import com.android.systemui.shade.ui.composable.OverlayShade
 import com.android.systemui.shade.ui.composable.OverlayShadeHeader
 import com.android.systemui.shade.ui.composable.QuickSettingsOverlayHeader
+import com.android.systemui.shade.ui.composable.QuickSettingsOverlayPrivacyChip
 import com.android.systemui.shade.ui.composable.isFullWidthShade
 import com.android.systemui.statusbar.notification.stack.shared.model.ShadeScrimBounds
 import com.android.systemui.statusbar.notification.stack.shared.model.ShadeScrimShape
@@ -216,6 +217,7 @@ constructor(
                             notificationsHighlight = headerViewModel.inactiveChipHighlight,
                             quickSettingsHighlight = ChipHighlightModel.Strong,
                             showClock = true,
+                            showPrivacyChip = false,
                             modifier = Modifier.element(QuickSettingsShade.Elements.StatusBar),
                         )
                     }
@@ -289,42 +291,53 @@ private fun ContentScope.QuickSettingsContainer(
         focusRequester.requestFocus()
     }
 
-    AnimatedContent(
-        modifier = Modifier
-            .focusRequester(focusRequester)
-            .focusable()
-            .sysuiResTag("quick_settings_container"),
-        targetState =
-            when {
-                isEditing -> ShadeBodyState.Editing
-                tileDetails != null -> ShadeBodyState.TileDetails
-                else -> ShadeBodyState.Default
-            },
-        transitionSpec = { fadeIn(tween(500)) togetherWith fadeOut(tween(500)) },
-    ) { state ->
-        when (state) {
-            ShadeBodyState.Editing -> {
-                EditMode(
-                    viewModel = containerViewModel.editModeViewModel,
-                    modifier =
-                        modifier.fillMaxWidth().padding(QuickSettingsShade.Dimensions.Padding),
-                )
-            }
+    Column {
+        QuickSettingsOverlayPrivacyChip(
+            containerViewModel.shadeHeaderViewModel,
+            modifier =
+                Modifier.padding(
+                    start = QuickSettingsShade.Dimensions.Padding,
+                    end = QuickSettingsShade.Dimensions.Padding,
+                    top = if (isFullWidthShade()) 0.dp else QuickSettingsShade.Dimensions.Padding,
+                ),
+        )
+        AnimatedContent(
+            modifier = Modifier
+                .focusRequester(focusRequester)
+                .focusable()
+                .sysuiResTag("quick_settings_container"),
+            targetState =
+                when {
+                    isEditing -> ShadeBodyState.Editing
+                    tileDetails != null -> ShadeBodyState.TileDetails
+                    else -> ShadeBodyState.Default
+                },
+            transitionSpec = { fadeIn(tween(500)) togetherWith fadeOut(tween(500)) },
+        ) { state ->
+            when (state) {
+                ShadeBodyState.Editing -> {
+                    EditMode(
+                        viewModel = containerViewModel.editModeViewModel,
+                        modifier =
+                            modifier.fillMaxWidth().padding(QuickSettingsShade.Dimensions.Padding),
+                    )
+                }
 
-            ShadeBodyState.TileDetails -> {
-                TileDetails(modifier = modifier, containerViewModel.detailsViewModel)
-            }
+                ShadeBodyState.TileDetails -> {
+                    TileDetails(modifier = modifier, containerViewModel.detailsViewModel)
+                }
 
-            ShadeBodyState.Default -> {
-                QuickSettingsLayout(
-                    qsContainerViewModel = containerViewModel,
-                    toolbarViewModelFactory = contentViewModel.toolbarViewModelFactory,
-                    buildNumberViewModelFactory = contentViewModel.buildNumberViewModelFactory,
-                    isTransparencyEnabled = contentViewModel.isTransparencyEnabled,
-                    volumeSliderViewModel = contentViewModel.volumeSliderViewModel,
-                    audioDetailsViewModelFactory = contentViewModel.audioDetailsViewModelFactory,
-                    modifier = modifier.sysuiResTag("quick_settings_panel"),
-                )
+                ShadeBodyState.Default -> {
+                    QuickSettingsLayout(
+                        qsContainerViewModel = containerViewModel,
+                        toolbarViewModelFactory = contentViewModel.toolbarViewModelFactory,
+                        buildNumberViewModelFactory = contentViewModel.buildNumberViewModelFactory,
+                        isTransparencyEnabled = contentViewModel.isTransparencyEnabled,
+                        volumeSliderViewModel = contentViewModel.volumeSliderViewModel,
+                        audioDetailsViewModelFactory = contentViewModel.audioDetailsViewModelFactory,
+                        modifier = modifier.sysuiResTag("quick_settings_panel"),
+                    )
+                }
             }
         }
     }

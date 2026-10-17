@@ -277,7 +277,9 @@ abstract class ShadeViewProviderModule {
         fun providesOngoingPrivacyChip(
             @Named(SHADE_HEADER) header: MotionLayout
         ): OngoingPrivacyChip {
-            return header.requireViewById(R.id.privacy_chip)
+            return header.requireViewById<OngoingPrivacyChip>(R.id.privacy_chip).apply {
+                useGroupedStyle = true
+            }
         }
 
         @Provides
