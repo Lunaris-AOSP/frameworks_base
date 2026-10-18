@@ -40,6 +40,7 @@ object AxQsTileStacks {
                 it.isNotEmpty() &&
                     !it.startsWith("control:") &&
                     !it.startsWith("stack:") &&
+                    !it.startsWith("folder:") &&
                     ',' !in it &&
                     '=' !in it &&
                     TileSpec.create(it) != TileSpec.Invalid

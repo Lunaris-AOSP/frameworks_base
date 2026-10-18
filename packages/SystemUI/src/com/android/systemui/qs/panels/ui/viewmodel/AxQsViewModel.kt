@@ -20,7 +20,11 @@ import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.android.internal.jank.InteractionJankMonitor
 import com.android.keyguard.CarrierTextManager
+import com.android.systemui.animation.DialogCuj
+import com.android.systemui.animation.DialogTransitionAnimator
+import com.android.systemui.animation.Expandable
 import com.android.systemui.classifier.domain.interactor.FalsingInteractor
 import com.android.systemui.classifier.domain.interactor.runIfNotFalseTap
 import com.android.systemui.common.ui.domain.interactor.ConfigurationInteractor
@@ -42,9 +46,13 @@ import com.android.systemui.qs.panels.shared.model.AxQsTileStacks
 import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderKey
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
+import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolder
+import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolderController
 import com.android.systemui.res.R
 import com.android.systemui.shade.ShadeDisplayAware
 import com.android.systemui.shade.domain.interactor.ShadeInteractor
+import com.android.systemui.statusbar.phone.SystemUIDialog
+import com.android.systemui.statusbar.phone.SystemUIDialogFactory
 import com.android.systemui.statusbar.policy.ui.dialog.viewmodel.ModeTileViewModel
 import com.android.systemui.statusbar.policy.ui.dialog.viewmodel.ModesDialogViewModel
 import com.android.systemui.utils.coroutines.flow.conflatedCallbackFlow
@@ -56,6 +64,8 @@ class AxQsViewModel
 @Inject
 constructor(
     private val repository: AxQsSettingsRepository,
+    val folderDialogFactory: SystemUIDialogFactory,
+    private val dialogTransitionAnimator: DialogTransitionAnimator,
     configurationInteractor: ConfigurationInteractor,
     shadeInteractor: ShadeInteractor,
     columnsRepository: QSColumnsRepository,
@@ -138,6 +148,12 @@ constructor(
             traceName = "qsSpans",
             initialValue = repository.qsSpans.value,
             source = repository.qsSpans,
+        )
+    private val tileFolders by
+        hydrator.hydratedStateOf(
+            traceName = "tileFolders",
+            initialValue = repository.tileFolders.value,
+            source = repository.tileFolders,
         )
     private val tileStacks by
         hydrator.hydratedStateOf(
@@ -440,7 +456,39 @@ constructor(
         controlSpans: Map<String, AxQsSpan>,
         positions: Map<String, AxQsGridPosition>,
         stacks: Map<String, List<String>>,
-    ) = repository.saveLayout(layout, controls, tiles, controlSpans, positions, stacks)
+        folders: Map<String, LunarisQsTileFolder>,
+    ) = repository.saveLayout(layout, controls, tiles, controlSpans, positions, stacks, folders)
+
+    fun folders(layout: AxQsLayout): Map<String, LunarisQsTileFolder> =
+        LunarisQsTileFolderController.active(
+            tileFolders[layout].orEmpty(),
+            order(layout, AxQsGridSection.CONTROLS).orEmpty(),
+            stacks(layout).values.flatten().toSet(),
+        )
+
+    fun setFolderTileStyle(id: String, layout: AxQsLayout, style: AxQsTileStyle?) =
+        repository.setFolderTileStyle(id, layout, style)
+
+    fun onFolderClick(open: () -> Unit) {
+        falsingInteractor.runIfNotFalseTap { open() }
+    }
+
+    fun showFolderDialog(dialog: SystemUIDialog, expandable: Expandable) {
+        val controller =
+            expandable.dialogTransitionController(
+                DialogCuj(
+                    InteractionJankMonitor.CUJ_SHADE_DIALOG_OPEN,
+                    FOLDER_DIALOG_INTERACTION_JANK_TAG,
+                )
+            )
+        controller?.let {
+            dialogTransitionAnimator.show(
+                dialog,
+                it,
+                animateBackgroundBoundsChange = true,
+            )
+        } ?: dialog.show()
+    }
 
     fun stacks(layout: AxQsLayout): Map<String, List<String>> =
         AxQsTileStacks.active(
@@ -469,7 +517,11 @@ constructor(
         val control = AxQsControl.entries.firstOrNull { it.id == id }
         repository.setSpan(
             id,
-            control?.coerceSpan(span, columns) ?: span.coerceForControlTile(columns),
+            if (LunarisQsTileFolderController.isFolderId(id)) {
+                LunarisQsTileFolderController.coerceSpan(span, columns)
+            } else {
+                control?.coerceSpan(span, columns) ?: span.coerceForControlTile(columns)
+            },
             layout,
         )
     }
@@ -604,6 +656,7 @@ constructor(
     }
 
     private companion object {
+        const val FOLDER_DIALOG_INTERACTION_JANK_TAG = "lunaris_qs_folder"
         const val MIN_TILE_WIDTH_DP = 56f
         const val MIN_TILE_GRID_ROWS = 1
         const val MAX_TILE_GRID_ROWS = 3

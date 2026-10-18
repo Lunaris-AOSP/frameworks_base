@@ -17,7 +17,6 @@
 
 package com.android.systemui.qs.panels.ui.edit
 
-import android.content.Context
 import android.service.quicksettings.Tile.STATE_INACTIVE
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
@@ -76,12 +75,14 @@ import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.AxQsTileStacks
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
+import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolderController
 import com.android.systemui.qs.panels.ui.compose.AxLargeTileContent
 import com.android.systemui.qs.panels.ui.compose.AxQsPagerIndicator
 import com.android.systemui.qs.panels.ui.compose.AxTileDefaults
 import com.android.systemui.qs.panels.ui.compose.AxTileStackPlaceholder
 import com.android.systemui.qs.panels.ui.compose.LocalAxQsTileStyle
 import com.android.systemui.qs.panels.ui.compose.LocalTileScale
+import com.android.systemui.qs.panels.ui.compose.LunarisFolderPreview
 import com.android.systemui.qs.panels.ui.compose.LunarisModesTile
 import com.android.systemui.qs.panels.ui.compose.LunarisQsSliderOrientationButton
 import com.android.systemui.qs.panels.ui.compose.axQsControlShape
@@ -131,6 +132,12 @@ internal sealed interface AxAddItem : CategoryAndName {
 
     data class Stack(override val label: String) : AxAddItem {
         override val id = "stack:new"
+        override val isAdded = false
+        override val category = TileCategory.UTILITIES
+    }
+
+    data class Folder(override val label: String, val limitReached: Boolean) : AxAddItem {
+        override val id = "folder:new"
         override val isAdded = false
         override val category = TileCategory.UTILITIES
     }
@@ -185,6 +192,12 @@ internal fun AxAvailableControls(
                     if (control.supportsOrientation) sliderSpan(control) else control.defaultSpan,
                 )
             }
+    val folderItem =
+        AxAddItem.Folder(
+            stringResource(R.string.lunaris_qs_tile_folder),
+            currentIds.count(LunarisQsTileFolderController::isFolderId) >=
+                LunarisQsTileFolderController.MAX_FOLDERS,
+        )
     val stackItem = AxAddItem.Stack(stringResource(R.string.lunaris_qs_tile_stack))
     val onRotateSlider: (AxAddItem.Control) -> Unit = { item ->
         onSliderSpanChanged(item.control, item.control.rotateSpan(item.span, controlColumns))
@@ -199,7 +212,7 @@ internal fun AxAvailableControls(
             AxAvailableItemGroup(
                 title = axString("ax_qs_controls", "Controls"),
                 iconId = TileCategory.UTILITIES.iconId,
-                items = controls + stackItem,
+                items = controls + stackItem + folderItem,
                 columns = controlColumns,
                 sliderStyle = sliderStyle,
                 onSliderStyleChanged = onSliderStyleChanged,
@@ -480,7 +493,11 @@ private fun AxAddItemCell(
         }
     val fullDescription =
         if (!item.isAdded && !canAdd) {
-            if (item is AxAddItem.Control || item is AxAddItem.Stack) {
+            if (item is AxAddItem.Folder && item.limitReached) {
+                stringResource(R.string.lunaris_qs_folder_limit)
+            } else if (
+                item is AxAddItem.Control || item is AxAddItem.Stack || item is AxAddItem.Folder
+            ) {
                 axString("ax_qs_control_grid_full", "Controls grid full")
             } else {
                 axString("ax_qs_tile_grid_full", "Tiles grid full")
@@ -495,6 +512,7 @@ private fun AxAddItemCell(
             ?: LunarisQsSliderStyle.M3_EXPRESSIVE
     val previewShape =
         when (item) {
+            is AxAddItem.Folder -> axQsTileShape(span, LocalAxQsTileStyle.current)
             is AxAddItem.Stack -> axQsTileShape(span, LocalAxQsTileStyle.current)
             is AxAddItem.Tile -> axQsTileShape(span, LocalAxQsTileStyle.current)
             is AxAddItem.Control ->
@@ -532,6 +550,8 @@ private fun AxAddItemCell(
             Box(modifier = Modifier.fillMaxWidth().height(previewHeight)) {
                 Box(Modifier.fillMaxSize().clearAndSetSemantics {}) {
                     when (item) {
+                        is AxAddItem.Folder ->
+                            LunarisFolderPreview(emptyList(), tileContent = { _, _ -> })
                         is AxAddItem.Stack -> AxTileStackPlaceholder()
                         is AxAddItem.Tile ->
                             AxQsEditTile(
@@ -576,6 +596,13 @@ private fun AxAddItemCell(
             style = MaterialTheme.typography.labelMedium,
             modifier = Modifier.fillMaxWidth(),
         )
+        if (item is AxAddItem.Folder && item.limitReached) {
+            Text(
+                stringResource(R.string.lunaris_qs_folder_limit),
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+            )
+        }
         if (item is AxAddItem.Control && item.control == AxQsControl.FLASHLIGHT) {
             Text(
                 text = stringResource(R.string.lunaris_qs_flashlight_slider_hint),
@@ -599,6 +626,7 @@ private fun AxAddItemCell(
 
 private fun AxAddItem.pickerSpan(columns: Int): AxQsSpan {
     return when (this) {
+        is AxAddItem.Folder -> LunarisQsTileFolderController.Span
         is AxAddItem.Stack -> AxQsTileStacks.Span
         is AxAddItem.Tile -> AxQsSpan.TileDefault
         is AxAddItem.Control -> {

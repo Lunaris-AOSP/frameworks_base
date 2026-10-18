@@ -52,7 +52,6 @@ import com.android.systemui.qs.panels.shared.model.AxMediaSurface
 import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsGridItem
 import com.android.systemui.qs.panels.shared.model.AxQsGridLayout
-import com.android.systemui.qs.panels.shared.model.AxQsGridPosition
 import com.android.systemui.qs.panels.shared.model.AxQsGridSection
 import com.android.systemui.qs.panels.shared.model.AxQsGridValue
 import com.android.systemui.qs.panels.shared.model.AxQsLayout
@@ -60,6 +59,7 @@ import com.android.systemui.qs.panels.shared.model.AxQsPanelMode
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.AxQsTileStacks
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
+import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolderController
 import com.android.systemui.qs.panels.ui.media.AxMediaPanel
 import com.android.systemui.qs.panels.ui.media.nonQsGridMediaHeight
 import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
@@ -116,10 +116,14 @@ internal fun ContentScope.AxQsMixedGrid(
             (splitShade || tileColumns >= axQsViewModel.defaultColumns(tileGridLayout))
     val controlPositions = axQsViewModel.controlPositions(layout)
     val stacks = axQsViewModel.stacks(layout)
-    val stackedSpecs = stacks.values.flatten().toSet()
+    val folders = axQsViewModel.folders(layout)
+    val stackedSpecs = stacks.values.flatten().toSet() + folders.values.flatMap { it.tileSpecs }
     val tilesBySpec = tiles.associateBy { it.spec.spec }
     stacks.forEach { (id, specs) ->
         values[id] = AxQsGridValue.Stack(specs.mapNotNull(tilesBySpec::get))
+    }
+    folders.forEach { (id, folder) ->
+        values[id] = AxQsGridValue.Folder(folder, folder.tileSpecs.mapNotNull(tilesBySpec::get))
     }
     stackedSpecs.forEach(values::remove)
     val controlIds =
@@ -141,6 +145,19 @@ internal fun ContentScope.AxQsMixedGrid(
     val controlItems: List<AxQsGridItem<AxQsGridValue>> =
         controlIds.map { id ->
             when (val value = values.getValue(id)) {
+                is AxQsGridValue.Folder ->
+                    AxQsGridItem<AxQsGridValue>(
+                        id = id,
+                        span =
+                            LunarisQsTileFolderController.coerceSpan(
+                                axQsViewModel.span(id, layout, LunarisQsTileFolderController.Span),
+                                controlColumns,
+                            ),
+                        minSpan = LunarisQsTileFolderController.MinSpan,
+                        maxSpan = LunarisQsTileFolderController.maxSpan(controlColumns),
+                        value = value,
+                        position = controlPositions[id],
+                    )
                 is AxQsGridValue.Stack ->
                     AxQsGridItem<AxQsGridValue>(
                         id = id,
@@ -211,6 +228,7 @@ internal fun ContentScope.AxQsMixedGrid(
                 when (val value = it.value) {
                     is AxQsGridValue.Tile -> listOf(value.viewModel)
                     is AxQsGridValue.Stack -> value.tiles
+                    is AxQsGridValue.Folder -> value.tiles
                     is AxQsGridValue.Control -> emptyList()
                 }
             }
@@ -226,6 +244,16 @@ internal fun ContentScope.AxQsMixedGrid(
     val qqsHideBypass = separateQqs && axQsViewModel.isQsBypassingShade
     val controlContent: @Composable (AxQsGridItem<AxQsGridValue>) -> Unit = { item ->
         when (val value = item.value) {
+            is AxQsGridValue.Folder ->
+                this@AxQsMixedGrid.LunarisQsTileFolder(
+                    id = item.id,
+                    folder = value.folder,
+                    span = item.span,
+                    tiles = value.tiles,
+                    layout = layout,
+                    viewModel = axQsViewModel,
+                    listening = listening,
+                )
             is AxQsGridValue.Stack ->
                 AxTileStack(
                     pageKeys = value.tiles.map { it.spec.spec },
@@ -282,7 +310,8 @@ internal fun ContentScope.AxQsMixedGrid(
     }
     val tileContent: @Composable (AxQsGridItem<AxQsGridValue>) -> Unit = { item ->
         when (val value = item.value) {
-            is AxQsGridValue.Stack -> Unit
+            is AxQsGridValue.Stack,
+            is AxQsGridValue.Folder -> Unit
             is AxQsGridValue.Tile ->
                 this@AxQsMixedGrid.AxLiveTile(
                     tile = value.viewModel,

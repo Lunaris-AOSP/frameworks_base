@@ -386,4 +386,12 @@
     <string name="dynamic_island_event_recent_apps">Recent apps</string>
     <string name="dynamic_island_event_paused">Paused</string>
     <string name="dynamic_island_event_saved">Saved</string>
+    <string name="lunaris_qs_tile_folder">Tile folder</string>
+    <string name="lunaris_qs_folder_open">Open tile folder</string>
+    <string name="lunaris_qs_folder_edit">Edit tile folder</string>
+    <string name="lunaris_qs_folder_hint">Choose up to 8 tiles. The large tiles can be used directly from the folder preview.</string>
+    <string name="lunaris_qs_folder_count">%1$d of %2$d tiles</string>
+    <string name="lunaris_qs_folder_limit">Maximum of 2 folders per panel</string>
+    <string name="lunaris_qs_folder_empty">Add tiles from the Quick Settings editor</string>
+    <string name="lunaris_qs_folder_shape_panel">Use panel shape</string>
 </resources>

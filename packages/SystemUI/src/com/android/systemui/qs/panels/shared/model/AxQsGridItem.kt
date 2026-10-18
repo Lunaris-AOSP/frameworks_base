@@ -33,6 +33,9 @@ sealed interface AxQsGridValue {
     data class Control(val control: AxQsControl) : AxQsGridValue
 
     data class Stack(val tiles: List<TileViewModel>) : AxQsGridValue
+
+    data class Folder(val folder: LunarisQsTileFolder, val tiles: List<TileViewModel>) :
+        AxQsGridValue
 }
 
 enum class AxMediaSurface(val dismissible: Boolean) {

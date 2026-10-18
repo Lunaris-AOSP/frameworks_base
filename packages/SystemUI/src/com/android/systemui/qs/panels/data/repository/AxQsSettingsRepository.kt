@@ -16,6 +16,7 @@
 
 package com.android.systemui.qs.panels.data.repository
 
+import android.provider.Settings
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Background
@@ -31,11 +32,12 @@ import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderKey
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsSpacing
+import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolder
+import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolderController
 import com.android.systemui.user.data.repository.UserRepository
-import android.provider.Settings
-import com.android.systemui.util.settings.SystemSettings
 import com.android.systemui.util.settings.SecureSettings
 import com.android.systemui.util.settings.SettingsProxyExt.observerFlow
+import com.android.systemui.util.settings.SystemSettings
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -164,6 +166,29 @@ constructor(
             .distinctUntilChanged()
             .stateIn(applicationScope, SharingStarted.Eagerly, emptyMap())
 
+    val tileFolders: StateFlow<Map<AxQsLayout, Map<String, LunarisQsTileFolder>>> =
+        userRepository.selectedUserInfo
+            .flatMapLatest { user ->
+                combine(
+                    FOLDER_KEYS.map { (layout, key) ->
+                        secureSettings
+                            .observerFlow(user.id, key)
+                            .onStart { emit(Unit) }
+                            .map {
+                                layout to
+                                    LunarisQsTileFolderController.decode(
+                                        secureSettings.getStringForUser(key, user.id)
+                                    )
+                            }
+                    }
+                ) {
+                    it.toMap()
+                }
+            }
+            .flowOn(backgroundDispatcher)
+            .distinctUntilChanged()
+            .stateIn(applicationScope, SharingStarted.Eagerly, emptyMap())
+
     fun setOrder(order: List<String>, layout: AxQsLayout, section: AxQsGridSection) {
         putString(sectionOrderKey(layout, section), order.distinct())
     }
@@ -196,6 +221,7 @@ constructor(
         controlSpans: Map<String, AxQsSpan>,
         positions: Map<String, AxQsGridPosition>,
         stacks: Map<String, List<String>>,
+        folders: Map<String, LunarisQsTileFolder>,
     ) {
         val userId = userRepository.getSelectedUserInfo().id
         applicationScope.launch(backgroundDispatcher) {
@@ -207,10 +233,26 @@ constructor(
                     }
                 val spans =
                     parseSpans(secureSettings.getStringForUser(key, userId), order) + controlSpans
+                val activeStacks = AxQsTileStacks.active(stacks, controls)
+                val activeFolders =
+                    LunarisQsTileFolderController.active(
+                        folders,
+                        controls,
+                        activeStacks.values.flatten().toSet(),
+                    )
+                val groupedSpecs =
+                    activeStacks.values.flatten().toSet() +
+                        activeFolders.values.flatMap { it.tileSpecs }
+                val activeControls =
+                    controls.filter {
+                        it !in groupedSpecs &&
+                            (!LunarisQsTileFolderController.isFolderId(it) || it in activeFolders)
+                    }
                 val values =
                     mapOf(
-                        STACK_KEYS.getValue(layout) to
-                            AxQsTileStacks.encode(AxQsTileStacks.active(stacks, controls)),
+                        FOLDER_KEYS.getValue(layout) to
+                            LunarisQsTileFolderController.encode(activeFolders),
+                        STACK_KEYS.getValue(layout) to AxQsTileStacks.encode(activeStacks),
                         key to
                             spans.entries
                                 .sortedBy { it.key }
@@ -220,13 +262,37 @@ constructor(
                                 .sortedBy { it.key }
                                 .joinToString(",") { "${it.key}=${it.value}" },
                         sectionOrderKey(layout, AxQsGridSection.CONTROLS) to
-                            controls.distinct().joinToString(","),
+                            activeControls.distinct().joinToString(","),
                         sectionOrderKey(layout, AxQsGridSection.TILES) to
-                            tiles.distinct().joinToString(","),
+                            tiles.distinct().filterNot(groupedSpecs::contains).joinToString(","),
                     )
                 values.forEach { (setting, value) ->
                     secureSettings.putStringForUser(setting, value, null, false, userId, true)
                 }
+            }
+        }
+    }
+
+    fun setFolderTileStyle(id: String, layout: AxQsLayout, style: AxQsTileStyle?) {
+        val userId = userRepository.getSelectedUserInfo().id
+        applicationScope.launch(backgroundDispatcher) {
+            spansMutex.withLock {
+                val key = FOLDER_KEYS.getValue(layout)
+                val folders =
+                    LunarisQsTileFolderController.decode(
+                        secureSettings.getStringForUser(key, userId)
+                    )
+                val folder = folders[id] ?: return@withLock
+                secureSettings.putStringForUser(
+                    key,
+                    LunarisQsTileFolderController.encode(
+                        folders + (id to folder.copy(tileStyle = style))
+                    ),
+                    null,
+                    false,
+                    userId,
+                    true,
+                )
             }
         }
     }
@@ -293,6 +359,7 @@ constructor(
             put(LANDSCAPE_CONTROL_POSITIONS, "")
             LEGACY_ORDER_KEYS.forEach { put(it, "") }
             STACK_KEYS.values.forEach { put(it, "") }
+            FOLDER_KEYS.values.forEach { put(it, "") }
         }
 
         applicationScope.launch(backgroundDispatcher) {
@@ -658,6 +725,13 @@ constructor(
             QQS_ORDER,
             LANDSCAPE_ORDER,
         )
+
+        val FOLDER_KEYS =
+            mapOf(
+                AxQsLayout.QQS to "lunaris_qqs_tile_folders",
+                AxQsLayout.QS to "lunaris_qs_tile_folders",
+                AxQsLayout.SPLIT_SHADE to "lunaris_qs_split_shade_tile_folders",
+            )
 
         val STACK_KEYS =
             mapOf(

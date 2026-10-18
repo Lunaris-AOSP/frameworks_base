@@ -19,9 +19,7 @@
 
 package com.android.systemui.qs.panels.ui.edit
 
-import android.content.Context
 import android.content.res.Configuration
-import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutLinearInEasing
@@ -71,7 +69,6 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FloatingToolbarDefaults
 import androidx.compose.material3.HorizontalFloatingToolbar
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -79,7 +76,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -101,7 +97,6 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
@@ -110,6 +105,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsControlSpans
 import com.android.systemui.qs.panels.shared.model.AxQsGridItem
@@ -121,13 +117,15 @@ import com.android.systemui.qs.panels.shared.model.AxQsPanelMode
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.AxQsTileStacks
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
+import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolder
+import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolderController
 import com.android.systemui.qs.panels.ui.compose.AX_QS_CONTROL_MAX_ROWS
 import com.android.systemui.qs.panels.ui.compose.AxInteractiveTileContainer
-import com.android.systemui.qs.panels.ui.compose.AxQuickSettingsLayoutDefaults
 import com.android.systemui.qs.panels.ui.compose.AxQsGrid
+import com.android.systemui.qs.panels.ui.compose.AxQuickSettingsLayoutDefaults
 import com.android.systemui.qs.panels.ui.compose.AxTileDefaults
-import com.android.systemui.qs.panels.ui.compose.LocalTileScale
 import com.android.systemui.qs.panels.ui.compose.LocalAxQsTileStyle
+import com.android.systemui.qs.panels.ui.compose.LocalTileScale
 import com.android.systemui.qs.panels.ui.compose.LunarisQsSliderOrientationButton
 import com.android.systemui.qs.panels.ui.compose.axQsControlShape
 import com.android.systemui.qs.panels.ui.compose.axQsGridCellWidth
@@ -144,10 +142,8 @@ import com.android.systemui.qs.panels.ui.compose.useAxQsCircleCells
 import com.android.systemui.qs.panels.ui.viewmodel.AxQsViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.EditModeViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.EditTileViewModel
-import com.android.systemui.qs.ui.composable.QuickSettingsShade
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.policy.ui.dialog.viewmodel.ModeTileViewModel
-import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
 @Composable
@@ -169,6 +165,11 @@ private sealed interface AxEditGridValue {
         AxEditGridValue
 
     data class Stack(val tileSpecs: List<String>, val tiles: List<EditTileViewModel>) :
+        AxEditGridValue {
+        override val section = AxQsGridSection.CONTROLS
+    }
+
+    data class Folder(val folder: LunarisQsTileFolder, val tiles: List<EditTileViewModel>) :
         AxEditGridValue {
         override val section = AxQsGridSection.CONTROLS
     }
@@ -459,6 +460,7 @@ private fun AxEditableGrid(
     val savedTileOrder = axQsViewModel.order(layout, AxQsGridSection.TILES)
     val savedSpans = axQsViewModel.spans(layout)
     val savedStacks = axQsViewModel.stacks(layout)
+    val savedFolders = axQsViewModel.folders(layout)
     val modes by axQsViewModel.modes.collectAsStateWithLifecycle(emptyList())
     val savedControlPositions = axQsViewModel.controlPositions(layout)
     val sourceItems =
@@ -473,6 +475,7 @@ private fun AxEditableGrid(
             savedSpans,
             savedControlPositions,
             savedStacks,
+            savedFolders,
         ) {
             buildEditItems(
                 currentTiles = currentTiles,
@@ -485,6 +488,9 @@ private fun AxEditableGrid(
             )
         }
     var selectedId by remember(layout) { mutableStateOf<String?>(null) }
+    var editingFolderId by remember(layout) { mutableStateOf<String?>(null) }
+    var pendingFolders by
+        remember(layout) { mutableStateOf<Map<String, LunarisQsTileFolder>?>(null) }
     var editingStackId by remember(layout) { mutableStateOf<String?>(null) }
     var pendingStacks by remember(layout) { mutableStateOf<Map<String, List<String>>?>(null) }
     var pendingControlOrder by remember(layout) { mutableStateOf<List<String>?>(null) }
@@ -517,6 +523,13 @@ private fun AxEditableGrid(
                 }
                 .toMap()
         pendingStacks = stacks
+        val folders =
+            listState.items
+                .mapNotNull { item ->
+                    (item.value as? AxEditGridValue.Folder)?.let { item.id to it.folder }
+                }
+                .toMap()
+        pendingFolders = folders
         axQsViewModel.saveLayout(
             layout,
             controlOrder,
@@ -524,6 +537,7 @@ private fun AxEditableGrid(
             controlSpans,
             positions.filterKeys(controlIds::contains),
             stacks,
+            folders,
         )
     }
 
@@ -538,7 +552,10 @@ private fun AxEditableGrid(
         savedSpans,
         pendingStacks,
         savedStacks,
+        pendingFolders,
+        savedFolders,
     ) {
+        if (pendingFolders != null && savedFolders != pendingFolders) return@LaunchedEffect
         if (pendingStacks != null && savedStacks != pendingStacks) return@LaunchedEffect
         if (pendingSpans.any { (id, span) -> savedSpans[id] != span }) {
             return@LaunchedEffect
@@ -553,6 +570,7 @@ private fun AxEditableGrid(
         pendingControlOrder = null
         pendingTileOrder = null
         pendingStacks = null
+        pendingFolders = null
         if (!listState.dragInProgress && listState.items != sourceItems) {
             listState.updateItems(sourceItems)
             selectedId = selectedId?.takeIf { id -> sourceItems.any { it.id == id } }
@@ -564,7 +582,10 @@ private fun AxEditableGrid(
     val spacing = axQsViewModel.spacing.tileGap.dp * scale
     val fitsLayout: (List<AxQsGridItem<AxEditGridValue>>) -> Boolean = { items ->
         val controls = items.filter { it.section == AxQsGridSection.CONTROLS }
-        val tileCount = items.count { it.section == AxQsGridSection.TILES }
+        val tileCount =
+            items
+                .count { it.section == AxQsGridSection.TILES }
+                .coerceAtLeast(if (items.any { it.value is AxEditGridValue.Folder }) 1 else 0)
         if (boundedRows) {
             canFitAxQsSharedGrid(controls, controlColumns, tileCount, tileColumns)
         } else {
@@ -590,7 +611,8 @@ private fun AxEditableGrid(
             val allowed =
                 when (value) {
                     is AxEditGridValue.Tile -> true
-                    is AxEditGridValue.Stack -> section == AxQsGridSection.CONTROLS
+                    is AxEditGridValue.Stack,
+                    is AxEditGridValue.Folder -> section == AxQsGridSection.CONTROLS
                     is AxEditGridValue.Control ->
                         section == AxQsGridSection.CONTROLS || value.control.canUseTileGrid
                 }
@@ -602,6 +624,12 @@ private fun AxEditableGrid(
                         section == AxQsGridSection.TILES ->
                             TileGridSpans
                         value is AxEditGridValue.Control -> value.control.spans(controlColumns)
+                        value is AxEditGridValue.Folder ->
+                            AxQsControlSpans(
+                                LunarisQsTileFolderController.Span,
+                                LunarisQsTileFolderController.MinSpan,
+                                LunarisQsTileFolderController.maxSpan(controlColumns),
+                            )
                         value is AxEditGridValue.Stack ->
                             AxQsControlSpans(
                                 AxQsTileStacks.Span,
@@ -622,6 +650,8 @@ private fun AxEditableGrid(
                                 AxQsSpan.TileDefault
                             } else if (value is AxEditGridValue.Control) {
                                 value.control.coerceSpan(item.span, controlColumns)
+                            } else if (value is AxEditGridValue.Folder) {
+                                LunarisQsTileFolderController.coerceSpan(item.span, controlColumns)
                             } else {
                                 item.span.coerceForControlTile(controlColumns)
                             },
@@ -641,7 +671,7 @@ private fun AxEditableGrid(
         val otherMembers =
             listState.items
                 .filter { it.id != editingStack.id }
-                .flatMap { (it.value as? AxEditGridValue.Stack)?.tileSpecs.orEmpty() }
+                .flatMap { it.value.memberSpecs }
                 .toSet()
         AxTileStackEditor(
             initialSpecs = editingValue.tileSpecs,
@@ -669,6 +699,48 @@ private fun AxEditableGrid(
         )
     }
 
+    val editingFolder = listState.items.firstOrNull { it.id == editingFolderId }
+    val folderValue = editingFolder?.value as? AxEditGridValue.Folder
+    if (editingFolder != null && folderValue != null) {
+        val otherMembers =
+            listState.items
+                .filter { it.id != editingFolder.id }
+                .flatMap { it.value.memberSpecs }
+                .toSet()
+        LunarisTileFolderEditor(
+            initialFolder = folderValue.folder,
+            availableTiles = allTiles.filterNot { it.tileSpec.spec in otherMembers },
+            onDismiss = { editingFolderId = null },
+            onSave = { folder ->
+                val members =
+                    LunarisQsTileFolderController.normalizeSpecs(folder.tileSpecs)
+                        .filterNot(otherMembers::contains)
+                val tilesBySpec = allTiles.associateBy { it.tileSpec.spec }
+                val newTiles = members.mapNotNull(tilesBySpec::get).filterNot { it.isCurrent }
+                if (newTiles.isNotEmpty()) editModeViewModel.addTiles(newTiles.map { it.tileSpec })
+                listState.items
+                    .filter { it.value is AxEditGridValue.Tile && it.id in members }
+                    .map { it.id }
+                    .forEach(listState::remove)
+                val removed = folderValue.folder.tileSpecs.filterNot(members::contains)
+                restoredFolderTiles(removed, allTiles).forEach { tile ->
+                    if (listState.items.none { it.id == tile.id }) listState.add(tile)
+                }
+                listState.update(editingFolder.id) {
+                    it.copy(
+                        value =
+                            AxEditGridValue.Folder(
+                                folder.copy(tileSpecs = members),
+                                members.mapNotNull(tilesBySpec::get),
+                            )
+                    )
+                }
+                editingFolderId = null
+                saveOrders()
+            },
+        )
+    }
+
     AxQsDragAutoScroll(listState, scrollState, viewportBounds)
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -676,7 +748,10 @@ private fun AxEditableGrid(
     ) {
         val controlCapacityRows =
             if (
-                boundedRows && listState.items.any { it.section == AxQsGridSection.TILES }
+                boundedRows &&
+                    listState.items.any {
+                        it.section == AxQsGridSection.TILES || it.value is AxEditGridValue.Folder
+                    }
             ) {
                 AX_QS_CONTROL_MAX_ROWS - 1
             } else {
@@ -704,6 +779,7 @@ private fun AxEditableGrid(
                     onSaveSpan = saveSpan,
                     onTransformSection = transformSection,
                     onEditStack = { editingStackId = it },
+                    onEditFolder = { editingFolderId = it },
                     controlPreview = controlPreview,
                     sliderStyle = sliderStyle,
                     hapticFeedback = hapticFeedback,
@@ -733,6 +809,7 @@ private fun AxEditableGrid(
                     onSaveSpan = saveSpan,
                     onTransformSection = transformSection,
                     onEditStack = { editingStackId = it },
+                    onEditFolder = { editingFolderId = it },
                     controlPreview = controlPreview,
                     sliderStyle = sliderStyle,
                     hapticFeedback = hapticFeedback,
@@ -756,17 +833,19 @@ private fun AxEditableGrid(
         }
         val addGridItem: (AxAddItem) -> AxQsGridItem<AxEditGridValue>? = { addItem ->
             if (
-                listState.items.any {
-                    it.id == addItem.id ||
-                        (it.value as? AxEditGridValue.Stack)?.tileSpecs?.contains(addItem.id) ==
-                            true
-                }
+                (addItem is AxAddItem.Folder &&
+                    listState.items.count { it.value is AxEditGridValue.Folder } >=
+                        LunarisQsTileFolderController.MAX_FOLDERS) ||
+                    listState.items.any {
+                        it.id == addItem.id || addItem.id in it.value.memberSpecs
+                    }
             ) {
                 null
             } else {
                 val section =
                     if (
                         addItem is AxAddItem.Stack ||
+                            addItem is AxAddItem.Folder ||
                             (addItem is AxAddItem.Control && !addItem.control.canUseTileGrid)
                     ) {
                         AxQsGridSection.CONTROLS
@@ -783,12 +862,7 @@ private fun AxEditableGrid(
         val canAddItem: (AxAddItem) -> Boolean = { addGridItem(it) != null }
         AxAvailableControls(
             allTiles = allTiles,
-            currentIds =
-                listState.items
-                    .flatMap {
-                        listOf(it.id) + (it.value as? AxEditGridValue.Stack)?.tileSpecs.orEmpty()
-                    }
-                    .toSet(),
+            currentIds = listState.items.flatMap { listOf(it.id) + it.value.memberSpecs }.toSet(),
             controlColumns = pickerControlColumns,
             tileColumns = pickerTileColumns,
             spacing = spacing,
@@ -825,7 +899,8 @@ private fun AxEditableGrid(
                             if (
                                 boundedRows &&
                                     listState.items.any {
-                                        it.section == AxQsGridSection.TILES
+                                        it.section == AxQsGridSection.TILES ||
+                                            it.value is AxEditGridValue.Folder
                                     }
                             ) {
                                 AX_QS_CONTROL_MAX_ROWS - 1
@@ -839,6 +914,7 @@ private fun AxEditableGrid(
                 }
                 listState.add(item)
                 if (addItem is AxAddItem.Stack) editingStackId = item.id
+                if (addItem is AxAddItem.Folder) editingFolderId = item.id
                 if (addItem is AxAddItem.Control) {
                     pickerSliderSpans = pickerSliderSpans - addItem.control
                 }
@@ -867,6 +943,7 @@ private fun AxEditableGridSection(
     onTransformSection:
         (AxQsGridItem<AxEditGridValue>, AxQsGridSection) -> AxQsGridItem<AxEditGridValue>?,
     onEditStack: (String) -> Unit,
+    onEditFolder: (String) -> Unit,
     controlPreview: @Composable (AxQsControl, AxQsSpan, Int, LunarisQsSliderStyle) -> Unit,
     sliderStyle: (AxQsControl) -> LunarisQsSliderStyle,
     hapticFeedback: HapticFeedback,
@@ -874,6 +951,7 @@ private fun AxEditableGridSection(
 ) {
     val items = listState.items.filter { it.section == section }
     val editStackLabel = stringResource(R.string.lunaris_qs_stack_edit)
+    val editFolderLabel = stringResource(R.string.lunaris_qs_folder_edit)
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val gridPadding = if (section == AxQsGridSection.CONTROLS) EditGridPadding else 0.dp
         val availableWidth = (maxWidth - gridPadding * 2).coerceAtLeast(0.dp)
@@ -917,7 +995,12 @@ private fun AxEditableGridSection(
                         canStack = { source, target ->
                             source.value is AxEditGridValue.Tile &&
                                 target.section == AxQsGridSection.CONTROLS &&
-                                (target.value is AxEditGridValue.Stack ||
+                                ((target.value as? AxEditGridValue.Folder)?.let {
+                                    it.folder.tileSpecs.size <
+                                        LunarisQsTileFolderController.MAX_TILES &&
+                                        source.id !in it.folder.tileSpecs
+                                } == true ||
+                                    target.value is AxEditGridValue.Stack ||
                                     (target.value is AxEditGridValue.Tile &&
                                         target.span == AxQsTileStacks.Span))
                         },
@@ -936,7 +1019,29 @@ private fun AxEditableGridSection(
                                     is AxEditGridValue.Tile -> listOf(targetValue.viewModel)
                                     else -> emptyList()
                                 }
-                            if (sourceTile == null || target.span != AxQsTileStacks.Span) {
+                            if (sourceTile == null) {
+                                null
+                            } else if (targetValue is AxEditGridValue.Folder) {
+                                if (
+                                    targetValue.folder.tileSpecs.size >=
+                                        LunarisQsTileFolderController.MAX_TILES ||
+                                        source.id in targetValue.folder.tileSpecs
+                                ) {
+                                    null
+                                } else {
+                                    target.copy(
+                                        value =
+                                            targetValue.copy(
+                                                folder =
+                                                    targetValue.folder.copy(
+                                                        tileSpecs =
+                                                            targetValue.folder.tileSpecs + source.id
+                                                    ),
+                                                tiles = targetValue.tiles + sourceTile,
+                                            )
+                                    )
+                                }
+                            } else if (target.span != AxQsTileStacks.Span) {
                                 null
                             } else {
                                 target.copy(
@@ -992,6 +1097,11 @@ private fun AxEditableGridSection(
                 }
                 val removeItem = {
                     listState.remove(item.id)
+                    (item.value as? AxEditGridValue.Folder)?.let { folder ->
+                        restoredFolderTiles(folder.folder.tileSpecs, folder.tiles).forEach { tile ->
+                            if (listState.items.none { it.id == tile.id }) listState.add(tile)
+                        }
+                    }
                     onSave()
                     onSelected(null)
                 }
@@ -1001,6 +1111,8 @@ private fun AxEditableGridSection(
                         when (value) {
                             is AxEditGridValue.Control -> value.control.isSpanAllowed(span, columns)
                             is AxEditGridValue.Stack -> span == AxQsTileStacks.Span
+                            is AxEditGridValue.Folder ->
+                                span == LunarisQsTileFolderController.coerceSpan(span, columns)
                             is AxEditGridValue.Tile ->
                                 section == AxQsGridSection.CONTROLS &&
                                     span == span.coerceForControlTile(columns)
@@ -1077,6 +1189,11 @@ private fun AxEditableGridSection(
                             axQsTileShape(item.span, LocalAxQsTileStyle.current)
                         is AxEditGridValue.Stack ->
                             axQsTileShape(item.span, LocalAxQsTileStyle.current)
+                        is AxEditGridValue.Folder ->
+                            axQsTileShape(
+                                item.span,
+                                value.folder.tileStyle ?: LocalAxQsTileStyle.current,
+                            )
                         is AxEditGridValue.Control ->
                             axQsControlShape(value.control, item.span, controlStyle)
                     }
@@ -1116,6 +1233,17 @@ private fun AxEditableGridSection(
                             resolveSpan = { startSpan, columnDelta, rowDelta ->
                                 when (value) {
                                     is AxEditGridValue.Stack -> AxQsTileStacks.Span
+                                    is AxEditGridValue.Folder ->
+                                        AxQsSpan(
+                                            (startSpan.columns + columnDelta).coerceIn(
+                                                item.minSpan.columns,
+                                                item.maxSpan.columns,
+                                            ),
+                                            (startSpan.rows + rowDelta).coerceIn(
+                                                item.minSpan.rows,
+                                                item.maxSpan.rows,
+                                            ),
+                                        )
                                     is AxEditGridValue.Control ->
                                         value.control.resizeSpan(
                                             startSpan = startSpan,
@@ -1178,6 +1306,8 @@ private fun AxEditableGridSection(
                         Box(Modifier.fillMaxSize()) {
                             if (orientationControl != null) {
                                 controlPreview(orientationControl, item.span, columns, controlStyle)
+                            } else if (value is AxEditGridValue.Folder) {
+                                LunarisEditTileFolder(value.folder, value.tiles, item.span)
                             } else if (value is AxEditGridValue.Stack) {
                                 AxEditTileStack(value.tiles, modes)
                             }
@@ -1211,6 +1341,15 @@ private fun AxEditableGridSection(
                                         val nextSpan =
                                             if (orientationControl != null) {
                                                 orientationControl.nextSpan(current.span, columns)
+                                            } else if (value is AxEditGridValue.Folder) {
+                                                val options =
+                                                    LunarisQsTileFolderController.resizeOptions(
+                                                        columns
+                                                    )
+                                                val start = options.indexOf(current.span)
+                                                (1..options.size)
+                                                    .map { options[(start + it) % options.size] }
+                                                    .firstOrNull(canResize) ?: current.span
                                             } else {
                                                 val width =
                                                     if (
@@ -1255,12 +1394,17 @@ private fun AxEditableGridSection(
                                         )
                                         .clickable(
                                             onClickLabel =
-                                                editStackLabel.takeIf {
-                                                    value is AxEditGridValue.Stack
+                                                when (value) {
+                                                    is AxEditGridValue.Stack -> editStackLabel
+                                                    is AxEditGridValue.Folder ->
+                                                        editFolderLabel.takeIf { isSelected }
+                                                    else -> null
                                                 }
                                         ) {
                                             onSelected(item.id)
                                             if (value is AxEditGridValue.Stack) onEditStack(item.id)
+                                            if (value is AxEditGridValue.Folder && isSelected)
+                                                onEditFolder(item.id)
                                         }
                                         .semantics {
                                             customActions =
@@ -1271,10 +1415,24 @@ private fun AxEditableGridSection(
                                                     CustomAccessibilityAction(moveLaterLabel) {
                                                         moveItem(1)
                                                     },
-                                                )
+                                                ) +
+                                                    if (value is AxEditGridValue.Folder) {
+                                                        listOf(
+                                                            CustomAccessibilityAction(
+                                                                editFolderLabel
+                                                            ) {
+                                                                onEditFolder(item.id)
+                                                                true
+                                                            }
+                                                        )
+                                                    } else {
+                                                        emptyList()
+                                                    }
                                         }
                             ) {
                                 when (value) {
+                                    is AxEditGridValue.Folder ->
+                                        LunarisEditTileFolder(value.folder, value.tiles, item.span)
                                     is AxEditGridValue.Stack -> AxEditTileStack(value.tiles, modes)
                                     is AxEditGridValue.Tile ->
                                         AxQsEditTile(
@@ -1294,6 +1452,15 @@ private fun AxEditableGridSection(
                                 }
                             }
                         }
+                        if (isSelected && value is AxEditGridValue.Folder) {
+                            LunarisFolderEditButton(
+                                onClick = { onEditFolder(item.id) },
+                                modifier =
+                                    Modifier.align(Alignment.TopStart)
+                                        .offset(x = (-12).dp, y = (-12).dp)
+                                        .zIndex(3f),
+                            )
+                        }
                         if (isSelected && orientationControl != null) {
                             LunarisQsSliderOrientationButton(
                                 vertical = item.span.columns == 1,
@@ -1312,6 +1479,32 @@ private fun AxEditableGridSection(
     }
 }
 
+private val AxEditGridValue.memberSpecs: List<String>
+    get() =
+        when (this) {
+            is AxEditGridValue.Stack -> tileSpecs
+            is AxEditGridValue.Folder -> folder.tileSpecs
+            else -> emptyList()
+        }
+
+private fun restoredFolderTiles(
+    specs: List<String>,
+    tiles: List<EditTileViewModel>,
+): List<AxQsGridItem<AxEditGridValue>> {
+    val bySpec = tiles.associateBy { it.tileSpec.spec }
+    return specs.mapNotNull { spec ->
+        bySpec[spec]?.let { tile ->
+            AxQsGridItem<AxEditGridValue>(
+                id = spec,
+                span = AxQsSpan.TileDefault,
+                minSpan = AxQsSpan.TileDefault,
+                maxSpan = AxQsSpan.TileDefault,
+                value = AxEditGridValue.Tile(tile, AxQsGridSection.TILES),
+            )
+        }
+    }
+}
+
 private val AxQsGridItem<AxEditGridValue>.section: AxQsGridSection
     get() = value.section
 
@@ -1319,7 +1512,8 @@ private fun AxEditGridValue.inSection(section: AxQsGridSection): AxEditGridValue
     return when (this) {
         is AxEditGridValue.Tile -> copy(section = section)
         is AxEditGridValue.Control -> copy(section = section)
-        is AxEditGridValue.Stack -> this
+        is AxEditGridValue.Stack,
+        is AxEditGridValue.Folder -> this
     }
 }
 
@@ -1328,6 +1522,14 @@ private fun AxAddItem.toEditGridItem(
     section: AxQsGridSection,
 ): AxQsGridItem<AxEditGridValue> {
     return when (this) {
+        is AxAddItem.Folder ->
+            AxQsGridItem<AxEditGridValue>(
+                id = LunarisQsTileFolderController.newId(),
+                span = LunarisQsTileFolderController.Span,
+                minSpan = LunarisQsTileFolderController.MinSpan,
+                maxSpan = LunarisQsTileFolderController.maxSpan(columns),
+                value = AxEditGridValue.Folder(LunarisQsTileFolder(emptyList()), emptyList()),
+            )
         is AxAddItem.Stack ->
             AxQsGridItem<AxEditGridValue>(
                 id = AxQsTileStacks.newId(),
@@ -1388,10 +1590,14 @@ private fun buildEditItems(
             values[control.id] = AxEditGridValue.Control(control, AxQsGridSection.CONTROLS)
         }
     val stacks = viewModel.stacks(layout)
-    val stackedSpecs = stacks.values.flatten().toSet()
+    val folders = viewModel.folders(layout)
+    val stackedSpecs = stacks.values.flatten().toSet() + folders.values.flatMap { it.tileSpecs }
     val tilesBySpec = allTiles.associateBy { it.tileSpec.spec }
     stacks.forEach { (id, specs) ->
         values[id] = AxEditGridValue.Stack(specs, specs.mapNotNull(tilesBySpec::get))
+    }
+    folders.forEach { (id, folder) ->
+        values[id] = AxEditGridValue.Folder(folder, folder.tileSpecs.mapNotNull(tilesBySpec::get))
     }
     stackedSpecs.forEach(values::remove)
     val controlIds =
@@ -1415,6 +1621,19 @@ private fun buildEditItems(
     val controlItems: List<AxQsGridItem<AxEditGridValue>> =
         controlIds.map { id ->
             when (val value = values.getValue(id)) {
+                is AxEditGridValue.Folder ->
+                    AxQsGridItem<AxEditGridValue>(
+                        id = id,
+                        span =
+                            LunarisQsTileFolderController.coerceSpan(
+                                viewModel.span(id, layout, LunarisQsTileFolderController.Span),
+                                controlColumns,
+                            ),
+                        minSpan = LunarisQsTileFolderController.MinSpan,
+                        maxSpan = LunarisQsTileFolderController.maxSpan(controlColumns),
+                        value = value,
+                        position = controlPositions[id],
+                    )
                 is AxEditGridValue.Stack ->
                     AxQsGridItem<AxEditGridValue>(
                         id = id,
