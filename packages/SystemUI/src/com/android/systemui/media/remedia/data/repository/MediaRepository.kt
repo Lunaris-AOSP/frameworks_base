@@ -20,11 +20,14 @@ import android.app.WallpaperColors
 import android.content.Context
 import android.content.pm.PackageManager
 import android.content.theming.ThemeStyle
+import android.graphics.Bitmap
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.PlaybackState
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -39,11 +42,13 @@ import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Background
+import com.android.systemui.media.MediaSessionManager
 import com.android.systemui.media.NotificationMediaManager
 import com.android.systemui.media.controls.data.model.MediaSortKeyModel
 import com.android.systemui.media.controls.shared.model.MediaData
 import com.android.systemui.media.remedia.data.model.MediaDataModel
 import com.android.systemui.media.remedia.data.model.UpdateArtInfoModel
+import com.android.systemui.media.remedia.shared.flag.MediaControlsInComposeFlag
 import com.android.systemui.media.remedia.shared.model.MediaColorScheme
 import com.android.systemui.media.remedia.shared.model.MediaSessionState
 import com.android.systemui.monet.ColorScheme
@@ -87,13 +92,14 @@ interface MediaRepository {
 
 @SysUISingleton
 class MediaRepositoryImpl
-@Inject
-constructor(
+@VisibleForTesting
+internal constructor(
     @Application private val applicationContext: Context,
     @Application private val applicationScope: CoroutineScope,
     @Background val backgroundDispatcher: CoroutineDispatcher,
     private val systemClock: SystemClock,
     secureSettings: SecureSettings,
+    private val mediaSessionManager: MediaSessionManager,
 ) :
     MediaRepository,
     MediaPipelineRepository(
@@ -102,6 +108,22 @@ constructor(
         backgroundDispatcher,
         secureSettings,
     ) {
+
+    @Inject
+    constructor(
+        @Application applicationContext: Context,
+        @Application applicationScope: CoroutineScope,
+        @Background backgroundDispatcher: CoroutineDispatcher,
+        systemClock: SystemClock,
+        secureSettings: SecureSettings,
+    ) : this(
+        applicationContext,
+        applicationScope,
+        backgroundDispatcher,
+        systemClock,
+        secureSettings,
+        MediaSessionManager.get(),
+    )
 
     override val currentMedia: SnapshotStateList<MediaDataModel> = mutableStateListOf()
 
@@ -119,6 +141,14 @@ constructor(
     private val positionPollers = mutableMapOf<InstanceId, Job>()
     private val mediaMutex = Mutex()
 
+    @GuardedBy("mediaMutex") private var hasPublishedLockscreenArtwork = false
+
+    @GuardedBy("mediaMutex") private var publishedLockscreenArtworkInstanceId: InstanceId? = null
+
+    @GuardedBy("mediaMutex") private var publishedLockscreenArtworkSource: Drawable? = null
+
+    @GuardedBy("mediaMutex") private var publishedLockscreenArtworkState: MediaSessionState? = null
+
     override fun addCurrentUserMediaEntry(data: MediaData): UpdateArtInfoModel? {
         return super.addCurrentUserMediaEntry(data).also { updateModel ->
             applicationScope.launch {
@@ -129,7 +159,12 @@ constructor(
 
     override fun removeCurrentUserMediaEntry(key: InstanceId): MediaData? {
         return super.removeCurrentUserMediaEntry(key)?.also {
-            applicationScope.launch { mediaMutex.withLock { removeFromSortedMediaLocked(it) } }
+            applicationScope.launch {
+                mediaMutex.withLock {
+                    removeFromSortedMediaLocked(it)
+                    publishLockscreenArtworkLocked()
+                }
+            }
         }
     }
 
@@ -137,7 +172,10 @@ constructor(
         return super.removeCurrentUserMediaEntry(key, data).also {
             if (it) {
                 applicationScope.launch {
-                    mediaMutex.withLock { removeFromSortedMediaLocked(data) }
+                    mediaMutex.withLock {
+                        removeFromSortedMediaLocked(data)
+                        publishLockscreenArtworkLocked()
+                    }
                 }
             }
         }
@@ -147,7 +185,10 @@ constructor(
         val userEntries = LinkedHashMap<InstanceId, MediaData>(mutableUserEntries.value)
         mutableUserEntries.value = LinkedHashMap()
         applicationScope.launch {
-            mediaMutex.withLock { userEntries.forEach { removeFromSortedMediaLocked(it.value) } }
+            mediaMutex.withLock {
+                userEntries.forEach { removeFromSortedMediaLocked(it.value) }
+                publishLockscreenArtworkLocked()
+            }
         }
     }
 
@@ -241,6 +282,7 @@ constructor(
                 }
 
                 sortedMedia = sortedMap
+                publishLockscreenArtworkLocked()
             }
         }
     }
@@ -254,6 +296,78 @@ constructor(
             }
         clearControllerState(data.instanceId)
     }
+
+    /**
+     * Keeps the lockscreen media-art listener in sync with the highest-priority active session.
+     *
+     * This is intentionally gated to the Compose pipeline. The legacy media panel owns this bridge
+     * when that pipeline is selected.
+     */
+    @GuardedBy("mediaMutex")
+    private suspend fun publishLockscreenArtworkLocked() {
+        if (!MediaControlsInComposeFlag.isEnabled) return
+
+        // The carousel can keep its visual order while playback priority changes.
+        val activeModel =
+            sortedMedia.values.firstOrNull {
+                it.isActive && mutableUserEntries.value[it.instanceId]?.active == true
+            }
+        val sourceData = activeModel?.let { mutableUserEntries.value[it.instanceId] }
+        val sourceDrawable = (activeModel?.background as? Icon.Loaded)?.drawable
+        if (
+            hasPublishedLockscreenArtwork &&
+                publishedLockscreenArtworkInstanceId == activeModel?.instanceId &&
+                publishedLockscreenArtworkSource === sourceDrawable &&
+                publishedLockscreenArtworkState == activeModel?.state
+        ) {
+            return
+        }
+
+        val lockscreenDrawable = sourceDrawable?.copyForLockscreen(sourceData?.artwork)
+        // A session can be removed or replaced while its bitmap is copied off the main thread.
+        // Its queued repository update will publish the new artwork (or clear it) instead.
+        if (
+            activeModel != null &&
+                (mutableUserEntries.value[activeModel.instanceId] !== sourceData ||
+                    sourceData?.active != true)
+        ) {
+            return
+        }
+        hasPublishedLockscreenArtwork = true
+        publishedLockscreenArtworkInstanceId = activeModel?.instanceId
+        publishedLockscreenArtworkSource = sourceDrawable
+        publishedLockscreenArtworkState = activeModel?.state
+        mediaSessionManager.onAlbumArtChanged(lockscreenDrawable)
+    }
+
+    /** Returns an independent drawable so lockscreen processing cannot mutate Compose state. */
+    private suspend fun Drawable.copyForLockscreen(
+        sourceIcon: android.graphics.drawable.Icon?
+    ): Drawable? =
+        withContext(backgroundDispatcher) {
+            try {
+                if (this@copyForLockscreen is BitmapDrawable) {
+                    // newDrawable().mutate() alone still shares the Bitmap, which lockscreen
+                    // effects can recycle. Keep the Compose bitmap independent as well.
+                    bitmap
+                        ?.takeUnless { it.isRecycled }
+                        ?.copy(Bitmap.Config.ARGB_8888, false)
+                        ?.let { BitmapDrawable(applicationContext.resources, it) }
+                } else {
+                    // Reload only if this drawable cannot create an independent ConstantState.
+                    (constantState?.newDrawable(applicationContext.resources)
+                            ?: sourceIcon?.loadDrawable(applicationContext))
+                        ?.takeUnless { it === this@copyForLockscreen }
+                        ?.mutate()
+                }
+            } catch (e: RuntimeException) {
+                Log.w(TAG, "Cannot copy lockscreen media artwork", e)
+                null
+            } catch (e: OutOfMemoryError) {
+                Log.w(TAG, "Not enough memory to copy lockscreen media artwork", e)
+                null
+            }
+        }
 
     private suspend fun MediaData.toDataModel(
         controller: MediaController?,

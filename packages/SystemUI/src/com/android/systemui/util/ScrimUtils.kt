@@ -139,6 +139,7 @@ class ScrimUtils private constructor(context: Context?) {
         if (mMediaArtVisible == visible) return
         mMediaArtVisible = visible
         listeners.notifyOnMain { it.onMediaArtVisibilityChanged(visible) }
+        mWallpaperDepthUtils?.updateDepthWallpaperVisibility()
     }
 
     fun isMediaArtVisible(): Boolean = mMediaArtVisible
