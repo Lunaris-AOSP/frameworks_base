@@ -43,15 +43,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.Measurable
 import androidx.compose.ui.layout.MeasurePolicy
@@ -85,6 +88,8 @@ fun SliderTrack(
     inactiveTrackStartIcon: (@Composable BoxScope.(iconsState: SliderIconsState) -> Unit)? = null,
     inactiveTrackEndIcon: (@Composable BoxScope.(iconsState: SliderIconsState) -> Unit)? = null,
     ignoreGradient: Boolean = true,
+    activeTrackBrush: Brush? = null,
+    activeTrackAlpha: Float = 1f,
 ) {
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val measurePolicy =
@@ -96,74 +101,125 @@ fun SliderTrack(
                 gapSize = thumbTrackGapSize,
             )
         }
-    val gradient = if (rememberGradientColorMode() == 1) {
+    val gradient =
+        if (rememberGradientColorMode() == 1) {
             rememberGradientCustomColors()
         } else {
-            VolumeGradient(
-                MaterialTheme.colorScheme.primary,
-                MaterialTheme.colorScheme.secondary
-            )
+            VolumeGradient(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary)
         }
     val gradientEnabled = rememberVolumeGradientEnabled()
-    val gradientBrush = remember(ignoreGradient, gradient, gradientEnabled) {
-        if (!ignoreGradient && gradientEnabled) createGradientBrush(gradient) else null
-    }
+    val gradientBrush =
+        remember(ignoreGradient, gradient, gradientEnabled) {
+            if (!ignoreGradient && gradientEnabled) createGradientBrush(gradient) else null
+        }
     Layout(
         measurePolicy = measurePolicy,
         content = {
-            SliderDefaults.Track(
-                sliderState = sliderState,
-                colors = colors,
-                enabled = isEnabled,
-                trackCornerSize = trackCornerSize,
-                trackInsideCornerSize = trackInsideCornerSize,
-                drawStopIndicator = null,
-                thumbTrackGapSize = thumbTrackGapSize,
-                drawTick = { _, _ -> },
-                modifier =
-                    Modifier.then(
-                        if (isVertical) {
-                            Modifier.width(trackSize)
-                        } else {
-                            Modifier.height(trackSize)
-                        }
-                    ).thenIf(gradientBrush != null) {
-                        Modifier.drawWithCache {
-                            val trackShape = RoundedCornerShape(trackCornerSize)
-                            val outline = trackShape.createOutline(size, layoutDirection, this)
-                            val clipPath = outline.asPath()
+            if (activeTrackBrush != null) {
+                Box(Modifier.layoutId(Contents.Track)) {
+                    for (activeLayer in listOf(false, true)) {
+                        val trackColors =
+                            if (activeLayer) {
+                                colors.copy(
+                                    activeTrackColor = Color.White,
+                                    disabledActiveTrackColor = Color.White.copy(alpha = 0.38f),
+                                    inactiveTrackColor = Color.Transparent,
+                                    disabledInactiveTrackColor = Color.Transparent,
+                                )
+                            } else {
+                                colors.copy(
+                                    activeTrackColor = Color.Transparent,
+                                    disabledActiveTrackColor = Color.Transparent,
+                                )
+                            }
+                        SliderDefaults.Track(
+                            sliderState = sliderState,
+                            colors = trackColors,
+                            enabled = isEnabled,
+                            trackCornerSize = trackCornerSize,
+                            trackInsideCornerSize = trackInsideCornerSize,
+                            drawStopIndicator = null,
+                            thumbTrackGapSize = thumbTrackGapSize,
+                            drawTick = { _, _ -> },
+                            modifier =
+                                (if (isVertical) Modifier.width(trackSize)
+                                    else Modifier.height(trackSize))
+                                    .thenIf(activeLayer) {
+                                        Modifier.graphicsLayer {
+                                                compositingStrategy = CompositingStrategy.Offscreen
+                                                alpha = if (isEnabled) activeTrackAlpha else 1f
+                                            }
+                                            .drawWithContent {
+                                                drawContent()
+                                                drawRect(
+                                                    brush = activeTrackBrush,
+                                                    blendMode = BlendMode.SrcIn,
+                                                )
+                                            }
+                                    },
+                        )
+                    }
+                }
+            } else {
+                SliderDefaults.Track(
+                    sliderState = sliderState,
+                    colors = colors,
+                    enabled = isEnabled,
+                    trackCornerSize = trackCornerSize,
+                    trackInsideCornerSize = trackInsideCornerSize,
+                    drawStopIndicator = null,
+                    thumbTrackGapSize = thumbTrackGapSize,
+                    drawTick = { _, _ -> },
+                    modifier =
+                        Modifier.then(
+                                if (isVertical) {
+                                    Modifier.width(trackSize)
+                                } else {
+                                    Modifier.height(trackSize)
+                                }
+                            )
+                            .thenIf(gradientBrush != null) {
+                                Modifier.drawWithCache {
+                                    val trackShape = RoundedCornerShape(trackCornerSize)
+                                    val outline =
+                                        trackShape.createOutline(size, layoutDirection, this)
+                                    val clipPath = outline.asPath()
 
-                            onDrawWithContent {
-                                val progress = sliderState.coercedValueAsFraction
-                                val gapPx = thumbTrackGapSize.toPx()
-                                val activeSize = if (isVertical) {
-                                    Size(size.width, size.height * progress - gapPx)
-                                } else {
-                                    Size(size.width * progress - gapPx, size.height)
-                                }
-                                val activeOffset = if (isVertical) {
-                                    Offset(0f, size.height - activeSize.height)
-                                } else {
-                                    Offset.Zero
-                                }
-                                clipPath(clipPath) {
-                                    // Inactive track
-                                    drawRect(
-                                        color = colors.inactiveTrackColor,
-                                        topLeft = Offset.Zero,
-                                        size = size
-                                    )
-                                    // Active track
-                                    drawRect(
-                                        brush = gradientBrush!!,
-                                        topLeft = activeOffset,
-                                        size = activeSize
-                                    )
+                                    onDrawWithContent {
+                                        val progress = sliderState.coercedValueAsFraction
+                                        val gapPx = thumbTrackGapSize.toPx()
+                                        val activeSize =
+                                            if (isVertical) {
+                                                Size(size.width, size.height * progress - gapPx)
+                                            } else {
+                                                Size(size.width * progress - gapPx, size.height)
+                                            }
+                                        val activeOffset =
+                                            if (isVertical) {
+                                                Offset(0f, size.height - activeSize.height)
+                                            } else {
+                                                Offset.Zero
+                                            }
+                                        clipPath(clipPath) {
+                                            // Inactive track
+                                            drawRect(
+                                                color = colors.inactiveTrackColor,
+                                                topLeft = Offset.Zero,
+                                                size = size,
+                                            )
+                                            // Active track
+                                            drawRect(
+                                                brush = gradientBrush!!,
+                                                topLeft = activeOffset,
+                                                size = activeSize,
+                                            )
+                                        }
+                                    }
                                 }
                             }
-                        }
-                    }.layoutId(Contents.Track),
-            )
+                            .layoutId(Contents.Track),
+                )
+            }
 
             TrackIcon(
                 icon = activeTrackStartIcon,

@@ -679,6 +679,7 @@ data class TileColors(
     val icon: Color,
     val iconBackgroundGradient: Brush? = null,
     val outline: Color,
+    val backgroundGradient: Brush? = null,
 )
 
 @Composable

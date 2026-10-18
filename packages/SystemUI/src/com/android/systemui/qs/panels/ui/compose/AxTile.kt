@@ -17,7 +17,6 @@
 package com.android.systemui.qs.panels.ui.compose
 
 import android.content.Context
-import android.content.res.Configuration
 import android.content.res.Resources
 import android.graphics.drawable.Drawable
 import android.service.quicksettings.Tile.STATE_ACTIVE
@@ -50,11 +49,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -84,7 +83,6 @@ import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.qs.composefragment.mist.LocalBlurEnabled
 import com.android.systemui.qs.flags.QsDetailedView
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
-import com.android.systemui.qs.panels.ui.compose.BounceableInfo
 import com.android.systemui.qs.panels.ui.compose.AxTileDefaults.InactiveCornerRadius
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults.longPressLabelMoreDetails
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults.longPressLabelSettings
@@ -261,7 +259,10 @@ fun ContentScope.AxTile(
                 iconOnly = compact,
                 isDualTarget = isDualTarget,
                 fillHeight = fillHeight,
-                modifier = contentRevealModifier,
+                modifier =
+                    contentRevealModifier.thenIf(colors.backgroundGradient != null) {
+                        Modifier.drawBehind { drawRect(brush = colors.backgroundGradient!!) }
+                    },
             ) {
                 val iconProvider: Context.() -> Icon = { getAxTileIcon(icon = icon) }
                 AnimatedContent(
@@ -435,16 +436,21 @@ object AxTileColorsDefaults {
     }
 
     @Composable
-    @ReadOnlyComposable
-    fun activeTileColors(): TileColors =
-        TileColors(
+    fun activeTileColors(): TileColors {
+        val gradient = rememberLunarisQsGradient()
+        val brush = gradient.tileBrush()
+        val foreground =
+            if (brush != null) gradient.contentColor else MaterialTheme.colorScheme.onPrimary
+        return TileColors(
             background = MaterialTheme.colorScheme.primary,
             iconBackground = Color.Transparent,
-            label = MaterialTheme.colorScheme.onPrimary,
-            secondaryLabel = MaterialTheme.colorScheme.onPrimary,
-            icon = MaterialTheme.colorScheme.onPrimary,
+            label = foreground,
+            secondaryLabel = foreground,
+            icon = foreground,
             outline = MaterialTheme.colorScheme.primary,
+            backgroundGradient = brush,
         )
+    }
 
     @Composable
     @ReadOnlyComposable
@@ -459,16 +465,20 @@ object AxTileColorsDefaults {
         )
 
     @Composable
-    @ReadOnlyComposable
-    fun activeDualTargetTileColors(): TileColors =
-        TileColors(
+    fun activeDualTargetTileColors(): TileColors {
+        val gradient = rememberLunarisQsGradient()
+        val brush = gradient.tileBrush()
+        return TileColors(
             background = backgroundTileColors(),
             iconBackground = MaterialTheme.colorScheme.primary,
             label = MaterialTheme.colorScheme.onSurface,
             secondaryLabel = MaterialTheme.colorScheme.onSurface,
-            icon = MaterialTheme.colorScheme.onPrimary,
+            icon =
+                if (brush != null) gradient.contentColor else MaterialTheme.colorScheme.onPrimary,
             outline = MaterialTheme.colorScheme.primary,
+            iconBackgroundGradient = brush,
         )
+    }
 
     @Composable
     @ReadOnlyComposable
@@ -513,7 +523,6 @@ object AxTileColorsDefaults {
     }
 
     @Composable
-    @ReadOnlyComposable
     fun getColorForState(
         uiState: TileUiState,
         iconOnly: Boolean,

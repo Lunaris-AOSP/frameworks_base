@@ -188,6 +188,7 @@ import com.android.systemui.qs.composefragment.ui.toAxEditMode
 import com.android.systemui.qs.panels.ui.compose.AxQsControlPreview
 import com.android.systemui.qs.panels.ui.compose.AxQsMixedGrid
 import com.android.systemui.qs.panels.ui.compose.LocalAxQsTileStyle
+import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsGradientSettings
 import com.android.systemui.qs.panels.ui.compose.LocalShowQsSliderPercentage
 import com.android.systemui.qs.panels.domain.interactor.EditTilesResetInteractor
 import com.android.systemui.qs.panels.ui.edit.AxQsEditUi
@@ -364,6 +365,7 @@ constructor(
                     CompositionLocalProvider(
                         LocalBlurEnabled provides blurEnabled,
                         LocalAxQsTileStyle provides axQsViewModel.tileStyle,
+                        LocalLunarisQsGradientSettings provides axQsViewModel.gradientSettings,
                         LocalShowQsSliderPercentage provides axQsViewModel.showSliderPercentage,
                         LocalRingerSliderViewModel provides ringerSliderViewModel,
                         LocalLunarisFlashlightSliderViewModel provides flashlightSliderViewModel,

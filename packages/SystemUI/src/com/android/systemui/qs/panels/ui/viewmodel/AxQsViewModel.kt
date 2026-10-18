@@ -296,6 +296,12 @@ constructor(
             initialValue = repository.spacing.value,
             source = repository.spacing,
         )
+    val gradientSettings by
+        hydrator.hydratedStateOf(
+            traceName = "gradientSettings",
+            initialValue = repository.gradientSettings.value,
+            source = repository.gradientSettings,
+        )
     val tileStyle by
         hydrator.hydratedStateOf(
             traceName = "tileStyle",
@@ -541,6 +547,20 @@ constructor(
     fun setShowWeather(show: Boolean) = repository.setShowWeather(show)
 
     fun setShowSliderPercentage(show: Boolean) = repository.setShowSliderPercentage(show)
+
+    fun setGradientEnabled(enabled: Boolean) = repository.setGradientEnabled(enabled)
+
+    fun setGradientSliderOnly(sliderOnly: Boolean) = repository.setGradientSliderOnly(sliderOnly)
+
+    fun setGradientColorMode(mode: Int) = repository.setGradientColorMode(mode)
+
+    fun setGradientAutoStyle(style: Int) = repository.setGradientAutoStyle(style)
+
+    fun setGradientRotation(rotation: Int) = repository.setGradientRotation(rotation)
+
+    fun setGradientStartColor(color: Int) = repository.setGradientStartColor(color)
+
+    fun setGradientEndColor(color: Int) = repository.setGradientEndColor(color)
 
     fun setTileStyle(style: AxQsTileStyle) = repository.setTileStyle(style)
 

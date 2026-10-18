@@ -56,6 +56,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
@@ -71,8 +72,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.android.compose.animation.scene.ContentScope
 import com.android.compose.animation.Expandable
+import com.android.compose.animation.scene.ContentScope
 import com.android.systemui.animation.Expandable as SystemUiExpandable
 import com.android.systemui.common.shared.model.Icon as TileIcon
 import com.android.systemui.common.ui.compose.Icon as TileIconView
@@ -378,7 +379,10 @@ private fun LunarisFolderSmallTile(tile: TileViewModel) {
     Box(
         Modifier.fillMaxSize()
             .clearAndSetSemantics {}
-            .background(colors.background, RoundedCornerShape(percent = corner)),
+            .background(
+                colors.backgroundGradient ?: SolidColor(colors.background),
+                RoundedCornerShape(percent = corner),
+            ),
         contentAlignment = Alignment.Center,
     ) {
         TileIconView(icon, modifier = Modifier.fillMaxSize(0.55f), tint = colors.icon)

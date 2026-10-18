@@ -29,6 +29,7 @@ import com.android.systemui.qs.panels.shared.model.AxQsPanelMode
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.AxQsTileStacks
 import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
+import com.android.systemui.qs.panels.shared.model.LunarisQsGradientSettings
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderKey
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsSpacing
@@ -111,6 +112,49 @@ constructor(
     val quickPanelOnLeft: StateFlow<Boolean> = boolSetting(QUICK_PANEL_ON_LEFT, false)
     val showWeather: StateFlow<Boolean> = boolSetting(SHOW_WEATHER, true)
     val showSliderPercentage: StateFlow<Boolean> = boolSetting(SHOW_SLIDER_PERCENTAGE, false)
+
+    val gradientSettings: StateFlow<LunarisQsGradientSettings> =
+        userRepository.selectedUserInfo
+            .flatMapLatest { user ->
+                secureSettings
+                    .observerFlow(
+                        user.id,
+                        GRADIENT_ENABLED,
+                        GRADIENT_SLIDER_ONLY,
+                        GRADIENT_COLOR_MODE,
+                        GRADIENT_AUTO_STYLE,
+                        GRADIENT_ROTATION,
+                        GRADIENT_START_COLOR,
+                        GRADIENT_END_COLOR,
+                    )
+                    .onStart { emit(Unit) }
+                    .map {
+                        LunarisQsGradientSettings(
+                            enabled =
+                                secureSettings.getIntForUser(GRADIENT_ENABLED, 0, user.id) != 0,
+                            sliderOnly =
+                                secureSettings.getIntForUser(GRADIENT_SLIDER_ONLY, 0, user.id) != 0,
+                            colorMode =
+                                secureSettings
+                                    .getIntForUser(GRADIENT_COLOR_MODE, 0, user.id)
+                                    .coerceIn(0, 1),
+                            autoStyle =
+                                secureSettings
+                                    .getIntForUser(GRADIENT_AUTO_STYLE, 0, user.id)
+                                    .coerceIn(0, 1),
+                            rotation =
+                                secureSettings
+                                    .getIntForUser(GRADIENT_ROTATION, 0, user.id)
+                                    .coerceIn(0, 360),
+                            startColor =
+                                secureSettings.getIntForUser(GRADIENT_START_COLOR, 0, user.id),
+                            endColor = secureSettings.getIntForUser(GRADIENT_END_COLOR, 0, user.id),
+                        )
+                    }
+            }
+            .flowOn(backgroundDispatcher)
+            .distinctUntilChanged()
+            .stateIn(applicationScope, SharingStarted.Eagerly, LunarisQsGradientSettings())
 
     val tileStyle: StateFlow<AxQsTileStyle> =
         intSetting(TILE_STYLE, AxQsTileStyle.PILL.settingValue)
@@ -311,6 +355,21 @@ constructor(
     fun setShowWeather(show: Boolean) = putInt(SHOW_WEATHER, show.toSetting())
 
     fun setShowSliderPercentage(show: Boolean) = putInt(SHOW_SLIDER_PERCENTAGE, show.toSetting())
+
+    fun setGradientEnabled(enabled: Boolean) = putInt(GRADIENT_ENABLED, enabled.toSetting())
+
+    fun setGradientSliderOnly(sliderOnly: Boolean) =
+        putInt(GRADIENT_SLIDER_ONLY, sliderOnly.toSetting())
+
+    fun setGradientColorMode(mode: Int) = putInt(GRADIENT_COLOR_MODE, mode.coerceIn(0, 1))
+
+    fun setGradientAutoStyle(style: Int) = putInt(GRADIENT_AUTO_STYLE, style.coerceIn(0, 1))
+
+    fun setGradientRotation(rotation: Int) = putInt(GRADIENT_ROTATION, rotation.coerceIn(0, 360))
+
+    fun setGradientStartColor(color: Int) = putInt(GRADIENT_START_COLOR, color)
+
+    fun setGradientEndColor(color: Int) = putInt(GRADIENT_END_COLOR, color)
 
     fun setTileStyle(style: AxQsTileStyle) = putInt(TILE_STYLE, style.settingValue)
 
@@ -688,6 +747,13 @@ constructor(
         const val SPLIT_SHADE_TILE_LABELS = "ax_qs_split_shade_show_tile_labels"
         const val SHOW_WEATHER = "ax_qs_show_weather"
         const val SHOW_SLIDER_PERCENTAGE = "ax_qs_show_slider_percentage"
+        private const val GRADIENT_ENABLED = "ax_qs_gradient_enabled"
+        private const val GRADIENT_SLIDER_ONLY = "ax_qs_gradient_slider_only"
+        private const val GRADIENT_COLOR_MODE = "ax_qs_gradient_color_mode"
+        private const val GRADIENT_AUTO_STYLE = "ax_qs_gradient_auto_style"
+        private const val GRADIENT_ROTATION = "ax_qs_gradient_rotation"
+        private const val GRADIENT_START_COLOR = "ax_qs_gradient_start_color"
+        private const val GRADIENT_END_COLOR = "ax_qs_gradient_end_color"
         const val TILE_STYLE = "ax_qs_tile_style"
         const val TILE_GAP = "ax_qs_tile_gap"
         const val SIDE_PADDING = "ax_qs_side_padding"

@@ -34,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -43,6 +44,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.android.compose.modifiers.thenIf
 import com.android.systemui.brightness.ui.viewmodel.BrightnessSliderViewModel
 import com.android.systemui.common.ui.compose.Icon
 import com.android.systemui.qs.panels.shared.model.AxQsControl
@@ -122,6 +124,8 @@ private fun AxQsButtonControl(
     icon: @Composable (Color) -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
+    val gradient = rememberLunarisQsGradient()
+    val activeBackgroundBrush = gradient.tileBrush().takeIf { active }
     val background by
         animateColorAsState(
             targetValue =
@@ -131,7 +135,8 @@ private fun AxQsButtonControl(
     val foreground by
         animateColorAsState(
             targetValue =
-                if (active) MaterialTheme.colorScheme.onPrimary
+                if (activeBackgroundBrush != null) gradient.contentColor
+                else if (active) MaterialTheme.colorScheme.onPrimary
                 else MaterialTheme.colorScheme.onSurface,
             label = "AxQsButtonForeground",
         )
@@ -143,6 +148,9 @@ private fun AxQsButtonControl(
                 .lunarisTilePressAnimation(interactionSource, interactive)
                 .clip(CircleShape)
                 .background(background)
+                .thenIf(activeBackgroundBrush != null) {
+                    Modifier.drawBehind { drawRect(brush = activeBackgroundBrush!!) }
+                }
                 .clickable(
                     interactionSource = interactionSource,
                     indication = LocalIndication.current,

@@ -69,7 +69,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
@@ -285,9 +285,13 @@ internal fun AxQsSlider(
         } else {
             null
         }
+    val gradient = rememberLunarisQsGradient(rotationOffset = if (vertical) 90 else 0)
+    val activeTrackBrush = gradient.sliderBrush()
     val activeTrackColor =
-        MaterialTheme.colorScheme.primary.copy(alpha = if (active) 1f else 0.7f)
-    val activeContentColor = MaterialTheme.colorScheme.onPrimary
+        (if (activeTrackBrush != null) gradient.startColor else MaterialTheme.colorScheme.primary)
+            .copy(alpha = if (active) 1f else 0.7f)
+    val activeContentColor =
+        if (activeTrackBrush != null) gradient.contentColor else MaterialTheme.colorScheme.onPrimary
     val sliderModifier =
         modifier.lunarisSliderLongPress(
             vertical = vertical,
@@ -338,6 +342,26 @@ internal fun AxQsSlider(
                 },
                 sliderHeight = trackHeight,
                 trackCornerRadius = if (roundedSquare) AxQsControlCornerRadius else null,
+                indicatorBackground =
+                    if (activeTrackBrush != null) {
+                        { indicatorModifier, cornerRadius ->
+                            val startCorner =
+                                if (roundedSquare) AxQsControlCornerRadius else trackHeight / 2
+                            Box(
+                                indicatorModifier
+                                    .alpha(if (!enabled) 0.38f else if (active) 1f else 0.7f)
+                                    .background(
+                                        activeTrackBrush,
+                                        RoundedCornerShape(
+                                            topStart = startCorner,
+                                            bottomStart = startCorner,
+                                            topEnd = cornerRadius,
+                                            bottomEnd = cornerRadius,
+                                        ),
+                                    )
+                            )
+                        }
+                    } else null,
                 modifier = Modifier.fillMaxWidth(),
             )
             if (percentageLabel != null) {
@@ -401,6 +425,8 @@ internal fun AxQsSlider(
                     trackInsideCornerSize = AxSliderTrackInsideCornerRadius,
                     thumbTrackGapSize = AxSliderThumbTrackGap,
                     trackSize = sliderHeight,
+                    activeTrackBrush = activeTrackBrush,
+                    activeTrackAlpha = if (active) 1f else 0.7f,
                     modifier = Modifier.background(trackBackgroundColor, ExpressiveSliderShape),
                     activeTrackEndIcon = { iconsState ->
                         if (percentageLabel == null) {

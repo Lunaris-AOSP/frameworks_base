@@ -53,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -202,7 +203,11 @@ fun AxLargeTileContent(
                     iconTargetModifier
                         .thenIf(useDualTargetStyle) {
                             Modifier.clip(iconShape)
-                                .background(animatedIconBackgroundColor, iconShape)
+                                .background(
+                                    colors.iconBackgroundGradient
+                                        ?: SolidColor(animatedIconBackgroundColor),
+                                    iconShape,
+                                )
                         }
                         .thenIf(toggleClick != null) {
                             Modifier.borderOnFocus(color = focusBorderColor, iconShape.topEnd)

@@ -18,8 +18,13 @@
 
 package com.android.systemui.qs.panels.ui.edit
 
+import android.graphics.Color as AndroidColor
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +37,7 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
@@ -40,10 +46,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -55,6 +64,7 @@ import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
@@ -62,6 +72,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -78,6 +89,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -85,6 +102,8 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsGridLayout
@@ -94,6 +113,7 @@ import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsSpacing
 import com.android.systemui.qs.panels.ui.compose.AxTileDefaults
+import com.android.systemui.qs.panels.ui.compose.rememberLunarisQsGradient
 import com.android.systemui.qs.panels.ui.viewmodel.AxQsViewModel
 import com.android.systemui.res.R
 import kotlin.math.roundToInt
@@ -110,6 +130,24 @@ fun LunariQsPanelSettings(
     val title = stringResource(R.string.ax_qs_panel_settings)
     val defaults = remember { LunarisQsSpacing() }
     val separate = viewModel.panelMode == AxQsPanelMode.SEPARATE
+    val gradientSettings = viewModel.gradientSettings
+    val gradientEnabled = gradientSettings.enabled
+    val gradientScope =
+        if (gradientSettings.sliderOnly) GRADIENT_SCOPE_SLIDERS_ONLY else GRADIENT_SCOPE_ALL_ACTIVE
+    val gradientMode = gradientSettings.colorMode
+    val autoGradientStyle = gradientSettings.autoStyle
+    val gradientRotation = gradientSettings.rotation
+    val gradient = rememberLunarisQsGradient(gradientSettings)
+    val gradientPreviewLabel = stringResource(R.string.ax_qs_settings_gradient_preview)
+    var showStartColorPicker by rememberSaveable { mutableStateOf(false) }
+    var showEndColorPicker by rememberSaveable { mutableStateOf(false) }
+    val startColor =
+        if (gradientSettings.startColor == 0) MaterialTheme.colorScheme.primary
+        else Color(gradientSettings.startColor)
+    val endColor =
+        if (gradientSettings.endColor == 0) MaterialTheme.colorScheme.secondary
+        else Color(gradientSettings.endColor)
+
     val controls =
         when (layout) {
             AxQsLayout.QQS -> AxQsGridLayout.PORTRAIT_QQS_CONTROLS
@@ -198,6 +236,114 @@ fun LunariQsPanelSettings(
                             ),
                         onSelect = { viewModel.setTileStyle(AxQsTileStyle.fromSetting(it)) },
                         position = SettingPosition.Last,
+                    )
+                }
+                item("gradient") {
+                    SettingsHeading(stringResource(R.string.ax_qs_settings_gradient))
+                }
+                item("gradient_enabled") {
+                    SettingsSwitch(
+                        title = stringResource(R.string.ax_qs_settings_gradient_enabled),
+                        summary = stringResource(R.string.ax_qs_settings_gradient_enabled_summary),
+                        checked = gradientEnabled,
+                        onCheckedChange = viewModel::setGradientEnabled,
+                        position = SettingPosition.First,
+                    )
+                }
+                item("gradient_scope") {
+                    SettingsChoice(
+                        title = stringResource(R.string.ax_qs_settings_gradient_scope),
+                        selected = gradientScope,
+                        options =
+                            listOf(
+                                GRADIENT_SCOPE_ALL_ACTIVE to
+                                    stringResource(R.string.ax_qs_settings_gradient_scope_all),
+                                GRADIENT_SCOPE_SLIDERS_ONLY to
+                                    stringResource(R.string.ax_qs_settings_gradient_scope_sliders),
+                            ),
+                        onSelect = {
+                            viewModel.setGradientSliderOnly(it == GRADIENT_SCOPE_SLIDERS_ONLY)
+                        },
+                        enabled = gradientEnabled,
+                    )
+                }
+                item("gradient_mode") {
+                    SettingsChoice(
+                        title = stringResource(R.string.ax_qs_settings_gradient_mode),
+                        selected = gradientMode,
+                        options =
+                            listOf(
+                                GRADIENT_MODE_AUTO to
+                                    stringResource(R.string.ax_qs_settings_gradient_mode_auto),
+                                GRADIENT_MODE_MANUAL to
+                                    stringResource(R.string.ax_qs_settings_gradient_mode_manual),
+                            ),
+                        onSelect = viewModel::setGradientColorMode,
+                        enabled = gradientEnabled,
+                    )
+                }
+                if (gradientEnabled && gradientMode == GRADIENT_MODE_AUTO) {
+                    item("gradient_auto_style") {
+                        SettingsChoice(
+                            title = stringResource(R.string.ax_qs_settings_gradient_auto_style),
+                            selected = autoGradientStyle,
+                            options =
+                                listOf(
+                                    GRADIENT_AUTO_STYLE_LIGHT_DEEP_PRIMARY to
+                                        stringResource(
+                                            R.string
+                                                .ax_qs_settings_gradient_auto_style_light_deep_primary
+                                        ),
+                                    GRADIENT_AUTO_STYLE_PRIMARY_SECONDARY to
+                                        stringResource(
+                                            R.string
+                                                .ax_qs_settings_gradient_auto_style_primary_secondary
+                                        ),
+                                ),
+                            onSelect = viewModel::setGradientAutoStyle,
+                            enabled = gradientEnabled,
+                        )
+                    }
+                } else if (gradientEnabled) {
+                    item("gradient_start_color") {
+                        SettingsColorChoice(
+                            title = stringResource(R.string.ax_qs_settings_gradient_start_color),
+                            color = startColor,
+                            onClick = { showStartColorPicker = true },
+                        )
+                    }
+                    item("gradient_end_color") {
+                        SettingsColorChoice(
+                            title = stringResource(R.string.ax_qs_settings_gradient_end_color),
+                            color = endColor,
+                            onClick = { showEndColorPicker = true },
+                        )
+                    }
+                }
+                if (gradientEnabled) {
+                    item("gradient_preview") {
+                        Box(
+                            Modifier.fillMaxWidth()
+                                .height(64.dp)
+                                .background(gradient.brush, RoundedCornerShape(4.dp))
+                                .semantics { contentDescription = gradientPreviewLabel },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(gradientPreviewLabel, color = gradient.contentColor)
+                        }
+                    }
+                }
+                item("gradient_rotation") {
+                    SettingsSlider(
+                        title = stringResource(R.string.ax_qs_settings_gradient_rotation),
+                        summary = stringResource(R.string.ax_qs_settings_gradient_rotation_summary),
+                        value = gradientRotation,
+                        defaultValue = 0,
+                        range = 0..360,
+                        onValueChange = viewModel::setGradientRotation,
+                        position = SettingPosition.Last,
+                        enabled = gradientEnabled,
+                        valueInDegrees = true,
                     )
                 }
                 item("behavior") {
@@ -365,7 +511,37 @@ fun LunariQsPanelSettings(
             }
         }
     }
+
+    if (showStartColorPicker) {
+        GradientColorPickerDialog(
+            title = stringResource(R.string.ax_qs_settings_gradient_start_color),
+            initialColor = startColor,
+            onDismiss = { showStartColorPicker = false },
+            onConfirm = { color ->
+                viewModel.setGradientStartColor(color)
+                showStartColorPicker = false
+            },
+        )
+    }
+    if (showEndColorPicker) {
+        GradientColorPickerDialog(
+            title = stringResource(R.string.ax_qs_settings_gradient_end_color),
+            initialColor = endColor,
+            onDismiss = { showEndColorPicker = false },
+            onConfirm = { color ->
+                viewModel.setGradientEndColor(color)
+                showEndColorPicker = false
+            },
+        )
+    }
 }
+
+private const val GRADIENT_SCOPE_ALL_ACTIVE = 0
+private const val GRADIENT_SCOPE_SLIDERS_ONLY = 1
+private const val GRADIENT_MODE_AUTO = 0
+private const val GRADIENT_MODE_MANUAL = 1
+private const val GRADIENT_AUTO_STYLE_LIGHT_DEEP_PRIMARY = 0
+private const val GRADIENT_AUTO_STYLE_PRIMARY_SECONDARY = 1
 
 @Composable
 private fun gridOptions(default: Int, range: IntRange): List<Pair<Int, String>> =
@@ -498,6 +674,7 @@ private fun SettingsChoice(
     selected: Int,
     options: List<Pair<Int, String>>,
     onSelect: (Int) -> Unit,
+    enabled: Boolean = true,
     position: SettingPosition = SettingPosition.Middle,
 ) {
     var showDialog by rememberSaveable { mutableStateOf(false) }
@@ -506,7 +683,7 @@ private fun SettingsChoice(
             Modifier.fillMaxWidth()
                 .clip(settingShape(position))
                 .background(AxTileDefaults.backgroundColor())
-                .clickable(role = Role.Button) { showDialog = true }
+                .clickable(enabled = enabled, role = Role.Button) { showDialog = true }
                 .padding(horizontal = 20.dp, vertical = 18.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -514,15 +691,16 @@ private fun SettingsChoice(
         SettingsLabel(
             title,
             options.firstOrNull { it.first == selected }?.second,
-            Modifier.weight(1f),
+            Modifier.weight(1f).alpha(if (enabled) 1f else 0.38f),
         )
         Icon(
             Icons.Default.ExpandMore,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.alpha(if (enabled) 1f else 0.38f),
         )
     }
-    if (showDialog) {
+    if (showDialog && enabled) {
         AlertDialog(
             onDismissRequest = { showDialog = false },
             title = { Text(title) },
@@ -563,6 +741,247 @@ private fun SettingsChoice(
 }
 
 @Composable
+private fun SettingsColorChoice(
+    title: String,
+    color: Color,
+    onClick: () -> Unit,
+    position: SettingPosition = SettingPosition.Middle,
+) {
+    Row(
+        modifier =
+            Modifier.fillMaxWidth()
+                .clip(settingShape(position))
+                .background(AxTileDefaults.backgroundColor())
+                .clickable(role = Role.Button, onClick = onClick)
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        SettingsLabel(title, null, Modifier.weight(1f))
+        Box(
+            modifier =
+                Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(color).semantics {
+                    contentDescription = title
+                }
+        )
+    }
+}
+
+@Composable
+private fun GradientColorPickerDialog(
+    title: String,
+    initialColor: Color,
+    onDismiss: () -> Unit,
+    onConfirm: (Int) -> Unit,
+) {
+    val initialHsv =
+        remember(initialColor) {
+            FloatArray(3).also { hsv -> AndroidColor.colorToHSV(initialColor.toArgb(), hsv) }
+        }
+    var hue by rememberSaveable(initialColor) { mutableFloatStateOf(initialHsv[0]) }
+    var saturation by rememberSaveable(initialColor) { mutableFloatStateOf(initialHsv[1]) }
+    var value by rememberSaveable(initialColor) { mutableFloatStateOf(initialHsv[2]) }
+    var hexInput by
+        rememberSaveable(initialColor) { mutableStateOf(colorHex(initialColor.toArgb())) }
+    val selectedColor = Color(AndroidColor.HSVToColor(floatArrayOf(hue, saturation, value)))
+    val hueColor = Color(AndroidColor.HSVToColor(floatArrayOf(hue, 1f, 1f)))
+    val validHex = hexInput.length == 6 && hexInput.toIntOrNull(16) != null
+    val colorAreaLabel = stringResource(R.string.ax_qs_settings_gradient_color_area)
+
+    fun updateColor(
+        nextHue: Float = hue,
+        nextSaturation: Float = saturation,
+        nextValue: Float = value,
+    ) {
+        hue = nextHue
+        saturation = nextSaturation
+        value = nextValue
+        hexInput = colorHex(AndroidColor.HSVToColor(floatArrayOf(hue, saturation, value)))
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Canvas(
+                    Modifier.fillMaxWidth()
+                        .height(140.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .semantics { contentDescription = colorAreaLabel }
+                        .pointerInput(initialColor) {
+                            fun select(position: Offset) {
+                                updateColor(
+                                    nextSaturation =
+                                        (position.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f),
+                                    nextValue =
+                                        1f -
+                                            (position.y / size.height.coerceAtLeast(1)).coerceIn(
+                                                0f,
+                                                1f,
+                                            ),
+                                )
+                            }
+                            awaitEachGesture {
+                                val down = awaitFirstDown()
+                                down.consume()
+                                select(down.position)
+                                drag(down.id) { change ->
+                                    change.consume()
+                                    select(change.position)
+                                }
+                            }
+                        }
+                ) {
+                    drawRect(Brush.horizontalGradient(listOf(Color.White, hueColor)))
+                    drawRect(Brush.verticalGradient(listOf(Color.Transparent, Color.Black)))
+                    val center = Offset(saturation * size.width, (1f - value) * size.height)
+                    drawCircle(Color.Black, 8.dp.toPx(), center, style = Stroke(3.dp.toPx()))
+                    drawCircle(Color.White, 8.dp.toPx(), center, style = Stroke(1.5.dp.toPx()))
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.size(48.dp).background(selectedColor, RoundedCornerShape(12.dp)))
+                    OutlinedTextField(
+                        value = hexInput,
+                        onValueChange = { input ->
+                            hexInput =
+                                input
+                                    .removePrefix("#")
+                                    .filter { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }
+                                    .take(6)
+                                    .uppercase()
+                            if (hexInput.length == 6) {
+                                val hsv = FloatArray(3)
+                                AndroidColor.colorToHSV(
+                                    hexInput.toInt(16) or 0xFF000000.toInt(),
+                                    hsv,
+                                )
+                                hue = hsv[0]
+                                saturation = hsv[1]
+                                value = hsv[2]
+                            }
+                        },
+                        label = { Text(stringResource(R.string.ax_qs_settings_gradient_hex)) },
+                        prefix = { Text("#") },
+                        isError = !validHex,
+                        supportingText =
+                            if (!validHex) {
+                                { Text(stringResource(R.string.ax_qs_settings_gradient_hex_error)) }
+                            } else null,
+                        keyboardOptions =
+                            KeyboardOptions(
+                                capitalization = KeyboardCapitalization.Characters,
+                                keyboardType = KeyboardType.Ascii,
+                            ),
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                ColorPickerSlider(
+                    title = stringResource(R.string.ax_qs_settings_gradient_hue),
+                    value = hue,
+                    valueRange = 0f..360f,
+                    steps = 359,
+                    valueLabel = stringResource(R.string.ax_qs_settings_degrees, hue.roundToInt()),
+                    brush =
+                        Brush.horizontalGradient(
+                            (0..6).map {
+                                Color(AndroidColor.HSVToColor(floatArrayOf(it * 60f, 1f, 1f)))
+                            }
+                        ),
+                    onValueChange = { updateColor(nextHue = it) },
+                )
+                ColorPickerSlider(
+                    title = stringResource(R.string.ax_qs_settings_gradient_saturation),
+                    value = saturation,
+                    valueRange = 0f..1f,
+                    steps = 99,
+                    valueLabel = "${(saturation * 100).roundToInt()}%",
+                    brush = Brush.horizontalGradient(listOf(Color.White, hueColor)),
+                    onValueChange = { updateColor(nextSaturation = it) },
+                )
+                ColorPickerSlider(
+                    title = stringResource(R.string.ax_qs_settings_gradient_brightness),
+                    value = value,
+                    valueRange = 0f..1f,
+                    steps = 99,
+                    valueLabel = "${(value * 100).roundToInt()}%",
+                    brush =
+                        Brush.horizontalGradient(
+                            listOf(
+                                Color.Black,
+                                Color(AndroidColor.HSVToColor(floatArrayOf(hue, saturation, 1f))),
+                            )
+                        ),
+                    onValueChange = { updateColor(nextValue = it) },
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = validHex,
+                onClick = { onConfirm(hexInput.toInt(16) or 0xFF000000.toInt()) },
+            ) {
+                Text(stringResource(android.R.string.ok))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) }
+        },
+    )
+}
+
+private fun colorHex(color: Int): String =
+    (color and 0xFFFFFF).toString(16).padStart(6, '0').uppercase()
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ColorPickerSlider(
+    title: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    steps: Int,
+    valueLabel: String,
+    brush: Brush,
+    onValueChange: (Float) -> Unit,
+) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(title, style = MaterialTheme.typography.labelLarge)
+            Text(valueLabel, style = MaterialTheme.typography.labelLarge)
+        }
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = valueRange,
+            steps = steps,
+            track = {
+                Box(
+                    Modifier.fillMaxWidth()
+                        .height(12.dp)
+                        .background(brush, RoundedCornerShape(6.dp))
+                )
+            },
+            modifier =
+                Modifier.fillMaxWidth().semantics {
+                    contentDescription = title
+                    stateDescription = valueLabel
+                },
+        )
+    }
+}
+
+@Composable
 private fun SettingsSlider(
     title: String,
     summary: String,
@@ -570,11 +989,17 @@ private fun SettingsSlider(
     defaultValue: Int,
     range: IntRange,
     onValueChange: (Int) -> Unit,
+    enabled: Boolean = true,
     position: SettingPosition = SettingPosition.Middle,
+    valueInDegrees: Boolean = false,
 ) {
     var sliderValue by remember(value) { mutableFloatStateOf(value.toFloat()) }
     val currentValue = sliderValue.roundToInt().coerceIn(range)
-    val valueLabel = stringResource(R.string.ax_qs_settings_dp, currentValue)
+    val valueLabel =
+        stringResource(
+            if (valueInDegrees) R.string.ax_qs_settings_degrees else R.string.ax_qs_settings_dp,
+            currentValue,
+        )
     val spacingIconButtonColors =
         IconButtonDefaults.iconButtonColors(
             contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -592,7 +1017,7 @@ private fun SettingsSlider(
                 .background(AxTileDefaults.backgroundColor())
                 .padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
-        SettingsLabel(title, summary)
+        SettingsLabel(title, summary, Modifier.alpha(if (enabled) 1f else 0.38f))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -605,7 +1030,7 @@ private fun SettingsSlider(
             )
             IconButton(
                 onClick = { commitValue(defaultValue) },
-                enabled = currentValue != defaultValue,
+                enabled = enabled && currentValue != defaultValue,
                 colors = spacingIconButtonColors,
             ) {
                 Icon(
@@ -617,7 +1042,7 @@ private fun SettingsSlider(
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(
                 onClick = { commitValue(currentValue - 1) },
-                enabled = currentValue > range.first,
+                enabled = enabled && currentValue > range.first,
                 colors = spacingIconButtonColors,
             ) {
                 Icon(
@@ -630,6 +1055,7 @@ private fun SettingsSlider(
                 value = sliderValue,
                 onValueChange = { sliderValue = it },
                 onValueChangeFinished = { commitValue(sliderValue.roundToInt()) },
+                enabled = enabled,
                 valueRange = range.first.toFloat()..range.last.toFloat(),
                 steps = range.last - range.first - 1,
                 modifier =
@@ -640,7 +1066,7 @@ private fun SettingsSlider(
             )
             IconButton(
                 onClick = { commitValue(currentValue + 1) },
-                enabled = currentValue < range.last,
+                enabled = enabled && currentValue < range.last,
                 colors = spacingIconButtonColors,
             ) {
                 Icon(

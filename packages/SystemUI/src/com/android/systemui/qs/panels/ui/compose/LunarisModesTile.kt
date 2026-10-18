@@ -38,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -138,16 +139,21 @@ private fun LunarisModeButton(
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val background by animateColorAsState(
-        if (mode.enabled) MaterialTheme.colorScheme.primary
-        else MaterialTheme.colorScheme.primaryContainer,
-        label = "LunarisModeBackground",
-    )
-    val foreground by animateColorAsState(
-        if (mode.enabled) MaterialTheme.colorScheme.onPrimary
-        else MaterialTheme.colorScheme.onPrimaryContainer,
-        label = "LunarisModeForeground",
-    )
+    val gradient = rememberLunarisQsGradient()
+    val brush = gradient.tileBrush().takeIf { mode.enabled }
+    val background by
+        animateColorAsState(
+            if (mode.enabled) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.primaryContainer,
+            label = "LunarisModeBackground",
+        )
+    val foreground by
+        animateColorAsState(
+            if (brush != null) gradient.contentColor
+            else if (mode.enabled) MaterialTheme.colorScheme.onPrimary
+            else MaterialTheme.colorScheme.onPrimaryContainer,
+            label = "LunarisModeForeground",
+        )
     val shape = RoundedCornerShape(20.dp)
     val interactionSource = remember(mode.id) { MutableInteractionSource() }
     val view = LocalView.current
@@ -156,7 +162,7 @@ private fun LunarisModeButton(
         modifier =
             modifier.lunarisTilePressAnimation(interactionSource, enabled)
                 .clip(shape)
-                .background(background)
+                .background(brush ?: SolidColor(background))
                 .borderOnFocus(MaterialTheme.colorScheme.secondary, shape.topEnd)
                 .combinedClickable(
                     interactionSource = interactionSource,
