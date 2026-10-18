@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2025-2026 AxionOS
+ * Copyright (C) 2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,7 +39,10 @@ constructor(
     val currentMode: Int get() = interactor.currentMode
     val ringerModeChanges: Flow<Int> get() = interactor.ringerModeChanges
     val isZenMuted: StateFlow<Boolean> get() = interactor.isZenMuted
+    val isDndEnabled: StateFlow<Boolean> get() = interactor.isDndEnabled
+    val isDndAvailable: StateFlow<Boolean> get() = interactor.isDndAvailable
     fun setRingerMode(mode: Int) = interactor.setRingerMode(mode)
+    fun toggleDnd() = interactor.toggleDnd()
     fun targetPosition(ringerMode: Int): Float = interactor.targetPosition(ringerMode)
     fun snapToIndex(offset: Float): Int = interactor.snapToIndex(offset)
 }

@@ -1,5 +1,6 @@
 /*
- * Copyright 2025-2026 AxionOS
+ * Copyright (C) 2025-2026 AxionOS
+ * Copyright (C) 2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -556,6 +557,7 @@ private fun AxLiveControl(
                 }
             AxQsControl.RINGER ->
                 RingerSliderTileContent(
+                    vertical = span.columns == 1,
                     shape = axQsControlShape(AxQsControl.RINGER, span),
                     modifier = Modifier.fillMaxSize(),
                 )

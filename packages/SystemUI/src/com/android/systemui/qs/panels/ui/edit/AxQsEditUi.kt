@@ -1040,8 +1040,10 @@ private fun AxEditableGridSection(
                     else TileState.Removable
                 val sliderControl =
                     (value as? AxEditGridValue.Control)?.control?.takeIf { it.isSlider }
+                val orientationControl =
+                    (value as? AxEditGridValue.Control)?.control?.takeIf { it.supportsOrientation }
                 val verticalSlider = sliderControl != null && item.span.columns == 1
-                val rotatedSpan = sliderControl?.rotateSpan(item.span, columns)
+                val rotatedSpan = orientationControl?.rotateSpan(item.span, columns)
                 val canRotateWithoutRepack = rotatedSpan?.let(canResize) == true
                 val canRotate =
                     rotatedSpan != null &&
@@ -1179,8 +1181,8 @@ private fun AxEditableGridSection(
                 ) {
                     if (listState.draggedId == item.id) {
                         Box(Modifier.fillMaxSize()) {
-                            if (sliderControl != null) {
-                                controlPreview(sliderControl, item.span, columns, controlStyle)
+                            if (orientationControl != null) {
+                                controlPreview(orientationControl, item.span, columns, controlStyle)
                             } else if (value is AxEditGridValue.Stack) {
                                 AxEditTileStack(value.tiles, modes)
                             }
@@ -1212,8 +1214,8 @@ private fun AxEditableGridSection(
                                 if (resizable) {
                                     listState.item(item.id)?.let { current ->
                                         val nextSpan =
-                                            if (sliderControl != null) {
-                                                sliderControl.nextSpan(current.span, columns)
+                                            if (orientationControl != null) {
+                                                orientationControl.nextSpan(current.span, columns)
                                             } else {
                                                 val width =
                                                     if (
@@ -1297,9 +1299,9 @@ private fun AxEditableGridSection(
                                 }
                             }
                         }
-                        if (isSelected && sliderControl != null) {
+                        if (isSelected && orientationControl != null) {
                             LunarisQsSliderOrientationButton(
-                                vertical = verticalSlider,
+                                vertical = item.span.columns == 1,
                                 enabled = canRotate,
                                 onClick = rotateItem,
                                 modifier =

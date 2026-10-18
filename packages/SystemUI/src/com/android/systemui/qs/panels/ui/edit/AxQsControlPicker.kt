@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2025-2026 AxionOS
+ * Copyright (C) 2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -181,7 +182,7 @@ internal fun AxAvailableControls(
                     control,
                     label,
                     control.id in currentIds,
-                    if (control.isSlider) sliderSpan(control) else control.defaultSpan,
+                    if (control.supportsOrientation) sliderSpan(control) else control.defaultSpan,
                 )
             }
     val stackItem = AxAddItem.Stack(stringResource(R.string.lunaris_qs_tile_stack))
@@ -527,11 +528,6 @@ private fun AxAddItemCell(
                 previewHeight = previewHeight,
                 modifier = Modifier.fillMaxWidth(),
             )
-            LunarisQsSliderOrientationButton(
-                vertical = span.columns == 1,
-                enabled = !item.isAdded,
-                onClick = { onRotateSlider(item) },
-            )
         } else {
             Box(modifier = Modifier.fillMaxWidth().height(previewHeight)) {
                 Box(Modifier.fillMaxSize().clearAndSetSemantics {}) {
@@ -564,6 +560,13 @@ private fun AxAddItemCell(
                 AxAddItemBadge(Modifier.align(Alignment.TopEnd))
             }
         }
+        if (item is AxAddItem.Control && item.control.supportsOrientation) {
+            LunarisQsSliderOrientationButton(
+                vertical = span.columns == 1,
+                enabled = !item.isAdded,
+                onClick = { onRotateSlider(item) },
+            )
+        }
         Text(
             text = item.label,
             color = MaterialTheme.colorScheme.onSurface,
@@ -582,6 +585,15 @@ private fun AxAddItemCell(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
+        if (item is AxAddItem.Control && item.control == AxQsControl.RINGER) {
+            Text(
+                text = stringResource(R.string.lunaris_qs_ringer_slider_hint),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 
@@ -591,7 +603,7 @@ private fun AxAddItem.pickerSpan(columns: Int): AxQsSpan {
         is AxAddItem.Tile -> AxQsSpan.TileDefault
         is AxAddItem.Control -> {
             val span =
-                if (control == AxQsControl.RINGER) {
+                if (control == AxQsControl.RINGER && this.span.columns > 1) {
                     AxQsSpan.TileWideDefault
                 } else {
                     control.coerceSpan(this.span, columns)

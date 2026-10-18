@@ -1,5 +1,6 @@
 /*
- * Copyright 2025-2026 AxionOS
+ * Copyright (C) 2025-2026 AxionOS
+ * Copyright (C) 2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -108,7 +109,7 @@ enum class AxQsControl(
     RINGER(
         id = "control:ringer",
         defaultSpan = AxQsSpan(4, 1),
-        minSpan = AxQsSpan.TileWideDefault,
+        minSpan = AxQsSpan.TileDefault,
         maxSpan = AxQsSpan.Max,
     ),
     MEDIA(
@@ -120,7 +121,7 @@ enum class AxQsControl(
 
     fun spans(columns: Int): AxQsControlSpans {
         val resolvedMax =
-            if (this == MEDIA || this == RINGER || isSlider) {
+            if (this == MEDIA || supportsOrientation) {
                 maxSpan.copy(columns = columns.coerceIn(minSpan.columns, AxQsSpan.MAX_COLUMNS))
             } else {
                 maxSpan
@@ -135,14 +136,15 @@ enum class AxQsControl(
     fun coerceSpan(span: AxQsSpan, columns: Int): AxQsSpan {
         val spans = spans(columns)
         return when {
-            isSlider && span.columns == 1 -> AxQsSpan(1, span.rows.coerceIn(2, spans.max.rows))
-            isSlider -> AxQsSpan(span.columns.coerceIn(2, spans.max.columns), 1)
+            supportsOrientation && span.columns == 1 ->
+                AxQsSpan(1, span.rows.coerceIn(2, spans.max.rows))
+            supportsOrientation -> AxQsSpan(span.columns.coerceIn(2, spans.max.columns), 1)
             else -> span.coerceIn(spans.min, spans.max)
         }
     }
 
     fun nextSpan(span: AxQsSpan, columns: Int): AxQsSpan {
-        if (!isSlider) return span
+        if (!supportsOrientation) return span
         val spans = spans(columns)
         return if (span.columns == 1) {
             val rows = if (span.rows < spans.max.rows) span.rows + 1 else 2
@@ -155,7 +157,7 @@ enum class AxQsControl(
     }
 
     fun resizeSpan(startSpan: AxQsSpan, columnDelta: Int, rowDelta: Int, columns: Int): AxQsSpan {
-        if (!isSlider) {
+        if (!supportsOrientation) {
             return AxQsSpan(
                 columns =
                     (startSpan.columns + columnDelta).coerceIn(
@@ -180,7 +182,7 @@ enum class AxQsControl(
     }
 
     fun rotateSpan(span: AxQsSpan, columns: Int): AxQsSpan {
-        if (!isSlider) return span
+        if (!supportsOrientation) return span
         return if (span.columns == 1) {
             AxQsSpan(span.rows.coerceIn(2, columns), 1)
         } else {
@@ -190,6 +192,9 @@ enum class AxQsControl(
 
     val isSlider: Boolean
         get() = this == BRIGHTNESS || this == VOLUME || this == FLASHLIGHT
+
+    val supportsOrientation: Boolean
+        get() = isSlider || this == RINGER
 
     /**
      * Whether this control should appear in the QS Edit grid.

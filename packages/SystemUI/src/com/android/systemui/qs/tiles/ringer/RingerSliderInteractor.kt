@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2025-2026 AxionOS
+ * Copyright (C) 2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -50,7 +51,7 @@ constructor(
     private val audioManager: AudioManager,
     broadcastDispatcher: BroadcastDispatcher,
     context: Context,
-    zenModeController: ZenModeController,
+    private val zenModeController: ZenModeController,
 ) {
 
     private val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
@@ -71,8 +72,28 @@ constructor(
     val currentMode: Int
         get() = audioManager.ringerModeInternal
 
-    fun setRingerMode(mode: Int) {
+    fun setRingerMode(mode: Int): Boolean {
+        if (
+            mode == currentMode ||
+                availableModes.none { it.mode == mode } ||
+                computeIsZenMuted(zenModeController)
+        ) {
+            return false
+        }
         audioManager.ringerModeInternal = mode
+        return true
+    }
+
+    fun toggleDnd(): Boolean {
+        if (!zenModeController.isZenAvailable) return false
+        val zen =
+            if (zenModeController.zen == Global.ZEN_MODE_OFF) {
+                Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS
+            } else {
+                Global.ZEN_MODE_OFF
+            }
+        zenModeController.setZen(zen, null, "RingerSlider")
+        return true
     }
 
     fun targetPosition(ringerMode: Int): Float {
@@ -92,11 +113,22 @@ constructor(
 
     val isZenMuted: StateFlow<Boolean> = _isZenMuted.asStateFlow()
 
+    private val _isDndEnabled = MutableStateFlow(zenModeController.zen != Global.ZEN_MODE_OFF)
+    val isDndEnabled: StateFlow<Boolean> = _isDndEnabled.asStateFlow()
+
+    private val _isDndAvailable = MutableStateFlow(zenModeController.isZenAvailable)
+    val isDndAvailable: StateFlow<Boolean> = _isDndAvailable.asStateFlow()
+
     init {
         zenModeController.addCallback(
             object : ZenModeController.Callback {
                 override fun onZenChanged(zen: Int) {
+                    _isDndEnabled.value = zen != Global.ZEN_MODE_OFF
                     _isZenMuted.value = computeIsZenMuted(zenModeController)
+                }
+
+                override fun onZenAvailableChanged(available: Boolean) {
+                    _isDndAvailable.value = available
                 }
 
                 override fun onConsolidatedPolicyChanged(policy: NotificationManager.Policy) {
