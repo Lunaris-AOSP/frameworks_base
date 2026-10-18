@@ -279,7 +279,7 @@ internal fun AxQsDateHeader(
                 AxQuickSettingsDate(viewModel = shadeHeaderViewModel)
             }
             QsDataUsage(
-                textColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                textColor = ShadeHeader.Colors.textColor,
                 compact = true,
             )
             if (showWeather) {
@@ -438,7 +438,7 @@ fun AxQsWeather(
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                 ),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = ShadeHeader.Colors.textColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -522,7 +522,7 @@ private fun AxEditButton(
                 Icon(
                     imageVector = Icons.Default.Edit,
                     contentDescription = stringResource(R.string.accessibility_quick_settings_edit),
-                    tint = MaterialTheme.colorScheme.onSurface,
+                    tint = ShadeHeader.Colors.textColor,
                     modifier = Modifier.size(18.dp),
                 )
             }
@@ -552,7 +552,7 @@ private fun AxFooterOverflowMenu(viewModel: ToolbarViewModel) {
                 Icon(
                     imageVector = Icons.Default.MoreVert,
                     contentDescription = stringResource(R.string.qs_edit_menu_content_description),
-                    tint = MaterialTheme.colorScheme.onSurface,
+                    tint = ShadeHeader.Colors.textColor,
                 )
             }
         }
@@ -600,7 +600,7 @@ private fun FooterIconButton(
     model: FooterActionsButtonViewModel?,
     containerColor: Color,
     modifier: Modifier = Modifier,
-    iconColor: Color = MaterialTheme.colorScheme.onSurface,
+    iconColor: Color = ShadeHeader.Colors.textColor,
 ) {
     if (model == null) return
     Expandable(

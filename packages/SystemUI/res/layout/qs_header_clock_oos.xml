@@ -15,12 +15,16 @@
         android:layoutDirection="ltr">
 
         <TextClock
+            android:id="@+id/oos_time"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:includeFontPadding="false"
+            android:ellipsize="none"
+            android:fontFeatureSettings="tnum"
             android:format12Hour="hh:mm"
             android:format24Hour="HH:mm"
             android:singleLine="true"
+            android:useBoundsForWidth="true"
             android:textColor="?android:attr/textColorPrimary"
             android:textSize="30sp"
             android:textStyle="bold" />
@@ -29,10 +33,12 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:includeFontPadding="false"
-            android:format12Hour="hh:mm"
-            android:format24Hour="HH:mm"
-            android:maxLength="2"
+            android:ellipsize="none"
+            android:fontFeatureSettings="tnum"
+            android:format12Hour="hh"
+            android:format24Hour="HH"
             android:singleLine="true"
+            android:useBoundsForWidth="true"
             android:textColor="@android:color/system_accent1_300"
             android:textSize="30sp"
             android:textStyle="bold" />

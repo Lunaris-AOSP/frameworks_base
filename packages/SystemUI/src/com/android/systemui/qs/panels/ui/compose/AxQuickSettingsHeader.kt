@@ -31,6 +31,7 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.TextView
 import androidx.annotation.ColorInt
 import androidx.annotation.LayoutRes
 import androidx.compose.foundation.basicMarquee
@@ -111,7 +112,7 @@ fun AxQuickSettingsHeader(
     sidePadding: Dp,
     modifier: Modifier = Modifier,
 ) {
-    val foregroundColor = MaterialTheme.colorScheme.onSurface
+    val foregroundColor = ShadeHeader.Colors.textColor
     val clockStyle = rememberClockStyle()
     val clockHasEmbeddedDate = clockStyle in 1..3
     BoxWithConstraints(modifier.fillMaxWidth()) {
@@ -330,7 +331,7 @@ fun AxQuickSettingsClock(
     modifier: Modifier = Modifier,
     clockStyle: Int = rememberClockStyle(),
 ) {
-    val textColor = MaterialTheme.colorScheme.onSurface
+    val textColor = ShadeHeader.Colors.textColor
     when (clockStyle) {
         0 -> AxHeaderClock(onClick = viewModel::onClockClicked, textColor = textColor, modifier = modifier)
         1 -> AxCustomClockView(layoutRes = R.layout.qs_header_clock_chip, onClick = viewModel::onClockClicked, modifier = modifier)
@@ -346,6 +347,7 @@ private fun AxCustomClockView(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val textColor = ShadeHeader.Colors.textColor.toArgb()
     key(layoutRes) {
         AndroidView(
             factory = { context ->
@@ -354,6 +356,10 @@ private fun AxCustomClockView(
                 val view = LayoutInflater.from(themedContext).inflate(layoutRes, null, false)
                 view.setOnClickListener { onClick() }
                 view
+            },
+            update = { view ->
+                view.findViewById<TextView>(R.id.oos_time)?.setTextColor(textColor)
+                view.findViewById<TextView>(R.id.oos_date)?.setTextColor(textColor)
             },
             modifier = modifier.wrapContentWidth().clickable(onClick = onClick),
         )
@@ -366,7 +372,7 @@ fun AxQuickSettingsDate(viewModel: ShadeHeaderViewModel, modifier: Modifier = Mo
     AxHeaderDate(
         longerDateText = viewModel.longerDateText,
         shorterDateText = viewModel.shorterDateText,
-        textColor = MaterialTheme.colorScheme.onSurface,
+        textColor = ShadeHeader.Colors.textColor,
         modifier =
             modifier.clickable {
                 try {
@@ -587,7 +593,7 @@ private fun AxBatteryInfo(
     useExpandedFormat: Boolean,
     modifier: Modifier = Modifier,
     isHighlighted: Boolean = false,
-    textColor: Color = MaterialTheme.colorScheme.onSurface,
+    textColor: Color = ShadeHeader.Colors.textColor,
     iconTint: Color? = null,
     iconBackgroundColor: Color? = null,
     onClick: (() -> Unit)? = null,
