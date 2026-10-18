@@ -547,7 +547,7 @@ public final class NotificationPanelViewController implements
     private int mHeaderImageHeight;
     private int mBottomFadeHeight;
     private int mHeaderImageShadow;
-    private float mShadeHeaderExpansion;
+    private boolean mHeaderImageLayoutDirty = true;
     private Drawable mCurrentBackground;
     private StatusBarHeaderMachine mStatusBarHeaderMachine;
 
@@ -3713,7 +3713,8 @@ public final class NotificationPanelViewController implements
             }
             if (mHeaderImageEnabled) {
                 mOrientation = newConfig.orientation;
-                mView.post(() -> updateHeaderImage());
+                mHeaderImageLayoutDirty = true;
+                mView.post(mUpdateHeaderImageRunnable);
             }
         }
 
@@ -3901,6 +3902,8 @@ public final class NotificationPanelViewController implements
             mStatusBarStateController.removeCallback(mStatusBarStateListener);
             mConfigurationController.removeCallback(mConfigurationListener);
             mStatusBarHeaderMachine.removeObserver(this);
+            mView.removeCallbacks(mUpdateHeaderImageRunnable);
+            stopHeaderAnimIfRunning();
             mTunerService.removeTunable(this);
             mFalsingManager.removeTapListener(mFalsingTapListener);
         }
@@ -3922,28 +3925,32 @@ public final class NotificationPanelViewController implements
                     break;
                 case STATUS_BAR_CUSTOM_HEADER:
                     mHeaderImageEnabled =
-                            !com.android.systemui.qs.flags.MistQsMode.isEnabled()
-                            && TunerService.parseIntegerSwitch(newValue, false);
+                            TunerService.parseIntegerSwitch(newValue, false);
                     if (!mHeaderImageEnabled) {
+                        mView.removeCallbacks(mUpdateHeaderImageRunnable);
                         mQsHeaderLayout.setVisibility(View.GONE);
+                        mLastPostedShadeHeaderExpansion = -1f;
+                        stopHeaderAnimIfRunning();
                     } else {
                         mOrientation = mView.getResources().getConfiguration().orientation;
-                        mView.post(() -> updateHeaderImage());
+                        mHeaderImageLayoutDirty = true;
+                        mView.post(mUpdateHeaderImageRunnable);
                     }
                     break;
                 case STATUS_BAR_CUSTOM_HEADER_HEIGHT:
                     mHeaderImageHeight =
                             TunerService.parseInteger(newValue, 142);
                     mBottomFadeHeight = (int) Math.round(mHeaderImageHeight * 0.555);
+                    mHeaderImageLayoutDirty = true;
                     if (mHeaderImageEnabled) {
-                        mView.post(() -> updateHeaderImage());
+                        mView.post(mUpdateHeaderImageRunnable);
                     }
                     break;
                 case STATUS_BAR_CUSTOM_HEADER_SHADOW:
                     mHeaderImageShadow =
                             TunerService.parseInteger(newValue, 0);
                     if (mHeaderImageEnabled) {
-                        mView.post(() -> updateHeaderImage());
+                        mView.post(mUpdateHeaderImageRunnable);
                     }
                     break;
                 case STATUS_BAR_BRIGHTNESS_CONTROL:
@@ -3966,10 +3973,7 @@ public final class NotificationPanelViewController implements
 
         @Override
         public void disableHeader() {
-            mView.post(() -> {
-                mCurrentBackground = null;
-                mQsHeaderImageView.setVisibility(View.GONE);
-            });
+            mView.post(() -> doUpdateStatusBarCustomHeader(null, true));
         }
 
         @Override
@@ -4691,29 +4695,31 @@ public final class NotificationPanelViewController implements
             mCurrentBackground = drawable;
             setNotificationPanelHeaderBackground(drawable, force);
         } else {
+            stopHeaderAnimIfRunning();
             mCurrentBackground = null;
+            mQsHeaderImageView.setImageDrawable(null);
             mQsHeaderImageView.setVisibility(View.GONE);
         }
-        if (mHeaderImageEnabled) {
-            updateHeaderImage();
-        }
+        updateHeaderImage();
     }
 
     private void updateHeaderImage() {
         float shadeHeaderExpansion = mShadeHeaderController.getShadeExpandedFraction();
-        if (shadeHeaderExpansion > 0f &&
+        if (mHeaderImageEnabled && mView.isAttachedToWindow() && shadeHeaderExpansion > 0f &&
             mOrientation != Configuration.ORIENTATION_LANDSCAPE &&
             mCurrentBackground != null && mQsHeaderImageView.getDrawable() != null) {
 
-            if (mQsHeaderLayout.getVisibility() != View.VISIBLE) {
+            if (mHeaderImageLayoutDirty) {
                 int headerImageHeight = (int) TypedValue.applyDimension(
                         TypedValue.COMPLEX_UNIT_DIP,
                         mHeaderImageHeight,
                         mView.getResources().getDisplayMetrics());
 
                 ViewGroup.LayoutParams params = mQsHeaderLayout.getLayoutParams();
-                params.height = headerImageHeight;
-                mQsHeaderLayout.setLayoutParams(params);
+                if (params.height != headerImageHeight) {
+                    params.height = headerImageHeight;
+                    mQsHeaderLayout.setLayoutParams(params);
+                }
 
                 mQsHeaderLayout.setFadeSizes(0, 0,
                         (int) TypedValue.applyDimension(
@@ -4721,14 +4727,17 @@ public final class NotificationPanelViewController implements
                                 mBottomFadeHeight,
                                 mView.getResources().getDisplayMetrics()),
                         0);
-
-                mQsHeaderLayout.setVisibility(View.VISIBLE);
+                mHeaderImageLayoutDirty = false;
             }
-            if (mShadeHeaderExpansion != shadeHeaderExpansion) {
-                mShadeHeaderExpansion = shadeHeaderExpansion;
-                mQsHeaderImageView.setImageAlpha( (int)
-                    (mShadeHeaderExpansion * (255 - mHeaderImageShadow)));
+            mQsHeaderLayout.setVisibility(View.VISIBLE);
+            int imageAlpha = (int) (shadeHeaderExpansion * (255 - mHeaderImageShadow));
+            if (mQsHeaderImageView.getImageAlpha() != imageAlpha) {
+                mQsHeaderImageView.setImageAlpha(imageAlpha);
+            }
+            if (imageAlpha > 0) {
                 startHeaderAnimIfPossible();
+            } else {
+                stopHeaderAnimIfRunning();
             }
         } else {
             mQsHeaderLayout.setVisibility(View.GONE);
@@ -4746,7 +4755,9 @@ public final class NotificationPanelViewController implements
             return;
         }
 
-        drawable.setVisible(true, true);
+        if (!drawable.isVisible()) {
+            drawable.setVisible(true, false);
+        }
         if (drawable instanceof Animatable anim && !anim.isRunning()) {
             anim.start();
         }
