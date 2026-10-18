@@ -21,6 +21,7 @@ import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.app.Dialog
 import android.graphics.Color
+import android.graphics.PointF
 import android.graphics.Rect
 import android.os.Looper
 import android.util.Log
@@ -36,6 +37,8 @@ import com.android.app.animation.Interpolators
 import com.android.internal.jank.Cuj.CujType
 import com.android.internal.jank.InteractionJankMonitor
 import com.android.systemui.Flags
+import com.android.systemui.animation.DialogTransitionAnimator.Companion.COLLAPSE_SPRING_PARAMS
+import com.android.systemui.animation.DialogTransitionAnimator.Companion.LAUNCH_SPRING_PARAMS
 import com.android.systemui.util.maybeForceFullscreen
 import com.android.systemui.util.registerAnimationOnBackInvoked
 import java.util.concurrent.Executor
@@ -61,11 +64,37 @@ constructor(
     private val callback: Callback,
     private val interactionJankMonitor: InteractionJankMonitor,
     private val transitionAnimator: TransitionAnimator =
-        TransitionAnimator(mainExecutor, TIMINGS, INTERPOLATORS),
+        TransitionAnimator(
+            mainExecutor,
+            TIMINGS,
+            INTERPOLATORS,
+            ActivityTransitionAnimator.SPRING_TIMINGS,
+            ActivityTransitionAnimator.SPRING_INTERPOLATORS,
+        ),
     private val isForTesting: Boolean = false,
 ) {
-    private companion object {
+    companion object {
         private val TIMINGS = ActivityTransitionAnimator.TIMINGS
+
+        internal val LAUNCH_SPRING_PARAMS =
+            TransitionAnimator.SpringParams(
+                centerXStiffness = 700f,
+                centerXDampingRatio = 1.1f,
+                centerYStiffness = 700f,
+                centerYDampingRatio = 1.1f,
+                scaleStiffness = 700f,
+                scaleDampingRatio = 1.3f,
+            )
+
+        internal val COLLAPSE_SPRING_PARAMS =
+            TransitionAnimator.SpringParams(
+                centerXStiffness = 380f,
+                centerXDampingRatio = 0.9f,
+                centerYStiffness = 380f,
+                centerYDampingRatio = 0.87f,
+                scaleStiffness = 380f,
+                scaleDampingRatio = 0.9f,
+            )
 
         // We use the same interpolator for X and Y axis to make sure the dialog does not move out
         // of the screen bounds during the animation.
@@ -251,16 +280,40 @@ constructor(
             )
         }
 
+        showWithControllerResolver(
+            dialog,
+            { controller },
+            controller.cuj,
+            animateBackgroundBoundsChange,
+        )
+    }
+
+    @JvmOverloads
+    fun showWithControllerResolver(
+        dialog: Dialog,
+        resolveController: (DialogCuj?) -> Controller?,
+        cuj: DialogCuj? = null,
+        animateBackgroundBoundsChange: Boolean = false,
+    ) {
+        check(Looper.myLooper() == Looper.getMainLooper()) {
+            "Dialog transitions must be started on the main thread"
+        }
+        val startController = resolveController(cuj)
+        if (startController == null) {
+            dialog.show()
+            return
+        }
+
         // If the view we are launching from belongs to another dialog, then this means the caller
         // intent is to launch a dialog from another dialog.
         val animatedParent =
             openedDialogs.firstOrNull {
-                it.dialog.window?.decorView?.viewRootImpl == controller.viewRoot
+                it.dialog.window?.decorView?.viewRootImpl == startController.viewRoot
             }
         val controller =
             animatedParent?.dialogContentWithBackground?.let {
-                Controller.fromView(it, controller.cuj)
-            } ?: controller
+                Controller.fromView(it, startController.cuj)
+            } ?: startController
 
         // Make sure we don't run the launch animation from the same source twice at the same time.
         if (openedDialogs.any { it.controller.sourceIdentity == controller.sourceIdentity }) {
@@ -279,6 +332,8 @@ constructor(
                 callback = callback,
                 interactionJankMonitor = interactionJankMonitor,
                 controller = controller,
+                resolveController =
+                    if (animatedParent == null) resolveController else { _ -> controller },
                 onDialogDismissed = { openedDialogs.remove(it) },
                 dialog = dialog,
                 animateBackgroundBoundsChange = animateBackgroundBoundsChange,
@@ -503,7 +558,8 @@ private class AnimatedDialog(
      * The controller of the source that triggered the dialog and that will animate into/from the
      * dialog.
      */
-    val controller: DialogTransitionAnimator.Controller,
+    var controller: DialogTransitionAnimator.Controller,
+    private val resolveController: (DialogCuj?) -> DialogTransitionAnimator.Controller?,
 
     /**
      * A callback that will be called with this [AnimatedDialog] after the dialog was dismissed and
@@ -580,6 +636,13 @@ private class AnimatedDialog(
         // Create the dialog so that its onCreate() method is called, which usually sets the dialog
         // content.
         dialog.create()
+        controller =
+            resolveController(controller.cuj)
+                ?: run {
+                    onDialogDismissed(this)
+                    dialog.show()
+                    return
+                }
 
         val window = dialog.window!!
         val isWindowFullScreen =
@@ -734,8 +797,11 @@ private class AnimatedDialog(
      * drawn in the overlay at the same time as it is removed from its original position (or
      * inversely, removed from the overlay when the source is moved back to its original position).
      */
-    private fun synchronizeNextDraw(then: () -> Unit) {
-        val controllerRootView = controller.viewRoot?.view
+    private fun synchronizeNextDraw(
+        sourceController: DialogTransitionAnimator.Controller = controller,
+        then: () -> Unit,
+    ) {
+        val controllerRootView = sourceController.viewRoot?.view
         if (forceDisableSynchronization || controllerRootView == null) {
             // Don't synchronize when inside an automated test or if the controller root view is
             // detached.
@@ -852,15 +918,24 @@ private class AnimatedDialog(
             decorView.removeOnLayoutChangeListener(decorViewLayoutListener)
         }
 
-        if (!shouldAnimateDialogIntoSource()) {
+        val endController = resolveController(controller.cuj)
+        if (endController == null || !shouldAnimateDialogIntoSource(endController)) {
             Log.i(TAG, "Skipping animation of dialog into the source")
-            controller.onExitAnimationCancelled()
+            endController?.onExitAnimationCancelled()
+            if (endController !== controller) controller.onExitAnimationCancelled()
+            if (endController !== controller) endController?.stopDrawingInOverlay()
+            controller.stopDrawingInOverlay()
             onAnimationFinished(false /* instantDismiss */)
             onDialogDismissed(this@AnimatedDialog)
             return
         }
 
+        if (endController !== controller) {
+            endController.startDrawingInOverlayOf(decorView)
+        }
+
         startAnimation(
+            controller = endController,
             isLaunching = false,
             onLaunchAnimationStart = {
                 // Remove the dim background as soon as we start the animation.
@@ -882,8 +957,12 @@ private class AnimatedDialog(
                     )
                 }
 
-                controller.stopDrawingInOverlay()
-                synchronizeNextDraw {
+                endController.stopDrawingInOverlay()
+                if (endController !== controller) {
+                    controller.stopDrawingInOverlay()
+                    controller.onExitAnimationCancelled()
+                }
+                synchronizeNextDraw(endController) {
                     onAnimationFinished(true /* instantDismiss */)
                     onDialogDismissed(this@AnimatedDialog)
                 }
@@ -892,6 +971,7 @@ private class AnimatedDialog(
     }
 
     private fun startAnimation(
+        controller: DialogTransitionAnimator.Controller = this.controller,
         isLaunching: Boolean,
         onLaunchAnimationStart: () -> Unit = {},
         onLaunchAnimationEnd: () -> Unit = {},
@@ -1000,6 +1080,9 @@ private class AnimatedDialog(
             controller,
             { endController.createAnimatorState() },
             originalDialogBackgroundColor,
+            startVelocity = PointF(0f, 0f),
+            springParams = if (isLaunching) LAUNCH_SPRING_PARAMS else COLLAPSE_SPRING_PARAMS,
+            useDynamicPivot = true,
         )
     }
 
@@ -1034,7 +1117,9 @@ private class AnimatedDialog(
         }
     }
 
-    private fun shouldAnimateDialogIntoSource(): Boolean {
+    private fun shouldAnimateDialogIntoSource(
+        controller: DialogTransitionAnimator.Controller
+    ): Boolean {
         // Don't animate if the dialog was previously hidden using hide() or if we disabled the exit
         // animation.
         if (exitAnimationDisabled || !dialog.isShowing) {

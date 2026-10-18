@@ -27,7 +27,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
@@ -41,7 +40,7 @@ import com.android.compose.animation.Expandable
 import com.android.compose.animation.rememberExpandableController
 import com.android.compose.theme.LocalAndroidColorScheme
 import com.android.compose.theme.PlatformTheme
-import com.android.systemui.animation.Expandable
+import com.android.systemui.animation.DynamicExpandable
 import com.android.systemui.privacy.PrivacyType
 import com.android.systemui.privacy.ui.compose.PrivacyChipContainer.Colors
 import com.android.systemui.privacy.ui.compose.PrivacyChipContainer.Dimensions.compressedPadding
@@ -65,7 +64,7 @@ fun PrivacyChipContainer(
     modifier: Modifier = Modifier,
     /** Whether to use smaller padding */
     compressedPaddings: Boolean = false,
-    onExpandableChanged: (Expandable?) -> Unit,
+    expandable: DynamicExpandable,
 ) {
     if (privacyTypes.isEmpty()) {
         return
@@ -78,12 +77,9 @@ fun PrivacyChipContainer(
         val hasLocation =
             remember(privacyTypes) { privacyTypes.contains(PrivacyType.TYPE_LOCATION) }
         val controller = rememberExpandableController(color = Colors.container, shape = CircleShape)
-        DisposableEffect(controller, onExpandableChanged) {
-            onExpandableChanged(controller.expandable)
-            onDispose { onExpandableChanged(null) }
-        }
         Expandable(
             controller = controller,
+            expandable = expandable,
             defaultMinSize = false,
             useModifierBasedImplementation = true,
             modifier = modifier,

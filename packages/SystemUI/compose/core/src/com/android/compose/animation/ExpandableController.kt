@@ -51,6 +51,7 @@ import com.android.systemui.animation.DialogCuj
 import com.android.systemui.animation.DialogTransitionAnimator
 import com.android.systemui.animation.Expandable
 import com.android.systemui.animation.TransitionAnimator
+import com.android.systemui.animation.TransitionSource
 import kotlin.math.roundToInt
 
 /** A controller that can control animated launches from an [Expandable]. */
@@ -129,7 +130,8 @@ fun rememberExpandableController(
             )
         }
 
-    DisposableEffect(Unit) {
+    DisposableEffect(controller) {
+        isComposed = true
         onDispose {
             isComposed = false
             controller.onDispose()
@@ -170,11 +172,52 @@ internal class ExpandableControllerImpl(
 
     /** The [ActivityTransitionAnimator.Controller] to be cleaned up [onDispose]. */
     private var activityControllerForDisposal: ActivityTransitionAnimator.Controller? = null
+    private var isDisposed = false
 
     /**
      * The current [DrawModifierNode] in the overlay, drawing the expandable during a transition.
      */
     internal var currentNodeInOverlay: DrawModifierNode? = null
+
+    internal val transitionSource =
+        object : TransitionSource {
+            override var isSourceVisible: Boolean
+                get() = !isDialogShowing
+                set(value) {
+                    isDialogShowing = !value
+                }
+
+            override val isAvailable: Boolean
+                get() =
+                    !isDisposed &&
+                        isComposed() &&
+                        composeViewRoot.isAttachedToWindow &&
+                        composeViewRoot.isShown &&
+                        boundsInComposeViewRoot.width > 0 &&
+                        boundsInComposeViewRoot.height > 0
+
+            override fun dialogTransitionController(cuj: DialogCuj?) =
+                if (isAvailable) expandable.dialogTransitionController(cuj) else null
+
+            override fun activityTransitionController(
+                launchCujType: Int?,
+                cookie: ActivityTransitionAnimator.TransitionCookie?,
+                component: ComponentName?,
+                returnCujType: Int?,
+                isEphemeral: Boolean,
+            ) =
+                if (isAvailable) {
+                    expandable.activityTransitionController(
+                        launchCujType,
+                        cookie,
+                        component,
+                        returnCujType,
+                        isEphemeral,
+                    )
+                } else {
+                    null
+                }
+        }
 
     override val expandable: Expandable =
         object : Expandable {
@@ -185,7 +228,7 @@ internal class ExpandableControllerImpl(
                 returnCujType: Int?,
                 isEphemeral: Boolean,
             ): ActivityTransitionAnimator.Controller? {
-                if (!isComposed()) {
+                if (isDisposed || !isComposed()) {
                     return null
                 }
 
@@ -201,7 +244,7 @@ internal class ExpandableControllerImpl(
             override fun dialogTransitionController(
                 cuj: DialogCuj?
             ): DialogTransitionAnimator.Controller? {
-                if (!isComposed()) {
+                if (isDisposed || !isComposed()) {
                     return null
                 }
 
@@ -212,6 +255,7 @@ internal class ExpandableControllerImpl(
     override val isAnimating: Boolean by derivedStateOf { animatorState != null && overlay != null }
 
     override fun onDispose() {
+        isDisposed = true
         activityControllerForDisposal?.onDispose()
         activityControllerForDisposal = null
     }

@@ -37,7 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import com.android.settingslib.Utils
 import com.android.systemui.Flags
-import com.android.systemui.animation.Expandable
+import com.android.systemui.animation.DynamicExpandable
 import com.android.systemui.privacy.ui.compose.PrivacyChipContainer
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.events.BackgroundAnimatableView
@@ -72,12 +72,10 @@ constructor(
 
     var showPrivacyText by mutableStateOf(false)
 
-    var expandable: Expandable? = null
-        private set
+    val expandable = DynamicExpandable()
 
     private var privacyTypes by mutableStateOf(emptySet<PrivacyType>())
     private var groupedChipView: ComposeView? = null
-    private val onExpandableChanged: (Expandable?) -> Unit = { expandable = it }
 
     private val locationIndicatorsEnabled
         get() = Settings.Secure.getIntForUser(context.contentResolver,
@@ -212,7 +210,7 @@ constructor(
                             PrivacyChipContainer(
                                 privacyTypes = privacyTypes,
                                 showPrivacyText = showPrivacyText,
-                                onExpandableChanged = onExpandableChanged,
+                                expandable = expandable,
                             )
                         }
                         iconsContainer.addView(this, WRAP_CONTENT, WRAP_CONTENT)
@@ -224,7 +222,6 @@ constructor(
             it.disposeComposition()
             iconsContainer.removeView(it)
             groupedChipView = null
-            expandable = null
         }
         iconsContainer.clipToOutline = true
         iconsContainer.importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_AUTO

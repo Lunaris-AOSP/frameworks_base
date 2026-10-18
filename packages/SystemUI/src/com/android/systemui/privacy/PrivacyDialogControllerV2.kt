@@ -293,7 +293,15 @@ class PrivacyDialogControllerV2(
                         if (controller == null) {
                             d.show()
                         } else {
-                            dialogTransitionAnimator.show(d, controller)
+                            if (privacyChip.useGroupedStyle) {
+                                dialogTransitionAnimator.showWithControllerResolver(
+                                    d,
+                                    { getPrivacyDialogController(privacyChip) },
+                                    controller.cuj,
+                                )
+                            } else {
+                                dialogTransitionAnimator.show(d, controller)
+                            }
                         }
                     } else {
                         d.show()
@@ -312,7 +320,7 @@ class PrivacyDialogControllerV2(
     ): DialogTransitionAnimator.Controller? {
         val delegate =
             if (source.useGroupedStyle) {
-                source.expandable?.dialogTransitionController()
+                source.expandable.dialogTransitionController()
             } else {
                 DialogTransitionAnimator.Controller.fromView(source.launchableContentView)
             } ?: return null

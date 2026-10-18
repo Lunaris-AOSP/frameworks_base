@@ -63,6 +63,9 @@ class TransitionAnimator(
     companion object {
         internal const val DEBUG = false
         private val SRC_MODE = PorterDuffXfermode(PorterDuff.Mode.SRC)
+        private const val SPRING_MAX_SPEED = 6500f
+        private const val SPRING_SPEED_FALLOFF_COEFFICIENT = 1800f
+        private const val SPRING_SPEED_FALLOFF_THRESHOLD = 4000f
 
         /** Default parameters for the multi-spring animator. */
         private val DEFAULT_SPRING_PARAMS =
@@ -280,6 +283,18 @@ class TransitionAnimator(
         /** Whether all springs composing the animation have settled in the final position. */
         val isDone
             get() = isCenterXDone && isCenterYDone && isScaleDone
+    }
+
+    private enum class AnimationPivot {
+        CENTER,
+        LEFT,
+        TOP_LEFT,
+        TOP,
+        TOP_RIGHT,
+        RIGHT,
+        BOTTOM_RIGHT,
+        BOTTOM,
+        BOTTOM_LEFT,
     }
 
     /** Supported [SpringState] properties with getters and setters to update them. */
@@ -504,6 +519,8 @@ class TransitionAnimator(
         drawHole: Boolean = false,
         startVelocity: PointF? = null,
         startFrameTime: Long = -1,
+        springParams: SpringParams = this.springParams,
+        useDynamicPivot: Boolean = false,
     ): Animation {
         // We add an extra layer with the same color as the dialog/app splash screen background
         // color, which is usually the same color of the app background. We first fade in this layer
@@ -524,6 +541,8 @@ class TransitionAnimator(
                 drawHole,
                 startVelocity,
                 startFrameTime,
+                springParams,
+                useDynamicPivot,
             )
             .apply { start() }
     }
@@ -538,6 +557,8 @@ class TransitionAnimator(
         drawHole: Boolean = false,
         startVelocity: PointF? = null,
         startFrameTime: Long = -1,
+        springParams: SpringParams = this.springParams,
+        useDynamicPivot: Boolean = false,
     ): Animation {
         val transitionContainer = controller.transitionContainer
         val transitionContainerOverlay = transitionContainer.overlay
@@ -569,6 +590,8 @@ class TransitionAnimator(
                 shouldFadeWindowBackgroundLayer,
                 drawHole,
                 moveBackgroundLayerWhenAppVisibilityChanges,
+                springParams,
+                useDynamicPivot,
             )
         } else {
             createInterpolatedAnimation(
@@ -765,25 +788,85 @@ class TransitionAnimator(
         shouldFadeWindowBackgroundLayer: () -> Boolean = { true },
         drawHole: Boolean = false,
         moveBackgroundLayerWhenAppVisibilityChanges: Boolean = false,
+        springParams: SpringParams,
+        useDynamicPivot: Boolean = false,
     ): Animation {
+        var endState = startState
+        var pivot = AnimationPivot.CENTER
 
-        var endState = calculateEndState()
-        var springX: SpringAnimation? = null
-        var springY: SpringAnimation? = null
-        var targetX = endState.centerX
-        var targetY = endState.centerY
-
-        var movedBackgroundLayer = false
-
-        fun maybeUpdateEndState() {
-            if (Flags.dialogAnimEndStateUpdate()) {
+        fun updateEndStateAndPivot() {
+            if (useDynamicPivot || Flags.dialogAnimEndStateUpdate() || endState === startState) {
                 endState = calculateEndState()
             }
-            if (endState.centerX != targetX && endState.centerY != targetY) {
-                targetX = endState.centerX
-                targetY = endState.centerY
 
+            if (!useDynamicPivot) {
+                pivot = AnimationPivot.CENTER
+                return
+            }
+
+            val useTopPivot =
+                endState.height < startState.height &&
+                    endState.top > startState.top &&
+                    endState.bottom > startState.bottom
+            val useBottomPivot =
+                endState.height < startState.height &&
+                    endState.top < startState.top &&
+                    endState.bottom < startState.bottom
+            val useLeftPivot =
+                endState.width < startState.width &&
+                    endState.left > startState.left &&
+                    endState.right > startState.right
+            val useRightPivot =
+                endState.width < startState.width &&
+                    endState.left < startState.left &&
+                    endState.right < startState.right
+            pivot =
+                when {
+                    useLeftPivot && useTopPivot -> AnimationPivot.TOP_LEFT
+                    useTopPivot && useRightPivot -> AnimationPivot.TOP_RIGHT
+                    useRightPivot && useBottomPivot -> AnimationPivot.BOTTOM_RIGHT
+                    useBottomPivot && useLeftPivot -> AnimationPivot.BOTTOM_LEFT
+                    useLeftPivot -> AnimationPivot.LEFT
+                    useTopPivot -> AnimationPivot.TOP
+                    useRightPivot -> AnimationPivot.RIGHT
+                    useBottomPivot -> AnimationPivot.BOTTOM
+                    else -> AnimationPivot.CENTER
+                }
+        }
+
+        fun extractPivotAttributes(state: State, pivot: AnimationPivot): Pair<Float, Float> {
+            return when (pivot) {
+                AnimationPivot.LEFT -> Pair(state.left.toFloat(), state.centerY)
+                AnimationPivot.TOP_LEFT -> Pair(state.left.toFloat(), state.top.toFloat())
+                AnimationPivot.TOP -> Pair(state.centerX, state.top.toFloat())
+                AnimationPivot.TOP_RIGHT -> Pair(state.right.toFloat(), state.top.toFloat())
+                AnimationPivot.RIGHT -> Pair(state.right.toFloat(), state.centerY)
+                AnimationPivot.BOTTOM_RIGHT -> Pair(state.right.toFloat(), state.bottom.toFloat())
+                AnimationPivot.BOTTOM -> Pair(state.centerX, state.bottom.toFloat())
+                AnimationPivot.BOTTOM_LEFT -> Pair(state.left.toFloat(), state.bottom.toFloat())
+                AnimationPivot.CENTER -> Pair(state.centerX, state.centerY)
+            }
+        }
+
+        var springX: SpringAnimation? = null
+        var springY: SpringAnimation? = null
+        var movedBackgroundLayer = false
+
+        updateEndStateAndPivot()
+        var (targetX, targetY) = extractPivotAttributes(endState, pivot)
+
+        fun maybeUpdateEndState(state: SpringState) {
+            updateEndStateAndPivot()
+
+            val (newTargetX, newTargetY) = extractPivotAttributes(endState, pivot)
+            if (newTargetX != targetX) {
+                targetX = newTargetX
+                if (useDynamicPivot) state.isCenterXDone = false
                 springX?.animateToFinalPosition(targetX)
+            }
+            if (newTargetY != targetY) {
+                targetY = newTargetY
+                if (useDynamicPivot) state.isCenterYDone = false
                 springY?.animateToFinalPosition(targetY)
             }
         }
@@ -794,29 +877,92 @@ class TransitionAnimator(
                     !(state.isCenterYUpdated || state.isCenterYDone) ||
                     !(state.isScaleUpdated || state.isScaleDone)
             ) {
-                // Because all three springs use the same update method, we only actually update
-                // when all properties have received their new value (which could be unchanged from
-                // the previous one), avoiding two redundant calls per frame.
                 return
             }
-
-            // Reset the update flags.
             state.isCenterXUpdated = false
             state.isCenterYUpdated = false
             state.isScaleUpdated = false
-
-            // Current scale-based values, that will be used to find the new animation bounds.
             val width =
                 MathUtils.lerp(startState.width.toFloat(), endState.width.toFloat(), state.scale)
             val height =
                 MathUtils.lerp(startState.height.toFloat(), endState.height.toFloat(), state.scale)
 
+            val left: Float
+            val top: Float
+            val right: Float
+            val bottom: Float
+
+            when (pivot) {
+                AnimationPivot.LEFT -> {
+                    left = state.centerX
+                    top = state.centerY - height / 2
+                    right = state.centerX + width
+                    bottom = state.centerY + height / 2
+                }
+
+                AnimationPivot.TOP_LEFT -> {
+                    left = state.centerX
+                    top = state.centerY
+                    right = state.centerX + width
+                    bottom = state.centerY + height
+                }
+
+                AnimationPivot.TOP -> {
+                    left = state.centerX - width / 2
+                    top = state.centerY
+                    right = state.centerX + width / 2
+                    bottom = state.centerY + height
+                }
+
+                AnimationPivot.TOP_RIGHT -> {
+                    left = state.centerX - width
+                    top = state.centerY
+                    right = state.centerX
+                    bottom = state.centerY + height
+                }
+
+                AnimationPivot.RIGHT -> {
+                    left = state.centerX - width
+                    top = state.centerY - height / 2
+                    right = state.centerX
+                    bottom = state.centerY + height / 2
+                }
+
+                AnimationPivot.BOTTOM_RIGHT -> {
+                    left = state.centerX - width
+                    top = state.centerY - height
+                    right = state.centerX
+                    bottom = state.centerY
+                }
+
+                AnimationPivot.BOTTOM -> {
+                    left = state.centerX - width / 2
+                    top = state.centerY - height
+                    right = state.centerX + width / 2
+                    bottom = state.centerY
+                }
+
+                AnimationPivot.BOTTOM_LEFT -> {
+                    left = state.centerX
+                    top = state.centerY - height
+                    right = state.centerX + width
+                    bottom = state.centerY
+                }
+
+                AnimationPivot.CENTER -> {
+                    left = state.centerX - width / 2
+                    top = state.centerY - height / 2
+                    right = state.centerX + width / 2
+                    bottom = state.centerY + height / 2
+                }
+            }
+
             val newState =
                 State(
-                        left = (state.centerX - width / 2).toInt(),
-                        top = (state.centerY - height / 2).toInt(),
-                        right = (state.centerX + width / 2).toInt(),
-                        bottom = (state.centerY + height / 2).toInt(),
+                        left = left.toInt(),
+                        top = top.toInt(),
+                        right = right.toInt(),
+                        bottom = bottom.toInt(),
                         topCornerRadius =
                             MathUtils.lerp(
                                 startState.topCornerRadius,
@@ -831,7 +977,12 @@ class TransitionAnimator(
                             ),
                     )
                     .apply {
-                        visible = checkVisibility(timings, state.scale, controller.isLaunching)
+                        visible =
+                            if (useDynamicPivot) {
+                                checkSpringVisibility(state.scale, controller.isLaunching)
+                            } else {
+                                checkVisibility(timings, state.scale, controller.isLaunching)
+                            }
                     }
 
             if (!movedBackgroundLayer) {
@@ -867,15 +1018,17 @@ class TransitionAnimator(
 
             controller.onTransitionAnimationProgress(newState, state.scale, state.scale)
 
-            maybeUpdateEndState()
+            maybeUpdateEndState(state)
         }
 
-        val springState = SpringState(centerX = startState.centerX, centerY = startState.centerY)
+        val (startX, startY) = extractPivotAttributes(startState, pivot)
+        val springState = SpringState(startX, startY)
         val isExpandingFullyAbove = isExpandingFullyAbove(transitionContainer, endState)
+        var animationEnded = false
 
-        /** End listener for each spring, which only does the end work if all springs are done. */
         fun onAnimationEnd() {
-            if (!springState.isDone) return
+            if (!springState.isDone || animationEnded) return
+            animationEnded = true
             onAnimationEnd(
                 controller,
                 isExpandingFullyAbove,
@@ -886,6 +1039,23 @@ class TransitionAnimator(
             )
         }
 
+
+        fun dampenSpeed(speed: Float): Float {
+            val absolute = abs(speed)
+            val sign = speed / absolute
+            if (absolute <= SPRING_SPEED_FALLOFF_THRESHOLD) return speed
+            return SPRING_MAX_SPEED *
+                (absolute / (absolute + SPRING_SPEED_FALLOFF_COEFFICIENT)) *
+                sign
+        }
+
+        val scaledVelocity =
+            if (useDynamicPivot) {
+                PointF(dampenSpeed(startVelocity.x), dampenSpeed(startVelocity.y))
+            } else {
+                startVelocity
+            }
+
         springX =
             SpringAnimation(
                     springState,
@@ -893,19 +1063,25 @@ class TransitionAnimator(
                 )
                 .apply {
                     spring =
-                        SpringForce(endState.centerX).apply {
+                        SpringForce(targetX).apply {
                             stiffness = springParams.centerXStiffness
                             dampingRatio = springParams.centerXDampingRatio
                         }
 
-                    setStartValue(startState.centerX)
-                    setStartVelocity(startVelocity.x)
-                    setMinValue(min(startState.centerX, endState.centerX))
-                    setMaxValue(max(startState.centerX, endState.centerX))
+                    setStartValue(startX)
+                    setStartVelocity(scaledVelocity.x)
+                    if (!useDynamicPivot) {
+                        setMinValue(min(startX, targetX))
+                        setMaxValue(max(startX, targetX))
+                    }
 
-                    addEndListener { _, _, _, _ ->
-                        springState.isCenterXDone = true
-                        onAnimationEnd()
+                    addEndListener { _, cancelled, value, _ ->
+                        if (useDynamicPivot && !cancelled && value != targetX) {
+                            animateToFinalPosition(targetX)
+                        } else {
+                            springState.isCenterXDone = true
+                            onAnimationEnd()
+                        }
                     }
                 }
         springY =
@@ -915,19 +1091,25 @@ class TransitionAnimator(
                 )
                 .apply {
                     spring =
-                        SpringForce(endState.centerY).apply {
+                        SpringForce(targetY).apply {
                             stiffness = springParams.centerYStiffness
                             dampingRatio = springParams.centerYDampingRatio
                         }
 
-                    setStartValue(startState.centerY)
-                    setStartVelocity(startVelocity.y)
-                    setMinValue(min(startState.centerY, endState.centerY))
-                    setMaxValue(max(startState.centerY, endState.centerY))
+                    setStartValue(startY)
+                    setStartVelocity(scaledVelocity.y)
+                    if (!useDynamicPivot) {
+                        setMinValue(min(startY, targetY))
+                        setMaxValue(max(startY, targetY))
+                    }
 
-                    addEndListener { _, _, _, _ ->
-                        springState.isCenterYDone = true
-                        onAnimationEnd()
+                    addEndListener { _, cancelled, value, _ ->
+                        if (useDynamicPivot && !cancelled && value != targetY) {
+                            animateToFinalPosition(targetY)
+                        } else {
+                            springState.isCenterYDone = true
+                            onAnimationEnd()
+                        }
                     }
                 }
         val springScale =
@@ -943,7 +1125,7 @@ class TransitionAnimator(
                         }
 
                     setStartValue(0f)
-                    setMaxValue(1f)
+                    if (!useDynamicPivot) setMaxValue(1f)
                     setMinimumVisibleChange(abs(1f / startState.height))
 
                     addEndListener { _, _, _, _ ->
@@ -1021,6 +1203,23 @@ class TransitionAnimator(
             mainExecutor.execute { onEnd() }
         } else {
             onEnd()
+        }
+    }
+
+    private fun checkSpringVisibility(progress: Float, isLaunching: Boolean): Boolean {
+        val timings = checkNotNull(springTimings)
+        return if (isLaunching) {
+            getProgress(
+                progress,
+                timings.contentBeforeFadeOutDelay,
+                timings.contentBeforeFadeOutDuration,
+            ) < 1
+        } else {
+            getProgress(
+                progress,
+                timings.contentAfterFadeInDelay,
+                timings.contentAfterFadeInDuration,
+            ) > 0
         }
     }
 

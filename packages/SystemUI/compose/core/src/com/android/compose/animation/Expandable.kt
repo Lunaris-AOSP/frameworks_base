@@ -90,6 +90,7 @@ import com.android.compose.modifiers.thenIf
 import com.android.compose.ui.graphics.FullScreenComposeViewInOverlay
 import com.android.systemui.Flags.expandableUseModifierImplementation
 import com.android.systemui.animation.ComposableControllerFactory
+import com.android.systemui.animation.DynamicExpandable
 import com.android.systemui.animation.Expandable
 import com.android.systemui.animation.TransitionAnimator
 import kotlin.math.max
@@ -167,7 +168,7 @@ fun Expandable(
         interactionSource,
         useModifierBasedImplementation,
         defaultMinSize,
-        content,
+        content = content,
     )
 }
 
@@ -211,6 +212,7 @@ fun Expandable(
     // proven that the new implementation is robust.
     useModifierBasedImplementation: Boolean = false,
     defaultMinSize: Boolean = true,
+    expandable: DynamicExpandable? = null,
     content: @Composable (Expandable) -> Unit,
 ) {
     val controller = controller as ExpandableControllerImpl
@@ -219,17 +221,26 @@ fun Expandable(
         DisposableEffect(controller.transitionControllerFactory) {
             // Notify the transition controller factory that the expandable is now available, so it
             // can move forward with any pending requests.
-            controller.transitionControllerFactory.onCompose(controller.expandable)
+            controller.transitionControllerFactory.onCompose(expandable ?: controller.expandable)
             // Once this composable is gone, the transition controller factory must be notified so
             // it doesn't accepts requests providing stale content.
             onDispose { controller.transitionControllerFactory.onDispose() }
         }
     }
 
-    if (useModifierBasedImplementation) {
-        Box(modifier.expandable(controller, onClick, onClickLabel, onLongClick, interactionSource)) {
+    if (useModifierBasedImplementation || expandable != null) {
+        Box(
+            modifier.expandable(
+                controller,
+                onClick,
+                onClickLabel,
+                onLongClick,
+                interactionSource,
+                expandable,
+            )
+        ) {
             WrappedContent(
-                controller.expandable,
+                expandable ?: controller.expandable,
                 controller.contentColor,
                 defaultMinSize = defaultMinSize,
                 content,
@@ -371,12 +382,13 @@ private fun Modifier.expandable(
     onClickLabel: String? = null,
     onLongClick: ((Expandable) -> Unit)? = null,
     interactionSource: MutableInteractionSource? = null,
+    expandable: DynamicExpandable? = null,
 ): Modifier {
     val controller = controller as ExpandableControllerImpl
     val graphicsLayer = rememberGraphicsLayer()
 
     val isAnimating = controller.isAnimating
-    if (isAnimating) {
+    if (isAnimating || (expandable != null && controller.isDialogShowing)) {
         FullScreenComposeViewInOverlay(controller.overlay) { view ->
             Modifier.then(DrawExpandableInOverlayElement(view, controller, graphicsLayer))
         }
@@ -386,9 +398,19 @@ private fun Modifier.expandable(
     return this.thenIf(onClick != null) { Modifier.minimumInteractiveComponentSize() }
         .thenIf(drawContent) {
             Modifier.border(controller)
-                .then(clickModifier(controller, onClick, onClickLabel, onLongClick, interactionSource))
+                .then(
+                    clickModifier(
+                        controller,
+                        onClick,
+                        onClickLabel,
+                        onLongClick,
+                        interactionSource,
+                        expandable ?: controller.expandable,
+                    )
+                )
                 .animatedBackground(controller.color, shape = controller.shape)
         }
+        .registerSource(controller.transitionSource, expandable)
         .onPlaced { coords ->
             // TODO(b/415570057): Remove this check.
             if (coords.isAttached) {
@@ -497,6 +519,7 @@ private fun clickModifier(
     onClickLabel: String? = null,
     onLongClick: ((Expandable) -> Unit)?,
     interactionSource: MutableInteractionSource?,
+    expandable: Expandable = controller.expandable,
 ): Modifier {
     if (onClick == null && onLongClick == null) {
         return Modifier
@@ -509,8 +532,8 @@ private fun clickModifier(
             interactionSource,
             indication = null,
             onClickLabel = onClickLabel,
-            onLongClick = { onLongClick?.invoke(controller.expandable) },
-            onClick = { onClick?.invoke(controller.expandable) }
+            onLongClick = { onLongClick?.invoke(expandable) },
+            onClick = { onClick?.invoke(expandable) },
         )
     } else if (interactionSource != null) {
         return Modifier.clickable(
@@ -518,21 +541,22 @@ private fun clickModifier(
             indication = null,
             onClickLabel = onClickLabel,
         ) {
-            onClick?.invoke(controller.expandable)
+            onClick?.invoke(expandable)
         }
     }
 
     // If no interaction source is provided, we draw the default indication (a ripple) and make sure
     // it's clipped by the expandable shape.
     if (onLongClick != null) {
-        return Modifier.clip(controller.shape).combinedClickable(
-            onClickLabel = onClickLabel,
-            onLongClick = { onLongClick?.invoke(controller.expandable) },
-            onClick = { onClick?.invoke(controller.expandable) }
-        )
+        return Modifier.clip(controller.shape)
+            .combinedClickable(
+                onClickLabel = onClickLabel,
+                onLongClick = { onLongClick?.invoke(expandable) },
+                onClick = { onClick?.invoke(expandable) },
+            )
     } else {
         return Modifier.clip(controller.shape).clickable(onClickLabel = onClickLabel) {
-            onClick?.invoke(controller.expandable)
+            onClick?.invoke(expandable)
         }
     }
 }
