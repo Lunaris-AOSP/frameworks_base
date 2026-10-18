@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2025 AxionOS
+ * Copyright (C) 2025-2026 AxionOS
+ * Copyright (C) 2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -78,6 +79,8 @@ class WaveformSeekBar @JvmOverloads constructor(
     private var waveAmplitudeMultiplier = 0f
     private var waveAnimator: ValueAnimator? = null
     private var fadeAnimator: ValueAnimator? = null
+    private var aggregatedVisible = false
+    private var wavePoints = FloatArray(0)
     var isPlaying = false
         private set
     var followsMediaColors = true
@@ -89,9 +92,17 @@ class WaveformSeekBar @JvmOverloads constructor(
     }
     
     fun startWaveAnimation() {
-        if (isPlaying && waveAnimator?.isRunning == true) return
         isPlaying = true
-        
+        syncWaveAnimation()
+    }
+
+    private fun syncWaveAnimation() {
+        if (!isPlaying || !isAttachedToWindow || !aggregatedVisible) {
+            stopWaveAnimation(animate = false)
+            return
+        }
+        if (waveAnimator?.isRunning == true) return
+
         fadeAnimator?.cancel()
         fadeAnimator = ValueAnimator.ofFloat(waveAmplitudeMultiplier, 1f).apply {
             duration = 300L
@@ -116,11 +127,22 @@ class WaveformSeekBar @JvmOverloads constructor(
     }
     
     fun stopWaveAnimation() {
+        val wasPlaying = isPlaying
         isPlaying = false
+        if (!wasPlaying && isAttachedToWindow && aggregatedVisible) return
+        stopWaveAnimation(animate = isAttachedToWindow && aggregatedVisible)
+    }
+
+    private fun stopWaveAnimation(animate: Boolean) {
         waveAnimator?.cancel()
         waveAnimator = null
-        
         fadeAnimator?.cancel()
+        fadeAnimator = null
+        if (!animate || waveAmplitudeMultiplier == 0f) {
+            waveAmplitudeMultiplier = 0f
+            postInvalidateOnAnimation()
+            return
+        }
         fadeAnimator = ValueAnimator.ofFloat(waveAmplitudeMultiplier, 0f).apply {
             duration = 300L
             addUpdateListener { 
@@ -137,32 +159,26 @@ class WaveformSeekBar @JvmOverloads constructor(
     
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        MediaSessionManager.get().addListener(this)
-        
-        if (isPlaying && waveAnimator?.isRunning != true) {
-            waveAnimator?.cancel()
-            waveAnimator = ValueAnimator.ofFloat(0f, (2 * Math.PI).toFloat()).apply {
-                duration = 3500L
-                repeatCount = ValueAnimator.INFINITE
-                interpolator = LinearInterpolator()
-                addUpdateListener { 
-                    wavePhase = it.animatedValue as Float
-                    invalidate()
-                }
-                start()
-            }
-        }
+        if (followsMediaColors) MediaSessionManager.get().addListener(this)
+        syncWaveAnimation()
     }
     
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         MediaSessionManager.get().removeListener(this)
-        waveAnimator?.cancel()
+        aggregatedVisible = false
+        stopWaveAnimation(animate = false)
+    }
+
+    override fun onVisibilityAggregated(isVisible: Boolean) {
+        super.onVisibilityAggregated(isVisible)
+        aggregatedVisible = isVisible
+        syncWaveAnimation()
     }
     
     override fun onMediaColorsChanged(color: Int) {
         if (followsMediaColors) {
-            post { setWaveformColor(color) }
+            post { if (followsMediaColors && isAttachedToWindow) setWaveformColor(color) }
         }
     }
     
@@ -283,39 +299,29 @@ class WaveformSeekBar @JvmOverloads constructor(
         if (endX <= startX) return
         
         val step = 2f * density
-        val points = mutableListOf<Pair<Float, Float>>()
-        
-        var x = startX
-        while (x <= endX) {
-            val y = calculateWaveY(x, startX, endX, trackTop, progressLengthFactor)
-            points.add(Pair(x, y))
-            x += step
+        val pointCount = max(2, ceil((endX - startX) / step).toInt() + 1)
+        if (wavePoints.size < pointCount * 2) {
+            wavePoints = FloatArray(pointCount * 2)
         }
-        
-        if (points.isEmpty() || points.last().first < endX) {
-            val y = calculateWaveY(endX, startX, endX, trackTop, progressLengthFactor)
-            points.add(Pair(endX, y))
+        for (i in 0 until pointCount) {
+            val x = min(startX + i * step, endX)
+            wavePoints[i * 2] = x
+            wavePoints[i * 2 + 1] = calculateWaveY(x, startX, endX, trackTop, progressLengthFactor)
         }
-        
-        if (points.size < 2) {
-            progressPath.lineTo(endX, trackTop)
-            return
-        }
-        
-        for (i in 0 until points.size - 1) {
-            val p0 = if (i > 0) points[i - 1] else points[i]
-            val p1 = points[i]
-            val p2 = points[i + 1]
-            val p3 = if (i + 2 < points.size) points[i + 2] else points[i + 1]
-            
+
+        for (i in 0 until pointCount - 1) {
+            val p0 = (i - 1).coerceAtLeast(0) * 2
+            val p1 = i * 2
+            val p2 = (i + 1) * 2
+            val p3 = (i + 2).coerceAtMost(pointCount - 1) * 2
+
             val tension = 0.5f
-            
-            val cp1x = p1.first + (p2.first - p0.first) * tension / 3f
-            val cp1y = p1.second + (p2.second - p0.second) * tension / 3f
-            val cp2x = p2.first - (p3.first - p1.first) * tension / 3f
-            val cp2y = p2.second - (p3.second - p1.second) * tension / 3f
-            
-            progressPath.cubicTo(cp1x, cp1y, cp2x, cp2y, p2.first, p2.second)
+            val cp1x = wavePoints[p1] + (wavePoints[p2] - wavePoints[p0]) * tension / 3f
+            val cp1y = wavePoints[p1 + 1] + (wavePoints[p2 + 1] - wavePoints[p0 + 1]) * tension / 3f
+            val cp2x = wavePoints[p2] - (wavePoints[p3] - wavePoints[p1]) * tension / 3f
+            val cp2y = wavePoints[p2 + 1] - (wavePoints[p3 + 1] - wavePoints[p1 + 1]) * tension / 3f
+
+            progressPath.cubicTo(cp1x, cp1y, cp2x, cp2y, wavePoints[p2], wavePoints[p2 + 1])
         }
     }
 

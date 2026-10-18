@@ -1,5 +1,6 @@
 /*
- * Copyright 2025-2026 AxionOS
+ * Copyright (C) 2025-2026 AxionOS
+ * Copyright (C) 2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -57,7 +58,6 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
@@ -302,7 +302,8 @@ private fun ellipseFactor(offset: Float, radius: Float): Float {
 internal fun Modifier.axQsResizeHandle(
     id: String,
     span: () -> AxQsSpan,
-    itemSize: () -> IntSize,
+    cellWidth: Dp,
+    rowHeight: Dp,
     spacing: Dp,
     resolveSpan: (AxQsSpan, Int, Int) -> AxQsSpan,
     canResize: (AxQsSpan) -> Boolean,
@@ -312,7 +313,6 @@ internal fun Modifier.axQsResizeHandle(
     onResizeFinished: (AxQsSpan) -> Unit,
 ): Modifier {
     val currentSpan by rememberUpdatedState(span)
-    val currentItemSize by rememberUpdatedState(itemSize)
     val currentResolveSpan by rememberUpdatedState(resolveSpan)
     val currentCanResize by rememberUpdatedState(canResize)
     val currentOnResizeStarted by rememberUpdatedState(onResizeStarted)
@@ -320,21 +320,18 @@ internal fun Modifier.axQsResizeHandle(
     val currentOnResize by rememberUpdatedState(onResize)
     val currentOnResizeFinished by rememberUpdatedState(onResizeFinished)
     val layoutDirection = LocalLayoutDirection.current
-    val spacingPx = with(LocalDensity.current) { spacing.toPx() }
+    val density = LocalDensity.current
+    val columnStep = with(density) { (cellWidth + spacing).toPx().coerceAtLeast(1f) }
+    val rowStep = with(density) { (rowHeight + spacing).toPx().coerceAtLeast(1f) }
 
-    return pointerInput(id, layoutDirection, spacingPx) {
+    return pointerInput(id, layoutDirection, columnStep, rowStep) {
         var startSpan = currentSpan()
         var dragOffset = Offset.Zero
-        var columnStep = 1f
-        var rowStep = 1f
         detectDragGestures(
             onDragStart = {
                 currentOnResizeStarted()
                 startSpan = currentSpan()
                 dragOffset = Offset.Zero
-                val size = currentItemSize()
-                columnStep = ((size.width + spacingPx) / startSpan.columns).coerceAtLeast(1f)
-                rowStep = ((size.height + spacingPx) / startSpan.rows).coerceAtLeast(1f)
             },
             onDragCancel = {
                 currentOnResize(startSpan)

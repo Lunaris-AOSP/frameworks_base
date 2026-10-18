@@ -1,5 +1,6 @@
 /*
- * Copyright 2025-2026 AxionOS
+ * Copyright (C) 2025-2026 AxionOS
+ * Copyright (C) 2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -64,8 +65,7 @@ constructor(
     private var scrubbingSessionKey: Any? by mutableStateOf(null)
     private var gutsSessionKey: Any? by mutableStateOf(null)
     private var scrubProgress by mutableFloatStateOf(0f)
-    private var dismissedSessions by
-        mutableStateOf(emptyMap<AxMediaSurface, Set<AxMediaDismissToken>>())
+    private var dismissedSessions by mutableStateOf(emptyMap<AxMediaSurface, Set<Any>>())
     private val sessions by derivedStateOf { interactor.sessions }
 
     private val activeSessions by derivedStateOf { sessions.filter { it.isDisplayable() } }
@@ -77,6 +77,7 @@ constructor(
 
     val showOnLockscreen = mediaCarouselInteractor.allowMediaOnLockscreen
     val isShadeExpanded: StateFlow<Boolean> = shadeInteractor.isAnyExpanded
+    val isShadeInteracting: StateFlow<Boolean> = shadeInteractor.isUserInteracting
     val currentKeyguardState: StateFlow<KeyguardState> = keyguardTransitionInteractor.currentKeyguardState
     val lastMediaPackage = mediaHistoryRepository.lastMediaPackage
 
@@ -95,6 +96,11 @@ constructor(
 
     fun visibleSessions(surface: AxMediaSurface): List<MediaSessionModel> {
         return activeSessions.filter { it.isVisibleOn(surface) }
+    }
+
+    fun currentSession(surface: AxMediaSurface): MediaSessionModel? {
+        val visible = visibleSessions(surface)
+        return visible.firstOrNull { it.key == currentSession?.key } ?: visible.firstOrNull()
     }
 
     fun hasVisibleSessions(surface: AxMediaSurface): Boolean = visibleSessions(surface).isNotEmpty()
@@ -131,23 +137,21 @@ constructor(
 
     fun dismissBySwipe(surface: AxMediaSurface) {
         if (!surface.dismissible) return
-        dismissedSessions =
-            dismissedSessions +
-                (surface to activeSessions.mapTo(mutableSetOf()) { it.dismissToken() })
+        dismissSessions(surface, activeSessions.mapTo(mutableSetOf()) { it.key })
         closeGuts()
     }
 
     fun dismissFromSurface(session: MediaSessionModel, surface: AxMediaSurface) {
         if (!surface.dismissible) return
         falsingSystem.runIfNotFalseTap(FalsingManager.LOW_PENALTY) {
-            val dismissed = dismissedSessions[surface].orEmpty() + session.dismissToken()
-            dismissedSessions = dismissedSessions + (surface to dismissed)
+            dismissSessions(surface, setOf(session.key))
             closeGuts()
         }
     }
 
     fun openSettings() {
         falsingSystem.runIfNotFalseTap(FalsingManager.LOW_PENALTY) {
+            closeGuts()
             interactor.openMediaSettings()
         }
     }
@@ -212,16 +216,13 @@ constructor(
 
     private fun MediaSessionModel.isVisibleOn(surface: AxMediaSurface): Boolean {
         return isDisplayable() &&
-            (!surface.dismissible || dismissToken() !in dismissedSessions[surface].orEmpty())
+            (!surface.dismissible || key !in dismissedSessions[surface].orEmpty())
     }
 
-    private fun MediaSessionModel.dismissToken(): AxMediaDismissToken {
-        return AxMediaDismissToken(key, title, subtitle)
+    private fun dismissSessions(surface: AxMediaSurface, keys: Set<Any>) {
+        val currentKeys = sessions.mapTo(mutableSetOf()) { it.key }
+        val retained =
+            dismissedSessions.mapValues { (_, dismissed) -> dismissed.intersect(currentKeys) }
+        dismissedSessions = retained + (surface to (retained[surface].orEmpty() + keys))
     }
 }
-
-private data class AxMediaDismissToken(
-    val sessionKey: Any,
-    val title: String,
-    val subtitle: String,
-)

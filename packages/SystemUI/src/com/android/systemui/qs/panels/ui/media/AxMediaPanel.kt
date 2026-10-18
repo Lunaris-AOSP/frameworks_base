@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2025-2026 AxionOS
+ * Copyright (C) 2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -122,7 +123,7 @@ fun AxMediaPanel(
     }
 
     val sessions = viewModel.visibleSessions(surface)
-    val currentSession = viewModel.currentSession?.takeIf { viewModel.isSessionVisible(it.key, surface) }
+    val currentSession = viewModel.currentSession(surface)
     val lastMediaPackage by viewModel.lastMediaPackage.collectAsStateWithLifecycle()
     val expandedMediaState = rememberMediaState()
     val hasVisibleMedia = sessions.isNotEmpty() || showPlaceholder
@@ -150,7 +151,7 @@ fun AxMediaPanel(
     }
 
     val shape = axQsControlShape(AxQsControl.MEDIA, span, mediaSurface = surface)
-    val gesturesEnabled = !viewModel.hasVisibleGuts()
+    val gesturesEnabled = interactive && !viewModel.hasVisibleGuts()
     val carouselScrollingEnabled =
         gesturesEnabled && (surface != AxMediaSurface.LOCKSCREEN || sessions.size > 1)
     var isFalseTouchDetected by remember(surface) { mutableStateOf(false) }

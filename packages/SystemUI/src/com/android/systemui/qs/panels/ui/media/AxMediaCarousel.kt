@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2024 The Android Open Source Project
  * Copyright (C) 2025-2026 AxionOS
+ * Copyright (C) 2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,10 +30,13 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Shape
@@ -43,6 +47,7 @@ import com.android.systemui.compose.modifiers.sysuiResTag
 import com.android.systemui.media.remedia.ui.compose.MediaUiBehavior
 import com.android.systemui.media.remedia.ui.viewmodel.MediaCardViewModel
 import com.android.systemui.media.remedia.ui.viewmodel.MediaViewModel
+import kotlinx.coroutines.flow.filterNotNull
 
 @Composable
 fun AxMediaCarousel(
@@ -55,26 +60,43 @@ fun AxMediaCarousel(
     cardContent: @Composable (MediaCardViewModel, Modifier) -> Unit,
     pagerIndicator: @Composable BoxScope.(PagerState) -> Unit = {},
 ) {
-    val hasCards = cardFilter?.let { viewModel.cards.any(it) } ?: viewModel.cards.isNotEmpty()
+    val rawCards = cardFilter?.let { viewModel.cards.filter(it) } ?: viewModel.cards
+    val rawKeys = rawCards.map { it.key }.toSet()
+    var orderedKeys by remember(viewModel) { mutableStateOf(emptyList<Any>()) }
+    val cardKeys =
+        remember(orderedKeys, rawKeys) {
+            orderedKeys.filter { it in rawKeys } + rawKeys.filter { it !in orderedKeys }
+        }
+    SideEffect { if (orderedKeys != cardKeys) orderedKeys = cardKeys }
+    val cardMap = rawCards.associateBy { it.key }
+    val cards = cardKeys.mapNotNull(cardMap::get)
+    val currentRawCards by rememberUpdatedState(viewModel.cards)
     AnimatedVisibility(
-        visible = viewModel.isCarouselVisible && hasCards,
+        visible = viewModel.isCarouselVisible && cards.isNotEmpty(),
         modifier = modifier,
     ) {
-        val cards = cardFilter?.let { viewModel.cards.filter(it) } ?: viewModel.cards
         if (cards.isEmpty()) return@AnimatedVisibility
-        val cardKeys = cards.map { it.key }
         val currentCardKey = viewModel.cards.getOrNull(viewModel.currentIndex)?.key
-        val currentIndex = cardKeys.indexOf(currentCardKey).coerceAtLeast(0)
-        val pagerState = rememberPagerState { cards.size }
-        LaunchedEffect(currentIndex, cards.size) {
-            if (currentIndex != pagerState.currentPage) {
-                pagerState.scrollToPage(currentIndex)
+        val initialIndex = cardKeys.indexOf(currentCardKey).coerceAtLeast(0)
+        val pagerState = rememberPagerState(initialPage = initialIndex) { cards.size }
+        LaunchedEffect(cards.size) {
+            if (pagerState.currentPage >= cards.size) {
+                pagerState.scrollToPage(cards.lastIndex)
             }
         }
-        LaunchedEffect(pagerState.currentPage, cardKeys) {
-            val selectedKey = cardKeys.getOrNull(pagerState.currentPage) ?: return@LaunchedEffect
-            val selectedIndex = viewModel.cards.indexOfFirst { it.key == selectedKey }
-            if (selectedIndex >= 0) viewModel.onCardSelected(selectedIndex)
+        LaunchedEffect(pagerState, viewModel) {
+            snapshotFlow {
+                    if (pagerState.isScrollInProgress) null
+                    else {
+                        val selectedKey =
+                            pagerState.layoutInfo.visiblePagesInfo
+                                .firstOrNull { it.index == pagerState.settledPage }
+                                ?.key
+                        currentRawCards.indexOfFirst { it.key == selectedKey }.takeIf { it >= 0 }
+                    }
+                }
+                .filterNotNull()
+                .collect { viewModel.onCardSelected(it) }
         }
         var isFalseTouchDetected: Boolean by
             remember(behavior.isCarouselScrollFalseTouch) { mutableStateOf(false) }
@@ -82,13 +104,11 @@ fun AxMediaCarousel(
 
         Box(
             modifier =
-                modifier.clip(carouselShape).pointerInput(behavior) {
+                Modifier.clip(carouselShape).pointerInput(behavior) {
                     if (behavior.isCarouselScrollFalseTouch != null) {
                         awaitEachGesture {
                             awaitFirstDown(false, PointerEventPass.Initial)
-                            val pointer = currentEvent.changes.first()
-                            isFalseTouchDetected =
-                                behavior.isCarouselScrollFalseTouch.invoke()
+                            isFalseTouchDetected = behavior.isCarouselScrollFalseTouch.invoke()
                         }
                     }
                 }

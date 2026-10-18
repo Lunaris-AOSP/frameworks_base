@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2025-2026 AxionOS
+ * Copyright (C) 2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,6 +36,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.systemui.media.controls.ui.drawable.SquigglyProgress
 import com.android.systemui.media.controls.ui.view.WaveformSeekBar
 import com.android.systemui.media.remedia.domain.model.MediaSessionModel
@@ -44,8 +46,6 @@ import com.android.systemui.res.R
 
 private class SeekBarStateHolder {
     var lastColorArgb: Int = 0
-    var lastPlaying: Boolean = false
-    var lastThumbTintList: ColorStateList? = null
     var lastProgressBackgroundTintList: ColorStateList? = null
 }
 
@@ -60,6 +60,7 @@ internal fun MediaSeekBar(
     modifier: Modifier = Modifier,
 ) {
     val height = if (dense) 20.dp else 32.dp
+    val isShadeInteracting by viewModel.isShadeInteracting.collectAsStateWithLifecycle()
     val currentSession by rememberUpdatedState(session)
     val currentViewModel by rememberUpdatedState(viewModel)
     val progress = session?.let(viewModel::progress) ?: 0f
@@ -82,6 +83,7 @@ internal fun MediaSeekBar(
                 var start = Offset.Zero
                 var delta = Offset.Zero
                 WaveformSeekBar(context).apply {
+                    followsMediaColors = false
                     layoutDirection = View.LAYOUT_DIRECTION_LTR
                     splitTrack = false
                     setPadding(0, 0, 0, 0)
@@ -157,7 +159,10 @@ internal fun MediaSeekBar(
                     seekBar.progressBackgroundTintList = bgTint
                 }
 
-                val playing = session?.state == MediaSessionState.Playing && !seekBar.isPressed
+                val playing =
+                    session?.state == MediaSessionState.Playing &&
+                        !seekBar.isPressed &&
+                        !isShadeInteracting
                 val squiggly = seekBar.progressDrawable as? SquigglyProgress
                 if (squiggly != null) {
                     if (squiggly.animate != playing) {

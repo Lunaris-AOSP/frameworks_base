@@ -115,7 +115,7 @@ internal fun LunarisBoxMediaPlayer(
     val title =
         session?.title?.takeIf { it.isNotBlank() }
             ?: stringResource(R.string.lunaris_qs_media_not_playing)
-    val progress = session?.let(viewModel::progress) ?: 0f
+    val progress = remember(session, viewModel) { { session?.let(viewModel::progress) ?: 0f } }
     val titleStyle = MaterialTheme.typography.titleSmallEmphasized
     val labelStyle = MaterialTheme.typography.labelMedium
     val density = LocalDensity.current
@@ -196,7 +196,7 @@ internal fun LunarisBoxMediaPlayer(
 @Composable
 private fun BoxMediaArtwork(artwork: IconModel?, tint: Color) {
     Crossfade(
-        targetState = artwork,
+        targetState = rememberAxMediaArtwork(artwork).artwork,
         animationSpec = tween(400),
         label = "LunarisBoxMediaArtwork",
         modifier = Modifier.fillMaxSize(),
@@ -291,7 +291,7 @@ private fun BoxMediaControls(
     interactive: Boolean,
     foreground: Color,
     hasArtwork: Boolean,
-    progress: Float,
+    progress: () -> Float,
     modifier: Modifier = Modifier,
 ) {
     val playing = session?.state == MediaSessionState.Playing
@@ -407,7 +407,7 @@ private fun BoxMediaAction(
     imageVector: ImageVector? = null,
     description: String? = null,
     pressedScale: Float = 0.82f,
-    progress: Float? = null,
+    progress: (() -> Float)? = null,
     ringColor: Color = tint,
 ) {
     if (action == MediaActionModel.ReserveSpace) {
@@ -471,9 +471,9 @@ private fun BoxMediaAction(
 }
 
 @Composable
-private fun BoxMediaTimestamps(session: MediaSessionModel, progress: Float, color: Color) {
+private fun BoxMediaTimestamps(session: MediaSessionModel, progress: () -> Float, color: Color) {
     val duration = session.durationMs.coerceAtLeast(0L)
-    val elapsedSeconds = (progress * duration).toLong().coerceIn(0L, duration) / 1000L
+    val elapsedSeconds = (progress() * duration).toLong().coerceIn(0L, duration) / 1000L
     val durationSeconds = duration / 1000L
     val elapsed = remember(elapsedSeconds) { DateUtils.formatElapsedTime(elapsedSeconds) }
     val total = remember(durationSeconds) { DateUtils.formatElapsedTime(durationSeconds) }
@@ -497,10 +497,15 @@ private fun BoxMediaTimestamps(session: MediaSessionModel, progress: Float, colo
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun BoxMediaProgressRing(progress: Float, color: Color, modifier: Modifier = Modifier) {
+private fun BoxMediaProgressRing(
+    progress: () -> Float,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    val currentProgress = progress().coerceIn(0f, 1f)
     val animatedProgress =
         animateFloatAsState(
-            targetValue = progress.coerceIn(0f, 1f),
+            targetValue = currentProgress,
             animationSpec = tween(300),
             label = "LunarisBoxMediaProgress",
         )
@@ -508,7 +513,7 @@ private fun BoxMediaProgressRing(progress: Float, color: Color, modifier: Modifi
     val cookieBounds = remember(cookiePath) { RectF().also { cookiePath.computeBounds(it, true) } }
     Box(
         modifier
-            .semantics { progressBarRangeInfo = ProgressBarRangeInfo(progress, 0f..1f) }
+            .semantics { progressBarRangeInfo = ProgressBarRangeInfo(currentProgress, 0f..1f) }
             .drawWithCache {
                 val stroke = 2.8.dp.toPx()
                 val diameter = (size.minDimension - stroke).coerceAtLeast(0f)

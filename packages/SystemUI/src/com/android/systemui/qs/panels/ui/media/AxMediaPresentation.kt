@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2025-2026 AxionOS
+ * Copyright (C) 2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -91,12 +92,6 @@ data class AxMediaColors(
     val foreground: Color,
 )
 
-@Immutable
-private data class MediaArtworkState(
-    val songKey: String,
-    val artwork: IconModel?,
-)
-
 @Composable
 internal fun MediaArtwork(
     artwork: IconModel?,
@@ -105,7 +100,7 @@ internal fun MediaArtwork(
     modifier: Modifier = Modifier,
 ) {
     AnimatedContent(
-        targetState = MediaArtworkState(songKey = songKey, artwork = artwork),
+        targetState = rememberAxMediaArtwork(artwork, songKey),
         transitionSpec = {
             (fadeIn(animationSpec = tween(durationMillis = 400, easing = Easings.EmphasizedDecelerate)) +
                 scaleIn(

@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2025-2026 AxionOS
+ * Copyright (C) 2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -94,7 +95,6 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -106,7 +106,6 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -884,7 +883,6 @@ private fun AxEditableGridSection(
         val gridPadding = if (section == AxQsGridSection.CONTROLS) EditGridPadding else 0.dp
         val availableWidth = (maxWidth - gridPadding * 2).coerceAtLeast(0.dp)
         val cellWidth = axQsGridCellWidth(availableWidth, columns, spacing)
-        val measuredRowHeight = rowHeight
         val circleCells =
             useAxQsCircleCells(
                 gridWidth = availableWidth,
@@ -892,6 +890,7 @@ private fun AxEditableGridSection(
                 spacing = spacing,
                 allowCircles = true,
             )
+        val measuredRowHeight = if (circleCells) cellWidth else rowHeight
         val contentRows = axQsGridRowCount(items, columns, maxRows)
         val visibleRows = contentRows.coerceAtLeast(1)
         val gridBorder =
@@ -989,7 +988,6 @@ private fun AxEditableGridSection(
             ) { item ->
                 val isSelected = selectedId == item.id
                 val isStackTarget = listState.hoveredStackTargetId == item.id
-                var itemSize by remember(item.id) { mutableStateOf(IntSize.Zero) }
                 val moveEarlierLabel = axString("ax_qs_move_earlier", "Move earlier")
                 val moveLaterLabel = axString("ax_qs_move_later", "Move later")
                 val moveItem: (Int) -> Boolean = { delta ->
@@ -1115,7 +1113,8 @@ private fun AxEditableGridSection(
                         Modifier.axQsResizeHandle(
                             id = item.id,
                             span = { listState.item(item.id)?.span ?: item.span },
-                            itemSize = { itemSize },
+                            cellWidth = cellWidth,
+                            rowHeight = measuredRowHeight,
                             spacing = spacing,
                             resolveSpan = { startSpan, columnDelta, rowDelta ->
                                 when (value) {
@@ -1177,7 +1176,6 @@ private fun AxEditableGridSection(
                                     }
                                 }
                             }
-                            .onSizeChanged { itemSize = it }
                 ) {
                     if (listState.draggedId == item.id) {
                         Box(Modifier.fillMaxSize()) {

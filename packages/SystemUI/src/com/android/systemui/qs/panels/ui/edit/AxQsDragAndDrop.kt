@@ -1,5 +1,6 @@
 /*
- * Copyright 2025-2026 AxionOS
+ * Copyright (C) 2025-2026 AxionOS
+ * Copyright (C) 2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -452,7 +453,7 @@ internal fun <T> Modifier.axQsDropTarget(
                 }
 
                 override fun onEnded(event: DragAndDropEvent) {
-                    state.finish(currentOnDrop)
+                    if (state.dragInProgress) state.cancel()
                 }
 
                 override fun onExited(event: DragAndDropEvent) {
