@@ -119,6 +119,7 @@ import com.android.systemui.qs.panels.shared.model.AxQsGridSection
 import com.android.systemui.qs.panels.shared.model.AxQsLayout
 import com.android.systemui.qs.panels.shared.model.AxQsPanelMode
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
+import com.android.systemui.qs.panels.shared.model.AxQsTileStacks
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.qs.panels.ui.compose.AX_QS_CONTROL_MAX_ROWS
 import com.android.systemui.qs.panels.ui.compose.AxInteractiveTileContainer
@@ -164,10 +165,13 @@ private sealed interface AxEditGridValue {
         override val section: AxQsGridSection,
     ) : AxEditGridValue
 
-    data class Control(
-        val control: AxQsControl,
-        override val section: AxQsGridSection,
-    ) : AxEditGridValue
+    data class Control(val control: AxQsControl, override val section: AxQsGridSection) :
+        AxEditGridValue
+
+    data class Stack(val tileSpecs: List<String>, val tiles: List<EditTileViewModel>) :
+        AxEditGridValue {
+        override val section = AxQsGridSection.CONTROLS
+    }
 }
 
 @Composable
@@ -460,11 +464,13 @@ private fun AxEditableGrid(
     val savedControlOrder = axQsViewModel.order(layout, AxQsGridSection.CONTROLS)
     val savedTileOrder = axQsViewModel.order(layout, AxQsGridSection.TILES)
     val savedSpans = axQsViewModel.spans(layout)
+    val savedStacks = axQsViewModel.stacks(layout)
     val modes by axQsViewModel.modes.collectAsStateWithLifecycle(emptyList())
     val savedControlPositions = axQsViewModel.controlPositions(layout)
     val sourceItems =
         remember(
             currentTiles,
+            allTiles,
             layout,
             controlColumns,
             tileColumns,
@@ -472,9 +478,11 @@ private fun AxEditableGrid(
             savedTileOrder,
             savedSpans,
             savedControlPositions,
+            savedStacks,
         ) {
             buildEditItems(
                 currentTiles = currentTiles,
+                allTiles = allTiles,
                 layout = layout,
                 controlColumns = controlColumns,
                 tileColumns = tileColumns,
@@ -482,14 +490,15 @@ private fun AxEditableGrid(
                 viewModel = axQsViewModel,
             )
         }
-    var selectedId by remember { mutableStateOf<String?>(null) }
-    var pendingControlOrder by remember { mutableStateOf<List<String>?>(null) }
-    var pendingTileOrder by remember { mutableStateOf<List<String>?>(null) }
-    var pendingSpans by remember { mutableStateOf<Map<String, AxQsSpan>>(emptyMap()) }
-    var pickerSliderSpans by remember(layout) {
-        mutableStateOf<Map<AxQsControl, AxQsSpan>>(emptyMap())
-    }
-    val listState = remember { AxQsEditListState(sourceItems) }
+    var selectedId by remember(layout) { mutableStateOf<String?>(null) }
+    var editingStackId by remember(layout) { mutableStateOf<String?>(null) }
+    var pendingStacks by remember(layout) { mutableStateOf<Map<String, List<String>>?>(null) }
+    var pendingControlOrder by remember(layout) { mutableStateOf<List<String>?>(null) }
+    var pendingTileOrder by remember(layout) { mutableStateOf<List<String>?>(null) }
+    var pendingSpans by remember(layout) { mutableStateOf<Map<String, AxQsSpan>>(emptyMap()) }
+    var pickerSliderSpans by
+        remember(layout) { mutableStateOf<Map<AxQsControl, AxQsSpan>>(emptyMap()) }
+    val listState = remember(layout) { AxQsEditListState(sourceItems) }
     val hapticFeedback = LocalHapticFeedback.current
     val saveSpan: (String, AxQsSpan) -> Unit = { id, span ->
         pendingSpans = pendingSpans + (id to span)
@@ -507,12 +516,20 @@ private fun AxEditableGrid(
         pendingSpans = controlSpans
         pendingControlOrder = controlOrder
         pendingTileOrder = tileOrder
+        val stacks =
+            listState.items
+                .mapNotNull { item ->
+                    (item.value as? AxEditGridValue.Stack)?.let { item.id to it.tileSpecs }
+                }
+                .toMap()
+        pendingStacks = stacks
         axQsViewModel.saveLayout(
             layout,
             controlOrder,
             tileOrder,
             controlSpans,
             positions.filterKeys(controlIds::contains),
+            stacks,
         )
     }
 
@@ -525,7 +542,10 @@ private fun AxEditableGrid(
         savedTileOrder,
         pendingSpans,
         savedSpans,
+        pendingStacks,
+        savedStacks,
     ) {
+        if (pendingStacks != null && savedStacks != pendingStacks) return@LaunchedEffect
         if (pendingSpans.any { (id, span) -> savedSpans[id] != span }) {
             return@LaunchedEffect
         }
@@ -538,6 +558,7 @@ private fun AxEditableGrid(
         pendingSpans = emptyMap()
         pendingControlOrder = null
         pendingTileOrder = null
+        pendingStacks = null
         if (!listState.dragInProgress && listState.items != sourceItems) {
             listState.updateItems(sourceItems)
             selectedId = selectedId?.takeIf { id -> sourceItems.any { it.id == id } }
@@ -575,6 +596,7 @@ private fun AxEditableGrid(
             val allowed =
                 when (value) {
                     is AxEditGridValue.Tile -> true
+                    is AxEditGridValue.Stack -> section == AxQsGridSection.CONTROLS
                     is AxEditGridValue.Control ->
                         section == AxQsGridSection.CONTROLS || value.control.canUseTileGrid
                 }
@@ -586,6 +608,12 @@ private fun AxEditableGrid(
                         section == AxQsGridSection.TILES ->
                             TileGridSpans
                         value is AxEditGridValue.Control -> value.control.spans(controlColumns)
+                        value is AxEditGridValue.Stack ->
+                            AxQsControlSpans(
+                                AxQsTileStacks.Span,
+                                AxQsTileStacks.Span,
+                                AxQsTileStacks.Span,
+                            )
                         else ->
                             AxQsControlSpans(
                                 item.span.coerceForControlTile(controlColumns),
@@ -612,6 +640,40 @@ private fun AxEditableGrid(
                 moved.takeIf { fitsAfterControlRepack(candidates) }
             }
         }
+
+    val editingStack = listState.items.firstOrNull { it.id == editingStackId }
+    val editingValue = editingStack?.value as? AxEditGridValue.Stack
+    if (editingStack != null && editingValue != null) {
+        val otherMembers =
+            listState.items
+                .filter { it.id != editingStack.id }
+                .flatMap { (it.value as? AxEditGridValue.Stack)?.tileSpecs.orEmpty() }
+                .toSet()
+        AxTileStackEditor(
+            initialSpecs = editingValue.tileSpecs,
+            availableTiles = allTiles.filterNot { it.tileSpec.spec in otherMembers },
+            onDismiss = { editingStackId = null },
+            onSave = { specs ->
+                val members = specs.distinct().filterNot(otherMembers::contains)
+                val tilesBySpec = allTiles.associateBy { it.tileSpec.spec }
+                val newTiles = members.mapNotNull(tilesBySpec::get).filterNot { it.isCurrent }
+                if (newTiles.isNotEmpty()) {
+                    editModeViewModel.addTiles(newTiles.map { it.tileSpec })
+                }
+                listState.items
+                    .filter { it.value is AxEditGridValue.Tile && it.id in members }
+                    .map { it.id }
+                    .forEach(listState::remove)
+                listState.update(editingStack.id) {
+                    it.copy(
+                        value = AxEditGridValue.Stack(members, members.mapNotNull(tilesBySpec::get))
+                    )
+                }
+                editingStackId = null
+                saveOrders()
+            },
+        )
+    }
 
     AxQsDragAutoScroll(listState, scrollState, viewportBounds)
     Column(
@@ -647,6 +709,7 @@ private fun AxEditableGrid(
                     onSave = saveOrders,
                     onSaveSpan = saveSpan,
                     onTransformSection = transformSection,
+                    onEditStack = { editingStackId = it },
                     controlPreview = controlPreview,
                     sliderStyle = sliderStyle,
                     hapticFeedback = hapticFeedback,
@@ -675,6 +738,7 @@ private fun AxEditableGrid(
                     onSave = saveOrders,
                     onSaveSpan = saveSpan,
                     onTransformSection = transformSection,
+                    onEditStack = { editingStackId = it },
                     controlPreview = controlPreview,
                     sliderStyle = sliderStyle,
                     hapticFeedback = hapticFeedback,
@@ -697,12 +761,19 @@ private fun AxEditableGrid(
             tileSection()
         }
         val addGridItem: (AxAddItem) -> AxQsGridItem<AxEditGridValue>? = { addItem ->
-            if (listState.items.any { it.id == addItem.id }) {
+            if (
+                listState.items.any {
+                    it.id == addItem.id ||
+                        (it.value as? AxEditGridValue.Stack)?.tileSpecs?.contains(addItem.id) ==
+                            true
+                }
+            ) {
                 null
             } else {
                 val section =
                     if (
-                        addItem is AxAddItem.Control && !addItem.control.canUseTileGrid
+                        addItem is AxAddItem.Stack ||
+                            (addItem is AxAddItem.Control && !addItem.control.canUseTileGrid)
                     ) {
                         AxQsGridSection.CONTROLS
                     } else {
@@ -718,7 +789,12 @@ private fun AxEditableGrid(
         val canAddItem: (AxAddItem) -> Boolean = { addGridItem(it) != null }
         AxAvailableControls(
             allTiles = allTiles,
-            currentIds = listState.items.mapTo(mutableSetOf()) { it.id },
+            currentIds =
+                listState.items
+                    .flatMap {
+                        listOf(it.id) + (it.value as? AxEditGridValue.Stack)?.tileSpecs.orEmpty()
+                    }
+                    .toSet(),
             controlColumns = pickerControlColumns,
             tileColumns = pickerTileColumns,
             spacing = spacing,
@@ -768,11 +844,12 @@ private fun AxEditableGrid(
                     }
                 }
                 listState.add(item)
+                if (addItem is AxAddItem.Stack) editingStackId = item.id
                 if (addItem is AxAddItem.Control) {
                     pickerSliderSpans = pickerSliderSpans - addItem.control
                 }
                 if (item.section == AxQsGridSection.CONTROLS) {
-                    saveSpan(addItem.id, item.span)
+                    saveSpan(item.id, item.span)
                 }
                 saveOrders()
             },
@@ -795,13 +872,14 @@ private fun AxEditableGridSection(
     onSaveSpan: (String, AxQsSpan) -> Unit,
     onTransformSection:
         (AxQsGridItem<AxEditGridValue>, AxQsGridSection) -> AxQsGridItem<AxEditGridValue>?,
-    controlPreview:
-        @Composable (AxQsControl, AxQsSpan, Int, LunarisQsSliderStyle) -> Unit,
+    onEditStack: (String) -> Unit,
+    controlPreview: @Composable (AxQsControl, AxQsSpan, Int, LunarisQsSliderStyle) -> Unit,
     sliderStyle: (AxQsControl) -> LunarisQsSliderStyle,
     hapticFeedback: HapticFeedback,
     modes: List<ModeTileViewModel>,
 ) {
     val items = listState.items.filter { it.section == section }
+    val editStackLabel = stringResource(R.string.lunaris_qs_stack_edit)
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val gridPadding = if (section == AxQsGridSection.CONTROLS) EditGridPadding else 0.dp
         val availableWidth = (maxWidth - gridPadding * 2).coerceAtLeast(0.dp)
@@ -842,6 +920,47 @@ private fun AxEditableGridSection(
                         sectionOf = { it.section },
                         transform = onTransformSection,
                         onDrop = onSave,
+                        canStack = { source, target ->
+                            source.value is AxEditGridValue.Tile &&
+                                target.section == AxQsGridSection.CONTROLS &&
+                                (target.value is AxEditGridValue.Stack ||
+                                    (target.value is AxEditGridValue.Tile &&
+                                        target.span == AxQsTileStacks.Span))
+                        },
+                        onStack = { source, target ->
+                            val sourceTile = (source.value as? AxEditGridValue.Tile)?.viewModel
+                            val targetValue = target.value
+                            val targetSpecs =
+                                when (targetValue) {
+                                    is AxEditGridValue.Stack -> targetValue.tileSpecs
+                                    is AxEditGridValue.Tile -> listOf(target.id)
+                                    else -> emptyList()
+                                }
+                            val targetTiles =
+                                when (targetValue) {
+                                    is AxEditGridValue.Stack -> targetValue.tiles
+                                    is AxEditGridValue.Tile -> listOf(targetValue.viewModel)
+                                    else -> emptyList()
+                                }
+                            if (sourceTile == null || target.span != AxQsTileStacks.Span) {
+                                null
+                            } else {
+                                target.copy(
+                                    id =
+                                        if (targetValue is AxEditGridValue.Stack) target.id
+                                        else AxQsTileStacks.newId(),
+                                    minSpan = AxQsTileStacks.Span,
+                                    maxSpan = AxQsTileStacks.Span,
+                                    value =
+                                        AxEditGridValue.Stack(
+                                            (targetSpecs + source.id).distinct(),
+                                            (targetTiles + sourceTile).distinctBy {
+                                                it.tileSpec.spec
+                                            },
+                                        ),
+                                )
+                            }
+                        },
                     )
                     .padding(gridPadding)
         ) {
@@ -869,6 +988,7 @@ private fun AxEditableGridSection(
                     },
             ) { item ->
                 val isSelected = selectedId == item.id
+                val isStackTarget = listState.hoveredStackTargetId == item.id
                 var itemSize by remember(item.id) { mutableStateOf(IntSize.Zero) }
                 val moveEarlierLabel = axString("ax_qs_move_earlier", "Move earlier")
                 val moveLaterLabel = axString("ax_qs_move_later", "Move later")
@@ -887,6 +1007,7 @@ private fun AxEditableGridSection(
                     val spanAllowed =
                         when (value) {
                             is AxEditGridValue.Control -> value.control.isSpanAllowed(span, columns)
+                            is AxEditGridValue.Stack -> span == AxQsTileStacks.Span
                             is AxEditGridValue.Tile ->
                                 section == AxQsGridSection.CONTROLS &&
                                     span == span.coerceForControlTile(columns)
@@ -917,7 +1038,8 @@ private fun AxEditableGridSection(
                 }
                 val resizable = section == AxQsGridSection.CONTROLS && item.minSpan != item.maxSpan
                 val tileState =
-                    if (isSelected && resizable) TileState.Selected else TileState.Removable
+                    if ((isSelected && resizable) || isStackTarget) TileState.Selected
+                    else TileState.Removable
                 val sliderControl =
                     (value as? AxEditGridValue.Control)?.control?.takeIf { it.isSlider }
                 val verticalSlider = sliderControl != null && item.span.columns == 1
@@ -958,6 +1080,8 @@ private fun AxEditableGridSection(
                     when (value) {
                         is AxEditGridValue.Tile ->
                             axQsTileShape(item.span, LocalAxQsTileStyle.current)
+                        is AxEditGridValue.Stack ->
+                            axQsTileShape(item.span, LocalAxQsTileStyle.current)
                         is AxEditGridValue.Control ->
                             axQsControlShape(value.control, item.span, controlStyle)
                     }
@@ -995,6 +1119,7 @@ private fun AxEditableGridSection(
                             spacing = spacing,
                             resolveSpan = { startSpan, columnDelta, rowDelta ->
                                 when (value) {
+                                    is AxEditGridValue.Stack -> AxQsTileStacks.Span
                                     is AxEditGridValue.Control ->
                                         value.control.resizeSpan(
                                             startSpan = startSpan,
@@ -1057,12 +1182,9 @@ private fun AxEditableGridSection(
                     if (listState.draggedId == item.id) {
                         Box(Modifier.fillMaxSize()) {
                             if (sliderControl != null) {
-                                controlPreview(
-                                    sliderControl,
-                                    item.span,
-                                    columns,
-                                    controlStyle,
-                                )
+                                controlPreview(sliderControl, item.span, columns, controlStyle)
+                            } else if (value is AxEditGridValue.Stack) {
+                                AxEditTileStack(value.tiles, modes)
                             }
                             Box(
                                 Modifier.fillMaxSize()
@@ -1136,7 +1258,15 @@ private fun AxEditableGridSection(
                                                 )
                                             },
                                         )
-                                        .clickable { onSelected(item.id) }
+                                        .clickable(
+                                            onClickLabel =
+                                                editStackLabel.takeIf {
+                                                    value is AxEditGridValue.Stack
+                                                }
+                                        ) {
+                                            onSelected(item.id)
+                                            if (value is AxEditGridValue.Stack) onEditStack(item.id)
+                                        }
                                         .semantics {
                                             customActions =
                                                 listOf(
@@ -1150,6 +1280,7 @@ private fun AxEditableGridSection(
                                         }
                             ) {
                                 when (value) {
+                                    is AxEditGridValue.Stack -> AxEditTileStack(value.tiles, modes)
                                     is AxEditGridValue.Tile ->
                                         AxQsEditTile(
                                             tile = value.viewModel,
@@ -1193,6 +1324,7 @@ private fun AxEditGridValue.inSection(section: AxQsGridSection): AxEditGridValue
     return when (this) {
         is AxEditGridValue.Tile -> copy(section = section)
         is AxEditGridValue.Control -> copy(section = section)
+        is AxEditGridValue.Stack -> this
     }
 }
 
@@ -1201,6 +1333,14 @@ private fun AxAddItem.toEditGridItem(
     section: AxQsGridSection,
 ): AxQsGridItem<AxEditGridValue> {
     return when (this) {
+        is AxAddItem.Stack ->
+            AxQsGridItem<AxEditGridValue>(
+                id = AxQsTileStacks.newId(),
+                span = AxQsTileStacks.Span,
+                minSpan = AxQsTileStacks.Span,
+                maxSpan = AxQsTileStacks.Span,
+                value = AxEditGridValue.Stack(emptyList(), emptyList()),
+            )
         is AxAddItem.Tile -> {
             val controlGrid = section == AxQsGridSection.CONTROLS
             AxQsGridItem(
@@ -1236,6 +1376,7 @@ private fun AxAddItem.toEditGridItem(
 
 private fun buildEditItems(
     currentTiles: List<EditTileViewModel>,
+    allTiles: List<EditTileViewModel>,
     layout: AxQsLayout,
     controlColumns: Int,
     tileColumns: Int,
@@ -1246,9 +1387,18 @@ private fun buildEditItems(
     currentTiles.forEach {
         values[it.tileSpec.spec] = AxEditGridValue.Tile(it, AxQsGridSection.TILES)
     }
-    AxQsControl.entries.filter { it.showInEditGrid }.forEach { control ->
-        values[control.id] = AxEditGridValue.Control(control, AxQsGridSection.CONTROLS)
+    AxQsControl.entries
+        .filter { it.showInEditGrid }
+        .forEach { control ->
+            values[control.id] = AxEditGridValue.Control(control, AxQsGridSection.CONTROLS)
+        }
+    val stacks = viewModel.stacks(layout)
+    val stackedSpecs = stacks.values.flatten().toSet()
+    val tilesBySpec = allTiles.associateBy { it.tileSpec.spec }
+    stacks.forEach { (id, specs) ->
+        values[id] = AxEditGridValue.Stack(specs, specs.mapNotNull(tilesBySpec::get))
     }
+    stackedSpecs.forEach(values::remove)
     val controlIds =
         viewModel.orderedIds(
             layout = layout,
@@ -1257,17 +1407,28 @@ private fun buildEditItems(
             defaultIds = currentTiles.map { it.tileSpec.spec },
         )
     val tileIds =
-        viewModel.orderedIds(
-            layout = layout,
-            section = AxQsGridSection.TILES,
-            availableIds =
-                currentTiles.map { it.tileSpec.spec } +
-                    AxQsControl.entries.filter { it.canUseTileGrid }.map(AxQsControl::id),
-            defaultIds = currentTiles.map { it.tileSpec.spec },
-        ).filterNot(controlIds.toSet()::contains)
+        viewModel
+            .orderedIds(
+                layout = layout,
+                section = AxQsGridSection.TILES,
+                availableIds =
+                    currentTiles.map { it.tileSpec.spec }.filterNot(stackedSpecs::contains) +
+                        AxQsControl.entries.filter { it.canUseTileGrid }.map(AxQsControl::id),
+                defaultIds = currentTiles.map { it.tileSpec.spec },
+            )
+            .filterNot(controlIds.toSet()::contains)
     val controlItems: List<AxQsGridItem<AxEditGridValue>> =
         controlIds.map { id ->
             when (val value = values.getValue(id)) {
+                is AxEditGridValue.Stack ->
+                    AxQsGridItem<AxEditGridValue>(
+                        id = id,
+                        span = AxQsTileStacks.Span,
+                        minSpan = AxQsTileStacks.Span,
+                        maxSpan = AxQsTileStacks.Span,
+                        value = value,
+                        position = controlPositions[id],
+                    )
                 is AxEditGridValue.Tile ->
                     AxQsGridItem<AxEditGridValue>(
                         id = id,

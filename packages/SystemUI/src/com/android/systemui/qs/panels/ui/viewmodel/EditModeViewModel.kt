@@ -233,6 +233,10 @@ constructor(
         }
     }
 
+    fun addTiles(tileSpecs: List<TileSpec>) {
+        setTiles((currentTilesInteractor.currentTilesSpecs + tileSpecs).distinct())
+    }
+
     private fun calculateDiffsAndEmitUiEvents(
         currentTiles: List<TileSpec>,
         newTiles: List<TileSpec>,

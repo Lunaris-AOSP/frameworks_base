@@ -69,6 +69,30 @@ internal class AxQsEditListState<T>(initialItems: List<AxQsGridItem<T>>) {
     var draggedPosition by mutableStateOf(Offset.Unspecified)
         private set
 
+    var hoveredStackTargetId by mutableStateOf<String?>(null)
+        private set
+
+    fun setHoveredStackTarget(id: String?) {
+        hoveredStackTargetId = id
+    }
+
+    fun stackItems(
+        sourceId: String,
+        targetId: String,
+        merge: (AxQsGridItem<T>, AxQsGridItem<T>) -> AxQsGridItem<T>?,
+    ): Boolean {
+        val source = item(sourceId) ?: return false
+        val target = item(targetId) ?: return false
+        if (sourceId == targetId) return false
+        val stack = merge(source, target) ?: return false
+        val targetIndex = indexOf(targetId)
+        _items[targetIndex] = stack
+        remove(sourceId)
+        if (stack.id != targetId) itemBounds.remove(targetId)
+        hoveredStackTargetId = null
+        return true
+    }
+
     val dragInProgress: Boolean
         get() = draggedId != null
 
@@ -287,6 +311,7 @@ internal class AxQsEditListState<T>(initialItems: List<AxQsGridItem<T>>) {
     }
 
     fun cancel() {
+        hoveredStackTargetId = null
         dragSnapshot?.let(::updateItems)
         dragSnapshot = null
         dragAnchor = Offset.Zero
@@ -296,6 +321,7 @@ internal class AxQsEditListState<T>(initialItems: List<AxQsGridItem<T>>) {
 
     fun finish(onDrop: () -> Unit) {
         if (draggedId == null) return
+        hoveredStackTargetId = null
         dragSnapshot = null
         dragAnchor = Offset.Zero
         draggedId = null
@@ -368,17 +394,36 @@ internal fun <T> Modifier.axQsDropTarget(
     sectionOf: (AxQsGridItem<T>) -> AxQsGridSection,
     transform: (AxQsGridItem<T>, AxQsGridSection) -> AxQsGridItem<T>?,
     onDrop: () -> Unit,
+    canStack: (AxQsGridItem<T>, AxQsGridItem<T>) -> Boolean = { _, _ -> false },
+    onStack: (AxQsGridItem<T>, AxQsGridItem<T>) -> AxQsGridItem<T>? = { _, _ -> null },
 ): Modifier {
     val currentOnDrop by rememberUpdatedState(onDrop)
+    val currentCanStack by rememberUpdatedState(canStack)
+    val currentOnStack by rememberUpdatedState(onStack)
+    val currentTransform by rememberUpdatedState(transform)
     val layoutDirection = LocalLayoutDirection.current
     val target =
-        remember(state, layoutDirection) {
+        remember(state, layoutDirection, section) {
             object : DragAndDropTarget {
+                private fun stackTarget(offset: Offset): String? {
+                    val source = state.draggedId?.let(state::item) ?: return null
+                    val (id, bounds) = state.findItemAt(offset, section) ?: return null
+                    val target = state.item(id) ?: return null
+                    val center = bounds.deflate(minOf(bounds.width, bounds.height) * 0.2f)
+                    return id.takeIf {
+                        center.contains(state.offsetInGrid(offset, section)) &&
+                            currentCanStack(source, target)
+                    }
+                }
+
                 override fun onMoved(event: DragAndDropEvent) {
                     val dragEvent = event.toAndroidDragEvent()
                     val offset = Offset(dragEvent.x, dragEvent.y)
                     state.onMoved(offset)
-                    if (!state.moveToSection(section, sectionOf, transform)) return
+                    val stackId = stackTarget(offset)
+                    state.setHoveredStackTarget(stackId)
+                    if (stackId != null) return
+                    if (!state.moveToSection(section, sectionOf, currentTransform)) return
                     if (state.moveToCell(offset, section)) return
                     val target = state.findItemAt(offset, section)
                     if (target != null) {
@@ -396,12 +441,22 @@ internal fun <T> Modifier.axQsDropTarget(
                 }
 
                 override fun onDrop(event: DragAndDropEvent): Boolean {
+                    val dragEvent = event.toAndroidDragEvent()
+                    val targetId = stackTarget(Offset(dragEvent.x, dragEvent.y))
+                    val sourceId = state.draggedId
+                    if (targetId != null && sourceId != null) {
+                        state.stackItems(sourceId, targetId, currentOnStack)
+                    }
                     state.finish(currentOnDrop)
                     return true
                 }
 
                 override fun onEnded(event: DragAndDropEvent) {
                     state.finish(currentOnDrop)
+                }
+
+                override fun onExited(event: DragAndDropEvent) {
+                    state.setHoveredStackTarget(null)
                 }
             }
         }

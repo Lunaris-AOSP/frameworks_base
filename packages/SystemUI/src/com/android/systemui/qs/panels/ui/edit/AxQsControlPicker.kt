@@ -73,10 +73,12 @@ import com.android.settingslib.notification.modes.ZenMode
 import com.android.systemui.common.ui.compose.load
 import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
+import com.android.systemui.qs.panels.shared.model.AxQsTileStacks
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.qs.panels.ui.compose.AxLargeTileContent
 import com.android.systemui.qs.panels.ui.compose.AxQsPagerIndicator
 import com.android.systemui.qs.panels.ui.compose.AxTileDefaults
+import com.android.systemui.qs.panels.ui.compose.AxTileStackPlaceholder
 import com.android.systemui.qs.panels.ui.compose.LocalAxQsTileStyle
 import com.android.systemui.qs.panels.ui.compose.LocalTileScale
 import com.android.systemui.qs.panels.ui.compose.LunarisModesTile
@@ -123,6 +125,12 @@ internal sealed interface AxAddItem : CategoryAndName {
         val span: AxQsSpan = control.defaultSpan,
     ) : AxAddItem {
         override val id = control.id
+        override val category = TileCategory.UTILITIES
+    }
+
+    data class Stack(override val label: String) : AxAddItem {
+        override val id = "stack:new"
+        override val isAdded = false
         override val category = TileCategory.UTILITIES
     }
 
@@ -176,6 +184,7 @@ internal fun AxAvailableControls(
                     if (control.isSlider) sliderSpan(control) else control.defaultSpan,
                 )
             }
+    val stackItem = AxAddItem.Stack(stringResource(R.string.lunaris_qs_tile_stack))
     val onRotateSlider: (AxAddItem.Control) -> Unit = { item ->
         onSliderSpanChanged(item.control, item.control.rotateSpan(item.span, controlColumns))
     }
@@ -189,7 +198,7 @@ internal fun AxAvailableControls(
             AxAvailableItemGroup(
                 title = axString("ax_qs_controls", "Controls"),
                 iconId = TileCategory.UTILITIES.iconId,
-                items = controls,
+                items = controls + stackItem,
                 columns = controlColumns,
                 sliderStyle = sliderStyle,
                 onSliderStyleChanged = onSliderStyleChanged,
@@ -470,7 +479,7 @@ private fun AxAddItemCell(
         }
     val fullDescription =
         if (!item.isAdded && !canAdd) {
-            if (item is AxAddItem.Control) {
+            if (item is AxAddItem.Control || item is AxAddItem.Stack) {
                 axString("ax_qs_control_grid_full", "Controls grid full")
             } else {
                 axString("ax_qs_tile_grid_full", "Tiles grid full")
@@ -485,6 +494,7 @@ private fun AxAddItemCell(
             ?: LunarisQsSliderStyle.M3_EXPRESSIVE
     val previewShape =
         when (item) {
+            is AxAddItem.Stack -> axQsTileShape(span, LocalAxQsTileStyle.current)
             is AxAddItem.Tile -> axQsTileShape(span, LocalAxQsTileStyle.current)
             is AxAddItem.Control ->
                 axQsControlShape(item.control, span, controlStyle)
@@ -526,6 +536,7 @@ private fun AxAddItemCell(
             Box(modifier = Modifier.fillMaxWidth().height(previewHeight)) {
                 Box(Modifier.fillMaxSize().clearAndSetSemantics {}) {
                     when (item) {
+                        is AxAddItem.Stack -> AxTileStackPlaceholder()
                         is AxAddItem.Tile ->
                             AxQsEditTile(
                                 tile = item.viewModel,
@@ -576,6 +587,7 @@ private fun AxAddItemCell(
 
 private fun AxAddItem.pickerSpan(columns: Int): AxQsSpan {
     return when (this) {
+        is AxAddItem.Stack -> AxQsTileStacks.Span
         is AxAddItem.Tile -> AxQsSpan.TileDefault
         is AxAddItem.Control -> {
             val span =

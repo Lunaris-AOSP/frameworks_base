@@ -15,6 +15,15 @@
     <string name="lunaris_qs_slider_auto_brightness">Switch to automatic brightness</string>
     <string name="lunaris_qs_slider_ringer_mode">Change ringer mode</string>
     <string name="lunaris_qs_media_not_playing">No media playing</string>
+    <string name="lunaris_qs_tile_stack">Tile stack</string>
+    <string name="lunaris_qs_stack_edit">Edit tile stack</string>
+    <string name="lunaris_qs_stack_hint">Swipe up or down to switch tiles. Drag a tile onto a 2×2 tile or stack to group them.</string>
+    <string name="lunaris_qs_stack_page">Tile %1$d of %2$d</string>
+    <string name="lunaris_qs_stack_previous">Previous tile</string>
+    <string name="lunaris_qs_stack_next">Next tile</string>
+    <string name="lunaris_qs_stack_unavailable_tile">Unavailable tile</string>
+    <string name="lunaris_qs_stack_move_up">Move %1$s earlier</string>
+    <string name="lunaris_qs_stack_move_down">Move %1$s later</string>
 
     <string name="empty_shade_all_clear">All clear</string>
     <string name="empty_shade_breathe">Take a breath</string>

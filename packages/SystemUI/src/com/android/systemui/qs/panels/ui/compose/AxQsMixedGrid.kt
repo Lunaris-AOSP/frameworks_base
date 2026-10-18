@@ -36,6 +36,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -56,6 +57,7 @@ import com.android.systemui.qs.panels.shared.model.AxQsGridValue
 import com.android.systemui.qs.panels.shared.model.AxQsLayout
 import com.android.systemui.qs.panels.shared.model.AxQsPanelMode
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
+import com.android.systemui.qs.panels.shared.model.AxQsTileStacks
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.qs.panels.ui.media.AxMediaPanel
 import com.android.systemui.qs.panels.ui.media.nonQsGridMediaHeight
@@ -63,6 +65,7 @@ import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.AxQsViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.DetailsViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.TileViewModel
+import com.android.systemui.qs.panels.ui.viewmodel.toUiState
 import com.android.systemui.qs.panels.ui.viewmodel.toolbar.ToolbarViewModel
 import com.android.systemui.qs.tiles.ringer.RingerSliderTileContent
 import com.android.systemui.qs.ui.composable.QuickSettingsTheme
@@ -111,6 +114,13 @@ internal fun ContentScope.AxQsMixedGrid(
         controlColumns >= axQsViewModel.defaultColumns(controlGridLayout) &&
             (splitShade || tileColumns >= axQsViewModel.defaultColumns(tileGridLayout))
     val controlPositions = axQsViewModel.controlPositions(layout)
+    val stacks = axQsViewModel.stacks(layout)
+    val stackedSpecs = stacks.values.flatten().toSet()
+    val tilesBySpec = tiles.associateBy { it.spec.spec }
+    stacks.forEach { (id, specs) ->
+        values[id] = AxQsGridValue.Stack(specs.mapNotNull(tilesBySpec::get))
+    }
+    stackedSpecs.forEach(values::remove)
     val controlIds =
         axQsViewModel.orderedIds(
             layout = layout,
@@ -123,13 +133,22 @@ internal fun ContentScope.AxQsMixedGrid(
             layout = layout,
             section = AxQsGridSection.TILES,
             availableIds =
-                tiles.map { it.spec.spec } +
+                tiles.map { it.spec.spec }.filterNot(stackedSpecs::contains) +
                     AxQsControl.entries.filter { it.canUseTileGrid }.map(AxQsControl::id),
             defaultIds = tiles.map { it.spec.spec },
         )
     val controlItems: List<AxQsGridItem<AxQsGridValue>> =
         controlIds.map { id ->
             when (val value = values.getValue(id)) {
+                is AxQsGridValue.Stack ->
+                    AxQsGridItem<AxQsGridValue>(
+                        id = id,
+                        span = AxQsTileStacks.Span,
+                        minSpan = AxQsTileStacks.Span,
+                        maxSpan = AxQsTileStacks.Span,
+                        value = value,
+                        position = controlPositions[id],
+                    )
                 is AxQsGridValue.Tile ->
                     AxQsGridItem<AxQsGridValue>(
                         id = id,
@@ -186,9 +205,15 @@ internal fun ContentScope.AxQsMixedGrid(
     val fittedControlItems: List<AxQsGridItem<AxQsGridValue>> =
         fitAxQsGridItems<AxQsGridValue>(controlItems, controlColumns, rows.controls)
     val visibleTiles =
-        (fittedControlItems + tileItems).mapNotNull {
-            (it.value as? AxQsGridValue.Tile)?.viewModel
-        }
+        (fittedControlItems + tileItems)
+            .flatMap {
+                when (val value = it.value) {
+                    is AxQsGridValue.Tile -> listOf(value.viewModel)
+                    is AxQsGridValue.Stack -> value.tiles
+                    is AxQsGridValue.Control -> emptyList()
+                }
+            }
+            .distinctBy { it.spec.spec }
     val rowHeight = AxTileDefaults.TileHeight * LocalTileScale.current
     val spacing = axQsViewModel.spacing.tileGap.dp * LocalTileScale.current
     val qsEntranceProgress = {
@@ -200,6 +225,31 @@ internal fun ContentScope.AxQsMixedGrid(
     val qqsHideBypass = separateQqs && axQsViewModel.isQsBypassingShade
     val controlContent: @Composable (AxQsGridItem<AxQsGridValue>) -> Unit = { item ->
         when (val value = item.value) {
+            is AxQsGridValue.Stack ->
+                AxTileStack(
+                    pageKeys = value.tiles.map { it.spec.spec },
+                    indicatorColor = { page ->
+                        val tile = value.tiles[page]
+                        val state by tile.state.collectAsStateWithLifecycle(tile.currentState)
+                        AxTileColorsDefaults.getColorForState(
+                                uiState = state.toUiState(LocalResources.current),
+                                iconOnly = false,
+                            )
+                            .label
+                    },
+                ) { page ->
+                    this@AxQsMixedGrid.AxLiveTile(
+                        tile = value.tiles[page],
+                        item = item,
+                        iconOnly = false,
+                        qqs = qqs,
+                        separateQqs = separateQqs,
+                        listening = listening,
+                        detailsViewModel = detailsViewModel,
+                        axQsViewModel = axQsViewModel,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             is AxQsGridValue.Tile ->
                 this@AxQsMixedGrid.AxLiveTile(
                     tile = value.viewModel,
@@ -231,6 +281,7 @@ internal fun ContentScope.AxQsMixedGrid(
     }
     val tileContent: @Composable (AxQsGridItem<AxQsGridValue>) -> Unit = { item ->
         when (val value = item.value) {
+            is AxQsGridValue.Stack -> Unit
             is AxQsGridValue.Tile ->
                 this@AxQsMixedGrid.AxLiveTile(
                     tile = value.viewModel,

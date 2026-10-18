@@ -38,6 +38,7 @@ import com.android.systemui.qs.panels.shared.model.AxQsLayout
 import com.android.systemui.qs.panels.shared.model.AxQsLayoutPadding
 import com.android.systemui.qs.panels.shared.model.AxQsPanelMode
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
+import com.android.systemui.qs.panels.shared.model.AxQsTileStacks
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderKey
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.res.R
@@ -136,6 +137,12 @@ constructor(
             traceName = "qsSpans",
             initialValue = repository.qsSpans.value,
             source = repository.qsSpans,
+        )
+    private val tileStacks by
+        hydrator.hydratedStateOf(
+            traceName = "tileStacks",
+            initialValue = repository.tileStacks.value,
+            source = repository.tileStacks,
         )
     private val qqsSpans by
         hydrator.hydratedStateOf(
@@ -431,7 +438,14 @@ constructor(
         tiles: List<String>,
         controlSpans: Map<String, AxQsSpan>,
         positions: Map<String, AxQsGridPosition>,
-    ) = repository.saveLayout(layout, controls, tiles, controlSpans, positions)
+        stacks: Map<String, List<String>>,
+    ) = repository.saveLayout(layout, controls, tiles, controlSpans, positions, stacks)
+
+    fun stacks(layout: AxQsLayout): Map<String, List<String>> =
+        AxQsTileStacks.active(
+            tileStacks[layout].orEmpty(),
+            order(layout, AxQsGridSection.CONTROLS).orEmpty(),
+        )
 
     fun controlPositions(layout: AxQsLayout): Map<String, AxQsGridPosition> {
         return when (layout) {

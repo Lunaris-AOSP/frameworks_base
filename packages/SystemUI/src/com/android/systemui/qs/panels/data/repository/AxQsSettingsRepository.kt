@@ -26,6 +26,7 @@ import com.android.systemui.qs.panels.shared.model.AxQsGridSection
 import com.android.systemui.qs.panels.shared.model.AxQsLayout
 import com.android.systemui.qs.panels.shared.model.AxQsPanelMode
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
+import com.android.systemui.qs.panels.shared.model.AxQsTileStacks
 import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderKey
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
@@ -140,6 +141,29 @@ constructor(
 
     val tileLabels: StateFlow<Map<AxQsGridLayout, Boolean>> = tileLabelSettings()
 
+    val tileStacks: StateFlow<Map<AxQsLayout, Map<String, List<String>>>> =
+        userRepository.selectedUserInfo
+            .flatMapLatest { user ->
+                combine(
+                    STACK_KEYS.map { (layout, key) ->
+                        secureSettings
+                            .observerFlow(user.id, key)
+                            .onStart { emit(Unit) }
+                            .map {
+                                layout to
+                                    AxQsTileStacks.decode(
+                                        secureSettings.getStringForUser(key, user.id)
+                                    )
+                            }
+                    }
+                ) {
+                    it.toMap()
+                }
+            }
+            .flowOn(backgroundDispatcher)
+            .distinctUntilChanged()
+            .stateIn(applicationScope, SharingStarted.Eagerly, emptyMap())
+
     fun setOrder(order: List<String>, layout: AxQsLayout, section: AxQsGridSection) {
         putString(sectionOrderKey(layout, section), order.distinct())
     }
@@ -171,22 +195,35 @@ constructor(
         tiles: List<String>,
         controlSpans: Map<String, AxQsSpan>,
         positions: Map<String, AxQsGridPosition>,
+        stacks: Map<String, List<String>>,
     ) {
         val userId = userRepository.getSelectedUserInfo().id
         applicationScope.launch(backgroundDispatcher) {
             spansMutex.withLock {
                 val key = spansKey(layout)
-                val order = controlOrderKeys(key).firstNotNullOfOrNull {
-                    secureSettings.getStringForUser(it, userId)
-                }
-                val spans = parseSpans(secureSettings.getStringForUser(key, userId), order) + controlSpans
-                val values = mapOf(
-                    key to spans.entries.sortedBy { it.key }.joinToString(",") { "${it.key}=${it.value}" },
-                    controlPositionsKey(layout) to positions.entries.sortedBy { it.key }
-                        .joinToString(",") { "${it.key}=${it.value}" },
-                    sectionOrderKey(layout, AxQsGridSection.CONTROLS) to controls.distinct().joinToString(","),
-                    sectionOrderKey(layout, AxQsGridSection.TILES) to tiles.distinct().joinToString(","),
-                )
+                val order =
+                    controlOrderKeys(key).firstNotNullOfOrNull {
+                        secureSettings.getStringForUser(it, userId)
+                    }
+                val spans =
+                    parseSpans(secureSettings.getStringForUser(key, userId), order) + controlSpans
+                val values =
+                    mapOf(
+                        STACK_KEYS.getValue(layout) to
+                            AxQsTileStacks.encode(AxQsTileStacks.active(stacks, controls)),
+                        key to
+                            spans.entries
+                                .sortedBy { it.key }
+                                .joinToString(",") { "${it.key}=${it.value}" },
+                        controlPositionsKey(layout) to
+                            positions.entries
+                                .sortedBy { it.key }
+                                .joinToString(",") { "${it.key}=${it.value}" },
+                        sectionOrderKey(layout, AxQsGridSection.CONTROLS) to
+                            controls.distinct().joinToString(","),
+                        sectionOrderKey(layout, AxQsGridSection.TILES) to
+                            tiles.distinct().joinToString(","),
+                    )
                 values.forEach { (setting, value) ->
                     secureSettings.putStringForUser(setting, value, null, false, userId, true)
                 }
@@ -241,6 +278,7 @@ constructor(
             CONTROL_POSITIONS_KEYS.values.forEach { put(it, "") }
             put(LANDSCAPE_CONTROL_POSITIONS, "")
             LEGACY_ORDER_KEYS.forEach { put(it, "") }
+            STACK_KEYS.values.forEach { put(it, "") }
         }
 
         applicationScope.launch(backgroundDispatcher) {
@@ -603,11 +641,19 @@ constructor(
             LANDSCAPE_ORDER,
         )
 
-        val SPANS_KEYS = mapOf(
-            AxQsLayout.QQS to QQS_SPANS,
-            AxQsLayout.QS to QS_SPANS,
-            AxQsLayout.SPLIT_SHADE to SPLIT_SHADE_SPANS,
-        )
+        val STACK_KEYS =
+            mapOf(
+                AxQsLayout.QQS to "ax_qqs_tile_stacks",
+                AxQsLayout.QS to "ax_qs_tile_stacks",
+                AxQsLayout.SPLIT_SHADE to "ax_qs_split_shade_tile_stacks",
+            )
+
+        val SPANS_KEYS =
+            mapOf(
+                AxQsLayout.QQS to QQS_SPANS,
+                AxQsLayout.QS to QS_SPANS,
+                AxQsLayout.SPLIT_SHADE to SPLIT_SHADE_SPANS,
+            )
 
         val CONTROL_POSITIONS_KEYS = mapOf(
             AxQsLayout.QQS to QQS_CONTROL_POSITIONS,
