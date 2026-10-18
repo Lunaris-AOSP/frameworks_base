@@ -111,21 +111,21 @@ constructor(
     val showSliderPercentage: StateFlow<Boolean> = boolSetting(SHOW_SLIDER_PERCENTAGE, false)
 
     val tileStyle: StateFlow<AxQsTileStyle> =
-        intSetting("ax_qs_tile_style", AxQsTileStyle.PILL.settingValue)
+        intSetting(TILE_STYLE, AxQsTileStyle.PILL.settingValue)
             .map(AxQsTileStyle::fromSetting)
             .distinctUntilChanged()
             .stateIn(applicationScope, SharingStarted.Eagerly, AxQsTileStyle.PILL)
 
     val spacing: StateFlow<LunarisQsSpacing> =
         combine(
-            intSetting("ax_qs_tile_gap", LunarisQsSpacing().tileGap),
-            intSetting("ax_qs_side_padding", LunarisQsSpacing().sidePadding),
-            intSetting("ax_qs_top_padding", LunarisQsSpacing().topPadding),
+            intSetting(TILE_GAP, LunarisQsSpacing().tileGap),
+            intSetting(SIDE_PADDING, LunarisQsSpacing().sidePadding),
+            intSetting(TOP_PADDING, LunarisQsSpacing().topPadding),
         ) { tileGap, sidePadding, topPadding ->
             LunarisQsSpacing(
-                tileGap = tileGap.coerceIn(8, 28),
-                sidePadding = sidePadding.coerceIn(8, 40),
-                topPadding = topPadding.coerceIn(0, 32),
+                tileGap = tileGap.coerceIn(LunarisQsSpacing.TILE_GAP_RANGE),
+                sidePadding = sidePadding.coerceIn(LunarisQsSpacing.SIDE_PADDING_RANGE),
+                topPadding = topPadding.coerceIn(LunarisQsSpacing.TOP_PADDING_RANGE),
             )
         }.distinctUntilChanged()
             .stateIn(applicationScope, SharingStarted.Eagerly, LunarisQsSpacing())
@@ -241,6 +241,20 @@ constructor(
     fun setQuickPanelOnLeft(onLeft: Boolean) {
         putInt(QUICK_PANEL_ON_LEFT, onLeft.toSetting())
     }
+
+    fun setShowWeather(show: Boolean) = putInt(SHOW_WEATHER, show.toSetting())
+
+    fun setShowSliderPercentage(show: Boolean) = putInt(SHOW_SLIDER_PERCENTAGE, show.toSetting())
+
+    fun setTileStyle(style: AxQsTileStyle) = putInt(TILE_STYLE, style.settingValue)
+
+    fun setTileGap(gap: Int) = putInt(TILE_GAP, gap.coerceIn(LunarisQsSpacing.TILE_GAP_RANGE))
+
+    fun setSidePadding(padding: Int) =
+        putInt(SIDE_PADDING, padding.coerceIn(LunarisQsSpacing.SIDE_PADDING_RANGE))
+
+    fun setTopPadding(padding: Int) =
+        putInt(TOP_PADDING, padding.coerceIn(LunarisQsSpacing.TOP_PADDING_RANGE))
 
     fun setSliderStyle(
         layout: AxQsLayout,
@@ -607,6 +621,10 @@ constructor(
         const val SPLIT_SHADE_TILE_LABELS = "ax_qs_split_shade_show_tile_labels"
         const val SHOW_WEATHER = "ax_qs_show_weather"
         const val SHOW_SLIDER_PERCENTAGE = "ax_qs_show_slider_percentage"
+        const val TILE_STYLE = "ax_qs_tile_style"
+        const val TILE_GAP = "ax_qs_tile_gap"
+        const val SIDE_PADDING = "ax_qs_side_padding"
+        const val TOP_PADDING = "ax_qs_top_padding"
 
         val SLIDER_KEYS =
             AxQsLayout.entries.flatMap { layout ->

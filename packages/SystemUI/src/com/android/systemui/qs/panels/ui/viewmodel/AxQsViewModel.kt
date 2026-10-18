@@ -39,6 +39,7 @@ import com.android.systemui.qs.panels.shared.model.AxQsLayoutPadding
 import com.android.systemui.qs.panels.shared.model.AxQsPanelMode
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.AxQsTileStacks
+import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderKey
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.res.R
@@ -484,6 +485,28 @@ constructor(
     }
 
     fun setQuickPanelOnLeft(onLeft: Boolean) = repository.setQuickPanelOnLeft(onLeft)
+
+    fun setShowWeather(show: Boolean) = repository.setShowWeather(show)
+
+    fun setShowSliderPercentage(show: Boolean) = repository.setShowSliderPercentage(show)
+
+    fun setTileStyle(style: AxQsTileStyle) = repository.setTileStyle(style)
+
+    fun setTileGap(gap: Int) = repository.setTileGap(gap)
+
+    fun setSidePadding(padding: Int) = repository.setSidePadding(padding)
+
+    fun setTopPadding(padding: Int) = repository.setTopPadding(padding)
+
+    fun configuredColumns(layout: AxQsGridLayout): Int? =
+        gridColumns[layout]?.coerceIn(columnRange(layout))
+
+    fun configuredRows(layout: AxQsGridLayout): Int? =
+        rowRange(layout)?.let { gridRows[layout]?.coerceIn(it) }
+
+    fun resetColumns(layout: AxQsGridLayout) = repository.setColumns(layout, 0)
+
+    fun resetRows(layout: AxQsGridLayout) = repository.setRows(layout, 0)
 
     fun sliderStyle(
         layout: AxQsLayout,

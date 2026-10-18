@@ -1,4 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="ax_qs_dnd_short_label">DND</string>
+    <string name="ax_qs_panel_settings">Panel settings</string>
+    <string name="ax_qs_back_to_editor">Back to tile editor</string>
+    <string name="ax_qs_settings_appearance">Appearance</string>
+    <string name="ax_qs_settings_behavior">Panel behavior</string>
+    <string name="ax_qs_settings_weather">Show weather</string>
+    <string name="ax_qs_settings_weather_summary">Show your configured weather provider in the QS header</string>
+    <string name="ax_qs_settings_split">Split Quick Settings</string>
+    <string name="ax_qs_settings_split_summary">Open Quick Settings and notifications separately</string>
+    <string name="ax_qs_settings_left">Quick Settings on the left</string>
+    <string name="ax_qs_settings_left_summary">Swipe from the left edge to open Quick Settings when split panels are enabled</string>
+    <string name="ax_qs_settings_tile_shape">Tile shape</string>
+    <string name="ax_qs_settings_shape_pill">Pill</string>
+    <string name="ax_qs_settings_shape_rounded">Rounded square</string>
+    <string name="ax_qs_settings_shape_dynamic">Dynamic (pill when active)</string>
+    <string name="ax_qs_settings_percentages">Show slider percentages</string>
+    <string name="ax_qs_settings_percentages_summary">Show values on brightness, volume, and flashlight sliders</string>
+    <string name="ax_qs_settings_spacing">Spacing</string>
+    <string name="ax_qs_settings_tile_gap">Tile gap</string>
+    <string name="ax_qs_settings_tile_gap_summary">Space between tiles and controls</string>
+    <string name="ax_qs_settings_side_padding">Side padding</string>
+    <string name="ax_qs_settings_side_padding_summary">Space between panel contents and screen edges</string>
+    <string name="ax_qs_settings_top_padding">Top spacing</string>
+    <string name="ax_qs_settings_top_padding_summary">Space below the clock and status icons</string>
+    <string name="ax_qs_settings_dp">%1$d dp</string>
+    <string name="ax_qs_settings_reset_value">Reset %1$s</string>
+    <string name="ax_qs_settings_decrease_value">Decrease %1$s</string>
+    <string name="ax_qs_settings_increase_value">Increase %1$s</string>
+    <string name="ax_qs_settings_layout">Panel layout</string>
+    <string name="ax_qs_settings_layout_top">Top QS</string>
+    <string name="ax_qs_settings_layout_full">Full QS</string>
+    <string name="ax_qs_settings_layout_large">Large screen</string>
+    <string name="ax_qs_settings_control_columns">Control columns</string>
+    <string name="ax_qs_settings_tile_columns">Tile columns</string>
+    <string name="ax_qs_settings_tile_rows">Tile rows</string>
+    <string name="ax_qs_settings_automatic">Automatic (%1$d)</string>
+    <string name="ax_qs_settings_brightness_style">Brightness slider style</string>
+    <string name="ax_qs_settings_volume_style">Volume slider style</string>
+    <string name="ax_qs_settings_flashlight_style">Flashlight slider style</string>
+    <string name="ax_qs_settings_style_expressive">Expressive</string>
+    <string name="ax_qs_settings_style_classic">Classic</string>
+    <string name="ax_qs_settings_tile_labels">Show tile labels</string>
 </resources>

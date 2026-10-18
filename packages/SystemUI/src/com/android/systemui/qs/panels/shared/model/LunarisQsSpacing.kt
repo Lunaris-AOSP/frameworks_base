@@ -20,4 +20,10 @@ data class LunarisQsSpacing(
     val tileGap: Int = 20,
     val sidePadding: Int = 24,
     val topPadding: Int = 8,
-)
+) {
+    companion object {
+        val TILE_GAP_RANGE = 8..28
+        val SIDE_PADDING_RANGE = 8..40
+        val TOP_PADDING_RANGE = 0..32
+    }
+}

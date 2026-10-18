@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package com.android.systemui.qs.composefragment.mist
 
 import com.android.systemui.qs.composefragment.SceneKeys
@@ -34,7 +36,14 @@ import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
@@ -60,7 +69,10 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.snapshotFlow
@@ -78,6 +90,7 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -86,6 +99,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
 import androidx.compose.ui.util.fastRoundToInt
@@ -133,6 +147,7 @@ import com.android.systemui.qs.composefragment.ui.NotificationScrimClipParams
 import com.android.systemui.qs.composefragment.viewmodel.QSFragmentComposeViewModel
 import com.android.systemui.qs.flags.QSComposeFragment
 import com.android.systemui.qs.panels.shared.model.QSFragmentComposeClippingTableLog
+import com.android.systemui.qs.panels.shared.model.AxQsLayout
 import com.android.systemui.qs.panels.ui.compose.AxQuickSettingsHeader
 import com.android.systemui.qs.panels.ui.compose.EditMode
 import com.android.systemui.qs.panels.ui.compose.LocalAxQsExpansionProgress
@@ -176,6 +191,7 @@ import com.android.systemui.qs.panels.ui.compose.LocalAxQsTileStyle
 import com.android.systemui.qs.panels.ui.compose.LocalShowQsSliderPercentage
 import com.android.systemui.qs.panels.domain.interactor.EditTilesResetInteractor
 import com.android.systemui.qs.panels.ui.edit.AxQsEditUi
+import com.android.systemui.qs.panels.ui.edit.LunariQsPanelSettings
 import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.AxQsViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.LocalLunarisFlashlightSliderViewModel
@@ -1000,43 +1016,67 @@ constructor(
 
     @Composable
     private fun EditModeElement(modifier: Modifier = Modifier) {
-        val context = LocalContext.current
-        AxQsEditUi(
-            editModeViewModel = viewModel.containerViewModel.editModeViewModel,
-            axQsViewModel = axQsViewModel,
-            controlPreview = { control, span, columns, style ->
-                AxQsControlPreview(
-                    control = control,
-                    span = span,
-                    maxColumns = columns,
-                    sliderStyle = style,
-                    brightnessViewModel = viewModel.containerViewModel.brightnessSliderViewModel,
-                    volumeViewModel = volumeSliderViewModel,
-                    mediaViewModel = axMediaViewModel,
-                    modifier = Modifier.fillMaxSize(),
-                )
+        val editModeViewModel = viewModel.containerViewModel.editModeViewModel
+        val allTiles by editModeViewModel.tiles.collectAsStateWithLifecycle(initialValue = null)
+        var showPanelSettings by rememberSaveable { mutableStateOf(false) }
+        var panelSettingsLayout by rememberSaveable { mutableStateOf(AxQsLayout.QS) }
+        val pageState = rememberSaveableStateHolder()
+        val spatialSpec = MaterialTheme.motionScheme.fastSpatialSpec<IntOffset>()
+        val effectsSpec = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
+        val direction = if (LocalLayoutDirection.current == LayoutDirection.Ltr) 1 else -1
+
+        BackHandler(enabled = viewModel.isEditing) {
+            if (showPanelSettings) showPanelSettings = false else editModeViewModel.stopEditing()
+        }
+
+        AnimatedContent(
+            targetState = showPanelSettings,
+            modifier = modifier.fillMaxSize().padding(top = { viewModel.qqsHeaderHeight }),
+            transitionSpec = {
+                (fadeIn(effectsSpec) + slideInHorizontally(spatialSpec) {
+                    (if (targetState) it / 6 else -it / 6) * direction
+                }) togetherWith (fadeOut(effectsSpec) + slideOutHorizontally(spatialSpec) {
+                    (if (targetState) -it / 6 else it / 6) * direction
+                })
             },
-            onOpenPanelSettings = {
-                try {
-                    // Exit Edit Mode before launching Settings so QS edit
-                    // is not still active when the user returns.
-                    viewModel.containerViewModel.editModeViewModel.stopEditing()
-                    val intent = android.content.Intent().apply {
-                        setClassName("com.android.settings", "com.android.settings.SubSettings")
-                        putExtra(":settings:show_fragment", "org.lunaris.settings.fragments.quicksettings.MistSettings")
-                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    context.startActivity(intent)
-                } catch (_: Exception) {}
-            },
-            animateItemBounds = true,
-            splitShade = viewModel.isInSplitShade,
-            onResetTiles = { editTilesResetInteractor.reset() },
-            modifier =
-                modifier
-                    .fillMaxWidth()
-                    .padding(top = { viewModel.qqsHeaderHeight }),
-        )
+            label = "QsEditorPage",
+        ) { settings ->
+            pageState.SaveableStateProvider(settings) {
+                if (settings) {
+                    LunariQsPanelSettings(
+                        viewModel = axQsViewModel,
+                        initialLayout = panelSettingsLayout,
+                        onBack = { showPanelSettings = false },
+                        onDone = editModeViewModel::stopEditing,
+                    )
+                } else {
+                    AxQsEditUi(
+                        editModeViewModel = editModeViewModel,
+                        axQsViewModel = axQsViewModel,
+                        allTiles = allTiles,
+                        controlPreview = { control, span, columns, style ->
+                            AxQsControlPreview(
+                                control = control,
+                                span = span,
+                                maxColumns = columns,
+                                sliderStyle = style,
+                                brightnessViewModel = viewModel.containerViewModel.brightnessSliderViewModel,
+                                volumeViewModel = volumeSliderViewModel,
+                                mediaViewModel = axMediaViewModel,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        },
+                        onOpenPanelSettings = {
+                            panelSettingsLayout = it
+                            showPanelSettings = true
+                        },
+                        animateItemBounds = true,
+                        splitShade = viewModel.isInSplitShade,
+                        onResetTiles = { editTilesResetInteractor.reset() },
+                    )
+                }
+            }
+        }
     }
 
     private fun Modifier.collapseExpandSemanticAction(label: String): Modifier {

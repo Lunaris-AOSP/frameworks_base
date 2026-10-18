@@ -15,13 +15,12 @@
  * limitations under the License.
  */
 
-@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@file:OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3ExpressiveApi::class)
 
 package com.android.systemui.qs.panels.ui.edit
 
 import android.content.Context
 import android.content.res.Configuration
-import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
@@ -45,6 +44,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -82,6 +83,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -108,7 +110,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsControlSpans
 import com.android.systemui.qs.panels.shared.model.AxQsGridItem
@@ -177,16 +178,16 @@ private sealed interface AxEditGridValue {
 fun AxQsEditUi(
     editModeViewModel: EditModeViewModel,
     axQsViewModel: AxQsViewModel,
+    allTiles: List<EditTileViewModel>?,
     controlPreview:
         @Composable (AxQsControl, AxQsSpan, Int, LunarisQsSliderStyle) -> Unit,
-    onOpenPanelSettings: () -> Unit,
+    onOpenPanelSettings: (AxQsLayout) -> Unit,
     animateItemBounds: Boolean,
     splitShade: Boolean,
     onResetTiles: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    val allTiles by editModeViewModel.tiles.collectAsStateWithLifecycle(initialValue = null)
-    var editQqs by remember { mutableStateOf(false) }
+    var editQqs by rememberSaveable { mutableStateOf(false) }
     val scrollState = rememberScrollState()
     var viewportBounds by remember { mutableStateOf(Rect.Zero) }
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -194,8 +195,12 @@ fun AxQsEditUi(
         !landscape && !splitShade && axQsViewModel.panelMode == AxQsPanelMode.TOGETHER
     var resetEpoch by remember { mutableStateOf(0) }
     var showResetDialog by remember { mutableStateOf(false) }
+    val layout = when {
+        splitShade -> AxQsLayout.SPLIT_SHADE
+        editQqs -> AxQsLayout.QQS
+        else -> AxQsLayout.QS
+    }
 
-    BackHandler { editModeViewModel.stopEditing() }
     LaunchedEffect(showQqsEditor) { if (!showQqsEditor) editQqs = false }
 
     if (showResetDialog) {
@@ -230,20 +235,16 @@ fun AxQsEditUi(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Row(
+                FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    if (landscape) {
-                        Spacer(Modifier.weight(1f))
-                    } else {
-                        FilledTonalButton(
-                            onClick = onOpenPanelSettings,
-                            shapes = ButtonDefaults.shapes(),
-                        ) {
-                            Text(axString("ax_qs_panel_settings", "Panel settings"))
-                        }
+                    FilledTonalButton(
+                        onClick = { onOpenPanelSettings(layout) },
+                        shapes = ButtonDefaults.shapes(),
+                    ) {
+                        Text(stringResource(R.string.ax_qs_panel_settings))
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilledTonalButton(
@@ -270,12 +271,6 @@ fun AxQsEditUi(
                 )
             }
 
-            val layout =
-                when {
-                    splitShade -> AxQsLayout.SPLIT_SHADE
-                    editQqs -> AxQsLayout.QQS
-                    else -> AxQsLayout.QS
-                }
             var renderedLayout by remember { mutableStateOf(layout) }
             var isSwitchingLayout by remember { mutableStateOf(false) }
 
