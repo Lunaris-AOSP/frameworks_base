@@ -235,6 +235,15 @@ fun LunariQsPanelSettings(
                                     stringResource(R.string.ax_qs_settings_shape_dynamic),
                             ),
                         onSelect = { viewModel.setTileStyle(AxQsTileStyle.fromSetting(it)) },
+                    )
+                }
+                item("dual_target_tile_style") {
+                    SettingsSwitch(
+                        title = stringResource(R.string.ax_qs_settings_dual_target_tile_style),
+                        summary =
+                            stringResource(R.string.ax_qs_settings_dual_target_tile_style_summary),
+                        checked = viewModel.fullColorDualTargetTiles,
+                        onCheckedChange = viewModel::setFullColorDualTargetTiles,
                         position = SettingPosition.Last,
                     )
                 }

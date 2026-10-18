@@ -113,6 +113,24 @@ constructor(
     val showWeather: StateFlow<Boolean> = boolSetting(SHOW_WEATHER, true)
     val showSliderPercentage: StateFlow<Boolean> = boolSetting(SHOW_SLIDER_PERCENTAGE, false)
 
+    val fullColorDualTargetTiles: StateFlow<Boolean> =
+        userRepository.selectedUserInfo
+            .flatMapLatest { user ->
+                systemSettings
+                    .observerFlow(user.id, Settings.System.DUAL_TARGET_TILE_STYLE)
+                    .onStart { emit(Unit) }
+                    .map {
+                        systemSettings.getIntForUser(
+                            Settings.System.DUAL_TARGET_TILE_STYLE,
+                            0,
+                            user.id,
+                        ) == 1
+                    }
+            }
+            .flowOn(backgroundDispatcher)
+            .distinctUntilChanged()
+            .stateIn(applicationScope, SharingStarted.Eagerly, false)
+
     val gradientSettings: StateFlow<LunarisQsGradientSettings> =
         userRepository.selectedUserInfo
             .flatMapLatest { user ->
@@ -355,6 +373,17 @@ constructor(
     fun setShowWeather(show: Boolean) = putInt(SHOW_WEATHER, show.toSetting())
 
     fun setShowSliderPercentage(show: Boolean) = putInt(SHOW_SLIDER_PERCENTAGE, show.toSetting())
+
+    fun setFullColorDualTargetTiles(enabled: Boolean) {
+        val userId = userRepository.getSelectedUserInfo().id
+        applicationScope.launch(backgroundDispatcher) {
+            systemSettings.putIntForUser(
+                Settings.System.DUAL_TARGET_TILE_STYLE,
+                enabled.toSetting(),
+                userId,
+            )
+        }
+    }
 
     fun setGradientEnabled(enabled: Boolean) = putInt(GRADIENT_ENABLED, enabled.toSetting())
 

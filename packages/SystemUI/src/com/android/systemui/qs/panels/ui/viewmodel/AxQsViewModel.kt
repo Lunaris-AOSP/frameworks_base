@@ -290,6 +290,12 @@ constructor(
             initialValue = repository.showSliderPercentage.value,
             source = repository.showSliderPercentage,
         )
+    val fullColorDualTargetTiles by
+        hydrator.hydratedStateOf(
+            traceName = "fullColorDualTargetTiles",
+            initialValue = repository.fullColorDualTargetTiles.value,
+            source = repository.fullColorDualTargetTiles,
+        )
     val spacing by
         hydrator.hydratedStateOf(
             traceName = "spacing",
@@ -547,6 +553,9 @@ constructor(
     fun setShowWeather(show: Boolean) = repository.setShowWeather(show)
 
     fun setShowSliderPercentage(show: Boolean) = repository.setShowSliderPercentage(show)
+
+    fun setFullColorDualTargetTiles(enabled: Boolean) =
+        repository.setFullColorDualTargetTiles(enabled)
 
     fun setGradientEnabled(enabled: Boolean) = repository.setGradientEnabled(enabled)
 

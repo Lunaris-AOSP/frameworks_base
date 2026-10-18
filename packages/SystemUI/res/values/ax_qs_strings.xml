@@ -12,6 +12,8 @@
     <string name="ax_qs_settings_left">Quick Settings on the left</string>
     <string name="ax_qs_settings_left_summary">Swipe from the left edge to open Quick Settings when split panels are enabled</string>
     <string name="ax_qs_settings_tile_shape">Tile shape</string>
+    <string name="ax_qs_settings_dual_target_tile_style">Dual-target tile style</string>
+    <string name="ax_qs_settings_dual_target_tile_style_summary">Extend the active tile color across the icon and label</string>
     <string name="ax_qs_settings_shape_pill">Pill</string>
     <string name="ax_qs_settings_shape_rounded">Rounded square</string>
     <string name="ax_qs_settings_shape_dynamic">Dynamic (pill when active)</string>
