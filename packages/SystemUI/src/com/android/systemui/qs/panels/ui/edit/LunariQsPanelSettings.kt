@@ -244,6 +244,14 @@ fun LunariQsPanelSettings(
                             stringResource(R.string.ax_qs_settings_dual_target_tile_style_summary),
                         checked = viewModel.fullColorDualTargetTiles,
                         onCheckedChange = viewModel::setFullColorDualTargetTiles,
+                    )
+                }
+                item("stroke_style") {
+                    SettingsSwitch(
+                        title = stringResource(R.string.ax_qs_settings_stroke_style),
+                        summary = stringResource(R.string.ax_qs_settings_stroke_style_summary),
+                        checked = viewModel.strokeStyle,
+                        onCheckedChange = viewModel::setStrokeStyle,
                         position = SettingPosition.Last,
                     )
                 }

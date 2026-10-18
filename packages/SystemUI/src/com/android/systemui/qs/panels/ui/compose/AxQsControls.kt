@@ -18,6 +18,7 @@
 package com.android.systemui.qs.panels.ui.compose
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -36,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -126,10 +128,12 @@ private fun AxQsButtonControl(
     val interactionSource = remember { MutableInteractionSource() }
     val gradient = rememberLunarisQsGradient()
     val activeBackgroundBrush = gradient.tileBrush().takeIf { active }
+    val strokeStyle = LocalLunarisQsStrokeStyle.current
     val background by
         animateColorAsState(
             targetValue =
-                if (active) MaterialTheme.colorScheme.primary else AxTileDefaults.backgroundColor(),
+                if (active && !strokeStyle) MaterialTheme.colorScheme.primary
+                else AxTileDefaults.backgroundColor(),
             label = "AxQsButtonBackground",
         )
     val foreground by
@@ -140,6 +144,20 @@ private fun AxQsButtonControl(
                 else MaterialTheme.colorScheme.onSurface,
             label = "AxQsButtonForeground",
         )
+    val fillModifier =
+        if (strokeStyle) {
+            val fillAlpha = animateFloatAsState(if (active) 1f else 0f, label = "AxQsButtonStrokeFill")
+            Modifier.lunarisQsInsetBackground(
+                brush = gradient.tileBrush() ?: SolidColor(MaterialTheme.colorScheme.primary),
+                shape = CircleShape,
+                insetWidth = LunarisQsTileStrokeWidth * LocalTileScale.current,
+                alpha = { fillAlpha.value },
+            )
+        } else {
+            Modifier.thenIf(activeBackgroundBrush != null) {
+                Modifier.drawBehind { drawRect(brush = activeBackgroundBrush!!) }
+            }
+        }
     Box(
         contentAlignment = Alignment.Center,
         modifier =
@@ -148,9 +166,7 @@ private fun AxQsButtonControl(
                 .lunarisTilePressAnimation(interactionSource, interactive)
                 .clip(CircleShape)
                 .background(background)
-                .thenIf(activeBackgroundBrush != null) {
-                    Modifier.drawBehind { drawRect(brush = activeBackgroundBrush!!) }
-                }
+                .then(fillModifier)
                 .clickable(
                     interactionSource = interactionSource,
                     indication = LocalIndication.current,

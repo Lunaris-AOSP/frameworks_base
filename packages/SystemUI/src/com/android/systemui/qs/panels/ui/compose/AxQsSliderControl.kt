@@ -24,6 +24,7 @@ import android.view.MotionEvent
 import android.view.View
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -74,6 +75,7 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -301,8 +303,13 @@ internal fun AxQsSlider(
     val sliderScale = sliderHeight / AxSliderTrackHeight
     val iconSize = AxSliderIconSize * sliderScale
     if (sliderStyle.usesPlatformSlider) {
+        val strokeStyle = LocalLunarisQsStrokeStyle.current
         val roundedSquare = sliderStyle == LunarisQsSliderStyle.ROUNDED_SQUARE
         val trackHeight = AxTileDefaults.TileHeight * sliderScale
+        val indicatorColor by animateColorAsState(
+            if (enabled) activeTrackColor else MaterialTheme.colorScheme.primary.copy(alpha = 0.38f),
+            label = "AxQsSliderStrokeColor",
+        )
         val platformTrackColor =
             if (trackBackgroundColor == Color.Transparent) {
                 inactiveTrackColor
@@ -343,22 +350,29 @@ internal fun AxQsSlider(
                 sliderHeight = trackHeight,
                 trackCornerRadius = if (roundedSquare) AxQsControlCornerRadius else null,
                 indicatorBackground =
-                    if (activeTrackBrush != null) {
+                    if (activeTrackBrush != null || strokeStyle) {
                         { indicatorModifier, cornerRadius ->
                             val startCorner =
                                 if (roundedSquare) AxQsControlCornerRadius else trackHeight / 2
+                            val indicatorShape = RoundedCornerShape(
+                                topStart = startCorner,
+                                bottomStart = startCorner,
+                                topEnd = cornerRadius,
+                                bottomEnd = cornerRadius,
+                            )
+                            val gradientAlpha = if (!enabled) 0.38f else if (active) 1f else 0.7f
                             Box(
-                                indicatorModifier
-                                    .alpha(if (!enabled) 0.38f else if (active) 1f else 0.7f)
-                                    .background(
-                                        activeTrackBrush,
-                                        RoundedCornerShape(
-                                            topStart = startCorner,
-                                            bottomStart = startCorner,
-                                            topEnd = cornerRadius,
-                                            bottomEnd = cornerRadius,
-                                        ),
+                                if (strokeStyle) {
+                                    indicatorModifier.lunarisQsInsetBackground(
+                                        brush = activeTrackBrush ?: SolidColor(indicatorColor),
+                                        shape = indicatorShape,
+                                        insetWidth = LunarisQsSliderStrokeWidth * sliderScale,
+                                        alpha = { if (activeTrackBrush != null) gradientAlpha else 1f },
                                     )
+                                } else {
+                                    indicatorModifier.alpha(gradientAlpha)
+                                        .background(activeTrackBrush!!, indicatorShape)
+                                }
                             )
                         }
                     } else null,

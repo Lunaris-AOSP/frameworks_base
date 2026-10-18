@@ -345,6 +345,7 @@ private fun ContentScope.LunarisFolderLiveTile(tile: TileViewModel, preview: Boo
             span = AxQsSpan.TileDefault,
             fillHeight = true,
             tileShapeOverride = shape,
+            strokeStyle = false,
             compactIconSize = minOf(maxWidth, maxHeight) * 0.46f,
             squishiness = { 1f },
             coroutineScope = scope,

@@ -26,6 +26,7 @@ import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -57,6 +58,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
@@ -127,6 +129,7 @@ fun ContentScope.AxTile(
     compactIconSize: Dp = AxTileDefaults.IconSize,
     tileShapeOverride: RoundedCornerShape? = null,
     deviceArtwork: Drawable? = null,
+    strokeStyle: Boolean = LocalLunarisQsStrokeStyle.current,
 ) {
     trace(tile.spec.spec) {
         val compact = span.columns == 1
@@ -153,6 +156,8 @@ fun ContentScope.AxTile(
                 !compact &&
                 span.rows == 1 &&
                 uiState.handlesSecondaryClick
+        val isIconOnlyDualTarget =
+            dualTargetTileStyle == DualTargetTileStyle.DUAL && uiState.handlesSecondaryClick
         val colors =
             AxTileColorsDefaults.getColorForState(
                 uiState = uiState,
@@ -164,7 +169,30 @@ fun ContentScope.AxTile(
 
         val defaultTileShape = animateAxQsTileShape(span, uiState.state)
         val tileShape = tileShapeOverride ?: defaultTileShape
-        val animatedColor by animateColorAsState(colors.background, label = "QSTileBackgroundColor")
+        val useStrokeStyle =
+            strokeStyle && !isIconOnlyDualTarget && uiState.state != STATE_UNAVAILABLE
+        val animatedColor by animateColorAsState(
+            if (useStrokeStyle) AxTileDefaults.backgroundColor() else colors.background,
+            label = "QSTileBackgroundColor",
+        )
+        val backgroundModifier =
+            if (useStrokeStyle) {
+                val fillAlpha = animateFloatAsState(
+                    if (uiState.state == STATE_ACTIVE) 1f else 0f,
+                    label = "QSTileStrokeFill",
+                )
+                Modifier.lunarisQsInsetBackground(
+                    brush = rememberLunarisQsGradient().tileBrush()
+                        ?: SolidColor(MaterialTheme.colorScheme.primary),
+                    shape = tileShape,
+                    insetWidth = LunarisQsTileStrokeWidth * LocalTileScale.current,
+                    alpha = { fillAlpha.value },
+                )
+            } else {
+                Modifier.thenIf(colors.backgroundGradient != null) {
+                    Modifier.drawBehind { drawRect(brush = colors.backgroundGradient!!) }
+                }
+            }
         val isDualTarget = uiState.handlesSecondaryClick
 
         val surfaceRevealModifier: Modifier
@@ -259,10 +287,7 @@ fun ContentScope.AxTile(
                 iconOnly = compact,
                 isDualTarget = isDualTarget,
                 fillHeight = fillHeight,
-                modifier =
-                    contentRevealModifier.thenIf(colors.backgroundGradient != null) {
-                        Modifier.drawBehind { drawRect(brush = colors.backgroundGradient!!) }
-                    },
+                modifier = contentRevealModifier.then(backgroundModifier),
             ) {
                 val iconProvider: Context.() -> Icon = { getAxTileIcon(icon = icon) }
                 AnimatedContent(

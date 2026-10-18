@@ -18,6 +18,7 @@ package com.android.systemui.qs.panels.ui.compose
 
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -141,9 +142,10 @@ private fun LunarisModeButton(
 ) {
     val gradient = rememberLunarisQsGradient()
     val brush = gradient.tileBrush().takeIf { mode.enabled }
+    val strokeStyle = LocalLunarisQsStrokeStyle.current
     val background by
         animateColorAsState(
-            if (mode.enabled) MaterialTheme.colorScheme.primary
+            if (mode.enabled && !strokeStyle) MaterialTheme.colorScheme.primary
             else MaterialTheme.colorScheme.primaryContainer,
             label = "LunarisModeBackground",
         )
@@ -155,6 +157,21 @@ private fun LunarisModeButton(
             label = "LunarisModeForeground",
         )
     val shape = RoundedCornerShape(20.dp)
+    val backgroundModifier =
+        if (strokeStyle) {
+            val fillAlpha = animateFloatAsState(
+                if (mode.enabled) 1f else 0f,
+                label = "LunarisModeStrokeFill",
+            )
+            Modifier.background(background).lunarisQsInsetBackground(
+                brush = gradient.tileBrush() ?: SolidColor(MaterialTheme.colorScheme.primary),
+                shape = shape,
+                insetWidth = LunarisQsTileStrokeWidth * LocalTileScale.current,
+                alpha = { fillAlpha.value },
+            )
+        } else {
+            Modifier.background(brush ?: SolidColor(background))
+        }
     val interactionSource = remember(mode.id) { MutableInteractionSource() }
     val view = LocalView.current
     val hapticEnabled = rememberTileHaptic()
@@ -162,7 +179,7 @@ private fun LunarisModeButton(
         modifier =
             modifier.lunarisTilePressAnimation(interactionSource, enabled)
                 .clip(shape)
-                .background(brush ?: SolidColor(background))
+                .then(backgroundModifier)
                 .borderOnFocus(MaterialTheme.colorScheme.secondary, shape.topEnd)
                 .combinedClickable(
                     interactionSource = interactionSource,

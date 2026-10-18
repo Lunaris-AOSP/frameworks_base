@@ -112,6 +112,7 @@ constructor(
     val quickPanelOnLeft: StateFlow<Boolean> = boolSetting(QUICK_PANEL_ON_LEFT, false)
     val showWeather: StateFlow<Boolean> = boolSetting(SHOW_WEATHER, true)
     val showSliderPercentage: StateFlow<Boolean> = boolSetting(SHOW_SLIDER_PERCENTAGE, false)
+    val strokeStyle: StateFlow<Boolean> = boolSetting(STROKE_STYLE, false)
 
     val fullColorDualTargetTiles: StateFlow<Boolean> =
         userRepository.selectedUserInfo
@@ -373,6 +374,8 @@ constructor(
     fun setShowWeather(show: Boolean) = putInt(SHOW_WEATHER, show.toSetting())
 
     fun setShowSliderPercentage(show: Boolean) = putInt(SHOW_SLIDER_PERCENTAGE, show.toSetting())
+
+    fun setStrokeStyle(enabled: Boolean) = putInt(STROKE_STYLE, enabled.toSetting())
 
     fun setFullColorDualTargetTiles(enabled: Boolean) {
         val userId = userRepository.getSelectedUserInfo().id
@@ -776,6 +779,7 @@ constructor(
         const val SPLIT_SHADE_TILE_LABELS = "ax_qs_split_shade_show_tile_labels"
         const val SHOW_WEATHER = "ax_qs_show_weather"
         const val SHOW_SLIDER_PERCENTAGE = "ax_qs_show_slider_percentage"
+        private const val STROKE_STYLE = "ax_qs_stroke_style"
         private const val GRADIENT_ENABLED = "ax_qs_gradient_enabled"
         private const val GRADIENT_SLIDER_ONLY = "ax_qs_gradient_slider_only"
         private const val GRADIENT_COLOR_MODE = "ax_qs_gradient_color_mode"

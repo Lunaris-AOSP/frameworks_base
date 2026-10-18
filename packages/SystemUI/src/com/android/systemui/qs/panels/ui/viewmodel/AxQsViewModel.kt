@@ -296,6 +296,12 @@ constructor(
             initialValue = repository.fullColorDualTargetTiles.value,
             source = repository.fullColorDualTargetTiles,
         )
+    val strokeStyle by
+        hydrator.hydratedStateOf(
+            traceName = "strokeStyle",
+            initialValue = repository.strokeStyle.value,
+            source = repository.strokeStyle,
+        )
     val spacing by
         hydrator.hydratedStateOf(
             traceName = "spacing",
@@ -553,6 +559,8 @@ constructor(
     fun setShowWeather(show: Boolean) = repository.setShowWeather(show)
 
     fun setShowSliderPercentage(show: Boolean) = repository.setShowSliderPercentage(show)
+
+    fun setStrokeStyle(enabled: Boolean) = repository.setStrokeStyle(enabled)
 
     fun setFullColorDualTargetTiles(enabled: Boolean) =
         repository.setFullColorDualTargetTiles(enabled)

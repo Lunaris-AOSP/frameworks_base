@@ -74,6 +74,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.compose.theme.LocalAndroidColorScheme
 import com.android.systemui.qs.composefragment.mist.LocalBlurEnabled
+import com.android.systemui.qs.panels.ui.compose.LocalTileScale
+import com.android.systemui.qs.panels.ui.compose.LunarisQsSliderStrokeWidth
+import com.android.systemui.qs.panels.ui.compose.lunarisQsInsetBackground
 import com.android.systemui.qs.panels.ui.compose.rememberLunarisQsGradient
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberQSTileAnimationStyle
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberTileHaptic
@@ -219,6 +222,7 @@ fun RingerSliderTileContent(
 
     val gradient = rememberLunarisQsGradient()
     val activeBrush = gradient.sliderBrush()
+    val strokeWidth = LunarisQsSliderStrokeWidth * LocalTileScale.current
     val activeBg = MaterialTheme.colorScheme.primary
     val activeIcon =
         if (activeBrush != null) gradient.contentColor else MaterialTheme.colorScheme.onPrimary
@@ -287,7 +291,11 @@ fun RingerSliderTileContent(
                     }
                     .tileToggleAnimation(animationStyle, toggleAnimState)
                     .size(slotSize)
-                    .background(activeBrush ?: SolidColor(activeBg), CircleShape),
+                    .lunarisQsInsetBackground(
+                        brush = activeBrush ?: SolidColor(activeBg),
+                        shape = CircleShape,
+                        insetWidth = strokeWidth,
+                    ),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
