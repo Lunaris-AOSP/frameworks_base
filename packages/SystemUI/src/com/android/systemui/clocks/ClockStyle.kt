@@ -27,15 +27,14 @@ import android.os.Looper
 import android.os.UserHandle
 import android.provider.Settings
 import android.util.AttributeSet
-import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewStub
 import android.view.animation.AccelerateInterpolator
 import android.view.animation.OvershootInterpolator
+import android.widget.FrameLayout
 import android.widget.ImageView
-import android.widget.LinearLayout
 import android.widget.RelativeLayout
 import android.widget.TextClock
 import android.widget.TextView
@@ -66,7 +65,7 @@ class ClockStyle @JvmOverloads constructor(
 
     private var currentClockView: View? = null
     private var clockStub: ViewStub? = null
-    private var clockContainer: ViewGroup? = null
+    private var clockContainer: ClockStyleFrameLayout? = null
 
     private val textClocks = ArrayList<TextClock>()
     private val styledTextViews = ArrayList<TextView>()
@@ -108,8 +107,6 @@ class ClockStyle @JvmOverloads constructor(
 
     private var currentShiftX = 0
     private var currentShiftY = 0
-
-    private var naturalClockHeight = 0
 
     private var pendingLayoutListener: View.OnLayoutChangeListener? = null
     private var clockSizeListener: View.OnLayoutChangeListener? = null
@@ -505,8 +502,6 @@ class ClockStyle @JvmOverloads constructor(
         textClocks.clear()
         styledTextViews.clear()
         hyperClocks.clear()
-        naturalClockHeight = 0
-        clockContainer?.minimumHeight = 0
 
         if (clockStyle in 1 until CLOCK_LAYOUTS.size) {
             val stub = clockStub
@@ -514,23 +509,24 @@ class ClockStyle @JvmOverloads constructor(
                 stub.layoutResource = CLOCK_LAYOUTS[clockStyle]
                 val inflated = stub.inflate()
                 currentClockView = inflated
-                clockContainer = inflated.parent as? ViewGroup
+                clockContainer = inflated.parent as? ClockStyleFrameLayout
                 clockStub = null
             } else {
                 clockContainer?.let { container ->
                     val inflated = LayoutInflater.from(context)
                         .inflate(CLOCK_LAYOUTS[clockStyle], container, false)
-                    // As the stub does on first inflation: some styles fill their parent,
-                    // which would make the clock as tall as the screen.
-                    inflated.layoutParams = inflated.layoutParams.apply {
-                        height = ViewGroup.LayoutParams.WRAP_CONTENT
-                    }
                     currentClockView = inflated
                     container.addView(inflated)
                 }
             }
 
             currentClockView?.let { view ->
+                // Match the detached preview and the first ViewStub inflation. Root layout
+                // margins/gravity must not change the clock's origin when switching styles.
+                view.layoutParams = FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                )
                 (view as? ClockDesignView)?.let {
                     it.userId = ActivityManager.getCurrentUser()
                     it.setDesign(clockDesign)
@@ -596,15 +592,17 @@ class ClockStyle @JvmOverloads constructor(
         val clockFrame = findViewById<View?>(R.id.clock_frame) ?: return
         val params = clockFrame.layoutParams as? ViewGroup.MarginLayoutParams ?: return
         val density = resources.displayMetrics.density
-        params.topMargin = (clockFrameMarginTop * density).toInt()
-        clockFrame.translationX = if (clockStyle == ClockDesign.STYLE) clockFrameMarginStart * density else 0f
-        if (clockStyle == ClockDesign.STYLE) {
-            params.marginStart = resources.getDimensionPixelSize(R.dimen.below_clock_padding_start)
-        } else if (!isNoHorizontalMarginClock(clockStyle)) {
-            params.marginStart = (clockFrameMarginStart * density).toInt()
-        } else {
-            params.marginStart = 0
-        }
+        val keyguardTop = resources.getDimensionPixelSize(R.dimen.status_bar_height) * 1.25f
+        // Lockstyles rounds the full screen offset once; the section already supplies
+        // keyguardTop.toInt(), so keep its fractional pixel when adding the user offset.
+        params.topMargin = (keyguardTop + clockFrameMarginTop * density).toInt() - keyguardTop.toInt()
+        val side = resources.getDimensionPixelSize(R.dimen.below_clock_padding_start)
+        params.marginStart = side
+        params.marginEnd = side
+        // Move a fixed-width clock, just as CustomClocks.frame does in Lockstyles.
+        // Changing a margin instead remeasures/recentres it and also changes its size.
+        clockFrame.translationX = if (isNoHorizontalMarginClock(clockStyle)) 0f
+            else (clockFrameMarginStart * density).toInt().toFloat()
         clockFrame.layoutParams = params
     }
 
@@ -708,14 +706,10 @@ class ClockStyle @JvmOverloads constructor(
 
     private fun attachClockSizeListener(view: View) {
         clockSizeListener?.let { currentClockView?.removeOnLayoutChangeListener(it) }
-        val listener = View.OnLayoutChangeListener { v, l, t, r, b, ol, ot, oR, ob ->
+        val listener = View.OnLayoutChangeListener { _, l, t, r, b, ol, ot, oR, ob ->
             if (r - l != oR - ol || b - t != ob - ot) {
-                if (v is ClockDesignView) {
-                    naturalClockHeight = v.height
-                    applyClockScale()
-                }
+                applyClockScale()
                 if (gradientEnabled) applyClockColors()
-                applyClockTransform()
             }
         }
         clockSizeListener = listener
@@ -842,32 +836,9 @@ class ClockStyle @JvmOverloads constructor(
         view.scaleY = scale
         view.pivotX = view.width / 2f
         view.pivotY = (view as? ClockDesignView)?.transformPivotY ?: (view.height / 2f)
+        clockContainer?.clockScale = scale
         disableClippingOnParents(view)
         applyClockTransform()
-        if (naturalClockHeight == 0 && view.height > 0) {
-            naturalClockHeight = view.height
-        }
-
-        if (naturalClockHeight > 0) {
-            val scaledHeight = (naturalClockHeight * scale).toInt()
-            val container = clockContainer ?: return
-            if (scale >= 1.0f) {
-                container.minimumHeight = scaledHeight
-                val lp = container.layoutParams
-                if (lp != null) {
-                    lp.height = ViewGroup.LayoutParams.WRAP_CONTENT
-                    container.layoutParams = lp
-                }
-            } else {
-                container.minimumHeight = 0
-                val lp = container.layoutParams
-                if (lp != null) {
-                    lp.height = scaledHeight
-                    container.layoutParams = lp
-                }
-            }
-            container.requestLayout()
-        }
     }
 
     private fun applyClockTransform() {
@@ -905,9 +876,6 @@ class ClockStyle @JvmOverloads constructor(
             ) {
                 v.removeOnLayoutChangeListener(this)
                 if (pendingLayoutListener === this) pendingLayoutListener = null
-                if (naturalClockHeight == 0) {
-                    naturalClockHeight = v.height
-                }
                 applyClockScale()
                 if (gradientEnabled) applyClockColors()
             }
