@@ -61,6 +61,7 @@ import android.view.Display;
 import android.view.WindowManager;
 
 import com.android.internal.policy.IKeyguardDismissCallback;
+import com.android.server.LocalServices;
 import com.android.server.inputmethod.InputMethodManagerInternal;
 import com.android.server.policy.WindowManagerPolicy;
 import com.android.window.flags.Flags;
@@ -245,7 +246,11 @@ class KeyguardController {
         state.writeEventLog("setKeyguardShown");
 
         if (displayId == DEFAULT_DISPLAY && keyguardChanged) {
-            GameSpaceService.get().onKeyguardChanged(keyguardShowing);
+            final GameSpaceService gameSpaceService =
+                    LocalServices.getService(GameSpaceService.class);
+            if (gameSpaceService != null) {
+                gameSpaceService.onKeyguardChanged(keyguardShowing);
+            }
         }
 
         if (keyguardChanged || (mWindowManager.mFlags.mAodTransition && aodChanged)) {

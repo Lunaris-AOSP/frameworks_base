@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025-2026 AxionOS Project
+ * Copyright (C) 2025-2026 AxionOS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,13 @@
  */
 package com.android.server.wm;
 
+import android.app.ActivityManager;
+import android.app.IActivityManager;
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
 import android.os.BatteryManager;
+import android.os.RemoteException;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.provider.Settings;
@@ -24,81 +29,106 @@ import android.util.Slog;
 
 import lineageos.health.HealthInterface;
 
-import com.android.internal.app.IGameSpaceCallback;
-
-import java.util.List;
-
 class GameStateDispatcher {
-
     private static final String TAG = "GameStateDispatcher";
+    private static final String GAME_SPACE_PACKAGE = "io.chaldeaprjkt.gamespace";
+    private static final String GAME_SPACE_SESSION_SERVICE =
+            "io.chaldeaprjkt.gamespace.gamebar.SessionService";
+    private static final ComponentName GAME_SPACE_SESSION_COMPONENT =
+            new ComponentName(GAME_SPACE_PACKAGE, GAME_SPACE_SESSION_SERVICE);
+    private static final String ACTION_GAME_START = "game_start";
+    private static final String EXTRA_PACKAGE_NAME = "package_name";
     private static final String KEY_GAMING_MODE_ACTIVE = "ax_gaming_mode_active";
     private static final String KEY_BYPASS_CHARGE_ENABLED = "bypass_charge_enabled";
+    private static final String KEY_POWER_MODE_PERF_BY_USER = "power_mode_perf_by_user";
     private static final String KEY_POWER_MODE_PERF = "persist.sys.power_mode_perf";
-    private static final String KEY_POWER_MODE_PERF_BY_USER = "persist.sys.power_mode_perf_by_user";
+    private static final int DEFAULT_CHARGE_LIMIT = 100;
 
     private final Context mContext;
-    private final List<IGameSpaceCallback> mCallbacks;
+    private final IActivityManager mActivityManager;
 
-    private int mChargeControlLimit = 100;
-    private boolean mWasChargingControlEnabled = false;
+    private int mChargeControlLimit = DEFAULT_CHARGE_LIMIT;
+    private boolean mWasChargingControlEnabled;
+    private boolean mBypassChargeActive;
 
-    GameStateDispatcher(Context context, List<IGameSpaceCallback> callbacks) {
+    GameStateDispatcher(Context context) {
         mContext = context;
-        mCallbacks = callbacks;
+        mActivityManager = ActivityManager.getService();
     }
 
     void dispatchGameState(boolean active, String packageName) {
-        Settings.Secure.putIntForUser(mContext.getContentResolver(),
-                KEY_GAMING_MODE_ACTIVE, active ? 1 : 0, UserHandle.USER_CURRENT);
-
-        for (IGameSpaceCallback callback : mCallbacks) {
-            try {
-                if (active && packageName != null) {
-                    callback.onGameStart(packageName);
-                } else {
-                    callback.onGameLeave();
-                }
-            } catch (Exception e) {
-                Slog.w(TAG, "Removing dead callback", e);
-                mCallbacks.remove(callback);
-            }
-        }
-
-        if (active) {
-            if (bypassChargeEnabled()) {
-                mChargeControlLimit = getChargingLimit();
-                setBypassActive(true);
-                setSmartChargeLvl(battLevel());
-            }
-        } else {
-            if (bypassChargeEnabled()) {
-                setBypassActive(false);
-                setSmartChargeLvl(mChargeControlLimit);
-            }
-        }
+        Settings.Secure.putIntForUser(mContext.getContentResolver(), KEY_GAMING_MODE_ACTIVE,
+                active ? 1 : 0, UserHandle.USER_CURRENT);
+        updateGameSession(active, packageName);
+        updateBypassCharge(active);
     }
 
     void boostGame(boolean enable) {
-        int perfByUser = Settings.System.getIntForUser(
-                mContext.getContentResolver(), KEY_POWER_MODE_PERF_BY_USER, 0,
-                UserHandle.USER_CURRENT);
-        if (perfByUser == 1) return;
+        final int perfByUser = Settings.System.getIntForUser(mContext.getContentResolver(),
+                KEY_POWER_MODE_PERF_BY_USER, 0, UserHandle.USER_CURRENT);
+        if (perfByUser == 1) {
+            return;
+        }
 
-        Settings.System.putIntForUser(mContext.getContentResolver(),
-                KEY_POWER_MODE_PERF, enable ? 1 : 0,
-                UserHandle.USER_CURRENT);
+        Settings.System.putIntForUser(mContext.getContentResolver(), KEY_POWER_MODE_PERF,
+                enable ? 1 : 0, UserHandle.USER_CURRENT);
         SystemProperties.set(KEY_POWER_MODE_PERF, enable ? "1" : "0");
     }
 
-    void setBypassCharge(boolean enable) {
-        if (!bypassChargeEnabled()) return;
+    private void updateGameSession(boolean active, String packageName) {
+        if (active) {
+            startGameSession(packageName);
+            return;
+        }
+        stopGameSession();
+    }
 
-        if (enable) {
+    private void startGameSession(String packageName) {
+        if (packageName == null) {
+            return;
+        }
+        final Intent intent = new Intent(ACTION_GAME_START)
+                .setComponent(GAME_SPACE_SESSION_COMPONENT)
+                .putExtra(EXTRA_PACKAGE_NAME, packageName);
+        try {
+            final ComponentName result = mActivityManager.startService(null, intent, null, false,
+                    mContext.getOpPackageName(), mContext.getAttributionTag(),
+                    UserHandle.USER_CURRENT);
+            if (result == null) {
+                Slog.w(TAG, "GameSpace session service not found");
+            }
+        } catch (RemoteException | RuntimeException e) {
+            Slog.w(TAG, "Failed to start GameSpace session", e);
+        }
+    }
+
+    private void stopGameSession() {
+        final Intent intent = new Intent().setComponent(GAME_SPACE_SESSION_COMPONENT);
+        try {
+            mActivityManager.stopService(null, intent, null, UserHandle.USER_CURRENT);
+        } catch (RemoteException | RuntimeException e) {
+            Slog.w(TAG, "Failed to stop GameSpace session", e);
+        }
+    }
+
+    private void updateBypassCharge(boolean active) {
+        if (active) {
+            if (!bypassChargeEnabled()) {
+                return;
+            }
             mChargeControlLimit = getChargingLimit();
+            setBypassActive(true);
+            setSmartChargeLevel(batteryLevel());
+            mBypassChargeActive = true;
+            return;
         }
 
-        setBypassActive(enable);
-        setSmartChargeLvl(enable ? battLevel() : mChargeControlLimit);
+        if (!mBypassChargeActive) {
+            return;
+        }
+        setBypassActive(false);
+        setSmartChargeLevel(mChargeControlLimit);
+        mBypassChargeActive = false;
     }
 
     private boolean bypassChargeEnabled() {
@@ -108,7 +138,7 @@ class GameStateDispatcher {
 
     private int getChargingLimit() {
         try {
-            HealthInterface health = HealthInterface.getInstance(mContext);
+            final HealthInterface health = HealthInterface.getInstance(mContext);
             mWasChargingControlEnabled = health.getEnabled();
             if (mWasChargingControlEnabled) {
                 return health.getLimit();
@@ -116,17 +146,23 @@ class GameStateDispatcher {
         } catch (Exception e) {
             Slog.w(TAG, "Failed to get charging limit", e);
         }
-        return 100;
+        return DEFAULT_CHARGE_LIMIT;
     }
 
-    private int battLevel() {
-        BatteryManager bm = mContext.getSystemService(BatteryManager.class);
-        return bm != null ? bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) : -1;
+    private int batteryLevel() {
+        final BatteryManager batteryManager = mContext.getSystemService(BatteryManager.class);
+        if (batteryManager == null) {
+            return -1;
+        }
+        return batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
     }
 
-    private void setSmartChargeLvl(int value) {
+    private void setSmartChargeLevel(int value) {
+        if (value < 0) {
+            return;
+        }
         try {
-            HealthInterface health = HealthInterface.getInstance(mContext);
+            final HealthInterface health = HealthInterface.getInstance(mContext);
             health.setMode(HealthInterface.MODE_LIMIT);
             health.setLimit(value);
         } catch (Exception e) {
@@ -136,7 +172,7 @@ class GameStateDispatcher {
 
     private void setBypassActive(boolean value) {
         try {
-            HealthInterface health = HealthInterface.getInstance(mContext);
+            final HealthInterface health = HealthInterface.getInstance(mContext);
             health.setEnabled(value || mWasChargingControlEnabled);
         } catch (Exception e) {
             Slog.w(TAG, "Failed to set charging bypass", e);

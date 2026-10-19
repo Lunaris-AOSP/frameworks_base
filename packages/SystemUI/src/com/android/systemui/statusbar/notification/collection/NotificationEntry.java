@@ -890,10 +890,8 @@ public final class NotificationEntry extends ListEntry {
     private boolean shouldSuppressVisualEffect(int effect) {
         if (effect == SUPPRESSED_EFFECT_FULL_SCREEN_INTENT
                 && row != null
-                && Settings.Secure.getIntForUser(
-                        row.getContext().getContentResolver(),
-                        "ax_gaming_mode_active", 0,
-                        UserHandle.USER_CURRENT) == 1) {
+                && Settings.Secure.getIntForUser(row.getContext().getContentResolver(),
+                        KEY_GAMING_MODE_ACTIVE, 0, UserHandle.USER_CURRENT) == 1) {
             return true;
         }
         if (isExemptFromDndVisualSuppression()) {
@@ -1151,4 +1149,5 @@ public final class NotificationEntry extends ListEntry {
     private static final int COLOR_INVALID = 1;
 
     private static final String TAG = "NotificationEntry";
+    private static final String KEY_GAMING_MODE_ACTIVE = "ax_gaming_mode_active";
 }

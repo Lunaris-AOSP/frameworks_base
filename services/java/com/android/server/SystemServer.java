@@ -322,6 +322,7 @@ import com.android.server.wearable.WearableSensingManagerService;
 import com.android.server.webkit.WebViewUpdateService;
 import com.android.server.wm.ActivityTaskManagerService;
 import com.android.server.wm.AxSandboxService;
+import com.android.server.wm.GameSpaceService;
 import com.android.server.wm.WindowManagerGlobalLock;
 import com.android.server.wm.WindowManagerService;
 
@@ -1789,6 +1790,10 @@ public final class SystemServer implements Dumpable {
 
             t.traceBegin("WindowManagerServiceOnInitReady");
             wm.onInitReady();
+            t.traceEnd();
+
+            t.traceBegin("StartGameSpaceService");
+            mSystemServiceManager.startService(GameSpaceService.class);
             t.traceEnd();
 
             t.traceBegin("StartDerpFestSystemExService");

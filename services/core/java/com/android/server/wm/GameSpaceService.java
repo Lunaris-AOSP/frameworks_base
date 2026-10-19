@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025-2026 AxionOS Project
+ * Copyright (C) 2025-2026 AxionOS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,163 +17,94 @@ package com.android.server.wm;
 
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Handler;
-import android.os.HandlerThread;
-import android.os.IBinder;
-import android.os.RemoteException;
-import android.os.ServiceManager;
+import android.os.Process;
 import android.util.Slog;
 
-import com.android.internal.app.IGameSpaceCallback;
-import com.android.internal.app.IGameSpaceService;
-import com.android.server.NtServiceInjector;
-import com.android.server.UiThread;
-import com.android.server.am.ActivityManagerService;
+import com.android.server.LocalServices;
+import com.android.server.ServiceThread;
+import com.android.server.SystemService;
 
-import java.util.concurrent.CopyOnWriteArrayList;
-
-public class GameSpaceService extends IGameSpaceService.Stub {
-
+public final class GameSpaceService extends SystemService {
     private static final String TAG = "GameSpaceService";
-    private static final boolean DEBUG = false;
+    private static final long BOOST_DELAY_MS = 500L;
 
-    private static GameSpaceService sInstance;
-
-    private final Context mContext;
-    private final ActivityManagerService mActivityManager;
-    private final CopyOnWriteArrayList<IGameSpaceCallback> mCallbacks = new CopyOnWriteArrayList<>();
     private final GameListManager mGameListManager;
     private final GameStateDispatcher mGameStateDispatcher;
     private final GamePackageHandler mGamePackageHandler;
+    private final ServiceThread mThread;
+    private final Handler mHandler;
 
-    private final HandlerThread mBgThread = new HandlerThread("GameSpaceBg");
-    private final Handler mBgHandler;
-
+    private boolean mStarted;
     private String mCurrentGame;
     private Runnable mPendingBoost;
 
-    private GameSpaceService(Context context, ActivityManagerService am) {
-        mContext = context;
-        mActivityManager = am;
+    public GameSpaceService(Context context) {
+        super(context);
+        mThread = new ServiceThread(TAG, Process.THREAD_PRIORITY_BACKGROUND, true);
+        mThread.start();
+        mHandler = new Handler(mThread.getLooper());
         mGameListManager = new GameListManager(context);
-        mGameStateDispatcher = new GameStateDispatcher(context, mCallbacks);
-
-        mBgThread.start();
-        mBgHandler = new Handler(mBgThread.getLooper());
-
-        mGamePackageHandler = new GamePackageHandler(context, mGameListManager, mBgHandler);
-        mGamePackageHandler.registerPackageReceiver();
-
-        mGameListManager.registerGameListObserver(mBgHandler);
-        mGameListManager.addListener(() -> {
-            mBgHandler.post(() -> {
-                if (mCurrentGame != null && mGameListManager.isGame(mCurrentGame)) {
-                    boolean inPerfMode = mGameListManager.isGameInPerfMode(mCurrentGame);
-                    mGameStateDispatcher.boostGame(inPerfMode);
-                }
-            });
-        });
+        mGameStateDispatcher = new GameStateDispatcher(context);
+        mGamePackageHandler = new GamePackageHandler(context, mGameListManager, mHandler);
     }
 
-    public static void systemReady() {
-        if (sInstance == null) {
-            sInstance = new GameSpaceService(NtServiceInjector.getCtx(), NtServiceInjector.getAm());
-            ServiceManager.addService("game_space", sInstance);
-            Slog.i(TAG, "GameSpaceService initialized");
+    @Override
+    public void onStart() {
+        publishLocalService(GameSpaceService.class, this);
+    }
+
+    @Override
+    public void onBootPhase(int phase) {
+        if (phase == PHASE_ACTIVITY_MANAGER_READY) {
+            startGameSpace();
         }
     }
 
-    public static GameSpaceService get() {
-        return sInstance;
-    }
-
-    private void startOverlay() {
-        final String currentGame = mCurrentGame;
-        if (currentGame == null) return;
-
-        mBgHandler.post(() -> {
-            if (mPendingBoost != null) {
-                mBgHandler.removeCallbacks(mPendingBoost);
-            }
-
-            if (mGameListManager.isGameInPerfMode(currentGame)) {
-                mPendingBoost = () -> mGameStateDispatcher.boostGame(true);
-                mBgHandler.postDelayed(mPendingBoost, 500);
-            }
-
-            UiThread.getHandler().post(
-                    () -> mGameStateDispatcher.dispatchGameState(true, currentGame));
-        });
-    }
-
-    private void stopOverlay() {
-        mBgHandler.post(() -> {
-            if (mPendingBoost != null) {
-                mBgHandler.removeCallbacks(mPendingBoost);
-                mPendingBoost = null;
-            }
-            UiThread.getHandler().post(
-                    () -> mGameStateDispatcher.dispatchGameState(false, null));
-            mGameStateDispatcher.boostGame(false);
-        });
-    }
-
     public void onAppFocusChanged(ActivityRecord record, Task task) {
-        if (record == null || record.packageName == null) return;
-
-        String packageName = record.packageName;
-
-        mBgHandler.post(() -> {
-            boolean gameActive = mCurrentGame != null
-                    && mActivityManager.isPackageTopApp(mCurrentGame);
-
-            if (task != null && task.getWindowingMode() == WINDOWING_MODE_FREEFORM && gameActive) {
-                if (DEBUG) Slog.d(TAG, "Freeform focused but game still TOP_APP, ignoring.");
-                return;
-            }
-
-            boolean isGame = mGameListManager.isGame(packageName);
-            boolean shouldStartOverlay = false;
-            boolean shouldStopOverlay = false;
-
-            if (isGame) {
-                if (!packageName.equals(mCurrentGame)) {
-                    if (mCurrentGame != null) {
-                        shouldStopOverlay = true;
-                    }
-                    mCurrentGame = packageName;
-                    shouldStartOverlay = true;
-                }
-            } else if (mCurrentGame != null) {
-                mCurrentGame = null;
-                shouldStopOverlay = true;
-            }
-
-            if (shouldStopOverlay) stopOverlay();
-            if (shouldStartOverlay) startOverlay();
-        });
+        if (record == null || record.packageName == null) {
+            return;
+        }
+        final String packageName = record.packageName;
+        final boolean freeformTask = task != null
+                && task.getWindowingMode() == WINDOWING_MODE_FREEFORM;
+        mHandler.post(() -> updateFocusedPackage(packageName, freeformTask));
     }
 
-    public void removeTask(Task task, String reason) {
-        if (task == null) return;
-
-        mBgHandler.post(() -> {
-            ActivityRecord top = task.getTopMostActivity();
-
-            if (mCurrentGame != null && top != null
-                    && mCurrentGame.equals(top.packageName)) {
-                if (DEBUG) Slog.d(TAG, "removeTask: clearing active game " + mCurrentGame);
+    public void removeTask(Task task) {
+        if (task == null) {
+            return;
+        }
+        final String packageName = getTaskPackageName(task);
+        if (packageName == null) {
+            return;
+        }
+        mHandler.post(() -> {
+            if (packageName.equals(mCurrentGame)) {
                 mCurrentGame = null;
                 stopOverlay();
             }
         });
     }
 
-    public void onKeyguardChanged(boolean showing) {
-        mBgHandler.post(() -> {
-            if (mCurrentGame == null) return;
+    private String getTaskPackageName(Task task) {
+        final ActivityRecord top = task.getTopMostActivity();
+        if (top != null && top.packageName != null) {
+            return top.packageName;
+        }
+        final Intent baseIntent = task.getBaseIntent();
+        final ComponentName component = baseIntent != null ? baseIntent.getComponent() : null;
+        return component != null ? component.getPackageName() : null;
+    }
 
+    public void onKeyguardChanged(boolean showing) {
+        mHandler.post(() -> {
+            if (mCurrentGame == null) {
+                return;
+            }
             if (showing) {
                 stopOverlay();
             } else {
@@ -182,25 +113,84 @@ public class GameSpaceService extends IGameSpaceService.Stub {
         });
     }
 
-    @Override
-    public void registerCallback(IGameSpaceCallback callback) {
-        if (callback == null || mCallbacks.contains(callback)) return;
+    private void startGameSpace() {
+        if (mStarted) {
+            return;
+        }
+        mStarted = true;
+        mGamePackageHandler.registerPackageReceiver();
+        mGameListManager.registerGameListObserver(mHandler);
+        mGameListManager.addListener(() -> mHandler.post(() -> {
+            if (mCurrentGame != null && mGameListManager.isGame(mCurrentGame)) {
+                mGameStateDispatcher.boostGame(mGameListManager.isGameInPerfMode(mCurrentGame));
+            }
+        }));
+        Slog.i(TAG, "GameSpaceService initialized");
+    }
 
-        mCallbacks.add(callback);
+    private void updateFocusedPackage(String packageName, boolean freeformTask) {
+        final boolean gameActive = mCurrentGame != null && isCurrentGameTopApp();
+        if (freeformTask && gameActive) {
+            return;
+        }
 
-        try {
-            IBinder binder = callback.asBinder();
-            binder.linkToDeath(() -> {
-                mCallbacks.remove(callback);
-                if (DEBUG) Slog.d(TAG, "Callback died, removed");
-            }, 0);
-        } catch (RemoteException e) {
-            mCallbacks.remove(callback);
+        final boolean isGame = mGameListManager.isGame(packageName);
+        boolean shouldStartOverlay = false;
+        boolean shouldStopOverlay = false;
+
+        if (isGame) {
+            if (!packageName.equals(mCurrentGame)) {
+                if (mCurrentGame != null) {
+                    shouldStopOverlay = true;
+                }
+                mCurrentGame = packageName;
+                shouldStartOverlay = true;
+            }
+        } else if (mCurrentGame != null) {
+            mCurrentGame = null;
+            shouldStopOverlay = true;
+        }
+
+        if (shouldStopOverlay) {
+            stopOverlay();
+        }
+        if (shouldStartOverlay) {
+            startOverlay();
         }
     }
 
-    @Override
-    public void unregisterCallback(IGameSpaceCallback callback) {
-        mCallbacks.remove(callback);
+    private boolean isCurrentGameTopApp() {
+        final ActivityTaskManagerInternal activityTaskManager =
+                LocalServices.getService(ActivityTaskManagerInternal.class);
+        final WindowProcessController topApp = activityTaskManager != null
+                ? activityTaskManager.getTopApp() : null;
+        return topApp != null && topApp.containsPackage(mCurrentGame);
+    }
+
+    private void startOverlay() {
+        final String currentGame = mCurrentGame;
+        if (currentGame == null) {
+            return;
+        }
+        cancelPendingBoost();
+        if (mGameListManager.isGameInPerfMode(currentGame)) {
+            mPendingBoost = () -> mGameStateDispatcher.boostGame(true);
+            mHandler.postDelayed(mPendingBoost, BOOST_DELAY_MS);
+        }
+        mGameStateDispatcher.dispatchGameState(true, currentGame);
+    }
+
+    private void stopOverlay() {
+        cancelPendingBoost();
+        mGameStateDispatcher.dispatchGameState(false, null);
+        mGameStateDispatcher.boostGame(false);
+    }
+
+    private void cancelPendingBoost() {
+        if (mPendingBoost == null) {
+            return;
+        }
+        mHandler.removeCallbacks(mPendingBoost);
+        mPendingBoost = null;
     }
 }

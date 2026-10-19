@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025-2026 AxionOS Project
+ * Copyright (C) 2025-2026 AxionOS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,22 +24,18 @@ import android.content.pm.PackageManager;
 import android.os.Handler;
 import android.os.UserHandle;
 import android.provider.Settings;
-import android.widget.Toast;
-
-import com.android.server.UiThread;
 
 class GamePackageHandler {
-
     private final Context mContext;
     private final PackageManager mPackageManager;
     private final GameListManager mGameListManager;
-    private final Handler mBgHandler;
+    private final Handler mHandler;
 
-    GamePackageHandler(Context context, GameListManager manager, Handler bgHandler) {
+    GamePackageHandler(Context context, GameListManager manager, Handler handler) {
         mContext = context;
         mPackageManager = context.getPackageManager();
         mGameListManager = manager;
-        mBgHandler = bgHandler;
+        mHandler = handler;
     }
 
     private boolean isAutoDetectEnabled() {
@@ -49,60 +45,48 @@ class GamePackageHandler {
     }
 
     void registerPackageReceiver() {
-        IntentFilter filter = new IntentFilter();
+        final IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_PACKAGE_ADDED);
         filter.addAction(Intent.ACTION_PACKAGE_FULLY_REMOVED);
         filter.addDataScheme("package");
-
-        mContext.registerReceiver(new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                final String pkg = intent.getData() != null
-                        ? intent.getData().getSchemeSpecificPart() : null;
-                if (pkg == null) return;
-
-                mBgHandler.post(() -> {
-                    String action = intent.getAction();
-                    if (Intent.ACTION_PACKAGE_ADDED.equals(action)) {
-                        if (!isAutoDetectEnabled()) return;
-                        if (mGameListManager.isDenied(pkg)) return;
-                        if (mGameListManager.isGame(pkg)) return;
-                        if (isGame(pkg)) {
-                            String label = getAppLabel(pkg);
-                            mGameListManager.addGame(pkg);
-                            UiThread.getHandler().post(
-                                    () -> showGameAddedToast(label));
-                        }
-                    } else if (Intent.ACTION_PACKAGE_FULLY_REMOVED.equals(action)) {
-                        mGameListManager.removeGame(pkg);
-                    }
-                });
-            }
-        }, filter);
+        mContext.registerReceiver(new PackageReceiver(), filter, Context.RECEIVER_NOT_EXPORTED);
     }
 
-    private boolean isGame(String pkg) {
+    private void handlePackageChanged(String action, String packageName) {
+        if (Intent.ACTION_PACKAGE_ADDED.equals(action)) {
+            if (!isAutoDetectEnabled()) return;
+            if (mGameListManager.isDenied(packageName)) return;
+            if (mGameListManager.isGame(packageName)) return;
+            if (isGame(packageName)) {
+                mGameListManager.addGame(packageName);
+            }
+        } else if (Intent.ACTION_PACKAGE_FULLY_REMOVED.equals(action)) {
+            mGameListManager.removeGame(packageName);
+        }
+    }
+
+    private boolean isGame(String packageName) {
         try {
-            ApplicationInfo info = mPackageManager.getApplicationInfo(
-                    pkg, PackageManager.ApplicationInfoFlags.of(PackageManager.GET_META_DATA));
+            final ApplicationInfo info = mPackageManager.getApplicationInfo(packageName,
+                    PackageManager.ApplicationInfoFlags.of(PackageManager.GET_META_DATA));
             return info.category == ApplicationInfo.CATEGORY_GAME;
         } catch (PackageManager.NameNotFoundException e) {
             return false;
         }
     }
 
-    private String getAppLabel(String pkg) {
-        try {
-            return mPackageManager
-                    .getApplicationLabel(mPackageManager.getApplicationInfo(
-                            pkg, PackageManager.ApplicationInfoFlags.of(0)))
-                    .toString();
-        } catch (PackageManager.NameNotFoundException e) {
-            return pkg;
+    private final class PackageReceiver extends BroadcastReceiver {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (intent == null || intent.getData() == null) {
+                return;
+            }
+            final String packageName = intent.getData().getSchemeSpecificPart();
+            final String action = intent.getAction();
+            if (packageName == null || action == null) {
+                return;
+            }
+            mHandler.post(() -> handlePackageChanged(action, packageName));
         }
-    }
-
-    private void showGameAddedToast(String appLabel) {
-        Toast.makeText(mContext, "Added " + appLabel + " to GameSpace", Toast.LENGTH_LONG).show();
     }
 }
