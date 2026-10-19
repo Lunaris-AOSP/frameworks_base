@@ -6128,6 +6128,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         mXOffset = dx;
         mYOffset = dy;
         mWallpaperScale = scale;
+        mSurfacePlacementNeeded = true;
         updateScaleIfNeeded();
         scheduleAnimation();
         return true;
