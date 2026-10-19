@@ -676,7 +676,7 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
         AxWindowBlurController.applyBlurBehind(mDialog.getWindow(), mContext);
 
         DialogTransitionAnimator.Controller controller =
-                expandable != null ? expandable.dialogTransitionController(
+                !composeStyle && expandable != null ? expandable.dialogTransitionController(
                         new DialogCuj(InteractionJankMonitor.CUJ_SHADE_DIALOG_OPEN,
                                 INTERACTION_JANK_TAG)) : null;
         mUserTracker.addCallback(mOnUserSwitched, mBackgroundExecutor);
