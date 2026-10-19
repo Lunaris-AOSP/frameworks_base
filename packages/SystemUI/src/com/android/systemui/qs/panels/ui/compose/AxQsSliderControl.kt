@@ -124,6 +124,7 @@ import com.android.systemui.lifecycle.rememberViewModel
 import com.android.systemui.qs.panels.shared.model.AxMediaSurface
 import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
+import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.qs.tiles.ringer.LocalRingerSliderViewModel
 import com.android.systemui.res.R
@@ -225,12 +226,14 @@ internal fun axQsControlShape(
     span: AxQsSpan,
     sliderStyle: LunarisQsSliderStyle = LunarisQsSliderStyle.M3_EXPRESSIVE,
     mediaSurface: AxMediaSurface = AxMediaSurface.CONTROL,
+    tileStyle: AxQsTileStyle = AxQsTileStyle.PILL,
 ): Shape {
     return when {
         control == AxQsControl.MEDIA && span == AxQsSpan.MediaDefault &&
             mediaSurface == AxMediaSurface.CONTROL ->
             RoundedCornerShape(28.dp)
-        control == AxQsControl.RINGER -> CircleShape
+        control == AxQsControl.RINGER ->
+            if (span == AxQsSpan.TileDefault) axQsTileShape(span, tileStyle) else CircleShape
         control.isSlider ->
             when (sliderStyle) {
                 LunarisQsSliderStyle.M3_EXPRESSIVE -> ExpressiveSliderShape

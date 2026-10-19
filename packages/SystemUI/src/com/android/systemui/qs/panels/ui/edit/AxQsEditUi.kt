@@ -1195,7 +1195,12 @@ private fun AxEditableGridSection(
                                 value.folder.tileStyle ?: LocalAxQsTileStyle.current,
                             )
                         is AxEditGridValue.Control ->
-                            axQsControlShape(value.control, item.span, controlStyle)
+                            axQsControlShape(
+                                value.control,
+                                item.span,
+                                controlStyle,
+                                tileStyle = LocalAxQsTileStyle.current,
+                            )
                     }
                 val selectionColor =
                     if (sliderControl != null) {
@@ -1469,7 +1474,10 @@ private fun AxEditableGridSection(
                                         .zIndex(3f),
                             )
                         }
-                        if (isSelected && orientationControl != null) {
+                        if (
+                            isSelected && orientationControl != null &&
+                                item.span != AxQsSpan.TileDefault
+                        ) {
                             LunarisQsSliderOrientationButton(
                                 vertical = item.span.columns == 1,
                                 enabled = canRotate,

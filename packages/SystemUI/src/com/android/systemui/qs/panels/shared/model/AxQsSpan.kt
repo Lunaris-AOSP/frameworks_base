@@ -137,8 +137,9 @@ enum class AxQsControl(
         val spans = spans(columns)
         return when {
             supportsOrientation && span.columns == 1 ->
-                AxQsSpan(1, span.rows.coerceIn(2, spans.max.rows))
-            supportsOrientation -> AxQsSpan(span.columns.coerceIn(2, spans.max.columns), 1)
+                AxQsSpan(1, span.rows.coerceIn(minOrientationLength, spans.max.rows))
+            supportsOrientation ->
+                AxQsSpan(span.columns.coerceIn(minOrientationLength, spans.max.columns), 1)
             else -> span.coerceIn(spans.min, spans.max)
         }
     }
@@ -146,12 +147,15 @@ enum class AxQsControl(
     fun nextSpan(span: AxQsSpan, columns: Int): AxQsSpan {
         if (!supportsOrientation) return span
         val spans = spans(columns)
+        if (this == RINGER && span == AxQsSpan.TileDefault) {
+            return AxQsSpan(2.coerceAtMost(spans.max.columns), 1)
+        }
         return if (span.columns == 1) {
-            val rows = if (span.rows < spans.max.rows) span.rows + 1 else 2
+            val rows = if (span.rows < spans.max.rows) span.rows + 1 else minOrientationLength
             AxQsSpan(1, rows)
         } else {
             val width =
-                if (span.columns < spans.max.columns) span.columns + 1 else 2
+                if (span.columns < spans.max.columns) span.columns + 1 else minOrientationLength
             AxQsSpan(width, 1)
         }
     }
@@ -168,12 +172,15 @@ enum class AxQsControl(
             )
         }
         val spans = spans(columns)
-        return if (startSpan.columns == 1) {
-            AxQsSpan(1, (startSpan.rows + rowDelta).coerceIn(2, spans.max.rows))
+        val vertical =
+            if (this == RINGER && startSpan == AxQsSpan.TileDefault) rowDelta > columnDelta
+            else startSpan.columns == 1
+        return if (vertical) {
+            AxQsSpan(1, (startSpan.rows + rowDelta).coerceIn(minOrientationLength, spans.max.rows))
         } else {
             AxQsSpan(
                 (startSpan.columns + columnDelta).coerceIn(
-                    2,
+                    minOrientationLength,
                     spans.max.columns,
                 ),
                 1,
@@ -184,9 +191,9 @@ enum class AxQsControl(
     fun rotateSpan(span: AxQsSpan, columns: Int): AxQsSpan {
         if (!supportsOrientation) return span
         return if (span.columns == 1) {
-            AxQsSpan(span.rows.coerceIn(2, columns), 1)
+            AxQsSpan(span.rows.coerceIn(minOrientationLength, columns), 1)
         } else {
-            AxQsSpan(1, span.columns.coerceIn(2, AxQsSpan.MAX_ROWS))
+            AxQsSpan(1, span.columns.coerceIn(minOrientationLength, AxQsSpan.MAX_ROWS))
         }
     }
 
@@ -195,6 +202,9 @@ enum class AxQsControl(
 
     val supportsOrientation: Boolean
         get() = isSlider || this == RINGER
+
+    private val minOrientationLength: Int
+        get() = if (this == RINGER) 1 else 2
 
     /**
      * Whether this control should appear in the QS Edit grid.

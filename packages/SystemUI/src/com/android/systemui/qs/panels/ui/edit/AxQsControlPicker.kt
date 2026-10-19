@@ -516,7 +516,12 @@ private fun AxAddItemCell(
             is AxAddItem.Stack -> axQsTileShape(span, LocalAxQsTileStyle.current)
             is AxAddItem.Tile -> axQsTileShape(span, LocalAxQsTileStyle.current)
             is AxAddItem.Control ->
-                axQsControlShape(item.control, span, controlStyle)
+                axQsControlShape(
+                    item.control,
+                    span,
+                    controlStyle,
+                    tileStyle = LocalAxQsTileStyle.current,
+                )
         }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -580,7 +585,10 @@ private fun AxAddItemCell(
                 AxAddItemBadge(Modifier.align(Alignment.TopEnd))
             }
         }
-        if (item is AxAddItem.Control && item.control.supportsOrientation) {
+        if (
+            item is AxAddItem.Control && item.control.supportsOrientation &&
+                span != AxQsSpan.TileDefault
+        ) {
             LunarisQsSliderOrientationButton(
                 vertical = span.columns == 1,
                 enabled = !item.isAdded,

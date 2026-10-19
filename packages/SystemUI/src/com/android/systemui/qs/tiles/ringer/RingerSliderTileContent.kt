@@ -27,7 +27,9 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
@@ -60,27 +62,33 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.android.compose.theme.LocalAndroidColorScheme
-import com.android.systemui.qs.composefragment.mist.LocalBlurEnabled
+import com.android.systemui.qs.panels.shared.model.AxQsSpan
+import com.android.systemui.qs.panels.ui.compose.AxTileDefaults
+import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsStrokeStyle
 import com.android.systemui.qs.panels.ui.compose.LocalTileScale
 import com.android.systemui.qs.panels.ui.compose.LunarisQsSliderStrokeWidth
-import com.android.systemui.qs.panels.ui.compose.lunarisQsInsetBackground
-import com.android.systemui.qs.panels.ui.compose.rememberLunarisQsGradient
+import com.android.systemui.qs.panels.ui.compose.LunarisQsTileStrokeWidth
+import com.android.systemui.qs.panels.ui.compose.animateAxQsTileShape
+import com.android.systemui.qs.panels.ui.compose.axQsTileIconSize
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberQSTileAnimationStyle
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberTileHaptic
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.tileToggleAnimation
+import com.android.systemui.qs.panels.ui.compose.lunarisQsInsetBackground
+import com.android.systemui.qs.panels.ui.compose.lunarisTilePressAnimation
+import com.android.systemui.qs.panels.ui.compose.rememberLunarisQsGradient
+import com.android.systemui.qs.ui.compose.borderOnFocus
 import com.android.systemui.res.R
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -89,6 +97,7 @@ import kotlinx.coroutines.launch
 fun RingerSliderTileContent(
     modifier: Modifier = Modifier.fillMaxSize(),
     interactable: Boolean = true,
+    compact: Boolean = false,
     vertical: Boolean = false,
     shape: Shape = CircleShape,
     viewModel: RingerSliderViewModel = LocalRingerSliderViewModel.current,
@@ -109,6 +118,7 @@ fun RingerSliderTileContent(
     val view = LocalView.current
     val coroutineScope = rememberCoroutineScope()
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val interactionSource = remember(viewModel) { MutableInteractionSource() }
 
     LaunchedEffect(displayedMode) {
         if (previousMode != displayedMode) {
@@ -116,13 +126,6 @@ fun RingerSliderTileContent(
             toggleAnimState = if (toggleAnimState == STATE_ACTIVE) STATE_INACTIVE else STATE_ACTIVE
         }
     }
-
-    val animatedPosition =
-        animateFloatAsState(
-            targetValue = if (isDndEnabled) maxModeIndex / 2f else currentIndex.toFloat(),
-            animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 400f),
-            label = "RingerPosition",
-        )
 
     fun selectMode(mode: Int): Boolean {
         if (!interactable || viewModel.isDndEnabled.value || !viewModel.setRingerMode(mode)) {
@@ -148,6 +151,11 @@ fun RingerSliderTileContent(
         return true
     }
 
+    fun cycleMode(): Boolean {
+        val index = viewModel.targetPosition(viewModel.currentMode).toInt()
+        return selectMode(availableModes[(index + 1) % availableModes.size].mode)
+    }
+
     val onSelectMode by rememberUpdatedState(::selectMode)
     val onToggleDnd by rememberUpdatedState(::toggleDnd)
     val controlLabel = stringResource(R.string.quick_settings_sound_label)
@@ -171,36 +179,44 @@ fun RingerSliderTileContent(
         )
     val interactionModifier =
         if (interactable) {
-            Modifier.pointerInput(viewModel, vertical, isRtl, isDndAvailable) {
-                    detectTapGestures(
-                        onTap = { offset ->
-                            val length = if (vertical) size.height else size.width
-                            if (length > 0) {
-                                val position =
-                                    when {
-                                        vertical -> offset.y
-                                        isRtl -> size.width - offset.x
-                                        else -> offset.x
-                                    }
-                                val index =
-                                    (position / length * availableModes.size)
-                                        .toInt()
-                                        .coerceIn(0, maxModeIndex)
-                                onSelectMode(availableModes[index].mode)
-                            }
-                        },
-                        onLongPress = if (isDndAvailable) ({ onToggleDnd() }) else null,
+            val gestureModifier =
+                if (compact) {
+                    Modifier.combinedClickable(
+                        interactionSource = interactionSource,
+                        enabled = !isDndEnabled || isDndAvailable,
+                        onClick = { cycleMode() },
+                        onLongClick = if (isDndAvailable) ({ toggleDnd() }) else null,
+                        hapticFeedbackEnabled = false,
                     )
+                } else {
+                    Modifier.pointerInput(viewModel, vertical, isRtl, isDndAvailable) {
+                        detectTapGestures(
+                            onTap = { offset ->
+                                val length = if (vertical) size.height else size.width
+                                if (length > 0) {
+                                    val position =
+                                        when {
+                                            vertical -> offset.y
+                                            isRtl -> size.width - offset.x
+                                            else -> offset.x
+                                        }
+                                    val index =
+                                        (position / length * availableModes.size)
+                                            .toInt()
+                                            .coerceIn(0, maxModeIndex)
+                                    onSelectMode(availableModes[index].mode)
+                                }
+                            },
+                            onLongPress = if (isDndAvailable) ({ onToggleDnd() }) else null,
+                        )
+                    }
                 }
-                .semantics(mergeDescendants = true) {
+            Modifier.clearAndSetSemantics {
                     role = Role.Button
                     contentDescription = controlLabel
                     stateDescription = currentDescription
                     if (!isDndEnabled) {
-                        onClick(changeModeLabel) {
-                            val index = viewModel.targetPosition(viewModel.currentMode).toInt()
-                            selectMode(availableModes[(index + 1) % availableModes.size].mode)
-                        }
+                        onClick(changeModeLabel) { cycleMode() }
                         customActions =
                             availableModes.mapIndexedNotNull { index, option ->
                                 if (index == currentIndex) null
@@ -216,22 +232,96 @@ fun RingerSliderTileContent(
                         disabled()
                     }
                 }
+                .then(gestureModifier)
         } else {
             Modifier
         }
 
     val gradient = rememberLunarisQsGradient()
+    if (compact) {
+        val active =
+            interactable && (isDndEnabled || currentRingerMode == AudioManager.RINGER_MODE_NORMAL)
+        val tileState = if (active) STATE_ACTIVE else STATE_INACTIVE
+        val tileShape = animateAxQsTileShape(AxQsSpan.TileDefault, tileState)
+        val activeBrush = gradient.tileBrush()
+        val strokeStyle = LocalLunarisQsStrokeStyle.current
+        val scale = LocalTileScale.current
+        val background by
+            animateColorAsState(
+                targetValue =
+                    if (active && !strokeStyle) MaterialTheme.colorScheme.primary
+                    else AxTileDefaults.backgroundColor(),
+                label = "RingerTileBackground",
+            )
+        val foreground by
+            animateColorAsState(
+                targetValue =
+                    if (!active) MaterialTheme.colorScheme.onSurface
+                    else if (activeBrush != null) gradient.contentColor
+                    else MaterialTheme.colorScheme.onPrimary,
+                label = "RingerTileForeground",
+            )
+        val fillModifier =
+            if (strokeStyle) {
+                val fillAlpha =
+                    animateFloatAsState(
+                        targetValue = if (active) 1f else 0f,
+                        label = "RingerTileStrokeFill",
+                    )
+                Modifier.lunarisQsInsetBackground(
+                    brush = activeBrush ?: SolidColor(MaterialTheme.colorScheme.primary),
+                    shape = tileShape,
+                    insetWidth = LunarisQsTileStrokeWidth * scale,
+                    alpha = { fillAlpha.value },
+                )
+            } else if (active && activeBrush != null) {
+                Modifier.background(activeBrush)
+            } else {
+                Modifier
+            }
+        BoxWithConstraints(
+            modifier =
+                modifier
+                    .lunarisTilePressAnimation(
+                        interactionSource,
+                        interactable && (!isDndEnabled || isDndAvailable),
+                    )
+                    .clip(tileShape)
+                    .background(background)
+                    .then(fillModifier)
+                    .borderOnFocus(MaterialTheme.colorScheme.secondary, tileShape.topEnd)
+                    .then(interactionModifier),
+            contentAlignment = Alignment.Center,
+        ) {
+            val iconSize =
+                if (interactable) axQsTileIconSize(minOf(maxWidth, maxHeight))
+                else AxTileDefaults.IconSize
+            Icon(
+                imageVector =
+                    if (isDndEnabled) Icons.Filled.DoNotDisturb
+                    else availableModes[currentIndex].icon,
+                contentDescription = null,
+                tint = foreground,
+                modifier =
+                    Modifier.tileToggleAnimation(animationStyle, toggleAnimState)
+                        .size(iconSize * scale),
+            )
+        }
+        return
+    }
+
+    val animatedPosition =
+        animateFloatAsState(
+            targetValue = if (isDndEnabled) maxModeIndex / 2f else currentIndex.toFloat(),
+            animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 400f),
+            label = "RingerPosition",
+        )
     val activeBrush = gradient.sliderBrush()
     val strokeWidth = LunarisQsSliderStrokeWidth * LocalTileScale.current
     val activeBg = MaterialTheme.colorScheme.primary
     val activeIcon =
         if (activeBrush != null) gradient.contentColor else MaterialTheme.colorScheme.onPrimary
-    val neutralBg =
-        if (LocalBlurEnabled.current) {
-            LocalAndroidColorScheme.current.surfaceEffect1
-        } else {
-            MaterialTheme.colorScheme.surfaceBright
-        }
+    val neutralBg = AxTileDefaults.backgroundColor()
     val neutralDot = MaterialTheme.colorScheme.onSurface
     val background by
         animateColorAsState(
