@@ -20,20 +20,11 @@ import android.service.quicksettings.Tile.STATE_ACTIVE
 import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.DropdownMenu
@@ -56,6 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
@@ -67,16 +59,16 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.compose.animation.Expandable
 import com.android.compose.animation.scene.ContentScope
+import com.android.compose.theme.LocalAndroidColorScheme
 import com.android.systemui.animation.Expandable as SystemUiExpandable
 import com.android.systemui.common.shared.model.Icon as TileIcon
 import com.android.systemui.common.ui.compose.Icon as TileIconView
+import com.android.systemui.qs.composefragment.mist.LocalBlurEnabled
 import com.android.systemui.qs.panels.shared.model.AxQsLayout
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
@@ -107,7 +99,12 @@ internal fun ContentScope.LunarisQsTileFolder(
     val currentFolder by rememberUpdatedState(folder)
     val currentTiles by rememberUpdatedState(tiles)
     val panelStyle by rememberUpdatedState(LocalAxQsTileStyle.current)
+    val blurEnabled by rememberUpdatedState(LocalBlurEnabled.current)
+    val gradientSettings by rememberUpdatedState(LocalLunarisQsGradientSettings.current)
+    val strokeStyle by rememberUpdatedState(LocalLunarisQsStrokeStyle.current)
+    val tileScale by rememberUpdatedState(LocalTileScale.current)
     val bySpec = remember(tiles) { tiles.associateBy { it.spec.spec } }
+    val directCount = LunarisQsTileFolderController.directTileCount(span, folder.tileSpecs.size)
     var dialog by remember(id, layout) { mutableStateOf<SystemUIDialog?>(null) }
     val openLabel = stringResource(R.string.lunaris_qs_folder_open)
     val countLabel =
@@ -120,16 +117,27 @@ internal fun ContentScope.LunarisQsTileFolder(
         viewModel.onFolderClick {
             if (dialog == null) {
                 val newDialog =
-                    viewModel.folderDialogFactory.create(context = context) { window ->
+                    viewModel.folderDialogFactory.create(
+                        context = context,
+                        theme = R.style.Theme_SystemUI_QSFolder,
+                        dialogDelegate = LunarisFolderWindowDelegate(),
+                    ) { window ->
                         QuickSettingsTheme {
                             CompositionLocalProvider(
-                                LocalAxQsTileStyle provides (currentFolder.tileStyle ?: panelStyle)
+                                LocalAxQsTileStyle provides (currentFolder.tileStyle ?: panelStyle),
+                                LocalBlurEnabled provides blurEnabled,
+                                LocalLunarisQsGradientSettings provides gradientSettings,
+                                LocalLunarisQsStrokeStyle provides strokeStyle,
+                                LocalTileScale provides tileScale,
                             ) {
-                                this@LunarisQsTileFolder.LunarisFolderDialogContent(
+                                this@LunarisQsTileFolder.LunarisFolderScreen(
                                     folder = currentFolder,
                                     tiles = currentTiles,
                                     onShapeChange = {
                                         viewModel.setFolderTileStyle(id, layout, it)
+                                    },
+                                    onTileResize = { spec, size ->
+                                        viewModel.setFolderTileSpan(id, layout, spec, size)
                                     },
                                     onDismiss = { window.dismiss() },
                                 )
@@ -159,8 +167,8 @@ internal fun ContentScope.LunarisQsTileFolder(
             tileContent = { spec, index ->
                 val tile = bySpec[spec]
                 if (tile == null) {
-                    LunarisFolderUnavailableTile()
-                } else if (index < LunarisQsTileFolderController.directTileCount(span)) {
+                    LunarisFolderUnavailableTile(LocalAndroidColorScheme.current.surfaceEffect2)
+                } else if (index < directCount) {
                     this@LunarisQsTileFolder.LunarisFolderLiveTile(tile, preview = true)
                 } else {
                     LunarisFolderSmallTile(tile)
@@ -218,12 +226,21 @@ internal fun LunarisFolderPreview(
                     val width = constraints.maxWidth
                     val height = constraints.maxHeight
                     val side = minOf(width, height)
+                    val singleCell = span == AxQsSpan.TileDefault
                     val compact = span.rows == 1
-                    val directCount = LunarisQsTileFolderController.directTileCount(span)
+                    val directCount =
+                        LunarisQsTileFolderController.directTileCount(span, specs.size)
                     val smallCount = (members.size - directCount).coerceAtLeast(0)
                     val smallRows = ((smallCount + 1) / 2).coerceAtLeast(1)
                     val smallCenters =
-                        if (compact) {
+                        if (singleCell) {
+                            listOf(
+                                0.32f to 0.32f,
+                                0.68f to 0.32f,
+                                0.32f to 0.68f,
+                                0.68f to 0.68f,
+                            )
+                        } else if (compact) {
                             (0 until smallCount).map { index ->
                                 val x =
                                     if (smallCount == 1) 0.80f
@@ -239,6 +256,7 @@ internal fun LunarisFolderPreview(
                             }
                         } else {
                             when (smallCount) {
+                                0 -> emptyList()
                                 1 -> listOf(0.75f to 0.75f)
                                 2 -> listOf(0.64f to 0.75f, 0.85f to 0.75f)
                                 3 ->
@@ -266,15 +284,22 @@ internal fun LunarisFolderPreview(
                         }
                     val largeCenters =
                         if (compact) {
-                            listOf(0.18f to 0.5f, 0.50f to 0.5f)
+                            listOf(0.18f to 0.5f, 0.50f to 0.5f, 0.82f to 0.5f)
                         } else {
-                            listOf(0.26f to 0.26f, 0.74f to 0.26f, 0.26f to 0.74f)
+                            listOf(
+                                0.26f to 0.26f,
+                                0.74f to 0.26f,
+                                0.26f to 0.74f,
+                                0.74f to 0.74f,
+                            )
                         }
-                    val centers = largeCenters + smallCenters
+                    val centers = largeCenters.take(directCount) + smallCenters
                     val placeables =
                         measurables.mapIndexed { index, measurable ->
                             val size =
-                                if (compact) {
+                                if (singleCell) {
+                                    side * 0.30f
+                                } else if (compact) {
                                     if (index < directCount) minOf(height * 0.62f, width * 0.24f)
                                     else
                                         minOf(
@@ -346,6 +371,8 @@ private fun ContentScope.LunarisFolderLiveTile(tile: TileViewModel, preview: Boo
             fillHeight = true,
             tileShapeOverride = shape,
             strokeStyle = false,
+            inactiveBackgroundColor =
+                if (preview) LocalAndroidColorScheme.current.surfaceEffect2 else null,
             compactIconSize = minOf(maxWidth, maxHeight) * 0.46f,
             squishiness = { 1f },
             coroutineScope = scope,
@@ -361,7 +388,11 @@ private fun ContentScope.LunarisFolderLiveTile(tile: TileViewModel, preview: Boo
 private fun LunarisFolderSmallTile(tile: TileViewModel) {
     val state by tile.state.collectAsStateWithLifecycle(tile.currentState)
     val colors =
-        AxTileColorsDefaults.getColorForState(state.toUiState(LocalResources.current), true)
+        AxTileColorsDefaults.getColorForState(
+            state.toUiState(LocalResources.current),
+            iconOnly = true,
+            inactiveBackgroundColor = LocalAndroidColorScheme.current.surfaceEffect2,
+        )
     val context = LocalContext.current
     val provider = state.toIconProvider()
     val icon =
@@ -391,10 +422,12 @@ private fun LunarisFolderSmallTile(tile: TileViewModel) {
 }
 
 @Composable
-internal fun LunarisFolderUnavailableTile() {
+internal fun LunarisFolderUnavailableTile(
+    backgroundColor: Color = MaterialTheme.colorScheme.surfaceVariant
+) {
     Box(
         Modifier.fillMaxSize()
-            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(50)),
+            .background(backgroundColor, RoundedCornerShape(50)),
         contentAlignment = Alignment.Center,
     ) {
         TileIconView(
@@ -402,75 +435,6 @@ internal fun LunarisFolderUnavailableTile() {
             modifier = Modifier.fillMaxSize(0.5f),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-    }
-}
-
-@Composable
-private fun ContentScope.LunarisFolderDialogContent(
-    folder: LunarisQsTileFolder,
-    tiles: List<TileViewModel>,
-    onShapeChange: (AxQsTileStyle?) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val bySpec = remember(tiles) { tiles.associateBy { it.spec.spec } }
-    TileListener(tiles) { true }
-    Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text(
-            stringResource(R.string.lunaris_qs_tile_folder),
-            style = MaterialTheme.typography.headlineSmall,
-        )
-        LunarisFolderShapePicker(folder.tileStyle, onShapeChange)
-        Column(
-            Modifier.weight(1f, fill = false)
-                .fillMaxWidth()
-                .heightIn(max = 400.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            if (folder.tileSpecs.isEmpty()) Text(stringResource(R.string.lunaris_qs_folder_empty))
-            folder.tileSpecs.chunked(2).forEach { row ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    row.forEach { spec ->
-                        key(spec) {
-                            val tile = bySpec[spec]
-                            Column(
-                                Modifier.weight(1f),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Box(Modifier.fillMaxWidth().height(72.dp)) {
-                                    if (tile != null)
-                                        this@LunarisFolderDialogContent.LunarisFolderLiveTile(tile)
-                                    else LunarisFolderUnavailableTile()
-                                }
-                                val state =
-                                    if (tile != null) {
-                                        tile.state
-                                            .collectAsStateWithLifecycle(tile.currentState)
-                                            .value
-                                    } else {
-                                        null
-                                    }
-                                Text(
-                                    state?.label?.toString()
-                                        ?: stringResource(
-                                            R.string.lunaris_qs_stack_unavailable_tile
-                                        ),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    textAlign = TextAlign.Center,
-                                )
-                            }
-                        }
-                    }
-                    if (row.size == 1) Box(Modifier.weight(1f))
-                }
-            }
-        }
-        TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
-            Text(stringResource(R.string.quick_settings_done))
-        }
     }
 }
 

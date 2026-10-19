@@ -311,10 +311,10 @@ constructor(
                         it !in groupedSpecs &&
                             (!LunarisQsTileFolderController.isFolderId(it) || it in activeFolders)
                     }
+                val folderValue = LunarisQsTileFolderController.encode(activeFolders)
                 val values =
                     mapOf(
-                        FOLDER_KEYS.getValue(layout) to
-                            LunarisQsTileFolderController.encode(activeFolders),
+                        FOLDER_KEYS.getValue(layout) to folderValue,
                         STACK_KEYS.getValue(layout) to AxQsTileStacks.encode(activeStacks),
                         key to
                             spans.entries
@@ -336,26 +336,35 @@ constructor(
         }
     }
 
-    fun setFolderTileStyle(id: String, layout: AxQsLayout, style: AxQsTileStyle?) {
+    fun setFolderTileStyle(id: String, layout: AxQsLayout, style: AxQsTileStyle?) =
+        updateFolder(id, layout) { it.copy(tileStyle = style) }
+
+    fun setFolderTileSpan(id: String, layout: AxQsLayout, spec: String, span: AxQsSpan) =
+        updateFolder(id, layout) { folder ->
+            if (spec in folder.tileSpecs) {
+                folder.copy(tileSpans = folder.tileSpans + (spec to span.coerceForControlTile(4)))
+            } else {
+                folder
+            }
+        }
+
+    private fun updateFolder(
+        id: String,
+        layout: AxQsLayout,
+        update: (LunarisQsTileFolder) -> LunarisQsTileFolder,
+    ) {
         val userId = userRepository.getSelectedUserInfo().id
         applicationScope.launch(backgroundDispatcher) {
             spansMutex.withLock {
-                val key = FOLDER_KEYS.getValue(layout)
+                val currentKey = FOLDER_KEYS.getValue(layout)
                 val folders =
                     LunarisQsTileFolderController.decode(
-                        secureSettings.getStringForUser(key, userId)
+                        secureSettings.getStringForUser(currentKey, userId)
                     )
                 val folder = folders[id] ?: return@withLock
-                secureSettings.putStringForUser(
-                    key,
-                    LunarisQsTileFolderController.encode(
-                        folders + (id to folder.copy(tileStyle = style))
-                    ),
-                    null,
-                    false,
-                    userId,
-                    true,
-                )
+                val value =
+                    LunarisQsTileFolderController.encode(folders + (id to update(folder)))
+                secureSettings.putStringForUser(currentKey, value, null, false, userId, true)
             }
         }
     }

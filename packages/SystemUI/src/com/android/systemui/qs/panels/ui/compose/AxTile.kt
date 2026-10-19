@@ -130,6 +130,7 @@ fun ContentScope.AxTile(
     tileShapeOverride: RoundedCornerShape? = null,
     deviceArtwork: Drawable? = null,
     strokeStyle: Boolean = LocalLunarisQsStrokeStyle.current,
+    inactiveBackgroundColor: Color? = null,
 ) {
     trace(tile.spec.spec) {
         val compact = span.columns == 1
@@ -163,6 +164,7 @@ fun ContentScope.AxTile(
                 uiState = uiState,
                 iconOnly = compact,
                 useDualTargetStyle = useDualTargetStyle,
+                inactiveBackgroundColor = inactiveBackgroundColor,
             )
         val view = LocalView.current
         val hapticEnabled = rememberTileHaptic()
@@ -172,7 +174,8 @@ fun ContentScope.AxTile(
         val useStrokeStyle =
             strokeStyle && !isIconOnlyDualTarget && uiState.state != STATE_UNAVAILABLE
         val animatedColor by animateColorAsState(
-            if (useStrokeStyle) AxTileDefaults.backgroundColor() else colors.background,
+            if (useStrokeStyle) inactiveBackgroundColor ?: AxTileDefaults.backgroundColor()
+            else colors.background,
             label = "QSTileBackgroundColor",
         )
         val backgroundModifier =
@@ -552,6 +555,7 @@ object AxTileColorsDefaults {
         uiState: TileUiState,
         iconOnly: Boolean,
         useDualTargetStyle: Boolean = false,
+        inactiveBackgroundColor: Color? = null,
     ): TileColors {
         return when (uiState.state) {
             STATE_ACTIVE ->
@@ -560,12 +564,15 @@ object AxTileColorsDefaults {
                 } else {
                     activeTileColors()
                 }
-            STATE_INACTIVE ->
-                if (useDualTargetStyle && uiState.handlesSecondaryClick && !iconOnly) {
-                    inactiveDualTargetTileColors()
-                } else {
-                    inactiveTileColors()
-                }
+            STATE_INACTIVE -> {
+                val colors =
+                    if (useDualTargetStyle && uiState.handlesSecondaryClick && !iconOnly) {
+                        inactiveDualTargetTileColors()
+                    } else {
+                        inactiveTileColors()
+                    }
+                colors.copy(background = inactiveBackgroundColor ?: colors.background)
+            }
             else -> unavailableTileColors()
         }
     }

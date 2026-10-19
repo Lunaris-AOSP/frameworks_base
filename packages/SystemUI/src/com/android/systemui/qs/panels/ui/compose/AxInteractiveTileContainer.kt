@@ -84,6 +84,7 @@ internal fun AxInteractiveTileContainer(
     onResizeClick: () -> Unit,
     removeContentDescription: String? = null,
     resizeContentDescription: String? = null,
+    removable: Boolean = true,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val selected = tileState == Selected
@@ -104,7 +105,9 @@ internal fun AxInteractiveTileContainer(
                     ),
             content = content,
         )
-        RemoveBadge(contentDescription = removeContentDescription, onClick = onRemoveClick)
+        if (removable) {
+            RemoveBadge(contentDescription = removeContentDescription, onClick = onRemoveClick)
+        }
         ResizeHandle(
             visible = selected && resizable,
             modifier = resizeHandleModifier,

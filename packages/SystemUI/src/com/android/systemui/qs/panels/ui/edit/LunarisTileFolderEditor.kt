@@ -52,6 +52,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.android.compose.theme.LocalAndroidColorScheme
+import com.android.systemui.animation.Expandable as SystemUiExpandable
 import com.android.systemui.common.ui.compose.Icon as TileIconView
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
@@ -69,6 +71,7 @@ internal fun LunarisEditTileFolder(
     folder: LunarisQsTileFolder,
     tiles: List<EditTileViewModel>,
     span: AxQsSpan,
+    onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val bySpec = remember(tiles) { tiles.associateBy { it.tileSpec.spec } }
@@ -78,15 +81,16 @@ internal fun LunarisEditTileFolder(
             specs = folder.tileSpecs,
             modifier = modifier,
             span = span,
+            onClick = onClick?.let { callback -> { _: SystemUiExpandable -> callback() } },
             tileContent = { spec, _ ->
                 val tile = bySpec[spec]
                 if (tile == null) {
-                    LunarisFolderUnavailableTile()
+                    LunarisFolderUnavailableTile(LocalAndroidColorScheme.current.surfaceEffect2)
                 } else {
                     Box(
                         Modifier.fillMaxSize()
                             .background(
-                                MaterialTheme.colorScheme.surfaceContainerHighest,
+                                LocalAndroidColorScheme.current.surfaceEffect2,
                                 RoundedCornerShape(if (style == AxQsTileStyle.PILL) 50 else 25),
                             ),
                         contentAlignment = Alignment.Center,
@@ -208,7 +212,17 @@ internal fun LunarisTileFolderEditor(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(LunarisQsTileFolder(selectedSpecs, selectedStyle)) }) {
+            TextButton(
+                onClick = {
+                    onSave(
+                        initialFolder.copy(
+                            tileSpecs = selectedSpecs,
+                            tileStyle = selectedStyle,
+                            tileSpans = initialFolder.tileSpans.filterKeys { it in selectedSpecs },
+                        )
+                    )
+                }
+            ) {
                 Text(stringResource(android.R.string.ok))
             }
         },

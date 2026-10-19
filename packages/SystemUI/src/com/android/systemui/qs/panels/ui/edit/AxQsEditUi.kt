@@ -1403,7 +1403,7 @@ private fun AxEditableGridSection(
                                         ) {
                                             onSelected(item.id)
                                             if (value is AxEditGridValue.Stack) onEditStack(item.id)
-                                            if (value is AxEditGridValue.Folder && isSelected)
+                                            if (value is AxEditGridValue.Folder)
                                                 onEditFolder(item.id)
                                         }
                                         .semantics {
@@ -1432,7 +1432,15 @@ private fun AxEditableGridSection(
                             ) {
                                 when (value) {
                                     is AxEditGridValue.Folder ->
-                                        LunarisEditTileFolder(value.folder, value.tiles, item.span)
+                                        LunarisEditTileFolder(
+                                            folder = value.folder,
+                                            tiles = value.tiles,
+                                            span = item.span,
+                                            onClick = {
+                                                onSelected(item.id)
+                                                onEditFolder(item.id)
+                                            },
+                                        )
                                     is AxEditGridValue.Stack -> AxEditTileStack(value.tiles, modes)
                                     is AxEditGridValue.Tile ->
                                         AxQsEditTile(

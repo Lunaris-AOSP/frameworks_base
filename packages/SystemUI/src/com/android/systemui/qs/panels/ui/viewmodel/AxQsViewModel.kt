@@ -477,15 +477,19 @@ constructor(
         folders: Map<String, LunarisQsTileFolder>,
     ) = repository.saveLayout(layout, controls, tiles, controlSpans, positions, stacks, folders)
 
-    fun folders(layout: AxQsLayout): Map<String, LunarisQsTileFolder> =
-        LunarisQsTileFolderController.active(
+    fun folders(layout: AxQsLayout): Map<String, LunarisQsTileFolder> {
+        return LunarisQsTileFolderController.active(
             tileFolders[layout].orEmpty(),
             order(layout, AxQsGridSection.CONTROLS).orEmpty(),
             stacks(layout).values.flatten().toSet(),
         )
+    }
 
     fun setFolderTileStyle(id: String, layout: AxQsLayout, style: AxQsTileStyle?) =
         repository.setFolderTileStyle(id, layout, style)
+
+    fun setFolderTileSpan(id: String, layout: AxQsLayout, spec: String, span: AxQsSpan) =
+        repository.setFolderTileSpan(id, layout, spec, span)
 
     fun onFolderClick(open: () -> Unit) {
         falsingInteractor.runIfNotFalseTap { open() }

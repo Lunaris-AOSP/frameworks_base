@@ -394,4 +394,5 @@
     <string name="lunaris_qs_folder_limit">Maximum of 2 folders per panel</string>
     <string name="lunaris_qs_folder_empty">Add tiles from the Quick Settings editor</string>
     <string name="lunaris_qs_folder_shape_panel">Use panel shape</string>
+    <string name="lunaris_qs_folder_resize_hint">Select a tile, then drag its corner to resize. Tap the corner to change its width.</string>
 </resources>
