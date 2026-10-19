@@ -35,6 +35,7 @@ import com.android.settingslib.Utils
 import com.android.systemui.surfaceeffects.ripple.RippleShader
 
 private const val RIPPLE_SPARKLE_STRENGTH: Float = 0.7f
+private const val FULLSCREEN_WATER_DURATION: Long = 1400L
 
 /**
  * Handles two ripple effects: dwell ripple and unlocked ripple
@@ -286,10 +287,14 @@ class AuthRippleView(context: Context, attrs: AttributeSet?) : FrameLayout(conte
         val effect = WaterRippleView(context)
         waterRipple = effect
         addView(effect, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
-        effect.play(
+        effect.playUnlock(
             origin.x.toFloat(),
             origin.y.toFloat(),
-            AuthRippleController.RIPPLE_ANIMATION_DURATION,
+            if (fullscreen && animation == WaterRippleView.EFFECT_WATER) {
+                FULLSCREEN_WATER_DURATION
+            } else {
+                AuthRippleController.RIPPLE_ANIMATION_DURATION
+            },
             animation,
             highFrameRate,
             fullscreen,
