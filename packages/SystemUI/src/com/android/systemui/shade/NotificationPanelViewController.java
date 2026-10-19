@@ -1509,7 +1509,10 @@ public final class NotificationPanelViewController implements
         setClosingWithAlphaFadeout(!expand && !isKeyguardShowing() && getFadeoutAlpha() == 1.0f);
         mNotificationStackScrollLayoutController.setPanelFlinging(true);
         mShadeRepository.setCurrentFling(new FlingInfo(expand, vel));
-        if (target == mExpandedHeight && mOverExpansion == 0.0f && (!expand || vel <= 0)) {
+        final boolean useSpring = mQsController.isBounceEnabled()
+                && expand && mBarState == SHADE && !mDozing
+                && !mQsController.isExpansionAnimating();
+        if (target == mExpandedHeight && mOverExpansion == 0.0f && (!useSpring || vel <= 0)) {
             // We're at the target and didn't fling and there's no overshoot
             onFlingEnd(false /* cancelled */);
             return;
@@ -1518,8 +1521,6 @@ public final class NotificationPanelViewController implements
         if (expandBecauseOfFalsing && vel < 0) {
             vel = 0;
         }
-        final boolean useSpring = mQsController.isBounceEnabled()
-                && expand && mBarState == SHADE && !mDozing;
         ValueAnimator animator = useSpring
                 ? ShadeExpansionSpring.createAnimator(mExpandedHeight, target, mShadeOverscroll,
                         vel, mResources.getDisplayMetrics().density, (height, amount) -> {
