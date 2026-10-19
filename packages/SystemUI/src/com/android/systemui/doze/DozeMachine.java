@@ -157,6 +157,8 @@ public class DozeMachine {
                 case DOZE_AOD_MINMODE:
                     return Display.STATE_ON;
                 case DOZE_AOD:
+                    return parameters.isScreenOffPeekActive()
+                            ? Display.STATE_ON : Display.STATE_DOZE_SUSPEND;
                 case DOZE_AOD_PAUSING:
                     return Display.STATE_DOZE_SUSPEND;
                 default:

@@ -314,8 +314,12 @@ public class DozeParameters implements
         dispatchAlwaysOnEvent();
     }
 
+    public boolean isScreenOffPeekActive() {
+        return mScreenOffPeekActive;
+    }
+
     private boolean shouldUseScreenOffAnimationAod() {
-        return (mAmbientDisplayConfiguration.alwaysOnEnabled(mUserTracker.getUserId())
+        return (mAmbientDisplayConfiguration.screenOffAodEnabled(mUserTracker.getUserId())
                 && !mBatteryController.isAodPowerSave())
                 || isMinModeActive();
     }
