@@ -59,6 +59,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,6 +70,8 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.dimensionResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -78,6 +81,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.compose.animation.scene.SceneKey
 import com.android.settingslib.Utils
 import com.android.systemui.battery.BatteryMeterView
@@ -85,6 +89,9 @@ import com.android.systemui.battery.BatteryMeterViewController
 import com.android.systemui.common.ui.compose.windowinsets.CutoutLocation
 import com.android.systemui.common.ui.compose.windowinsets.LocalDisplayCutout
 import com.android.systemui.compose.modifiers.sysuiResTag
+import com.android.systemui.kairos.ExperimentalKairosApi
+import com.android.systemui.kairos.buildSpec
+import com.android.systemui.kairos.util.nameTag
 import com.android.systemui.privacy.OngoingPrivacyChip
 import com.android.systemui.privacy.PrivacyItem
 import com.android.systemui.qs.panels.shared.model.AxQsLayoutPadding
@@ -92,14 +99,21 @@ import com.android.systemui.res.R
 import com.android.systemui.shade.ui.composable.LocalStatusIconContext
 import com.android.systemui.shade.ui.composable.ShadeHeader
 import com.android.systemui.shade.ui.viewmodel.ShadeHeaderViewModel
+import com.android.systemui.statusbar.StatusBarIconView.STATE_ICON
 import com.android.systemui.statusbar.core.NewStatusBarIcons
 import com.android.systemui.statusbar.phone.StatusBarLocation
 import com.android.systemui.statusbar.phone.domain.interactor.IsAreaDark
 import com.android.systemui.statusbar.pipeline.battery.ui.composable.BatteryWithEstimate
+import com.android.systemui.statusbar.pipeline.mobile.StatusBarMobileIconKairos
+import com.android.systemui.statusbar.pipeline.mobile.ui.view.ModernStatusBarMobileView
+import com.android.systemui.statusbar.pipeline.mobile.ui.viewmodel.QsMobileIconViewModelKairos
+import com.android.systemui.statusbar.pipeline.mobile.ui.viewmodel.composeWrapper
 import com.android.systemui.statusbar.policy.Clock as ClockView
 import com.android.systemui.statusbar.systemstatusicons.SystemStatusIconsInCompose
 import com.android.systemui.statusbar.systemstatusicons.ui.compose.SystemStatusIcons
 import com.android.systemui.statusbar.systemstatusicons.ui.compose.SystemStatusIconsLegacy
+import com.android.systemui.util.composable.kairos.ActivatedKairosSpec
+import com.android.systemui.util.composable.kairos.toComposeState
 import kotlin.math.max
 
 private val AxQuickSettingsHeaderContent = SceneKey("AxQuickSettingsHeader")
@@ -209,6 +223,7 @@ private fun AxStatusIcons(
             viewModelFactory = viewModel.systemStatusIconsViewModelFactory,
             tint = Color(foregroundColor),
             modifier = modifier,
+            showMobileIcons = false,
         )
     } else {
         val statusIconContext = LocalStatusIconContext.current
@@ -234,6 +249,7 @@ private fun AxStatusIcons(
             isMicCameraIndicationEnabled = viewModel.isMicCameraIndicationEnabled,
             isPrivacyChipEnabled = viewModel.isPrivacyChipVisible,
             isLocationIndicationEnabled = viewModel.isLocationIndicationEnabled,
+            showMobileIcons = false,
             modifier = modifier,
             content = movableContent,
         )
@@ -266,24 +282,118 @@ fun AxCarrierText(
     textColor: Color,
     modifier: Modifier = Modifier,
 ) {
-    if (carrierText.isNotEmpty()) {
-        Text(
-            text = carrierText,
-            color = textColor,
-            textAlign = TextAlign.End,
-            style =
-                MaterialTheme.typography.bodyMedium.copy(
-                    fontSize = 14.sp,
-                    platformStyle = PlatformTextStyle(includeFontPadding = false),
-                ),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            softWrap = false,
-            modifier =
-                modifier
-                    .basicMarquee(iterations = 1)
-                    .clickable { viewModel.onShadeCarrierGroupClicked() },
+    Row(
+        modifier = modifier.clickable { viewModel.onShadeCarrierGroupClicked() },
+        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AxCarrierMobileIcons(viewModel, textColor.toArgb())
+        if (carrierText.isNotEmpty()) {
+            Text(
+                text = carrierText,
+                color = textColor,
+                textAlign = TextAlign.End,
+                style =
+                    MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = 14.sp,
+                        platformStyle = PlatformTextStyle(includeFontPadding = false),
+                    ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false,
+                modifier = Modifier.weight(1f, fill = false).basicMarquee(iterations = 1),
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalKairosApi::class)
+@Composable
+private fun AxCarrierMobileIcons(viewModel: ShadeHeaderViewModel, @ColorInt tint: Int) {
+    if (StatusBarMobileIconKairos.isEnabled) {
+        AxCarrierMobileIconsKairos(viewModel, tint)
+        return
+    }
+    val iconsViewModel = viewModel.mobileIconsViewModel
+    val slot = stringResource(com.android.internal.R.string.status_bar_mobile)
+    val contrastTint = ShadeHeader.Colors.inverseTextColor.toArgb()
+    val iconHeight =
+        maxOf(
+            dimensionResource(R.dimen.status_bar_icon_size),
+            dimensionResource(R.dimen.status_bar_mobile_container_height),
         )
+    for (subId in viewModel.mobileSubIds) {
+        key(iconsViewModel, subId) {
+            val iconViewModel =
+                remember(iconsViewModel, subId) {
+                    iconsViewModel.viewModelForSub(subId, StatusBarLocation.QS)
+                }
+            val isVisible by iconViewModel.isVisible.collectAsStateWithLifecycle()
+            if (isVisible) {
+                AndroidView(
+                    factory = { context ->
+                        ModernStatusBarMobileView.constructAndBind(
+                                context = context,
+                                logger = iconsViewModel.logger,
+                                slot = slot,
+                                viewModel = iconViewModel,
+                            )
+                            .apply { setVisibleState(STATE_ICON, false) }
+                    },
+                    update = { it.setStaticDrawableColor(tint, contrastTint) },
+                    modifier = Modifier.height(iconHeight),
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalKairosApi::class)
+@Composable
+private fun AxCarrierMobileIconsKairos(viewModel: ShadeHeaderViewModel, @ColorInt tint: Int) {
+    val slot = stringResource(com.android.internal.R.string.status_bar_mobile)
+    val contrastTint = ShadeHeader.Colors.inverseTextColor.toArgb()
+    val iconHeight =
+        maxOf(
+            dimensionResource(R.dimen.status_bar_icon_size),
+            dimensionResource(R.dimen.status_bar_mobile_container_height),
+        )
+    ActivatedKairosSpec(
+        buildSpec = viewModel.mobileIconsViewModelKairos.get().composeWrapper(),
+        kairosNetwork = viewModel.kairosNetwork,
+        name = nameTag("AxCarrierMobileIcons"),
+    ) { iconsViewModel ->
+        for ((subId, icon) in iconsViewModel.icons) {
+            key(subId, icon) {
+                ActivatedKairosSpec(
+                    buildSpec = buildSpec { toComposeState(icon.isVisible) },
+                    kairosNetwork = viewModel.kairosNetwork,
+                    name = nameTag("AxCarrierMobileIconVisibility"),
+                ) { isVisible ->
+                    if (isVisible.value) {
+                        val scope = rememberCoroutineScope()
+                        AndroidView(
+                            factory = { context ->
+                                ModernStatusBarMobileView.constructAndBind(
+                                        context = context,
+                                        logger = iconsViewModel.logger,
+                                        slot = slot,
+                                        viewModel = QsMobileIconViewModelKairos(icon),
+                                        scope = scope,
+                                        subscriptionId = subId,
+                                        location = StatusBarLocation.QS,
+                                        kairosNetwork = viewModel.kairosNetwork,
+                                    )
+                                    .first
+                                    .apply { setVisibleState(STATE_ICON, false) }
+                            },
+                            update = { it.setStaticDrawableColor(tint, contrastTint) },
+                            modifier = Modifier.height(iconHeight),
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

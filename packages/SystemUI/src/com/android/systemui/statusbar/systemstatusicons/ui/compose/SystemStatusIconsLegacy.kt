@@ -44,6 +44,7 @@ fun SystemStatusIconsLegacy(
     isPrivacyChipEnabled: Boolean,
     isLocationIndicationEnabled: Boolean,
     modifier: Modifier = Modifier,
+    showMobileIcons: Boolean = isSingleCarrier || !useExpandedFormat,
     /**
      * This content should call through to [SystemStatusIconsLegacyAndroidView]. One way is to
      * provide it using [movableSystemStatusIconsLegacyAndroidView]. If remembered tied to the
@@ -65,11 +66,10 @@ fun SystemStatusIconsLegacy(
      * Use `rememberUpdatedState` to guarantee that a state will be exposed (without recomposition)
      * for all these parameters, so the update block will be called when any of them changes.
      */
-    val useExpandedFormat by rememberUpdatedState(useExpandedFormat)
+    val showMobileIcons by rememberUpdatedState(showMobileIcons)
     val isTransitioning by rememberUpdatedState(isTransitioning)
     val foregroundColor by rememberUpdatedState(foregroundColor)
     val backgroundColor by rememberUpdatedState(backgroundColor)
-    val isSingleCarrier by rememberUpdatedState(isSingleCarrier)
     val isMicCameraIndicationEnabled by rememberUpdatedState(isMicCameraIndicationEnabled)
     val isPrivacyChipEnabled by rememberUpdatedState(isPrivacyChipEnabled)
     val isLocationIndicationEnabled by rememberUpdatedState(isLocationIndicationEnabled)
@@ -86,7 +86,7 @@ fun SystemStatusIconsLegacy(
             { container: StatusIconContainer ->
                 container.setQsExpansionTransitioning(isTransitioning)
 
-                if (isSingleCarrier || !useExpandedFormat) {
+                if (showMobileIcons) {
                     container.removeIgnoredSlots(carrierIconSlots)
                 } else {
                     container.addIgnoredSlots(carrierIconSlots)

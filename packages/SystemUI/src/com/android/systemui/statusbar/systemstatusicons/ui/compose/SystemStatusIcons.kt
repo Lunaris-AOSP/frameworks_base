@@ -46,6 +46,7 @@ fun SystemStatusIcons(
     viewModelFactory: SystemStatusIconsViewModel.Factory,
     tint: Color,
     modifier: Modifier = Modifier,
+    showMobileIcons: Boolean = true,
 ) {
     val context = LocalContext.current
     val viewModel =
@@ -58,7 +59,9 @@ fun SystemStatusIcons(
             modifier = modifier.sysuiResTag("statusIcons"),
         ) {
             viewModel.iconViewModels
-                .filter { it.visible }
+                .filter {
+                    it.visible && (showMobileIcons || it !is SystemStatusIconViewModel.MobileIcons)
+                }
                 .forEach { iconViewModel ->
                     // TODO(414653733): Make sure icons are sized uniformly.
                     when (iconViewModel) {
