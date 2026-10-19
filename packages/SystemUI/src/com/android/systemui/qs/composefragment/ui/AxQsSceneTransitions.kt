@@ -29,9 +29,14 @@ import com.android.systemui.qs.composefragment.SceneKeys
 import com.android.systemui.qs.shared.ui.QuickSettings.Elements
 import com.android.systemui.shade.ui.composable.ShadeHeader
 
+internal val AxQsGridContent = ElementKey("AxQsGridContent")
+
 fun TransitionBuilder.axFromQuickQuickSettingsToQuickSettings() {
-    fade(SceneKeys.QuickQuickSettings.rootElementKey)
-    fade(SceneKeys.QuickSettings.rootElementKey)
+    fractionRange(start = 0.15f, end = 0.85f, easing = FastOutSlowInEasing) {
+        fade(SceneKeys.QuickQuickSettings.rootElementKey)
+        fade(SceneKeys.QuickSettings.rootElementKey)
+        translate(AxQsGridContent, y = AxQsSceneTranslation)
+    }
     disableAxQsSharedElements()
     sharedElement(ShadeHeader.Elements.Clock, enabled = false)
 }
@@ -108,14 +113,6 @@ internal fun Modifier.axQsEntrance(progress: () -> Float): Modifier {
             } else {
                 -(1f - entrance) * AX_QS_ENTRANCE_TRANSLATION_PX
             }
-    }
-}
-
-internal fun Modifier.axQuickSettingsSceneMotion(progress: () -> Float): Modifier {
-    return graphicsLayer {
-        val expansion = progress().coerceIn(0f, 1f)
-        val motionProgress = FastOutSlowInEasing.transform(expansion)
-        translationY = (1f - motionProgress) * AxQsSceneTranslation.toPx()
     }
 }
 

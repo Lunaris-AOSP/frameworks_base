@@ -53,7 +53,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -87,7 +86,7 @@ import com.android.systemui.common.ui.compose.PagerDots
 import com.android.systemui.compose.modifiers.sysuiResTag
 import com.android.systemui.development.ui.compose.QsDataUsage
 import com.android.systemui.lifecycle.rememberViewModel
-import com.android.systemui.qs.composefragment.ui.axQuickSettingsSceneMotion
+import com.android.systemui.qs.composefragment.ui.AxQsGridContent
 import com.android.systemui.qs.footer.ui.viewmodel.FooterActionsButtonViewModel
 import com.android.systemui.qs.panels.shared.model.AxQsGridItem
 import com.android.systemui.qs.panels.ui.viewmodel.toolbar.ToolbarViewModel
@@ -95,8 +94,6 @@ import com.android.systemui.res.R
 import com.android.systemui.shade.ui.composable.ShadeHeader
 import com.android.systemui.shade.ui.viewmodel.ShadeHeaderViewModel
 import com.android.internal.util.lunaris.OmniJawsClient
-
-val LocalAxQsExpansionProgress = compositionLocalOf<() -> Float> { { 1f } }
 
 @Composable
 internal fun <T> ContentScope.AxQQS(
@@ -210,7 +207,10 @@ internal fun <T> ContentScope.AxQS(
                     .clipScrollableContainer(Orientation.Vertical)
                     .verticalScroll(scrollState, overscrollEffect = null),
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(spacing)) {
+            Column(
+                modifier = Modifier.element(AxQsGridContent),
+                verticalArrangement = Arrangement.spacedBy(spacing),
+            ) {
                 if (controlItems.isNotEmpty()) {
                     AxQsGrid(
                         items = controlItems,
@@ -224,10 +224,7 @@ internal fun <T> ContentScope.AxQS(
                     )
                 }
                 if (tileItems.isNotEmpty()) {
-                    val expansionProgress = LocalAxQsExpansionProgress.current
-                    Column(
-                        modifier = Modifier.axQuickSettingsSceneMotion(expansionProgress)
-                    ) {
+                    Column {
                         AxQsTileGrid(
                             items = tileItems,
                             columns = tileColumns,

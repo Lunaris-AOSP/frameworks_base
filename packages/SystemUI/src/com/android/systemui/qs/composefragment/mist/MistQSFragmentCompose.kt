@@ -150,7 +150,6 @@ import com.android.systemui.qs.panels.shared.model.QSFragmentComposeClippingTabl
 import com.android.systemui.qs.panels.shared.model.AxQsLayout
 import com.android.systemui.qs.panels.ui.compose.AxQuickSettingsHeader
 import com.android.systemui.qs.panels.ui.compose.EditMode
-import com.android.systemui.qs.panels.ui.compose.LocalAxQsExpansionProgress
 import com.android.systemui.qs.panels.ui.compose.QuickQuickSettings
 import com.android.systemui.qs.shared.ui.QuickSettings.Elements
 import com.android.systemui.qs.ui.composable.QuickSettingsShade
@@ -485,11 +484,7 @@ constructor(
                             QuickSettings.rootElementKey,
                             Modifier,
                         ) {
-                            CompositionLocalProvider(
-                                LocalAxQsExpansionProgress provides { viewModel.expansionState.progress }
-                            ) {
-                                QuickSettingsElement()
-                            }
+                            QuickSettingsElement()
                         }
                     }
                 }
