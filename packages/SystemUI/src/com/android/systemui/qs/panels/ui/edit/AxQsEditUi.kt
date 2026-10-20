@@ -1185,7 +1185,15 @@ private fun AxEditableGridSection(
                 val orientationControl =
                     (value as? AxEditGridValue.Control)?.control?.takeIf { it.supportsOrientation }
                 val verticalSlider = sliderControl != null && item.span.columns == 1
-                val rotatedSpan = orientationControl?.rotateSpan(item.span, columns)
+                val rotatedSpan =
+                    when {
+                        orientationControl != null ->
+                            orientationControl.rotateSpan(item.span, columns)
+                        value is AxEditGridValue.Folder &&
+                            item.span.columns * item.span.rows == 2 ->
+                            AxQsSpan(item.span.rows, item.span.columns)
+                        else -> null
+                    }
                 val canRotateWithoutRepack = rotatedSpan?.let(canResize) == true
                 val canRotate =
                     rotatedSpan != null &&
@@ -1541,7 +1549,7 @@ private fun AxEditableGridSection(
                         }
                         if (
                             isSelected &&
-                                orientationControl != null &&
+                                rotatedSpan != null &&
                                 item.span != AxQsSpan.TileDefault &&
                                 (!isPhoto || item.span.columns != item.span.rows)
                         ) {
@@ -1549,9 +1557,28 @@ private fun AxEditableGridSection(
                                 vertical = item.span.columns == 1,
                                 enabled = canRotate,
                                 onClick = rotateItem,
+                                contentDescription =
+                                    if (value is AxEditGridValue.Folder) {
+                                        stringResource(
+                                            if (item.span.columns == 1)
+                                                R.string.lunaris_qs_folder_rotate_horizontal
+                                            else R.string.lunaris_qs_folder_rotate_vertical
+                                        )
+                                    } else {
+                                        null
+                                    },
                                 modifier =
-                                    Modifier.align(Alignment.TopStart)
-                                        .offset(x = (-12).dp, y = (-12).dp)
+                                    Modifier.align(
+                                            if (value is AxEditGridValue.Folder)
+                                                Alignment.BottomStart
+                                            else Alignment.TopStart
+                                        )
+                                        .offset(
+                                            x = (-12).dp,
+                                            y =
+                                                if (value is AxEditGridValue.Folder) 12.dp
+                                                else (-12).dp,
+                                        )
                                         .zIndex(3f),
                             )
                         }

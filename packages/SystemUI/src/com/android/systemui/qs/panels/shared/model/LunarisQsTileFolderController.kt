@@ -40,16 +40,16 @@ object LunarisQsTileFolderController {
     fun maxSpan(columns: Int): AxQsSpan = AxQsSpan(columns.coerceIn(2, 4), 2)
 
     fun coerceSpan(span: AxQsSpan, columns: Int): AxQsSpan =
-        span.coerceIn(if (span.rows == 1) MinSpan else Span, maxSpan(columns))
+        span.coerceIn(MinSpan, maxSpan(columns))
 
     fun resizeOptions(columns: Int): List<AxQsSpan> =
-        listOf(MinSpan, Span) +
+        listOf(MinSpan, Span, AxQsSpan(1, 2)) +
             (2..maxSpan(columns).columns).map { AxQsSpan(it, 1) } +
             (3..maxSpan(columns).columns).map { AxQsSpan(it, 2) }
 
     fun directTileCount(span: AxQsSpan, tileCount: Int): Int {
         if (span == MinSpan) return 0
-        val capacity = if (span.rows == 1) 3 else 4
+        val capacity = if (span.rows == 1 || span.columns == 1) 3 else 4
         return if (tileCount > capacity) capacity - 1 else tileCount
     }
 
@@ -57,7 +57,7 @@ object LunarisQsTileFolderController {
         if (span == MinSpan) ICON_PREVIEW_TILE_COUNT
         else
             directTileCount(span, MAX_TILES) +
-                if (span.rows == 1) PILE_PREVIEW_SMALL_TILE_COUNT
+                if (span.rows == 1 || span.columns == 1) PILE_PREVIEW_SMALL_TILE_COUNT
                 else BIG_PREVIEW_SMALL_TILE_COUNT
 
     fun previewSpecs(specs: List<String>, span: AxQsSpan): List<String> =

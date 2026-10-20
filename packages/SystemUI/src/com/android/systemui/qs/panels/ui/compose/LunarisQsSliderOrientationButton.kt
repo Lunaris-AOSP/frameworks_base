@@ -37,6 +37,7 @@ internal fun LunarisQsSliderOrientationButton(
     enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    contentDescription: String? = null,
 ) {
     IconButton(onClick = onClick, enabled = enabled, modifier = modifier.size(48.dp)) {
         Box(
@@ -51,10 +52,11 @@ internal fun LunarisQsSliderOrientationButton(
             Icon(
                 painter = painterResource(R.drawable.ic_statusbar_auto_rotate),
                 contentDescription =
-                    stringResource(
-                        if (vertical) R.string.lunaris_qs_slider_rotate_horizontal
-                        else R.string.lunaris_qs_slider_rotate_vertical
-                    ),
+                    contentDescription
+                        ?: stringResource(
+                            if (vertical) R.string.lunaris_qs_slider_rotate_horizontal
+                            else R.string.lunaris_qs_slider_rotate_vertical
+                        ),
                 tint = MaterialTheme.colorScheme.onPrimary,
                 modifier = Modifier.size(16.dp),
             )

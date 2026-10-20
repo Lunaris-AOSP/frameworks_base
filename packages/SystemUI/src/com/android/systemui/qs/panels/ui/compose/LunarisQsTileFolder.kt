@@ -227,7 +227,10 @@ internal fun LunarisFolderPreview(
                     val height = constraints.maxHeight
                     val side = minOf(width, height)
                     val singleCell = span == AxQsSpan.TileDefault
-                    val compact = span.rows == 1
+                    val vertical = span.columns == 1 && span.rows > 1
+                    val compact = span.rows == 1 || vertical
+                    val compactLength = if (vertical) height else width
+                    val compactThickness = if (vertical) width else height
                     val directCount =
                         LunarisQsTileFolderController.directTileCount(span, specs.size)
                     val smallCount = (members.size - directCount).coerceAtLeast(0)
@@ -300,11 +303,12 @@ internal fun LunarisFolderPreview(
                                 if (singleCell) {
                                     side * 0.30f
                                 } else if (compact) {
-                                    if (index < directCount) minOf(height * 0.62f, width * 0.24f)
+                                    if (index < directCount)
+                                        minOf(compactThickness * 0.62f, compactLength * 0.24f)
                                     else
                                         minOf(
-                                            width * 0.105f,
-                                            height * if (smallRows == 3) 0.21f else 0.26f,
+                                            compactLength * 0.105f,
+                                            compactThickness * if (smallRows == 3) 0.21f else 0.26f,
                                         )
                                 } else {
                                     side *
@@ -316,8 +320,10 @@ internal fun LunarisFolderPreview(
                         placeables.forEachIndexed { index, placeable ->
                             val (x, y) = centers[index]
                             placeable.placeRelative(
-                                (width * x - placeable.width / 2f).roundToInt(),
-                                (height * y - placeable.height / 2f).roundToInt(),
+                                (width * (if (vertical) y else x) - placeable.width / 2f)
+                                    .roundToInt(),
+                                (height * (if (vertical) x else y) - placeable.height / 2f)
+                                    .roundToInt(),
                             )
                         }
                     }
