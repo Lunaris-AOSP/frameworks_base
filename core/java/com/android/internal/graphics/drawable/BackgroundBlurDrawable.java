@@ -66,7 +66,7 @@ public final class BackgroundBlurDrawable extends Drawable {
     private float mCornerRadiusTR;
     private float mCornerRadiusBL;
     private float mCornerRadiusBR;
-    private float mAlpha = 1;
+    private int mAlpha = 255;
 
     // Do not update from UiThread. This holds the latest position for this drawable. It is used
     // by the Aggregator from RenderThread to get the final position of the blur region sent to SF
@@ -131,11 +131,16 @@ public final class BackgroundBlurDrawable extends Drawable {
 
     @Override
     public void setAlpha(int alpha) {
-        if (mAlpha != alpha / 255f) {
-            mAlpha = alpha / 255f;
+        if (mAlpha != alpha) {
+            mAlpha = alpha;
             invalidateSelf();
             mAggregator.onBlurDrawableUpdated(this);
         }
+    }
+
+    @Override
+    public int getAlpha() {
+        return mAlpha;
     }
 
     /**
@@ -285,6 +290,10 @@ public final class BackgroundBlurDrawable extends Drawable {
             if (mOnPreDrawListener == null && mViewRoot.getView() != null
                     && hasRegions()) {
                 registerPreDrawListener();
+
+                if (mHasUiUpdates) {
+                    mViewRoot.getView().invalidate();
+                }
             }
         }
 
@@ -396,15 +405,23 @@ public final class BackgroundBlurDrawable extends Drawable {
                 }
             }
 
+            int regionCount = 0;
+            for (BlurRegion blurRegion : blurRegionsForFrame) {
+                if (!blurRegion.rect.isEmpty()) {
+                    regionCount++;
+                }
+            }
             if (DEBUG) {
-                Log.d(TAG, "Dispatching " + blurRegionsForFrame.length + " blur regions:");
+                Log.d(TAG, "Dispatching " + regionCount + " blur regions:");
             }
 
-            final float[][] blurRegionsArray = new float[blurRegionsForFrame.length][];
-            for (int i = 0; i < blurRegionsArray.length; i++) {
-                blurRegionsArray[i] = blurRegionsForFrame[i].toFloatArray();
+            final float[][] blurRegionsArray = new float[regionCount][];
+            int index = 0;
+            for (BlurRegion blurRegion : blurRegionsForFrame) {
+                if (blurRegion.rect.isEmpty()) continue;
+                blurRegionsArray[index++] = blurRegion.toFloatArray();
                 if (DEBUG) {
-                    Log.d(TAG, blurRegionsForFrame[i].toString());
+                    Log.d(TAG, blurRegion.toString());
                 }
             }
             return blurRegionsArray;
@@ -439,7 +456,7 @@ public final class BackgroundBlurDrawable extends Drawable {
         public final Rect rect;
 
         BlurRegion(BackgroundBlurDrawable drawable) {
-            alpha = drawable.mAlpha;
+            alpha = drawable.mAlpha / 255f;
             blurRadius = drawable.mBlurRadius;
             cornerRadiusTL = drawable.mCornerRadiusTL;
             cornerRadiusTR = drawable.mCornerRadiusTR;
