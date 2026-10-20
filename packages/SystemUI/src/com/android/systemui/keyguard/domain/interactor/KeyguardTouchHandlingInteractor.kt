@@ -103,13 +103,16 @@ constructor(
                 combine(
                     transitionInteractor.isFinishedIn(KeyguardState.LOCKSCREEN),
                     repository.isQuickSettingsVisible,
+                    isLongPressSettingEnabled(),
                     secureLockDeviceInteractor.get().isSecureLockDeviceEnabled,
                 ) {
                     isFullyTransitionedToLockScreen,
                     isQuickSettingsVisible,
+                    isLongPressSettingEnabled,
                     isSecureLockDeviceEnabled ->
                     isFullyTransitionedToLockScreen &&
                         !isQuickSettingsVisible &&
+                        isLongPressSettingEnabled &&
                         !isSecureLockDeviceEnabled
                 }
             } else {
@@ -254,6 +257,13 @@ constructor(
         } else {
             pulsingGestureListener.onDoubleTapEvent()
         }
+    }
+
+    private fun isLongPressSettingEnabled(): Flow<Boolean> {
+        return secureSettingsRepository.boolSetting(
+            name = "lockscreen_long_press_enabled",
+            defaultValue = true,
+        )
     }
 
     private fun isDoubleTapSettingEnabled(): Flow<Boolean> {
