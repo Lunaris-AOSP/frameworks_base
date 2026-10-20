@@ -20,6 +20,7 @@ import android.app.Notification.GROUP_ALERT_SUMMARY
 import android.app.NotificationChannel.SYSTEM_RESERVED_IDS
 import android.util.ArrayMap
 import android.util.ArraySet
+import android.view.Display
 import com.android.internal.annotations.VisibleForTesting
 import com.android.systemui.Flags.notificationSkipSilentUpdates
 import com.android.systemui.dagger.qualifiers.Application
@@ -27,6 +28,7 @@ import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.statusbar.NotificationRemoteInputManager
 import com.android.systemui.statusbar.chips.notification.domain.interactor.StatusBarNotificationChipsInteractor
 import com.android.systemui.statusbar.chips.uievents.StatusBarChipsUiEventLogger
+import com.android.systemui.statusbar.featurepods.popups.data.repository.DynamicIslandStateRepository
 import com.android.systemui.statusbar.notification.NotifPipelineFlags
 import com.android.systemui.statusbar.notification.collection.BundleEntry
 import com.android.systemui.statusbar.notification.collection.GroupEntry
@@ -100,6 +102,7 @@ constructor(
     private val statusBarChipsUiEventLogger: StatusBarChipsUiEventLogger,
     @IncomingHeader private val mIncomingHeaderController: NodeController,
     @Main private val mExecutor: DelayableExecutor,
+    private val dynamicIslandStateRepository: DynamicIslandStateRepository,
 ) : Coordinator {
     private val mEntriesBindingUntil = ArrayMap<String, Long>()
     private val mEntriesUpdateTimes = ArrayMap<String, Long>()
@@ -120,6 +123,28 @@ constructor(
         pipeline.addOnBeforeFinalizeFilterListener(::onBeforeFinalizeFilter)
         pipeline.addPromoter(mNotifPromoter)
         pipeline.addNotificationLifetimeExtender(mLifetimeExtender)
+        applicationScope.launch {
+            dynamicIslandStateRepository.states.collect { states ->
+                val callKeys = states[Display.DEFAULT_DISPLAY]?.callNotificationKeys.orEmpty()
+                var changed = false
+                for (key in callKeys) {
+                    mPostedEntries[key]?.let {
+                        changed = changed || it.shouldHeadsUpEver || it.shouldHeadsUpAgain
+                        it.shouldHeadsUpEver = false
+                        it.shouldHeadsUpAgain = false
+                    }
+                    if (mEntriesBindingUntil.containsKey(key)) {
+                        mNotifPipeline.getEntry(key)?.let { cancelHeadsUpBind(it) }
+                        changed = true
+                    }
+                    if (mHeadsUpManager.isHeadsUpEntry(key)) {
+                        mHeadsUpManager.removeNotification(key, true, "call shown in Dynamic Island")
+                        changed = true
+                    }
+                }
+                if (changed) mNotifPromoter.invalidateList("Dynamic Island call visibility changed")
+            }
+        }
         if (NotificationBundleUi.isEnabled) {
             notificationActionClickManager.addActionClickListener(mActionPressListener)
         } else {
@@ -187,6 +212,12 @@ constructor(
     }
 
     private fun onHeadsUpViewBound(entry: NotificationEntry, isPinnedByUser: Boolean) {
+        if (dynamicIslandStateRepository.shouldSuppressCallHeadsUp(entry.sbn)) {
+            mEntriesBindingUntil.remove(entry.key)
+            mHeadsUpViewBinder.unbindHeadsUpView(entry)
+            mNotifPromoter.invalidateList("call shown in Dynamic Island")
+            return
+        }
         mHeadsUpManager.showNotification(entry, isPinnedByUser)
         mEntriesBindingUntil.remove(entry.key)
     }
@@ -489,6 +520,14 @@ constructor(
     private fun handlePostedEntry(posted: PostedEntry, hunMutator: HunMutator, scenario: String) {
         mLogger.logPostedEntryWillEvaluate(posted, scenario)
 
+        if (dynamicIslandStateRepository.shouldSuppressCallHeadsUp(posted.entry.sbn)) {
+            cancelHeadsUpBind(posted.entry)
+            if (mHeadsUpManager.isHeadsUpEntry(posted.key)) {
+                hunMutator.removeNotification(posted.key, true)
+            }
+            return
+        }
+
         if (posted.wasAdded) {
             if (posted.shouldHeadsUpEver) {
                 bindForAsyncHeadsUp(posted)
@@ -597,7 +636,8 @@ constructor(
                 val shouldHeadsUpEver =
                     mVisualInterruptionDecisionProvider
                         .makeAndLogHeadsUpDecision(entry)
-                        .shouldInterrupt
+                        .shouldInterrupt &&
+                        !dynamicIslandStateRepository.shouldSuppressCallHeadsUp(entry.sbn)
                 mPostedEntries[entry.key] =
                     PostedEntry(
                         entry,
@@ -622,7 +662,8 @@ constructor(
                 val shouldHeadsUpEver =
                     mVisualInterruptionDecisionProvider
                         .makeAndLogHeadsUpDecision(entry)
-                        .shouldInterrupt
+                        .shouldInterrupt &&
+                        !dynamicIslandStateRepository.shouldSuppressCallHeadsUp(entry.sbn)
                 val shouldHeadsUpAgain = shouldHunAgain(entry)
                 val isHeadsUpEntry = mHeadsUpManager.isHeadsUpEntry(entry.key)
                 val isBinding = isEntryBinding(entry)
@@ -781,7 +822,8 @@ constructor(
                     //   differs from the updated one
                     val decision =
                         mVisualInterruptionDecisionProvider.makeUnloggedHeadsUpDecision(entry)
-                    val shouldHeadsUpEver = decision.shouldInterrupt
+                    val shouldHeadsUpEver = decision.shouldInterrupt &&
+                        !dynamicIslandStateRepository.shouldSuppressCallHeadsUp(entry.sbn)
                     val postedShouldHeadsUpEver =
                         mPostedEntries[entry.key]?.shouldHeadsUpEver ?: false
                     val shouldUpdateEntry = postedShouldHeadsUpEver != shouldHeadsUpEver

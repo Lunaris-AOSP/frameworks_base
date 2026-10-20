@@ -381,6 +381,8 @@
     <string name="dynamic_island_event_silent">Silent</string>
     <string name="dynamic_island_event_clipboard">Clipboard</string>
     <string name="dynamic_island_event_call">Call</string>
+    <string name="dynamic_island_incoming_call">Incoming call</string>
+    <string name="dynamic_island_open_call">Open call</string>
     <string name="dynamic_island_event_timer">Timer</string>
     <string name="dynamic_island_event_recording">Audio recording</string>
     <string name="dynamic_island_event_recent_apps">Recent apps</string>

@@ -391,6 +391,7 @@ constructor(
                     registerTransition = {
                         activityStarter.registerTransition(cookie, factory, scope)
                     },
+                    unregisterTransition = { activityStarter.unregisterTransition(cookie) },
                     // Make the chip invisible at the beginning of the return transition to avoid
                     // it flickering.
                     hideChipForTransition = transitionState is TransitionState.ReturnRequested,

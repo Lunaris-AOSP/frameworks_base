@@ -18,6 +18,7 @@ package com.android.systemui.statusbar.chips.ui.viewmodel
 
 import android.graphics.RectF
 import com.android.systemui.display.dagger.SystemUIDisplaySubcomponent.DisplayAware
+import com.android.systemui.display.dagger.SystemUIDisplaySubcomponent.DisplayId
 import com.android.systemui.display.dagger.SystemUIDisplaySubcomponent.PerDisplaySingleton
 import com.android.systemui.display.domain.interactor.DisplayStateInteractor
 import com.android.systemui.log.LogBuffer
@@ -33,6 +34,8 @@ import com.android.systemui.statusbar.chips.sharetoapp.ui.viewmodel.ShareToAppCh
 import com.android.systemui.statusbar.chips.ui.model.MultipleOngoingActivityChipsModel
 import com.android.systemui.statusbar.chips.ui.model.MultipleOngoingActivityChipsModelLegacy
 import com.android.systemui.statusbar.chips.ui.model.OngoingActivityChipModel
+import com.android.systemui.statusbar.featurepods.popups.data.repository.DynamicIslandState
+import com.android.systemui.statusbar.featurepods.popups.data.repository.DynamicIslandStateRepository
 import com.android.systemui.statusbar.notification.promoted.PromotedNotificationUi
 import com.android.systemui.statusbar.phone.ongoingcall.StatusBarChipsModernization
 import com.android.systemui.util.kotlin.filterValuesNotNull
@@ -68,6 +71,8 @@ constructor(
     @DisplayAware displayStateInteractor: DisplayStateInteractor,
     private val chipsRefiners: Set<@JvmSuppressWildcards OngoingActivityChipsRefiner>,
     @StatusBarChipsLog private val logger: LogBuffer,
+    @DisplayId displayId: Int,
+    dynamicIslandStateRepository: DynamicIslandStateRepository,
 ) {
     private enum class ChipType {
         ScreenRecord,
@@ -142,6 +147,26 @@ constructor(
                     castToOtherDevice = castToOtherDevice,
                     call = call,
                     notifs = notifs,
+                )
+            }
+            .combine(dynamicIslandStateRepository.states) { bundle, states ->
+                val island = states[displayId] ?: DynamicIslandState()
+                val callKey = (bundle.call as? OngoingActivityChipModel.Active)?.key
+                    ?.removePrefix(CallChipViewModel.KEY_PREFIX)
+                bundle.copy(
+                    screenRecord = if (island.isScreenRecordingShown) {
+                        OngoingActivityChipModel.Inactive(shouldAnimate = false)
+                    } else bundle.screenRecord,
+                    shareToApp = if (island.isScreenRecordingShown) {
+                        OngoingActivityChipModel.Inactive(shouldAnimate = false)
+                    } else bundle.shareToApp,
+                    call = if (callKey != null && callKey in island.callNotificationKeys) {
+                        OngoingActivityChipModel.Inactive(
+                            shouldAnimate = false,
+                            transitionManager = bundle.call.transitionManager,
+                        )
+                    } else bundle.call,
+                    notifs = bundle.notifs.filterNot { it.key in island.callNotificationKeys },
                 )
             }
             // Some of the chips could have timers in them and we don't want the start time for

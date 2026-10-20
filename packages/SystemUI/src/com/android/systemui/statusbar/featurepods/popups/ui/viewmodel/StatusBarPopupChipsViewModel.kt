@@ -39,6 +39,8 @@ import com.android.systemui.statusbar.featurepods.livescore.ui.viewmodel.LiveSco
 import com.android.systemui.statusbar.featurepods.av.ui.viewmodel.AvControlsChipViewModel
 import com.android.systemui.statusbar.featurepods.media.ui.viewmodel.MediaControlChipViewModel
 import com.android.systemui.statusbar.featurepods.popups.StatusBarPopupChips
+import com.android.systemui.statusbar.featurepods.popups.data.repository.DynamicIslandState
+import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.CALLS
 import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.LOCKSCREEN
 import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.readDynamicIslandFeatureEnabled
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
@@ -89,6 +91,8 @@ constructor(
     private val avControlsChip by lazy { avControlsChipFactory.create() }
     private val shareScreenPrivacyIndicator by lazy { shareScreenPrivacyIndicatorFactory.create() }
     private var isDynamicIslandEnabled by mutableStateOf(readDynamicIslandEnabled())
+    private var isCallsEnabled by
+        mutableStateOf(context.contentResolver.readDynamicIslandFeatureEnabled(CALLS, false))
     private var isLockscreenEnabled by
         mutableStateOf(
             context.contentResolver.readDynamicIslandFeatureEnabled(LOCKSCREEN, defaultValue = false)
@@ -97,6 +101,7 @@ constructor(
         object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean) {
                 isDynamicIslandEnabled = readDynamicIslandEnabled()
+                isCallsEnabled = context.contentResolver.readDynamicIslandFeatureEnabled(CALLS, false)
                 isLockscreenEnabled =
                     context.contentResolver.readDynamicIslandFeatureEnabled(
                         LOCKSCREEN,
@@ -166,6 +171,17 @@ constructor(
     val lockscreenPopupChips: List<PopupChipModel.Shown>
         get() = if (isOnLockscreen) visiblePopupChips else emptyList()
 
+    internal val dynamicIslandState: DynamicIslandState
+        get() = DynamicIslandState(
+            canShowCalls = isDynamicIslandEnabled && isCallsEnabled && !isShadeVisible &&
+                (isReadyForAutoPopup || (isOnLockscreen && isLockscreenEnabled)),
+            callNotificationKeys = visiblePopupChips.mapNotNull { chip ->
+                (chip.chipId as? PopupChipId.SystemEvent)?.eventId
+                    ?.takeIf { it.startsWith("call_") }?.removePrefix("call_")
+            }.toSet(),
+            isScreenRecordingShown = visiblePopupChips.any { it.chipId == PopupChipId.ScreenRecord },
+        )
+
     private val visiblePopupChips: List<PopupChipModel.Shown> by derivedStateOf {
         if (!isDynamicIslandEnabled || (isOnLockscreen && !isLockscreenEnabled) || isShadeVisible) {
             return@derivedStateOf emptyList()
@@ -208,6 +224,12 @@ constructor(
 
     override suspend fun onActivated(): Nothing {
         coroutineScope {
+            context.contentResolver.registerContentObserver(
+                Settings.System.getUriFor(CALLS),
+                false,
+                dynamicIslandObserver,
+                UserHandle.USER_ALL,
+            )
             context.contentResolver.registerContentObserver(
                 Settings.System.getUriFor(LOCKSCREEN),
                 false,

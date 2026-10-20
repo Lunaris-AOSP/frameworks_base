@@ -81,6 +81,10 @@ private val EventPopupShape = RoundedCornerShape(32.dp)
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SystemEventPopup(model: PopupContentModel.SystemEvent, modifier: Modifier = Modifier) {
+    if (model.kind == SystemEventKind.Call) {
+        CallPopup(model, modifier)
+        return
+    }
     val accent = model.kind.accent
     val isMessage = model.kind == SystemEventKind.Notification || model.kind == SystemEventKind.Ongoing
     val isMedia = model.kind == SystemEventKind.NowPlaying
@@ -98,10 +102,7 @@ fun SystemEventPopup(model: PopupContentModel.SystemEvent, modifier: Modifier = 
                 .padding(horizontal = 20.dp, vertical = if (compact) 16.dp else 18.dp),
             verticalArrangement = Arrangement.spacedBy(if (compact) 12.dp else 16.dp),
         ) {
-            when (model.kind) {
-                SystemEventKind.Call -> CallIdentity(model, accent)
-                else -> EventHeader(model, accent, showSubtitle = !isMessage && model.kind != SystemEventKind.Clipboard)
-            }
+            EventHeader(model, accent, showSubtitle = !isMessage && model.kind != SystemEventKind.Clipboard)
 
             if (isMessage || model.kind == SystemEventKind.Clipboard) {
                 if (model.text.isNotBlank()) {
@@ -356,25 +357,6 @@ private fun EventHeader(model: PopupContentModel.SystemEvent, accent: Color, sho
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun CallIdentity(model: PopupContentModel.SystemEvent, accent: Color) {
-    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        EventGlyph(model, accent, size = 64.dp)
-        model.callStartTimeMs?.let { start ->
-            Text(rememberCallDurationText(start), style = MaterialTheme.typography.titleLarge,
-                color = accent, textAlign = TextAlign.Center)
-        }
-        Text(model.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold,
-            textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        if (model.text.isNotBlank()) {
-            Text(model.text, style = MaterialTheme.typography.bodyMedium,
-                color = LocalContentColor.current.copy(alpha = 0.73f), textAlign = TextAlign.Center,
-                maxLines = 3, overflow = TextOverflow.Ellipsis)
         }
     }
 }

@@ -16,10 +16,13 @@
 
 package com.android.systemui.statusbar.featurepods.popups.ui.viewmodel
 
+import androidx.compose.runtime.snapshotFlow
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
+import com.android.systemui.statusbar.featurepods.popups.data.repository.DynamicIslandStateRepository
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 @SysUISingleton
@@ -28,6 +31,7 @@ class StatusBarPopupChipsViewModelStore
 constructor(
     private val factory: StatusBarPopupChipsViewModel.Factory,
     @Application private val applicationScope: CoroutineScope,
+    private val dynamicIslandStateRepository: DynamicIslandStateRepository,
 ) {
     private val viewModels = mutableMapOf<Int, StatusBarPopupChipsViewModel>()
 
@@ -35,7 +39,18 @@ constructor(
     fun forDisplay(displayId: Int): StatusBarPopupChipsViewModel {
         return viewModels.getOrPut(displayId) {
             factory.create().also { model ->
-                applicationScope.launch { model.activate() }
+                applicationScope.launch {
+                    try {
+                        coroutineScope {
+                            launch { model.activate() }
+                            snapshotFlow { model.dynamicIslandState }.collect {
+                                dynamicIslandStateRepository.setState(displayId, it)
+                            }
+                        }
+                    } finally {
+                        dynamicIslandStateRepository.removeDisplay(displayId)
+                    }
+                }
             }
         }
     }

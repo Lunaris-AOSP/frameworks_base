@@ -1,5 +1,6 @@
 package com.android.systemui.statusbar.featurepods.popups.ui.viewmodel
 
+import android.app.Notification
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -17,6 +18,7 @@ import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.NotificationLockscreenUserManager
 import com.android.systemui.statusbar.featurepods.popups.shared.model.PopupActionModel
+import com.android.systemui.statusbar.featurepods.popups.shared.model.PopupActionRole
 import com.android.systemui.statusbar.featurepods.popups.shared.toActivityLaunchAction
 import com.android.systemui.statusbar.featurepods.popups.shared.toSendAction
 import com.android.systemui.statusbar.featurepods.popups.ui.model.BluetoothBatteryComponent
@@ -137,7 +139,11 @@ class SystemEventPopupMapper @Inject constructor(
         fun open(intent: PendingIntent?) {
             intent.toActivityLaunchAction(activityStarter, activityIntentHelper,
                 lockscreenUserManager, keyguardStateController)?.let {
-                actions += PopupActionModel(context.getString(R.string.dynamic_island_event_open), it)
+                actions += PopupActionModel(
+                    context.getString(R.string.dynamic_island_event_open),
+                    it,
+                    role = PopupActionRole.OpenApp,
+                )
             }
         }
         val (title, text) = when (event) {
@@ -221,7 +227,21 @@ class SystemEventPopupMapper @Inject constructor(
             is IslandEvent.Call -> {
                 icon = event.callerPhoto ?: event.appIcon
                 iconRes = android.R.drawable.sym_action_call
-                notificationActions(event.actions)
+                val extras = event.sbn.notification.extras
+                val answerIntent = extras.getParcelable(Notification.EXTRA_ANSWER_INTENT, PendingIntent::class.java)
+                val declineIntent = extras.getParcelable(Notification.EXTRA_DECLINE_INTENT, PendingIntent::class.java)
+                val hangUpIntent = extras.getParcelable(Notification.EXTRA_HANG_UP_INTENT, PendingIntent::class.java)
+                event.actions.forEach { item ->
+                    val intent = item.action.actionIntent
+                    intent.toSendAction()?.let { onClick ->
+                        val role = when (intent) {
+                            answerIntent -> PopupActionRole.AnswerCall
+                            declineIntent, hangUpIntent -> PopupActionRole.EndCall
+                            else -> PopupActionRole.Default
+                        }
+                        actions += PopupActionModel(item.label.toString(), onClick, role = role)
+                    }
+                }
                 open(event.sbn.notification.contentIntent)
                 (event.callerName ?: event.number ?: context.getString(R.string.dynamic_island_event_call)) to
                     (event.sbn.notification.extras.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString().orEmpty())

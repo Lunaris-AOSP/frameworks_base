@@ -21,4 +21,12 @@ data class PopupActionModel(
     val label: String,
     val onClick: () -> Unit,
     val emphasized: Boolean = false,
+    val role: PopupActionRole = PopupActionRole.Default,
 )
+
+enum class PopupActionRole {
+    Default,
+    AnswerCall,
+    EndCall,
+    OpenApp,
+}
