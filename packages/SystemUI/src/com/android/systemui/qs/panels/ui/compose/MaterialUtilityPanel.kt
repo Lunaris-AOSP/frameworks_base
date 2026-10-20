@@ -19,7 +19,7 @@ package com.android.systemui.qs.panels.ui.compose
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.net.ConnectivityManager
+import android.database.ContentObserver
 import android.net.TetheringManager
 import android.net.TetheringManager.TetheringRequest
 import android.net.TetheringManager.StartTetheringCallback
@@ -28,6 +28,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.UserHandle
 import android.provider.Settings
+import android.telephony.SubscriptionInfo
 import android.telephony.TelephonyManager
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -83,9 +84,8 @@ import androidx.compose.ui.unit.dp
 import com.android.compose.theme.LocalAndroidColorScheme
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CustomColorScheme
 import com.android.systemui.statusbar.connectivity.NetworkController
+import com.android.systemui.statusbar.connectivity.SignalCallback
 import com.android.systemui.Dependency
-import com.android.settingslib.net.DataUsageController
-import java.util.concurrent.Executor
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
@@ -101,15 +101,8 @@ fun MaterialUtilityPanel(modifier: Modifier = Modifier) {
     val wifiManager = remember {
         context.getSystemService(Context.WIFI_SERVICE) as? WifiManager
     }
-    val connectivityManager = remember {
-        context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-    }
-
     val tetheringManager = remember {
         context.getSystemService(Context.TETHERING_SERVICE) as? TetheringManager
-    }
-    val telephonyManager = remember {
-        context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
     }
     val networkController = remember { Dependency.get(NetworkController::class.java) }
     val dataUsageController = remember { networkController.mobileDataController }
@@ -123,13 +116,9 @@ fun MaterialUtilityPanel(modifier: Modifier = Modifier) {
         wifiManager?.wifiApState == WifiManager.WIFI_AP_STATE_ENABLED
     } catch (_: Exception) { false }
 
-    fun readMobileDataEnabled(): Boolean = try {
+    fun readMobileDataEnabled(fallback: Boolean = false): Boolean = try {
         dataUsageController.isMobileDataEnabled
-    } catch (_: Exception) {
-        try {
-            Settings.Global.getInt(context.contentResolver, "mobile_data", 1) == 1
-        } catch (_: Exception) { true }
-    }
+    } catch (_: Exception) { fallback }
 
     fun readAirplaneModeEnabled(): Boolean = try {
         Settings.Global.getInt(context.contentResolver, Settings.Global.AIRPLANE_MODE_ON, 0) == 1
@@ -149,6 +138,43 @@ fun MaterialUtilityPanel(modifier: Modifier = Modifier) {
     var dataOn by remember { mutableStateOf(readMobileDataEnabled()) }
     var airplaneOn by remember { mutableStateOf(readAirplaneModeEnabled()) }
     var utilityTileRounded by remember { mutableStateOf(readUtilityTileRounded()) }
+
+    DisposableEffect(context, networkController, dataUsageController) {
+        val resolver = context.contentResolver
+        var listening = true
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                if (listening) dataOn = readMobileDataEnabled(dataOn)
+            }
+        }
+        val callback = object : SignalCallback {
+            override fun setMobileDataEnabled(enabled: Boolean) {
+                if (listening) dataOn = enabled
+            }
+
+            override fun setSubs(subs: List<SubscriptionInfo>) {
+                if (!listening) return
+                resolver.unregisterContentObserver(observer)
+                resolver.registerContentObserver(
+                    Settings.Global.getUriFor(Settings.Global.MOBILE_DATA),
+                    true, observer, UserHandle.USER_ALL,
+                )
+                subs.forEach { sub ->
+                    resolver.registerContentObserver(
+                        Settings.Global.getUriFor(Settings.Global.MOBILE_DATA + sub.subscriptionId),
+                        true, observer, UserHandle.USER_ALL,
+                    )
+                }
+                dataOn = readMobileDataEnabled(dataOn)
+            }
+        }
+        networkController.addCallback(callback)
+        onDispose {
+            listening = false
+            networkController.removeCallback(callback)
+            resolver.unregisterContentObserver(observer)
+        }
+    }
 
     DisposableEffect(Unit) {
         val handler = Handler(Looper.getMainLooper())
@@ -175,8 +201,8 @@ fun MaterialUtilityPanel(modifier: Modifier = Modifier) {
                             else -> {}
                         }
                     }
-                    ConnectivityManager.CONNECTIVITY_ACTION -> {
-                        dataOn = readMobileDataEnabled()
+                    TelephonyManager.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED -> {
+                        dataOn = readMobileDataEnabled(dataOn)
                     }
                     Intent.ACTION_AIRPLANE_MODE_CHANGED -> {
                         airplaneOn = readAirplaneModeEnabled()
@@ -187,12 +213,10 @@ fun MaterialUtilityPanel(modifier: Modifier = Modifier) {
         val filter = IntentFilter().apply {
             addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
             addAction(WifiManager.WIFI_AP_STATE_CHANGED_ACTION)
-            addAction(ConnectivityManager.CONNECTIVITY_ACTION)
+            addAction(TelephonyManager.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED)
             addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED)
         }
         context.registerReceiver(receiver, filter, null, handler)
-        onDispose { context.unregisterReceiver(receiver) }
-
         val settingsObserver = object : android.database.ContentObserver(handler) {
             override fun onChange(selfChange: Boolean) {
                 utilityTileRounded = readUtilityTileRounded()
