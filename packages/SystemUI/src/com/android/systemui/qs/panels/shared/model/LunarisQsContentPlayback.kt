@@ -4,7 +4,7 @@
  */
 package com.android.systemui.qs.panels.shared.model
 
-internal fun shouldPlayQsPhoto(
+internal fun shouldPlayQsContent(
     layout: AxQsLayout,
     panelExpansion: Float,
     qsExpansion: Float,

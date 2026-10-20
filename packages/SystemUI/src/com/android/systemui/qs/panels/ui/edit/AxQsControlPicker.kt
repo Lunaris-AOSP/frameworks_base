@@ -175,6 +175,7 @@ internal fun AxAvailableControls(
                 AxQsControl.FLASHLIGHT to stringResource(R.string.lunaris_qs_flashlight_slider),
                 AxQsControl.MEDIA to axString("ax_qs_media", "Media player"),
                 AxQsControl.PHOTO to stringResource(R.string.lunaris_qs_photo_title),
+                AxQsControl.APP_WIDGET to stringResource(R.string.lunaris_qs_widget_title),
             )
             .filter { (control, _) ->
                 control != AxQsControl.FLASHLIGHT || hasFlashlight
@@ -322,10 +323,10 @@ private fun AxAvailableItemGroup(
                                 sliderStyle = sliderStyle,
                                 onSliderStyleChanged = onSliderStyleChanged,
                                 onRotateSlider = onRotateSlider,
-                                onResizePhoto = { photo ->
+                                onResizeContent = { content ->
                                     onControlSpanChanged(
-                                        photo.control,
-                                        photo.control.nextSpan(photo.span, columns),
+                                        content.control,
+                                        content.control.nextSpan(content.span, columns),
                                     )
                                 },
                                 controlPreview = controlPreview,
@@ -481,7 +482,7 @@ private fun AxAddItemCell(
     sliderStyle: (AxQsControl) -> LunarisQsSliderStyle,
     onSliderStyleChanged: (AxQsControl, LunarisQsSliderStyle) -> Unit,
     onRotateSlider: (AxAddItem.Control) -> Unit,
-    onResizePhoto: (AxAddItem.Control) -> Unit,
+    onResizeContent: (AxAddItem.Control) -> Unit,
     controlPreview: @Composable (AxQsControl, AxQsSpan, LunarisQsSliderStyle) -> Unit,
     canAdd: Boolean,
     onAdd: (AxAddItem) -> Unit,
@@ -594,7 +595,7 @@ private fun AxAddItemCell(
             item is AxAddItem.Control &&
                 item.control.supportsOrientation &&
                 span != AxQsSpan.TileDefault &&
-                (item.control != AxQsControl.PHOTO || span.columns != span.rows)
+                (!item.control.isResizableContent || span.columns != span.rows)
         ) {
             LunarisQsSliderOrientationButton(
                 vertical = span.columns == 1,
@@ -611,9 +612,9 @@ private fun AxAddItemCell(
             style = MaterialTheme.typography.labelMedium,
             modifier = Modifier.fillMaxWidth(),
         )
-        if (item is AxAddItem.Control && item.control == AxQsControl.PHOTO) {
-            TextButton(onClick = { onResizePhoto(item) }, enabled = !item.isAdded) {
-                Text(stringResource(R.string.lunaris_qs_photo_size, span.columns, span.rows))
+        if (item is AxAddItem.Control && item.control.isResizableContent) {
+            TextButton(onClick = { onResizeContent(item) }, enabled = !item.isAdded) {
+                Text(stringResource(R.string.lunaris_qs_content_size, span.columns, span.rows))
             }
         }
         if (item is AxAddItem.Folder && item.limitReached) {

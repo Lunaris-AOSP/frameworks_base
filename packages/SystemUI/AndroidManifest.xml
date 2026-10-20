@@ -1025,6 +1025,17 @@
                   android:excludeFromRecents="true"
                   android:theme="@style/Theme.SystemUI" />
 
+        <service android:name=".qs.panels.widgets.LunarisQsWidgetService"
+                 android:exported="false"
+                 android:directBootAware="false" />
+
+        <activity android:name=".qs.panels.ui.edit.LunarisQsWidgetActivity"
+                  android:exported="false"
+                  android:directBootAware="false"
+                  android:excludeFromRecents="true"
+                  android:windowSoftInputMode="adjustResize"
+                  android:theme="@style/Theme.SystemUI" />
+
         <activity android:name=".clipboardoverlay.EditTextActivity"
                   android:theme="@style/EditTextActivity"
                   android:exported="false"

@@ -19,6 +19,8 @@ package com.android.systemui.qs.panels.ui.viewmodel
 import android.content.Context
 import android.content.Intent
 import android.os.UserHandle
+import android.util.Log
+import android.widget.RemoteViews
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -48,11 +50,14 @@ import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.AxQsTileStacks
 import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsPhotoFrame
+import com.android.systemui.qs.panels.shared.model.LunarisQsWidget
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderKey
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolder
 import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolderController
 import com.android.systemui.qs.panels.ui.edit.LunarisQsPhotoActivity
+import com.android.systemui.qs.panels.ui.edit.LunarisQsWidgetActivity
+import com.android.systemui.qs.panels.widgets.LunarisQsWidgetService
 import com.android.systemui.res.R
 import com.android.systemui.shade.ShadeDisplayAware
 import com.android.systemui.shade.domain.interactor.ShadeInteractor
@@ -117,6 +122,60 @@ constructor(
     fun photoFrame(layout: AxQsLayout): LunarisQsPhotoFrame =
         photoFrames[layout]?.takeIf { it.userId == photoUserId }
             ?: LunarisQsPhotoFrame()
+
+    private val appWidgets by
+        hydrator.hydratedStateOf(
+            traceName = "appWidgets",
+            initialValue = emptyMap<AxQsLayout, LunarisQsWidget>(),
+            source = repository.appWidgets,
+        )
+
+    fun appWidget(layout: AxQsLayout): LunarisQsWidget =
+        appWidgets[layout]?.takeIf { it.userId == photoUserId } ?: LunarisQsWidget()
+
+    fun editAppWidget(layout: AxQsLayout, widthDp: Float, heightDp: Float) {
+        activityStarter.startActivity(
+            Intent(context, LunarisQsWidgetActivity::class.java)
+                .putExtra(LunarisQsWidgetActivity.EXTRA_LAYOUT, layout.name)
+                .putExtra(LunarisQsWidgetActivity.EXTRA_WIDTH, widthDp)
+                .putExtra(LunarisQsWidgetActivity.EXTRA_HEIGHT, heightDp),
+            true, null, false, UserHandle.of(userRepository.getSelectedUserInfo().id),
+        )
+    }
+
+    fun removeAppWidget(layout: AxQsLayout) {
+        try {
+            context.startServiceAsUser(
+                Intent(context, LunarisQsWidgetService::class.java)
+                    .setAction(LunarisQsWidgetService.ACTION_CLEAR)
+                    .putExtra(LunarisQsWidgetService.EXTRA_LAYOUT, layout.name),
+                UserHandle.of(userRepository.getSelectedUserInfo().id),
+            )
+        } catch (e: RuntimeException) {
+            Log.w("AxQsViewModel", "Cannot remove app widget", e)
+        }
+    }
+
+    val widgetInteractionHandler = RemoteViews.InteractionHandler { view, intent, response ->
+        falsingInteractor.runIfNotFalseTap {
+            val options = response.getLaunchOptions(view)
+            if (intent.isActivity) {
+                activityStarter.startPendingIntentMaybeDismissingKeyguard(
+                    intent, true, null, null, options.first, options.second.toBundle(), null,
+                )
+            } else {
+                activityStarter.dismissKeyguardThenExecute(
+                    {
+                        RemoteViews.startPendingIntent(view, intent, options)
+                        false
+                    },
+                    null,
+                    true,
+                )
+            }
+        }
+        true
+    }
 
     fun editPhoto(layout: AxQsLayout, widthDp: Float, heightDp: Float) {
         val intent =
@@ -682,6 +741,7 @@ constructor(
             defaultControls = defaultControls,
             defaultTiles = defaultTiles,
         )
+        AxQsLayout.entries.forEach(::removeAppWidget)
     }
 
     override suspend fun onActivated(): Nothing = hydrator.activate()

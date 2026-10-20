@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (C) 2024-2026 Lunaris AOSP
+     SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <string name="lunaris_qs_widget_title">App widget</string>
+    <string name="lunaris_qs_widget_choose">Choose widget</string>
+    <string name="lunaris_qs_widget_back">Back</string>
+    <string name="lunaris_qs_widget_search">Search apps and widgets</string>
+    <string name="lunaris_qs_widget_performance_warning">Widgets make Quick Settings heavier and may cause lag. Animations pause while you move the shade.</string>
+    <string name="lunaris_qs_widget_frame_size">Widget space: %1$d × %2$d dp. Resize it in the panel editor. Larger widgets scale down to fit.</string>
+    <string name="lunaris_qs_widget_current">Current widget</string>
+    <string name="lunaris_qs_widget_remove">Remove widget</string>
+    <string name="lunaris_qs_widget_select_again">Choose a new copy</string>
+    <string name="lunaris_qs_widget_unavailable">Widget unavailable. Choose another.</string>
+    <string name="lunaris_qs_widget_error">Couldn\'t load or configure the widget. Try another widget.</string>
+    <string name="lunaris_qs_widget_empty">No matching widgets</string>
+    <string name="lunaris_qs_widget_preview">Preview of %1$s</string>
+    <string name="lunaris_qs_widget_no_preview">Preview unavailable</string>
+    <string name="lunaris_qs_content_size">Size: %1$d × %2$d</string>
+</resources>

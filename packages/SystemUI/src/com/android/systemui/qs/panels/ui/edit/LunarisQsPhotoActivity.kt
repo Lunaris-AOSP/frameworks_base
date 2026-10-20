@@ -331,8 +331,12 @@ private fun PhotoSlider(
 }
 
 @Composable
-internal fun LunarisPhotoEditButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+internal fun LunarisQsContentEditButton(
+    onClick: () -> Unit,
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+) {
     FilledTonalIconButton(onClick = onClick, modifier = modifier.size(48.dp)) {
-        Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.lunaris_qs_photo_edit))
+        Icon(Icons.Filled.Edit, contentDescription = contentDescription)
     }
 }

@@ -62,7 +62,7 @@ import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.AxQsTileStacks
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolderController
-import com.android.systemui.qs.panels.shared.model.shouldPlayQsPhoto
+import com.android.systemui.qs.panels.shared.model.shouldPlayQsContent
 import com.android.systemui.qs.panels.ui.media.AxMediaPanel
 import com.android.systemui.qs.panels.ui.media.nonQsGridMediaHeight
 import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
@@ -245,21 +245,21 @@ internal fun ContentScope.AxQsMixedGrid(
     val separateQqs =
         qqs && !splitShade && axQsViewModel.panelMode == AxQsPanelMode.SEPARATE
     val qqsHideBypass = separateQqs && axQsViewModel.isQsBypassingShade
-    val photoVisible by remember(viewModel, qqs, splitShade, qqsHideBypass) {
+    val contentVisible by remember(viewModel, qqs, splitShade, qqsHideBypass) {
         derivedStateOf {
             viewModel.isQsVisibleAndAnyShadeExpanded && !viewModel.isEditing &&
                 if (qqs) !qqsHideBypass && !viewModel.isQsFullyExpanded
                 else splitShade || !viewModel.isQsFullyCollapsed
         }
     }
-    val photoPlaying by remember(viewModel, axQsViewModel, scrollState, layout, photoVisible) {
+    val contentPlaying by remember(viewModel, axQsViewModel, scrollState, layout, contentVisible) {
         derivedStateOf {
-            shouldPlayQsPhoto(
+            shouldPlayQsContent(
                 layout = layout,
                 panelExpansion = viewModel.panelExpansionFraction,
                 qsExpansion = viewModel.expansionState.progress,
                 qsExpanded = viewModel.isQsExpanded,
-                visible = photoVisible,
+                visible = contentVisible,
                 transitioning = axQsViewModel.isShadeBeingDragged ||
                     viewModel.isTransitioningToFullShade ||
                     viewModel.isStackScrollerOverscrolling || scrollState.isScrollInProgress,
@@ -321,8 +321,8 @@ internal fun ContentScope.AxQsMixedGrid(
                     span = item.span,
                     axQsViewModel = axQsViewModel,
                     layout = layout,
-                    photoVisible = photoVisible,
-                    photoPlaying = photoPlaying,
+                    contentVisible = contentVisible,
+                    contentPlaying = contentPlaying,
                     mediaViewModel = mediaViewModel,
                     mediaViewModelFactory = viewModel.mediaViewModelFactory,
                     brightnessSliderViewModel = brightnessSliderViewModel,
@@ -358,8 +358,8 @@ internal fun ContentScope.AxQsMixedGrid(
                     span = item.span,
                     axQsViewModel = axQsViewModel,
                     layout = layout,
-                    photoVisible = photoVisible,
-                    photoPlaying = photoPlaying,
+                    contentVisible = contentVisible,
+                    contentPlaying = contentPlaying,
                     mediaViewModel = mediaViewModel,
                     mediaViewModelFactory = viewModel.mediaViewModelFactory,
                     brightnessSliderViewModel = brightnessSliderViewModel,
@@ -573,8 +573,8 @@ private fun AxLiveControl(
     span: AxQsSpan,
     axQsViewModel: AxQsViewModel,
     layout: AxQsLayout,
-    photoVisible: Boolean,
-    photoPlaying: Boolean,
+    contentVisible: Boolean,
+    contentPlaying: Boolean,
     mediaViewModel: AxMediaViewModel,
     mediaViewModelFactory: MediaViewModel.Factory,
     brightnessSliderViewModel: BrightnessSliderViewModel,
@@ -585,11 +585,21 @@ private fun AxLiveControl(
 ) {
     Box(modifier, contentAlignment = Alignment.Center) {
         when (control) {
+            AxQsControl.APP_WIDGET ->
+                LunarisQsWidgetCard(
+                    widget = axQsViewModel.appWidget(layout),
+                    layout = layout,
+                    playing = contentPlaying,
+                    visible = contentVisible,
+                    interactionHandler = axQsViewModel.widgetInteractionHandler,
+                    onChoose = { width, height -> axQsViewModel.editAppWidget(layout, width, height) },
+                    modifier = Modifier.fillMaxSize(),
+                )
             AxQsControl.PHOTO ->
                 LunarisQsPhotoCard(
                     photo = axQsViewModel.photoFrame(layout),
-                    playing = photoPlaying,
-                    visible = photoVisible,
+                    playing = contentPlaying,
+                    visible = contentVisible,
                     modifier = Modifier.fillMaxSize(),
                 )
             AxQsControl.FLASHLIGHT ->

@@ -31,6 +31,7 @@ import com.android.systemui.qs.panels.shared.model.AxQsTileStacks
 import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsGradientSettings
 import com.android.systemui.qs.panels.shared.model.LunarisQsPhotoFrame
+import com.android.systemui.qs.panels.shared.model.LunarisQsWidget
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderKey
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsSpacing
@@ -86,6 +87,29 @@ constructor(
                                 secureSettings.getStringForUser(
                                     LunarisQsPhotoFrame.settingKey(layout),
                                     user.id,
+                                ),
+                                user.id,
+                            )
+                        }
+                    }
+            }
+            .flowOn(backgroundDispatcher)
+            .stateIn(applicationScope, SharingStarted.Eagerly, emptyMap())
+
+    val appWidgets: StateFlow<Map<AxQsLayout, LunarisQsWidget>> =
+        userRepository.selectedUserInfo
+            .flatMapLatest { user ->
+                secureSettings
+                    .observerFlow(
+                        user.id,
+                        *AxQsLayout.entries.map(LunarisQsWidget::settingKey).toTypedArray(),
+                    )
+                    .onStart { emit(Unit) }
+                    .map {
+                        AxQsLayout.entries.associateWith { layout ->
+                            LunarisQsWidget.fromJson(
+                                secureSettings.getStringForUser(
+                                    LunarisQsWidget.settingKey(layout), user.id,
                                 ),
                                 user.id,
                             )

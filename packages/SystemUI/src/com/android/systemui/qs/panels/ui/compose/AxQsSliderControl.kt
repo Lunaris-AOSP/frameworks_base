@@ -229,7 +229,7 @@ internal fun axQsControlShape(
     tileStyle: AxQsTileStyle = AxQsTileStyle.PILL,
 ): Shape {
     return when {
-        control == AxQsControl.PHOTO -> RoundedCornerShape(AxQsControlCornerRadius)
+        control.isResizableContent -> RoundedCornerShape(AxQsControlCornerRadius)
         control == AxQsControl.MEDIA &&
             span == AxQsSpan.MediaDefault &&
             mediaSurface == AxMediaSurface.CONTROL -> RoundedCornerShape(28.dp)
@@ -633,6 +633,7 @@ internal fun AxQsSliderPreview(
                 AxQsControl.FLASHLIGHT,
                 AxQsControl.VOLUME_MUTE,
                 AxQsControl.RINGER,
+                AxQsControl.APP_WIDGET,
                 AxQsControl.PHOTO,
                 AxQsControl.MEDIA -> Unit
             }
