@@ -698,6 +698,11 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         return isMistQsEnabled() && mAxQsShadePolicy.get().isSeparateShade();
     }
 
+    private boolean isMistSeparateNotificationShade() {
+        return isMistSeparateShade() && mBarState == StatusBarState.SHADE
+                && !getExpanded() && !isExpandImmediate();
+    }
+
     private boolean isLegacySplitShadeEligible() {
         return !isMistQsEnabled() && mQsSplitShadeEnabledLegacy
                 && mResources.getConfiguration().orientation
@@ -787,7 +792,8 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         boolean keyguardShowing = mBarState == KEYGUARD;
         if (!isExpansionEnabled() || mCollapsedOnDown || (keyguardShowing
                 && mKeyguardBypassController.getBypassEnabled()) || mSplitShadeEnabled
-                || (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE)) {
+                || (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE)
+                || isMistSeparateNotificationShade()) {
             return false;
         }
         if (getExpanded() && yDiff < 0 && isMistSeparateShade()) {
@@ -1943,7 +1949,8 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
             boolean isShadeOrQsHeightAnimationRunning, boolean isSynthesizedDown) {
         boolean legacySplitShade = isLegacySplitShadeEligible()
                 && mBarState == StatusBarState.SHADE;
-        if (legacySplitShade && !isFullyCollapsed) {
+        if (!isFullyCollapsed
+                && (legacySplitShade || isMistSeparateNotificationShade())) {
             return false;
         }
         boolean isSwipeDisabled = isLockscreenQsDisabled();
@@ -2157,7 +2164,8 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
 
     /** intercepts touches on Qs panel area. */
     boolean onIntercept(MotionEvent event) {
-        if (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE) {
+        if ((isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE)
+                || isMistSeparateNotificationShade()) {
             return false;
         }
         int pointerIndex = event.findPointerIndex(mTrackingPointer);
@@ -2814,7 +2822,9 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         @Override
         public void onOverscrollTopChanged(float amount, boolean isRubberbanded) {
             // When in split shade, overscroll shouldn't carry through to QS
-            if (mSplitShadeEnabled || (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE)) {
+            if (mSplitShadeEnabled
+                    || (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE)
+                    || isMistSeparateNotificationShade()) {
                 return;
             }
             cancelExpansionAnimation();
@@ -2832,7 +2842,9 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         @Override
         public void flingTopOverscroll(float velocity, boolean open) {
             // in split shade mode we want to expand/collapse QS only when touch happens within QS
-            if (mSplitShadeEnabled || (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE)) {
+            if (mSplitShadeEnabled
+                    || (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE)
+                    || isMistSeparateNotificationShade()) {
                 return;
             }
             mLastOverscroll = 0f;
