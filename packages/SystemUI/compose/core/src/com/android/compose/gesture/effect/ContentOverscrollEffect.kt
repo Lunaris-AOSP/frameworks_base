@@ -16,12 +16,20 @@
 
 package com.android.compose.gesture.effect
 
-import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationConstants
 import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.AnimationState
 import androidx.compose.animation.core.SpringSpec
+import androidx.compose.animation.core.animateTo
+import androidx.compose.animation.core.copy
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.OverscrollEffect
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.unit.Velocity
@@ -31,11 +39,14 @@ import com.android.compose.ui.util.VerticalSpaceVectorConverter
 import kotlin.math.abs
 import kotlin.math.sign
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 
 /**
- * An [OverscrollEffect] that uses an [Animatable] to track and animate overscroll values along a
+ * An [OverscrollEffect] that uses an [AnimationState] to track and animate overscroll values along a
  * specific [Orientation].
  */
 interface ContentOverscrollEffect : OverscrollEffect {
@@ -44,23 +55,20 @@ interface ContentOverscrollEffect : OverscrollEffect {
 }
 
 open class BaseContentOverscrollEffect(
-    private val animationScope: CoroutineScope,
+    @Suppress("UNUSED_PARAMETER") animationScope: CoroutineScope,
     private val animationSpec: AnimationSpec<Float>,
 ) : ContentOverscrollEffect {
-    /** The [Animatable] that holds the current overscroll value. */
-    private val animatable = Animatable(initialValue = 0f)
+    /** Allows the bounce to continue from the last fling frame without a one-frame pause. */
+    private var animationState by mutableStateOf(AnimationState(initialValue = 0f))
+    private var flingJob: Job? = null
     private var lastConverter: SpaceVectorConverter? = null
 
     override val overscrollDistance: Float
-        get() = animatable.value
+        get() = animationState.value
 
-    override val isInProgress: Boolean
-        /**
-         * We need both checks, because [overscrollDistance] can be
-         * - zero while it is already being animated, if the animation starts from 0
-         * - greater than zero without an animation, if the content is still being dragged
-         */
-        get() = overscrollDistance != 0f || animatable.isRunning
+    override val isInProgress: Boolean by derivedStateOf {
+        overscrollDistance != 0f || animationState.isRunning
+    }
 
     override fun applyToScroll(
         delta: Offset,
@@ -68,6 +76,13 @@ open class BaseContentOverscrollEffect(
         performScroll: (Offset) -> Offset,
     ): Offset {
         val converter = converterOrNull(delta.x, delta.y) ?: return performScroll(delta)
+        if (source == NestedScrollSource.UserInput) {
+            flingJob?.cancel()
+            flingJob = null
+            if (animationState.isRunning) {
+                animationState = AnimationState(overscrollDistance)
+            }
+        }
         return converter.applyToScroll(delta, source, performScroll)
     }
 
@@ -81,7 +96,7 @@ open class BaseContentOverscrollEffect(
         // If we're currently overscrolled, and the user scrolls in the opposite direction, we need
         // to "relax" the overscroll by consuming some of the scroll delta to bring it back towards
         // zero.
-        val currentOffset = animatable.value
+        val currentOffset = overscrollDistance
         val sameDirection = deltaForAxis.sign == currentOffset.sign
         val consumedByPreScroll =
             if (abs(currentOffset) > 0f && !sameDirection) {
@@ -91,12 +106,12 @@ open class BaseContentOverscrollEffect(
                     if (sign(prevOverscrollValue) != sign(newOverscrollValue)) {
                         // Enough to completely cancel the overscroll. We snap the overscroll value
                         // back to zero and consume the corresponding amount of the scroll delta.
-                        animationScope.launch { animatable.snapTo(0f) }
+                        animationState = AnimationState(0f)
                         -prevOverscrollValue
                     } else {
                         // Not enough to cancel the overscroll. We update the overscroll value
                         // accordingly and consume the entire scroll delta.
-                        animationScope.launch { animatable.snapTo(newOverscrollValue) }
+                        animationState = AnimationState(newOverscrollValue)
                         deltaForAxis
                     }
                 } else {
@@ -115,7 +130,7 @@ open class BaseContentOverscrollEffect(
         val overscroll = overscrollDelta.toFloat()
         val consumedByPostScroll =
             if (abs(overscroll) > 0f && source == NestedScrollSource.UserInput) {
-                animationScope.launch { animatable.snapTo(currentOffset + overscroll) }
+                animationState = AnimationState(overscrollDistance + overscroll)
                 overscroll.toOffset()
             } else {
                 Offset.Zero
@@ -128,7 +143,11 @@ open class BaseContentOverscrollEffect(
         velocity: Velocity,
         performFling: suspend (Velocity) -> Velocity,
     ) {
-        val converter = converterOrNull(velocity.x, velocity.y) ?: return
+        val converter = converterOrNull(velocity.x, velocity.y)
+        if (converter == null) {
+            performFling(velocity)
+            return
+        }
         converter.applyToFling(velocity, performFling)
     }
 
@@ -136,18 +155,36 @@ open class BaseContentOverscrollEffect(
         velocity: Velocity,
         performFling: suspend (Velocity) -> Velocity,
     ) {
-        // We launch a coroutine to ensure the fling animation starts after any pending [snapTo]
-        // animations have finished.
-        // This guarantees a smooth, sequential execution of animations on the overscroll value.
         coroutineScope {
-            launch {
-                val consumed = performFling(velocity)
+            flingJob?.cancel()
+            val currentJob = coroutineContext.job
+            flingJob = currentJob
+            try {
+                var lastFrameTime = AnimationConstants.UnspecifiedTime
+                val frameTimeJob = launch {
+                    while (true) withFrameNanos { lastFrameTime = it }
+                }
+                val consumed = try {
+                    performFling(velocity)
+                } finally {
+                    frameTimeJob.cancel()
+                }
+                ensureActive()
                 val remaining = velocity - consumed
-                animatable.animateTo(
+                val bounceState = animationState.copy(
+                    lastFrameTimeNanos = lastFrameTime,
+                    velocity = remaining.toFloat(),
+                )
+                animationState = bounceState
+                bounceState.animateTo(
                     0f,
                     animationSpec.withVisibilityThreshold(1f),
-                    remaining.toFloat(),
+                    sequentialAnimation = lastFrameTime != AnimationConstants.UnspecifiedTime,
                 )
+            } finally {
+                if (flingJob === currentJob) {
+                    flingJob = null
+                }
             }
         }
     }

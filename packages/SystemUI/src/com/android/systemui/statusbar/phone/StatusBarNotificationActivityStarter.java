@@ -398,14 +398,12 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
         String notificationKey = entry.getKey();
         mLogger.logHandleClickAfterPanelCollapsed(entry);
 
-        try {
-            // The intent we are sending is for the application, which
-            // won't have permission to immediately start an activity after
-            // the user switches to home.  We know it is safe to do at this
-            // point, so make sure new activity switches are now allowed.
-            ActivityManager.getService().resumeAppSwitches();
-        } catch (RemoteException e) {
-        }
+        mUiBgExecutor.execute(() -> {
+            try {
+                ActivityManager.getService().resumeAppSwitches();
+            } catch (RemoteException ignored) {
+            }
+        });
         // If the notification should be cancelled on click and we are launching a work activity in
         // a locked profile with separate challenge, we defer the activity action and cancelling of
         // the notification until work challenge is unlocked. If the notification shouldn't be
@@ -454,11 +452,19 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
             } else {
                 expandBubbleStackOnMainThread(entry);
             }
+            finishNotificationClick(entry, isActivityIntent, canBubble);
         } else {
-            startNotificationIntent(intent, fillInIntent, entry, row, animate, isActivityIntent);
+            startNotificationIntent(intent, fillInIntent, entry, row, animate, isActivityIntent,
+                    () -> finishNotificationClick(entry, isActivityIntent, canBubble));
         }
+    }
+
+    private void finishNotificationClick(NotificationEntry entry, boolean isActivityIntent,
+            boolean canBubble) {
+        final String notificationKey = entry.getKey();
         if (isActivityIntent || canBubble) {
-            mAssistManagerLazy.get().hideAssist();
+            final AssistManager assistManager = mAssistManagerLazy.get();
+            mUiBgExecutor.execute(assistManager::hideAssist);
         }
 
         final NotificationVisibility nv = mVisibilityProvider.obtain(entry, true);
@@ -480,7 +486,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
         }
 
         // inform NMS that the notification was clicked
-        mClickNotifier.onNotificationClick(notificationKey, nv);
+        mUiBgExecutor.execute(() -> mClickNotifier.onNotificationClick(notificationKey, nv));
 
         mIsCollapsingToShowActivityOverLockscreen = false;
     }
@@ -589,71 +595,73 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
             NotificationEntry entry,
             ExpandableNotificationRow row,
             boolean animate,
-            boolean isActivityIntent) {
+            boolean isActivityIntent,
+            Runnable onIntentSent) {
         mLogger.logStartNotificationIntent(entry);
         final int displayId = mContextInteractor.getContext().getDisplayId();
-        try {
-            ActivityTransitionAnimator.Controller animationController =
-                    new StatusBarTransitionAnimatorController(
-                            mNotificationAnimationProvider.getAnimatorController(row, null),
-                            mShadeAnimationInteractor,
-                            mShadeController,
-                            mNotificationShadeWindowController,
-                            mCommandQueue,
-                            displayId,
-                            isActivityIntent);
-
-            if (ActivityTransitionAnimator.Companion.shellMigrationEnabled()) {
-                ActivityTransitionAnimator.Controller controllerWithCookie =
-                        addCookieIfNeeded(animationController);
-                ActivityTransitionAnimator.TransitionCookie cookie =
-                        controllerWithCookie != null
-                                ? controllerWithCookie.getTransitionCookie() : null;
-
-                mActivityTransitionAnimator.startPendingIntentWithAnimation(
-                        controllerWithCookie,
-                        mApplicationScope,
-                        animate,
-                        (transition) -> {
-                            long eventTime = row.getAndResetLastActionUpTime();
-                            Bundle options = eventTime > 0
-                                    ? createActivityOptions(
-                                    displayId,
-                                    transition,
-                                    cookie,
-                                    mKeyguardStateController.isShowing(),
-                                    eventTime)
-                                    : createActivityOptions(displayId, transition, cookie);
-                            int result = intent.sendAndReturnResult(mContext, 0, fillInIntent, null,
-                                    null, null, options);
-                            mLogger.logSendPendingIntent(entry, intent, result);
-                            return result;
-                        });
-            } else {
-                mActivityTransitionAnimator.startPendingIntentWithAnimation(
-                        animationController,
-                        animate,
-                        intent.getCreatorPackage(),
-                        (adapter) -> {
-                            long eventTime = row.getAndResetLastActionUpTime();
-                            Bundle options = eventTime > 0
-                                    ? getActivityOptions(
-                                    displayId,
-                                    adapter,
-                                    mKeyguardStateController.isShowing(),
-                                    eventTime)
-                                    : getActivityOptions(displayId, adapter);
-                            int result = intent.sendAndReturnResult(mContext, 0, fillInIntent, null,
-                                    null, null, options);
-                            mLogger.logSendPendingIntent(entry, intent, result);
-                            return result;
-                        });
+        final long eventTime = row.getAndResetLastActionUpTime();
+        final boolean keyguardShowing = mKeyguardStateController.isShowing();
+        final boolean shellMigration = ActivityTransitionAnimator.Companion.shellMigrationEnabled();
+        final ActivityTransitionAnimator.Controller animationController =
+                new StatusBarTransitionAnimatorController(
+                        mNotificationAnimationProvider.getAnimatorController(row, null),
+                        mShadeAnimationInteractor,
+                        mShadeController,
+                        mNotificationShadeWindowController,
+                        mCommandQueue,
+                        displayId,
+                        isActivityIntent);
+        final ActivityTransitionAnimator.Controller controllerWithCookie =
+                shellMigration ? addCookieIfNeeded(animationController) : animationController;
+        mUiBgExecutor.execute(() -> {
+            try {
+                if (shellMigration) {
+                    ActivityTransitionAnimator.TransitionCookie cookie =
+                            controllerWithCookie != null
+                                    ? controllerWithCookie.getTransitionCookie() : null;
+                    mActivityTransitionAnimator.startPendingIntentWithAnimation(
+                            controllerWithCookie,
+                            mApplicationScope,
+                            animate,
+                            (transition) -> {
+                                Bundle options = eventTime > 0
+                                        ? createActivityOptions(displayId, transition, cookie,
+                                                keyguardShowing, eventTime)
+                                        : createActivityOptions(displayId, transition, cookie);
+                                return sendPendingIntent(intent, fillInIntent, options, entry);
+                            });
+                } else {
+                    mActivityTransitionAnimator.startPendingIntentWithAnimation(
+                            animationController,
+                            animate,
+                            intent.getCreatorPackage(),
+                            (adapter) -> {
+                                Bundle options = eventTime > 0
+                                        ? getActivityOptions(displayId, adapter,
+                                                keyguardShowing, eventTime)
+                                        : getActivityOptions(displayId, adapter);
+                                return sendPendingIntent(intent, fillInIntent, options, entry);
+                            });
+                }
+            } catch (PendingIntent.CanceledException e) {
+                mLogger.logSendingIntentFailed(e);
+                mMainThreadHandler.post(() -> animationController.onIntentStarted(false));
+            } finally {
+                mMainThreadHandler.post(onIntentSent);
             }
-        } catch (PendingIntent.CanceledException e) {
-            // the stack trace isn't very helpful here.
-            // Just log the exception message.
+        });
+    }
+
+    private int sendPendingIntent(PendingIntent intent, Intent fillInIntent, Bundle options,
+            NotificationEntry entry) {
+        try {
+            int result = intent.sendAndReturnResult(mContext, 0, fillInIntent,
+                    null, null, null, options);
+            mLogger.logSendPendingIntent(entry, intent, result);
+            return result;
+        } catch (PendingIntent.CanceledException | SecurityException e) {
             mLogger.logSendingIntentFailed(e);
-            // TODO: Dismiss Keyguard.
+            return ActivityManager.START_CANCELED;
         }
     }
 
