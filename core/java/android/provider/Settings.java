@@ -7605,6 +7605,13 @@ public final class Settings {
         public static final String QS_TILE_HAPTIC = "qs_tile_haptic";
 
         /**
+         * Whether to vibrate when opening Quick Settings or the notification shade.
+         * 0 = disabled (default), 1 = enabled.
+         * @hide
+         */
+        public static final String QS_FLING_HAPTIC = "qs_fling_haptic";
+
+        /**
          * @hide
          */
         public static final String QS_TILES_COLUMNS_LANDSCAPE = "qs_tiles_columns_landscape";

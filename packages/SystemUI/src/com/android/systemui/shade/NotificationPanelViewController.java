@@ -275,6 +275,7 @@ public final class NotificationPanelViewController implements
     private static final String COUNTER_PANEL_OPEN_PEEK = "panel_open_peek";
     private static final String DOUBLE_TAP_SLEEP_GESTURE =
             "lineagesystem:" + LineageSettings.System.DOUBLE_TAP_SLEEP_GESTURE;
+    private static final String QS_FLING_HAPTIC = "system:" + Settings.System.QS_FLING_HAPTIC;
      private static final String DOUBLE_TAP_SLEEP_LOCKSCREEN =
              "system:" + Settings.System.DOUBLE_TAP_SLEEP_LOCKSCREEN;
      private static final String STATUS_BAR_CUSTOM_HEADER =
@@ -344,7 +345,7 @@ public final class NotificationPanelViewController implements
     private final LockscreenShadeTransitionController mLockscreenShadeTransitionController;
     private final TapAgainViewController mTapAgainViewController;
     private final ShadeHeaderController mShadeHeaderController;
-    private final boolean mVibrateOnOpening;
+    private boolean mVibrateOnOpening;
     private final VelocityTracker mVelocityTracker = VelocityTracker.obtain();
     private final FlingAnimationUtils mFlingAnimationUtilsClosing;
     private final FlingAnimationUtils mFlingAnimationUtilsDismissing;
@@ -784,7 +785,6 @@ public final class NotificationPanelViewController implements
                 R.bool.config_enableNotificationShadeDrag);
         mVibratorHelper = vibratorHelper;
         mMSDLPlayer = msdlPlayer;
-        mVibrateOnOpening = mResources.getBoolean(R.bool.config_vibrateOnIconAnimation);
         mShadeTouchableRegionManager = shadeTouchableRegionManager;
         mSystemClock = systemClock;
         mKeyguardMediaController = keyguardMediaController;
@@ -3878,6 +3878,7 @@ public final class NotificationPanelViewController implements
             mStatusBarHeaderMachine.updateEnablement();
 
             mTunerService.addTunable(this, DOUBLE_TAP_SLEEP_GESTURE);
+            mTunerService.addTunable(this, QS_FLING_HAPTIC);
             mTunerService.addTunable(this, DOUBLE_TAP_SLEEP_LOCKSCREEN);
             mTunerService.addTunable(this, STATUS_BAR_CUSTOM_HEADER);
             mTunerService.addTunable(this, STATUS_BAR_CUSTOM_HEADER_HEIGHT);
@@ -3912,6 +3913,9 @@ public final class NotificationPanelViewController implements
         @Override
         public void onTuningChanged(String key, String newValue) {
             switch (key) {
+                case QS_FLING_HAPTIC:
+                    mVibrateOnOpening = TunerService.parseIntegerSwitch(newValue, false);
+                    break;
                 case DOUBLE_TAP_SLEEP_GESTURE:
                     mDoubleTapToSleepEnabled =
                             TunerService.parseIntegerSwitch(newValue,

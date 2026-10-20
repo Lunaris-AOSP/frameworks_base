@@ -34,6 +34,7 @@ import android.os.SystemClock;
 import android.os.VibrationAttributes;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.provider.Settings;
 import android.util.Log;
 import android.util.Slog;
 import android.view.HapticFeedbackConstants;
@@ -109,7 +110,6 @@ public class CentralSurfacesCommandQueueCallbacks implements CommandQueue.Callba
     private final Optional<Vibrator> mVibratorOptional;
     private final int mDisplayId;
     private final UserTracker mUserTracker;
-    private final boolean mVibrateOnOpening;
     private final ActivityStarter mActivityStarter;
     private final Lazy<CameraLauncher> mCameraLauncherLazy;
     private final QuickSettingsController mQsController;
@@ -190,7 +190,6 @@ public class CentralSurfacesCommandQueueCallbacks implements CommandQueue.Callba
         mUserTracker = userTracker;
         mQSHost = qsHost;
         mKeyguardInteractor = keyguardInteractor;
-        mVibrateOnOpening = resources.getBoolean(R.bool.config_vibrateOnIconAnimation);
         mActivityStarter = activityStarter;
         mEmergencyGestureIntentFactory = emergencyGestureIntentFactory;
         mWalletController = walletController;
@@ -336,7 +335,8 @@ public class CentralSurfacesCommandQueueCallbacks implements CommandQueue.Callba
         } else if (KeyEvent.KEYCODE_SYSTEM_NAVIGATION_DOWN == key.getKeyCode()) {
             mMetricsLogger.action(MetricsEvent.ACTION_SYSTEM_NAVIGATION_KEY_DOWN);
             if (mPanelExpansionInteractor.isFullyCollapsed()) {
-                if (mVibrateOnOpening) {
+                if (Settings.System.getIntForUser(mContext.getContentResolver(),
+                        Settings.System.QS_FLING_HAPTIC, 0, mUserTracker.getUserId()) != 0) {
                     vibrateOnNavigationKeyDown();
                 }
                 mShadeController.animateExpandShade();
