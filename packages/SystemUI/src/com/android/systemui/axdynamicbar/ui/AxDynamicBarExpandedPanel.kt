@@ -168,14 +168,11 @@ constructor(
         view.setViewTreeOnBackPressedDispatcherOwner(lifecycleOwner)
         panelLifecycleOwner = lifecycleOwner
 
-        val isCurrentlyExpanded = viewModel.isExpanded.value
         val flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
             WindowManager.LayoutParams.FLAG_LAYOUT_INSET_DECOR or
             WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-            WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
-            if (isCurrentlyExpanded) 0
-            else WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
 
         val params =
             WindowManager.LayoutParams(
@@ -187,6 +184,7 @@ constructor(
             )
         params.gravity = Gravity.TOP or Gravity.FILL_HORIZONTAL
         params.title = "AxDynamicBarExpanded"
+        updateFocusFlags(params, viewModel.isExpanded.value)
 
         windowManager.addView(view, params)
         overlayView = view
@@ -218,12 +216,11 @@ constructor(
         shrinkRunnable = null
         val view = overlayView ?: return@ensureMainThread
         val params = view.layoutParams as? WindowManager.LayoutParams ?: return@ensureMainThread
+        updateFocusFlags(params, expanded)
         if (expanded) {
-            params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
             params.height = WindowManager.LayoutParams.WRAP_CONTENT
             windowManager.updateViewLayout(view, params)
         } else {
-            params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
             windowManager.updateViewLayout(view, params)
             val runnable = Runnable {
                 val v = overlayView ?: return@Runnable
@@ -239,12 +236,24 @@ constructor(
     private fun setOverlayFocusable(focusable: Boolean) = ensureMainThread {
         val view = overlayView ?: return@ensureMainThread
         val params = view.layoutParams as? WindowManager.LayoutParams ?: return@ensureMainThread
-        if (focusable) {
-            params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
-        } else {
-            params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-        }
+        updateFocusFlags(params, focusable, needsInputMethod = focusable)
         windowManager.updateViewLayout(view, params)
+    }
+
+    private fun updateFocusFlags(
+        params: WindowManager.LayoutParams,
+        focusable: Boolean,
+        needsInputMethod: Boolean = false,
+    ) {
+        // Only a notification reply may take IME focus; expansion must preserve the app's keyboard.
+        val focusFlags = when {
+            needsInputMethod -> 0
+            focusable -> WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
+            else -> WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        }
+        val focusMask = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
+        params.flags = (params.flags and focusMask.inv()) or focusFlags
     }
 }
 

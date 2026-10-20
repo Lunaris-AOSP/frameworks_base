@@ -17,6 +17,7 @@
 package com.android.systemui.statusbar.featurepods.popups.ui.compose
 
 import android.view.ViewTreeObserver
+import android.view.WindowManager
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SizeTransform
@@ -100,7 +101,10 @@ fun StatusBarPopup(
         alignment = Alignment.TopCenter,
         properties =
             PopupProperties(
-                focusable = true,
+                // Keep Back dismissal without taking IME focus from the app below the popup.
+                flags =
+                    WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
+                        WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM,
                 dismissOnBackPress = true,
                 dismissOnClickOutside = true,
             ),
