@@ -35,27 +35,22 @@ object MistQsMode {
     fun initialize(context: Context) {
         val userId = UserHandle.USER_CURRENT
         isEnabled = readEnabled(context, userId)
-        syncClockStyle(context, userId)
+        initializeClockStyle(context, userId)
     }
 
     @JvmStatic
     fun readEnabled(context: Context, userId: Int): Boolean =
         Settings.System.getIntForUser(context.contentResolver, SETTING, 0, userId) == 1
 
-    private fun syncClockStyle(context: Context, userId: Int) {
-        val desiredStyle = if (isEnabled) OOS_CLOCK_STYLE else STOCK_CLOCK_STYLE
-        val currentStyle =
-            Settings.System.getIntForUser(
-                context.contentResolver,
-                QS_HEADER_CLOCK_STYLE,
-                STOCK_CLOCK_STYLE,
-                userId,
-            )
-        if (currentStyle != desiredStyle) {
+    private fun initializeClockStyle(context: Context, userId: Int) {
+        val savedStyle =
+            Settings.System.getStringForUser(context.contentResolver, QS_HEADER_CLOCK_STYLE, userId)
+        if (savedStyle == null) {
+            val defaultStyle = if (isEnabled) OOS_CLOCK_STYLE else STOCK_CLOCK_STYLE
             Settings.System.putIntForUser(
                 context.contentResolver,
                 QS_HEADER_CLOCK_STYLE,
-                desiredStyle,
+                defaultStyle,
                 userId,
             )
         }
