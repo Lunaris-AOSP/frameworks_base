@@ -33,6 +33,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -66,7 +67,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -137,9 +137,6 @@ import com.android.systemui.volume.ui.compose.slider.SliderIcon
 import java.text.NumberFormat
 import kotlin.math.round
 import kotlin.math.roundToInt
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 internal val LocalShowQsSliderPercentage = staticCompositionLocalOf { false }
@@ -1028,13 +1025,14 @@ private fun axVolumeHapticsViewModel(
     interactionSource: MutableInteractionSource,
     factory: SliderHapticsViewModel.Factory?,
 ): SliderHapticsViewModel? {
+    val isDragging by interactionSource.collectIsDraggedAsState()
     return factory?.let {
         val configs =
             VolumeHapticsConfigsProvider.discreteConfigs(
                 1f / (state.valueRange.endInclusive - state.valueRange.start),
                 state.hapticFilter,
             )
-        rememberViewModel(traceName = "AxVolumeSliderHaptics") {
+        rememberViewModel(traceName = "AxVolumeSliderHaptics", key = state.valueRange) {
                 it.create(
                     interactionSource,
                     state.valueRange,
@@ -1044,16 +1042,16 @@ private fun axVolumeHapticsViewModel(
                 )
             }
             .also { hapticsViewModel ->
-                var lastStep by remember { mutableFloatStateOf(round(value)) }
-                LaunchedEffect(value) {
-                    snapshotFlow { value }
-                        .map { round(it) }
-                        .filter { it != lastStep }
-                        .distinctUntilChanged()
-                        .collect { step ->
-                            lastStep = step
+                var lastStep by remember(hapticsViewModel) { mutableFloatStateOf(round(value)) }
+                LaunchedEffect(value, isDragging) {
+                    val step = round(value)
+                    if (step != lastStep) {
+                        lastStep = step
+                        if (isDragging) {
                             hapticsViewModel.onValueChange(step)
                         }
+                    }
+                    if (!isDragging) hapticsViewModel.onValueChangeEnded()
                 }
             }
     }
