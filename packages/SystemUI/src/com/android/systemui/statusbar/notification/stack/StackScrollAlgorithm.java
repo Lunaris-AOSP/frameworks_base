@@ -755,6 +755,9 @@ public class StackScrollAlgorithm {
         float stackTop = SceneContainerFlag.isEnabled()
                 ? ambientState.getStackTop()
                 : ambientState.getStackY();
+        if (mHostView instanceof NotificationStackScrollLayout stack) {
+            stackTop -= stack.getMotoCompactPreviewTopOffset();
+        }
         float viewEnd = stackTop + viewState.getYTranslation() + viewState.height;
         maybeUpdateHeadsUpIsVisible(viewState, ambientState.isShadeExpanded(),
                 view.mustStayOnScreen(),
@@ -813,7 +816,9 @@ public class StackScrollAlgorithm {
                     //  to use the innerHeight which doesn't update continuously, otherwise we show
                     //  more notifications than we should during this special transitional states.
                     boolean bypassPulseNotExpanding = ambientState.isBypassEnabled()
-                            && ambientState.isOnKeyguard() && !ambientState.isPulseExpanding();
+                            && ambientState.isOnKeyguard() && !ambientState.isPulseExpanding()
+                            && !(mHostView instanceof NotificationStackScrollLayout stack
+                                    && stack.isMotoCompactPreviewVisible());
                     final float stackBottom = !ambientState.isShadeExpanded()
                             || ambientState.getDozeAmount() == 1f
                             || bypassPulseNotExpanding

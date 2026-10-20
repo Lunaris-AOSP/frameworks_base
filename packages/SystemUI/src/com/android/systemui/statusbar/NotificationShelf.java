@@ -286,6 +286,9 @@ public class NotificationShelf extends ActivatableNotificationView {
                     icon.setClickable(false);
                     icon.setFocusable(false);
                     icon.setSelected(false);
+                    if (icon instanceof StatusBarIconView statusIcon) {
+                        statusIcon.setIncreasedSize(false);
+                    }
                 }
             }
             updateOutline();
@@ -299,7 +302,7 @@ public class NotificationShelf extends ActivatableNotificationView {
     public void onMotoIconClicked(StatusBarIconView icon) {
         if (mMotoCompactDesign && mInteractive
                 && icon.getVisibleState() == StatusBarIconView.STATE_ICON) {
-            mHostLayout.toggleMotoCompactApp(icon.getNotification());
+            mHostLayout.toggleMotoCompactApp(icon);
         }
     }
 
@@ -363,6 +366,7 @@ public class NotificationShelf extends ActivatableNotificationView {
             state.setYTranslation(0f);
             state.setScaleX(1f);
             state.setScaleY(1f);
+            icon.setIncreasedSize(true);
             icon.setSelected(mHostLayout.isMotoCompactAppSelected(notification));
             hasSelectedApp |= icon.isSelected();
             // Expose the app name, not potentially redacted notification text, to accessibility.
@@ -550,9 +554,10 @@ public class NotificationShelf extends ActivatableNotificationView {
             viewState.hasItemsInStableShelf = false;
         }
 
-        final float stackBottom = SceneContainerFlag.isEnabled()
+        final float stackBottom = (SceneContainerFlag.isEnabled()
                 ? ambientState.getStackTop() + ambientState.getInterpolatedStackHeight()
-                : ambientState.getStackY() + ambientState.getInterpolatedStackHeight();
+                : ambientState.getStackY() + ambientState.getInterpolatedStackHeight())
+                - mHostLayout.getMotoCompactPreviewTopOffset();
 
         if (viewState.hidden) {
             // if the shelf is hidden, position it at the end of the stack (plus the clip
