@@ -50,6 +50,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 
 @OptIn(ExperimentalCoroutinesApi::class)
 sealed class BatteryViewModel(
@@ -158,7 +159,7 @@ sealed class BatteryViewModel(
             interactor.batteryAttributionType,
             interactor.isCritical,
             interactor.tintStatusBarIconsWithAccent,
-            interactor.themeChanged,
+            interactor.themeChanged.onStart { emit(Unit) },
             interactor.batteryIconStyle,
         ) { attr, isCritical, useAccentColor, _, iconStyle ->
             val isTextStyle = iconStyle == BatteryRepository.ICON_STYLE_TEXT
