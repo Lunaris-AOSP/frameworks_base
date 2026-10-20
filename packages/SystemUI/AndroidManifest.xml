@@ -1013,6 +1013,18 @@
             </intent-filter>
         </activity>
 
+        <provider android:name=".qs.panels.data.repository.LunarisQsPhotoProvider"
+                  android:authorities="com.android.systemui.qs.photo"
+                  android:exported="false"
+                  android:directBootAware="false"
+                  android:grantUriPermissions="false" />
+
+        <activity android:name=".qs.panels.ui.edit.LunarisQsPhotoActivity"
+                  android:exported="false"
+                  android:directBootAware="false"
+                  android:excludeFromRecents="true"
+                  android:theme="@style/Theme.SystemUI" />
+
         <activity android:name=".clipboardoverlay.EditTextActivity"
                   android:theme="@style/EditTextActivity"
                   android:exported="false"

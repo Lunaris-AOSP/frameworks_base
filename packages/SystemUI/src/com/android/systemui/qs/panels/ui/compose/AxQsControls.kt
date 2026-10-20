@@ -194,6 +194,7 @@ fun AxQsControlPreview(
     modifier: Modifier = Modifier,
 ) {
     when (control) {
+        AxQsControl.PHOTO -> LunarisQsPhotoCard(modifier = modifier.fillMaxSize())
         AxQsControl.FLASHLIGHT ->
             LunarisFlashlightSlider(
                 vertical = span.columns == 1,

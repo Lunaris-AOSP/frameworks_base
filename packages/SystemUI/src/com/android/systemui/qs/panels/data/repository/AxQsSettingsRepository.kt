@@ -30,6 +30,7 @@ import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.AxQsTileStacks
 import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsGradientSettings
+import com.android.systemui.qs.panels.shared.model.LunarisQsPhotoFrame
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderKey
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsSpacing
@@ -69,6 +70,30 @@ constructor(
     private val spansMutex = Mutex()
     val defaultControlSpans: Map<String, AxQsSpan> = parseSpans(DEFAULT_SPANS_STRING)
     val defaultControls: List<String> = DEFAULT_CONTROLS_LIST
+
+    val photoFrames: StateFlow<Map<AxQsLayout, LunarisQsPhotoFrame>> =
+        userRepository.selectedUserInfo
+            .flatMapLatest { user ->
+                secureSettings
+                    .observerFlow(
+                        user.id,
+                        *AxQsLayout.entries.map(LunarisQsPhotoFrame::settingKey).toTypedArray(),
+                    )
+                    .onStart { emit(Unit) }
+                    .map {
+                        AxQsLayout.entries.associateWith { layout ->
+                            LunarisQsPhotoFrame.fromJson(
+                                secureSettings.getStringForUser(
+                                    LunarisQsPhotoFrame.settingKey(layout),
+                                    user.id,
+                                ),
+                                user.id,
+                            )
+                        }
+                    }
+            }
+            .flowOn(backgroundDispatcher)
+            .stateIn(applicationScope, SharingStarted.Eagerly, emptyMap())
 
     val qsOrder: StateFlow<List<String>?> = orderSetting(QS_ORDER)
     val qqsOrder: StateFlow<List<String>?> = orderSetting(QQS_ORDER)

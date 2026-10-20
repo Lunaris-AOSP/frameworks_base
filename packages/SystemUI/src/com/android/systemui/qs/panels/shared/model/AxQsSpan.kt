@@ -117,11 +117,19 @@ enum class AxQsControl(
         defaultSpan = AxQsSpan.MediaDefault,
         minSpan = AxQsSpan.MediaMin,
         maxSpan = AxQsSpan(4, 2),
+    ),
+    PHOTO(
+        id = "control:photo",
+        defaultSpan = AxQsSpan(2, 2),
+        minSpan = AxQsSpan.TileDefault,
+        maxSpan = AxQsSpan(2, 2),
     );
 
     fun spans(columns: Int): AxQsControlSpans {
         val resolvedMax =
-            if (this == MEDIA || supportsOrientation) {
+            if (this == PHOTO) {
+                maxSpan.copy(columns = columns.coerceIn(1, maxSpan.columns))
+            } else if (this == MEDIA || isSlider || this == RINGER) {
                 maxSpan.copy(columns = columns.coerceIn(minSpan.columns, AxQsSpan.MAX_COLUMNS))
             } else {
                 maxSpan
@@ -136,6 +144,7 @@ enum class AxQsControl(
     fun coerceSpan(span: AxQsSpan, columns: Int): AxQsSpan {
         val spans = spans(columns)
         return when {
+            this == PHOTO -> span.coerceIn(spans.min, spans.max)
             supportsOrientation && span.columns == 1 ->
                 AxQsSpan(1, span.rows.coerceIn(minOrientationLength, spans.max.rows))
             supportsOrientation ->
@@ -145,6 +154,10 @@ enum class AxQsControl(
     }
 
     fun nextSpan(span: AxQsSpan, columns: Int): AxQsSpan {
+        if (this == PHOTO) {
+            val sizes = photoSizes(columns)
+            return sizes[(sizes.indexOf(span) + 1) % sizes.size]
+        }
         if (!supportsOrientation) return span
         val spans = spans(columns)
         if (this == RINGER && span == AxQsSpan.TileDefault) {
@@ -161,6 +174,12 @@ enum class AxQsControl(
     }
 
     fun resizeSpan(startSpan: AxQsSpan, columnDelta: Int, rowDelta: Int, columns: Int): AxQsSpan {
+        if (this == PHOTO) {
+            return AxQsSpan(
+                (startSpan.columns + columnDelta).coerceIn(1, spans(columns).max.columns),
+                (startSpan.rows + rowDelta).coerceIn(1, maxSpan.rows),
+            )
+        }
         if (!supportsOrientation) {
             return AxQsSpan(
                 columns =
@@ -189,6 +208,7 @@ enum class AxQsControl(
     }
 
     fun rotateSpan(span: AxQsSpan, columns: Int): AxQsSpan {
+        if (this == PHOTO) return coerceSpan(AxQsSpan(span.rows, span.columns), columns)
         if (!supportsOrientation) return span
         return if (span.columns == 1) {
             AxQsSpan(span.rows.coerceIn(minOrientationLength, columns), 1)
@@ -201,7 +221,12 @@ enum class AxQsControl(
         get() = this == BRIGHTNESS || this == VOLUME || this == FLASHLIGHT
 
     val supportsOrientation: Boolean
-        get() = isSlider || this == RINGER
+        get() = isSlider || this == RINGER || this == PHOTO
+
+    fun photoSizes(columns: Int): List<AxQsSpan> =
+        listOf(AxQsSpan(1, 1), AxQsSpan(2, 1), AxQsSpan(2, 2), AxQsSpan(1, 2)).filter {
+            it.columns <= columns.coerceAtLeast(1)
+        }
 
     private val minOrientationLength: Int
         get() = if (this == RINGER) 1 else 2

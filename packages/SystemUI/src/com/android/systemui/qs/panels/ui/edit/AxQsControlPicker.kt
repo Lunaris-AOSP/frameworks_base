@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -166,20 +167,14 @@ internal fun AxAvailableControls(
     val hasFlashlight = LocalLunarisFlashlightSliderViewModel.current.hasFlashlight
     val controls: List<AxAddItem> =
         listOf(
-                AxQsControl.AUTO_BRIGHTNESS to
-                    axString("ax_qs_auto_brightness", "Auto brightness"),
-                AxQsControl.VOLUME_MUTE to
-                    axString("ax_qs_volume_mute", "Mute volume"),
-                AxQsControl.RINGER to
-                    stringResource(R.string.volume_ringer_mode),
-                AxQsControl.BRIGHTNESS to
-                    stringResource(R.string.lunaris_qs_brightness_slider),
-                AxQsControl.VOLUME to
-                    stringResource(R.string.lunaris_qs_volume_slider),
-                AxQsControl.FLASHLIGHT to
-                    stringResource(R.string.lunaris_qs_flashlight_slider),
-                AxQsControl.MEDIA to
-                    axString("ax_qs_media", "Media player"),
+                AxQsControl.AUTO_BRIGHTNESS to axString("ax_qs_auto_brightness", "Auto brightness"),
+                AxQsControl.VOLUME_MUTE to axString("ax_qs_volume_mute", "Mute volume"),
+                AxQsControl.RINGER to stringResource(R.string.volume_ringer_mode),
+                AxQsControl.BRIGHTNESS to stringResource(R.string.lunaris_qs_brightness_slider),
+                AxQsControl.VOLUME to stringResource(R.string.lunaris_qs_volume_slider),
+                AxQsControl.FLASHLIGHT to stringResource(R.string.lunaris_qs_flashlight_slider),
+                AxQsControl.MEDIA to axString("ax_qs_media", "Media player"),
+                AxQsControl.PHOTO to stringResource(R.string.lunaris_qs_photo_title),
             )
             .filter { (control, _) ->
                 control != AxQsControl.FLASHLIGHT || hasFlashlight
@@ -217,6 +212,7 @@ internal fun AxAvailableControls(
                 sliderStyle = sliderStyle,
                 onSliderStyleChanged = onSliderStyleChanged,
                 onRotateSlider = onRotateSlider,
+                onControlSpanChanged = onSliderSpanChanged,
                 spacing = spacing,
                 controlPreview = controlPreview,
                 canAdd = canAdd,
@@ -233,6 +229,7 @@ internal fun AxAvailableControls(
                     sliderStyle = sliderStyle,
                     onSliderStyleChanged = onSliderStyleChanged,
                     onRotateSlider = onRotateSlider,
+                    onControlSpanChanged = onSliderSpanChanged,
                     spacing = spacing,
                     controlPreview = controlPreview,
                     canAdd = canAdd,
@@ -266,6 +263,7 @@ private fun AxAvailableItemGroup(
     sliderStyle: (AxQsControl) -> LunarisQsSliderStyle,
     onSliderStyleChanged: (AxQsControl, LunarisQsSliderStyle) -> Unit,
     onRotateSlider: (AxAddItem.Control) -> Unit,
+    onControlSpanChanged: (AxQsControl, AxQsSpan) -> Unit,
     spacing: Dp,
     controlPreview: @Composable (AxQsControl, AxQsSpan, LunarisQsSliderStyle) -> Unit,
     canAdd: (AxAddItem) -> Boolean,
@@ -324,6 +322,12 @@ private fun AxAvailableItemGroup(
                                 sliderStyle = sliderStyle,
                                 onSliderStyleChanged = onSliderStyleChanged,
                                 onRotateSlider = onRotateSlider,
+                                onResizePhoto = { photo ->
+                                    onControlSpanChanged(
+                                        photo.control,
+                                        photo.control.nextSpan(photo.span, columns),
+                                    )
+                                },
                                 controlPreview = controlPreview,
                                 canAdd = canAdd(item),
                                 onAdd = onAdd,
@@ -477,6 +481,7 @@ private fun AxAddItemCell(
     sliderStyle: (AxQsControl) -> LunarisQsSliderStyle,
     onSliderStyleChanged: (AxQsControl, LunarisQsSliderStyle) -> Unit,
     onRotateSlider: (AxAddItem.Control) -> Unit,
+    onResizePhoto: (AxAddItem.Control) -> Unit,
     controlPreview: @Composable (AxQsControl, AxQsSpan, LunarisQsSliderStyle) -> Unit,
     canAdd: Boolean,
     onAdd: (AxAddItem) -> Unit,
@@ -586,8 +591,10 @@ private fun AxAddItemCell(
             }
         }
         if (
-            item is AxAddItem.Control && item.control.supportsOrientation &&
-                span != AxQsSpan.TileDefault
+            item is AxAddItem.Control &&
+                item.control.supportsOrientation &&
+                span != AxQsSpan.TileDefault &&
+                (item.control != AxQsControl.PHOTO || span.columns != span.rows)
         ) {
             LunarisQsSliderOrientationButton(
                 vertical = span.columns == 1,
@@ -604,6 +611,11 @@ private fun AxAddItemCell(
             style = MaterialTheme.typography.labelMedium,
             modifier = Modifier.fillMaxWidth(),
         )
+        if (item is AxAddItem.Control && item.control == AxQsControl.PHOTO) {
+            TextButton(onClick = { onResizePhoto(item) }, enabled = !item.isAdded) {
+                Text(stringResource(R.string.lunaris_qs_photo_size, span.columns, span.rows))
+            }
+        }
         if (item is AxAddItem.Folder && item.limitReached) {
             Text(
                 stringResource(R.string.lunaris_qs_folder_limit),

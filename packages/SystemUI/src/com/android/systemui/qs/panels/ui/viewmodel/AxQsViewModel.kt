@@ -17,6 +17,8 @@
 package com.android.systemui.qs.panels.ui.viewmodel
 
 import android.content.Context
+import android.content.Intent
+import android.os.UserHandle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -30,6 +32,7 @@ import com.android.systemui.classifier.domain.interactor.runIfNotFalseTap
 import com.android.systemui.common.ui.domain.interactor.ConfigurationInteractor
 import com.android.systemui.lifecycle.ExclusiveActivatable
 import com.android.systemui.lifecycle.Hydrator
+import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.qs.QSHost
 import com.android.systemui.qs.panels.data.repository.AxQsSettingsRepository
 import com.android.systemui.qs.panels.data.repository.LunarisBluetoothArtworkRepository
@@ -44,10 +47,12 @@ import com.android.systemui.qs.panels.shared.model.AxQsPanelMode
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.AxQsTileStacks
 import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
+import com.android.systemui.qs.panels.shared.model.LunarisQsPhotoFrame
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderKey
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolder
 import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolderController
+import com.android.systemui.qs.panels.ui.edit.LunarisQsPhotoActivity
 import com.android.systemui.res.R
 import com.android.systemui.shade.ShadeDisplayAware
 import com.android.systemui.shade.domain.interactor.ShadeInteractor
@@ -55,6 +60,7 @@ import com.android.systemui.statusbar.phone.SystemUIDialog
 import com.android.systemui.statusbar.phone.SystemUIDialogFactory
 import com.android.systemui.statusbar.policy.ui.dialog.viewmodel.ModeTileViewModel
 import com.android.systemui.statusbar.policy.ui.dialog.viewmodel.ModesDialogViewModel
+import com.android.systemui.user.data.repository.UserRepository
 import com.android.systemui.utils.coroutines.flow.conflatedCallbackFlow
 import javax.inject.Inject
 import kotlinx.coroutines.channels.awaitClose
@@ -64,6 +70,8 @@ class AxQsViewModel
 @Inject
 constructor(
     private val repository: AxQsSettingsRepository,
+    private val activityStarter: ActivityStarter,
+    private val userRepository: UserRepository,
     val folderDialogFactory: SystemUIDialogFactory,
     private val dialogTransitionAnimator: DialogTransitionAnimator,
     configurationInteractor: ConfigurationInteractor,
@@ -87,6 +95,44 @@ constructor(
     }
 
     private val hydrator = Hydrator("AxQsViewModel")
+    val isShadeBeingDragged by
+        hydrator.hydratedStateOf(
+            traceName = "isShadeBeingDragged",
+            initialValue = true,
+            source = shadeInteractor.isUserInteracting,
+        )
+    private val photoUserId by
+        hydrator.hydratedStateOf(
+            traceName = "photoUserId",
+            initialValue = userRepository.getSelectedUserInfo().id,
+            source = userRepository.selectedUserInfo.map { it.id },
+        )
+    private val photoFrames by
+        hydrator.hydratedStateOf(
+            traceName = "photoFrames",
+            initialValue = emptyMap<AxQsLayout, LunarisQsPhotoFrame>(),
+            source = repository.photoFrames,
+        )
+
+    fun photoFrame(layout: AxQsLayout): LunarisQsPhotoFrame =
+        photoFrames[layout]?.takeIf { it.userId == photoUserId }
+            ?: LunarisQsPhotoFrame()
+
+    fun editPhoto(layout: AxQsLayout, widthDp: Float, heightDp: Float) {
+        val intent =
+            Intent(context, LunarisQsPhotoActivity::class.java)
+                .putExtra(LunarisQsPhotoActivity.EXTRA_LAYOUT, layout.name)
+                .putExtra(LunarisQsPhotoActivity.EXTRA_WIDTH, widthDp)
+                .putExtra(LunarisQsPhotoActivity.EXTRA_HEIGHT, heightDp)
+        activityStarter.startActivity(
+            intent,
+            true,
+            null,
+            false,
+            UserHandle.of(userRepository.getSelectedUserInfo().id),
+        )
+    }
+
     val carrierText: String by
         hydrator.hydratedStateOf(
             traceName = "carrierText",

@@ -126,6 +126,7 @@ import com.android.systemui.qs.panels.ui.compose.AxQuickSettingsLayoutDefaults
 import com.android.systemui.qs.panels.ui.compose.AxTileDefaults
 import com.android.systemui.qs.panels.ui.compose.LocalAxQsTileStyle
 import com.android.systemui.qs.panels.ui.compose.LocalTileScale
+import com.android.systemui.qs.panels.ui.compose.LunarisQsPhotoCard
 import com.android.systemui.qs.panels.ui.compose.LunarisQsSliderOrientationButton
 import com.android.systemui.qs.panels.ui.compose.axQsControlShape
 import com.android.systemui.qs.panels.ui.compose.axQsGridCellWidth
@@ -442,6 +443,19 @@ private fun AxEditableGrid(
     animateItemBounds: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val photoControlPreview:
+        @Composable
+        (AxQsControl, AxQsSpan, Int, LunarisQsSliderStyle) -> Unit =
+        { control, span, columns, style ->
+            if (control == AxQsControl.PHOTO) {
+                LunarisQsPhotoCard(
+                    photo = axQsViewModel.photoFrame(layout),
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                controlPreview(control, span, columns, style)
+            }
+        }
     val currentTiles = allTiles.filter(EditTileViewModel::isCurrent)
     val qqs = layout == AxQsLayout.QQS
     val splitShade = layout == AxQsLayout.SPLIT_SHADE
@@ -780,7 +794,11 @@ private fun AxEditableGrid(
                     onTransformSection = transformSection,
                     onEditStack = { editingStackId = it },
                     onEditFolder = { editingFolderId = it },
-                    controlPreview = controlPreview,
+                    onEditPhoto = { width, height ->
+                        axQsViewModel.editPhoto(layout, width, height)
+                    },
+                    photoCornerDp = axQsViewModel.photoFrame(layout).cornerDp,
+                    controlPreview = photoControlPreview,
                     sliderStyle = sliderStyle,
                     hapticFeedback = hapticFeedback,
                     modes = modes,
@@ -810,7 +828,11 @@ private fun AxEditableGrid(
                     onTransformSection = transformSection,
                     onEditStack = { editingStackId = it },
                     onEditFolder = { editingFolderId = it },
-                    controlPreview = controlPreview,
+                    onEditPhoto = { width, height ->
+                        axQsViewModel.editPhoto(layout, width, height)
+                    },
+                    photoCornerDp = axQsViewModel.photoFrame(layout).cornerDp,
+                    controlPreview = photoControlPreview,
                     sliderStyle = sliderStyle,
                     hapticFeedback = hapticFeedback,
                     modes = modes,
@@ -878,7 +900,7 @@ private fun AxEditableGrid(
                 pickerSliderSpans = pickerSliderSpans + (control to span)
             },
             controlPreview = { control, span, style ->
-                controlPreview(control, span, pickerControlColumns, style)
+                photoControlPreview(control, span, pickerControlColumns, style)
             },
             canAdd = canAddItem,
             onAdd = { addItem ->
@@ -922,6 +944,9 @@ private fun AxEditableGrid(
                     saveSpan(item.id, item.span)
                 }
                 saveOrders()
+                if (addItem is AxAddItem.Control && addItem.control == AxQsControl.PHOTO) {
+                    selectedId = item.id
+                }
             },
         )
     }
@@ -944,6 +969,8 @@ private fun AxEditableGridSection(
         (AxQsGridItem<AxEditGridValue>, AxQsGridSection) -> AxQsGridItem<AxEditGridValue>?,
     onEditStack: (String) -> Unit,
     onEditFolder: (String) -> Unit,
+    onEditPhoto: (Float, Float) -> Unit,
+    photoCornerDp: Int,
     controlPreview: @Composable (AxQsControl, AxQsSpan, Int, LunarisQsSliderStyle) -> Unit,
     sliderStyle: (AxQsControl) -> LunarisQsSliderStyle,
     hapticFeedback: HapticFeedback,
@@ -952,6 +979,7 @@ private fun AxEditableGridSection(
     val items = listState.items.filter { it.section == section }
     val editStackLabel = stringResource(R.string.lunaris_qs_stack_edit)
     val editFolderLabel = stringResource(R.string.lunaris_qs_folder_edit)
+    val editPhotoLabel = stringResource(R.string.lunaris_qs_photo_edit)
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val gridPadding = if (section == AxQsGridSection.CONTROLS) EditGridPadding else 0.dp
         val availableWidth = (maxWidth - gridPadding * 2).coerceAtLeast(0.dp)
@@ -1147,6 +1175,13 @@ private fun AxEditableGridSection(
                     else TileState.Removable
                 val sliderControl =
                     (value as? AxEditGridValue.Control)?.control?.takeIf { it.isSlider }
+                val isPhoto = (value as? AxEditGridValue.Control)?.control == AxQsControl.PHOTO
+                val editPhoto = {
+                    onEditPhoto(
+                        (cellWidth * item.span.columns + spacing * (item.span.columns - 1)).value,
+                        (measuredRowHeight * item.span.rows + spacing * (item.span.rows - 1)).value,
+                    )
+                }
                 val orientationControl =
                     (value as? AxEditGridValue.Control)?.control?.takeIf { it.supportsOrientation }
                 val verticalSlider = sliderControl != null && item.span.columns == 1
@@ -1195,7 +1230,8 @@ private fun AxEditableGridSection(
                                 value.folder.tileStyle ?: LocalAxQsTileStyle.current,
                             )
                         is AxEditGridValue.Control ->
-                            axQsControlShape(
+                            if (isPhoto) RoundedCornerShape(photoCornerDp.dp)
+                            else axQsControlShape(
                                 value.control,
                                 item.span,
                                 controlStyle,
@@ -1344,7 +1380,13 @@ private fun AxEditableGridSection(
                                 if (resizable) {
                                     listState.item(item.id)?.let { current ->
                                         val nextSpan =
-                                            if (orientationControl != null) {
+                                            if (isPhoto) {
+                                                val options = AxQsControl.PHOTO.photoSizes(columns)
+                                                val start = options.indexOf(current.span)
+                                                (1..options.size)
+                                                    .map { options[(start + it) % options.size] }
+                                                    .firstOrNull(canResize) ?: current.span
+                                            } else if (orientationControl != null) {
                                                 orientationControl.nextSpan(current.span, columns)
                                             } else if (value is AxEditGridValue.Folder) {
                                                 val options =
@@ -1381,7 +1423,7 @@ private fun AxEditableGridSection(
                                 modifier =
                                     Modifier.fillMaxSize()
                                         .then(
-                                            if (sliderControl != null) {
+                                            if (sliderControl != null || isPhoto) {
                                                 Modifier
                                             } else {
                                                 Modifier.clip(selectionShape)
@@ -1403,6 +1445,10 @@ private fun AxEditableGridSection(
                                                     is AxEditGridValue.Stack -> editStackLabel
                                                     is AxEditGridValue.Folder ->
                                                         editFolderLabel.takeIf { isSelected }
+                                                    is AxEditGridValue.Control ->
+                                                        editPhotoLabel.takeIf {
+                                                            isPhoto && isSelected
+                                                        }
                                                     else -> null
                                                 }
                                         ) {
@@ -1410,6 +1456,7 @@ private fun AxEditableGridSection(
                                             if (value is AxEditGridValue.Stack) onEditStack(item.id)
                                             if (value is AxEditGridValue.Folder)
                                                 onEditFolder(item.id)
+                                            if (isPhoto && isSelected) editPhoto()
                                         }
                                         .semantics {
                                             customActions =
@@ -1421,7 +1468,16 @@ private fun AxEditableGridSection(
                                                         moveItem(1)
                                                     },
                                                 ) +
-                                                    if (value is AxEditGridValue.Folder) {
+                                                    if (isPhoto) {
+                                                        listOf(
+                                                            CustomAccessibilityAction(
+                                                                editPhotoLabel
+                                                            ) {
+                                                                editPhoto()
+                                                                true
+                                                            }
+                                                        )
+                                                    } else if (value is AxEditGridValue.Folder) {
                                                         listOf(
                                                             CustomAccessibilityAction(
                                                                 editFolderLabel
@@ -1474,9 +1530,20 @@ private fun AxEditableGridSection(
                                         .zIndex(3f),
                             )
                         }
+                        if (isSelected && isPhoto) {
+                            LunarisPhotoEditButton(
+                                onClick = editPhoto,
+                                modifier =
+                                    Modifier.align(Alignment.BottomStart)
+                                        .offset(x = (-12).dp, y = 12.dp)
+                                        .zIndex(3f),
+                            )
+                        }
                         if (
-                            isSelected && orientationControl != null &&
-                                item.span != AxQsSpan.TileDefault
+                            isSelected &&
+                                orientationControl != null &&
+                                item.span != AxQsSpan.TileDefault &&
+                                (!isPhoto || item.span.columns != item.span.rows)
                         ) {
                             LunarisQsSliderOrientationButton(
                                 vertical = item.span.columns == 1,

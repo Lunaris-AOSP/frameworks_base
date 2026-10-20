@@ -22,9 +22,9 @@ import android.media.AudioManager
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -229,9 +229,10 @@ internal fun axQsControlShape(
     tileStyle: AxQsTileStyle = AxQsTileStyle.PILL,
 ): Shape {
     return when {
-        control == AxQsControl.MEDIA && span == AxQsSpan.MediaDefault &&
-            mediaSurface == AxMediaSurface.CONTROL ->
-            RoundedCornerShape(28.dp)
+        control == AxQsControl.PHOTO -> RoundedCornerShape(AxQsControlCornerRadius)
+        control == AxQsControl.MEDIA &&
+            span == AxQsSpan.MediaDefault &&
+            mediaSurface == AxMediaSurface.CONTROL -> RoundedCornerShape(28.dp)
         control == AxQsControl.RINGER ->
             if (span == AxQsSpan.TileDefault) axQsTileShape(span, tileStyle) else CircleShape
         control.isSlider ->
@@ -632,6 +633,7 @@ internal fun AxQsSliderPreview(
                 AxQsControl.FLASHLIGHT,
                 AxQsControl.VOLUME_MUTE,
                 AxQsControl.RINGER,
+                AxQsControl.PHOTO,
                 AxQsControl.MEDIA -> Unit
             }
         }
