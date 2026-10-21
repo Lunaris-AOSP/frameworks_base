@@ -97,9 +97,7 @@ class SystemEventPopupChipsViewModel @AssistedInject constructor(
         traceName = "systemEventChips",
         initialValue = emptyList(),
         source = users.flatMapLatest {
-            DynamicIslandFeatureSettings.observeDynamicIslandFeatureEnabled(
-                context, Settings.System.STATUS_BAR_SHOW_DYNAMIC_ISLAND, defaultValue = false,
-            )
+            DynamicIslandFeatureSettings.observeDynamicIslandEnabled(context)
                 .distinctUntilChanged()
                 .flatMapLatest { enabled ->
                     if (enabled) events()

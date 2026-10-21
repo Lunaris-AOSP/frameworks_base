@@ -55,6 +55,8 @@ import com.android.systemui.statusbar.events.shared.model.SystemEventAnimationSt
 import com.android.systemui.statusbar.events.shared.model.SystemEventAnimationState.AnimatingIn
 import com.android.systemui.statusbar.events.shared.model.SystemEventAnimationState.AnimatingOut
 import com.android.systemui.statusbar.events.shared.model.SystemEventAnimationState.RunningChipAnim
+import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.observeDynamicIslandEnabled
+import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.readDynamicIslandEnabled
 import com.android.systemui.statusbar.notification.icon.ui.viewbinder.ConnectedDisplaysStatusBarNotificationIconViewStore
 import com.android.systemui.statusbar.notification.promoted.PromotedNotificationUi
 import com.android.systemui.statusbar.phone.fragment.CollapsedStatusBarFragment
@@ -178,7 +180,7 @@ constructor(
                             denyListed = false,
                             hideForHun = false,
                             chipStyle = 0,
-                            dynamicIslandEnabled = context.contentResolver.readDynamicIslandEnabled(),
+                            dynamicIslandEnabled = readDynamicIslandEnabled(context),
                             position = context.contentResolver.readClockPosition(),
                             visibilityModel = VisibilityModel(View.GONE, true),
                             gradientStartColor = context.contentResolver.readGradientStartColor(),
@@ -206,8 +208,6 @@ constructor(
                     Settings.System.getUriFor(Settings.System.STATUSBAR_CLOCK_CHIP_GRADIENT_ANGLE)
                 val gradientMaskTextUri: Uri =
                     Settings.System.getUriFor(Settings.System.STATUSBAR_CLOCK_CHIP_GRADIENT_MASK_TEXT)
-                val dynamicIslandUri: Uri =
-                    Settings.System.getUriFor(Settings.System.STATUS_BAR_SHOW_DYNAMIC_ISLAND)
 
                 val taskStackListener =
                     object : TaskStackChangeListener {
@@ -288,11 +288,6 @@ constructor(
                                            gradientMaskText =
                                                context.contentResolver.readGradientMaskText()
                                        )
-                                    dynamicIslandUri ->
-                                        current.copy(
-                                            dynamicIslandEnabled =
-                                                context.contentResolver.readDynamicIslandEnabled()
-                                        )
                                     else -> current
                                 }
                             }
@@ -301,7 +296,7 @@ constructor(
 
                 val urisToObserve = listOf(clockAutoHideUri, iconHideListUri, statusBarClockUri,
                     statusBarClockChipUri, gradientStartColorUri, gradientEndColorUri, gradientAngleUri,
-                    gradientMaskTextUri, dynamicIslandUri)
+                    gradientMaskTextUri)
                 urisToObserve.forEach { uri ->
                     context.contentResolver.registerContentObserver(
                         uri,
@@ -310,6 +305,12 @@ constructor(
                         UserHandle.USER_ALL,
                     )
                     contentObserver.onChange(false, uri)
+                }
+
+                launch {
+                    observeDynamicIslandEnabled(context).collect { enabled ->
+                        clockState.update { it.copy(dynamicIslandEnabled = enabled) }
+                    }
                 }
 
                 val iconViewStore =
@@ -768,15 +769,6 @@ constructor(
             UserHandle.USER_CURRENT,
         ) == GRADIENT_TEXT_STYLE_MASK
     
-    private fun ContentResolver.readDynamicIslandEnabled(): Boolean {
-        return Settings.System.getIntForUser(
-            this,
-            Settings.System.STATUS_BAR_SHOW_DYNAMIC_ISLAND,
-            0,
-            UserHandle.USER_CURRENT,
-        ) != 0
-    }
-
     private fun shouldClockAutoHideForCurrentTask(): Boolean {
         return ActivityManagerWrapper.getInstance()
             .runningTask

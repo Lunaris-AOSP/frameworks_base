@@ -42,6 +42,8 @@ import com.android.systemui.statusbar.featurepods.popups.StatusBarPopupChips
 import com.android.systemui.statusbar.featurepods.popups.data.repository.DynamicIslandState
 import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.CALLS
 import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.LOCKSCREEN
+import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.observeDynamicIslandEnabled
+import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.readDynamicIslandEnabled
 import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.readDynamicIslandFeatureEnabled
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
@@ -90,7 +92,7 @@ constructor(
     private val alarmChip by lazy { alarmChipFactory.create() }
     private val avControlsChip by lazy { avControlsChipFactory.create() }
     private val shareScreenPrivacyIndicator by lazy { shareScreenPrivacyIndicatorFactory.create() }
-    private var isDynamicIslandEnabled by mutableStateOf(readDynamicIslandEnabled())
+    private var isDynamicIslandEnabled by mutableStateOf(readDynamicIslandEnabled(context))
     private var isCallsEnabled by
         mutableStateOf(context.contentResolver.readDynamicIslandFeatureEnabled(CALLS, false))
     private var isLockscreenEnabled by
@@ -100,7 +102,7 @@ constructor(
     private val dynamicIslandObserver =
         object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean) {
-                isDynamicIslandEnabled = readDynamicIslandEnabled()
+                isDynamicIslandEnabled = readDynamicIslandEnabled(context)
                 isCallsEnabled = context.contentResolver.readDynamicIslandFeatureEnabled(CALLS, false)
                 isLockscreenEnabled =
                     context.contentResolver.readDynamicIslandFeatureEnabled(
@@ -236,16 +238,14 @@ constructor(
                 dynamicIslandObserver,
                 UserHandle.USER_ALL,
             )
-            context.contentResolver.registerContentObserver(
-                Settings.System.getUriFor(
-                    Settings.System.STATUS_BAR_SHOW_DYNAMIC_ISLAND
-                ),
-                false,
-                dynamicIslandObserver,
-                UserHandle.USER_ALL,
-            )
             userTracker.addCallback(userChangedCallback, context.mainExecutor)
             dynamicIslandObserver.onChange(false)
+            launch {
+                observeDynamicIslandEnabled(context).collect { enabled ->
+                    isDynamicIslandEnabled = enabled
+                    if (!enabled) showPopup(null)
+                }
+            }
             launch {
                 combine(
                         shadeInteractor.isAnyExpanded,
@@ -341,15 +341,6 @@ constructor(
         val shareScreen: PopupChipModel =
             PopupChipModel.Hidden(chipId = PopupChipId.ShareScreenPrivacyIndicator),
     )
-
-    private fun readDynamicIslandEnabled(): Boolean {
-        return Settings.System.getIntForUser(
-            context.contentResolver,
-            Settings.System.STATUS_BAR_SHOW_DYNAMIC_ISLAND,
-            0,
-            UserHandle.USER_CURRENT,
-        ) != 0
-    }
 
     @AssistedFactory
     interface Factory {

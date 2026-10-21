@@ -464,6 +464,7 @@ public class SystemUIApplicationImpl extends SystemUIApplication implements
 
     @Override
     public void onConfigurationChanged(@NonNull Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
         if (mServicesStarted) {
             ConfigurationForwarder configForwarder = mSysUIComponent.getConfigurationForwarder();
             if (Trace.isEnabled()) {

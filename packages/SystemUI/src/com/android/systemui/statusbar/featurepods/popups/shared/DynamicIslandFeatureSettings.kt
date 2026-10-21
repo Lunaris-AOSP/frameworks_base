@@ -16,8 +16,10 @@
 
 package com.android.systemui.statusbar.featurepods.popups.shared
 
+import android.content.ComponentCallbacks
 import android.content.ContentResolver
 import android.content.Context
+import android.content.res.Configuration
 import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
@@ -26,6 +28,7 @@ import android.provider.Settings
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 object DynamicIslandFeatureSettings {
     /** Opt-in; independent of every AxDynamicBar setting. */
@@ -55,6 +58,7 @@ object DynamicIslandFeatureSettings {
     const val HEIGHT_SCALE = "status_bar_dynamic_island_height_scale"
     const val POPUP_COLOR_MODE = "status_bar_dynamic_island_popup_color_mode"
     const val LOCKSCREEN = "status_bar_dynamic_island_lockscreen"
+    const val DISABLE_IN_LANDSCAPE = Settings.System.STATUS_BAR_DYNAMIC_ISLAND_DISABLE_IN_LANDSCAPE
 
     const val SCALE_MIN = 0.7f
     const val SCALE_MAX = 1.4f
@@ -64,6 +68,52 @@ object DynamicIslandFeatureSettings {
     const val POPUP_COLOR_MODE_DEFAULT = 0
     const val POPUP_COLOR_MODE_BLUR = 1
     const val POPUP_COLOR_MODE_SOLID_BLACK = 2
+
+    fun readDynamicIslandEnabled(
+        context: Context,
+        configuration: Configuration = context.resources.configuration,
+    ): Boolean =
+        context.contentResolver.readDynamicIslandFeatureEnabled(
+            Settings.System.STATUS_BAR_SHOW_DYNAMIC_ISLAND,
+            defaultValue = false,
+        ) &&
+            !(configuration.orientation == Configuration.ORIENTATION_LANDSCAPE &&
+                context.contentResolver.readDynamicIslandFeatureEnabled(
+                    DISABLE_IN_LANDSCAPE,
+                    defaultValue = false,
+                ))
+
+    fun observeDynamicIslandEnabled(context: Context): Flow<Boolean> =
+        callbackFlow {
+            val observer =
+                object : ContentObserver(Handler(Looper.getMainLooper())) {
+                    override fun onChange(selfChange: Boolean) {
+                        trySend(readDynamicIslandEnabled(context))
+                    }
+                }
+            val configurationCallback =
+                object : ComponentCallbacks {
+                    override fun onConfigurationChanged(newConfig: Configuration) {
+                        trySend(readDynamicIslandEnabled(context, newConfig))
+                    }
+
+                    override fun onLowMemory() {}
+                }
+            for (key in listOf(Settings.System.STATUS_BAR_SHOW_DYNAMIC_ISLAND, DISABLE_IN_LANDSCAPE)) {
+                context.contentResolver.registerContentObserver(
+                    Settings.System.getUriFor(key),
+                    false,
+                    observer,
+                    UserHandle.USER_ALL,
+                )
+            }
+            context.registerComponentCallbacks(configurationCallback)
+            trySend(readDynamicIslandEnabled(context))
+            awaitClose {
+                context.unregisterComponentCallbacks(configurationCallback)
+                context.contentResolver.unregisterContentObserver(observer)
+            }
+        }.distinctUntilChanged()
 
     fun ContentResolver.readDynamicIslandPopupColorMode(): Int {
         return Settings.System.getIntForUser(

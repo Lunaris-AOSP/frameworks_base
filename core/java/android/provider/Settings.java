@@ -8169,6 +8169,11 @@ public final class Settings {
         /**
          * @hide
          */
+        public static final String STATUS_BAR_DYNAMIC_ISLAND_DISABLE_IN_LANDSCAPE = "status_bar_dynamic_island_disable_in_landscape";
+
+        /**
+         * @hide
+         */
         public static final String STATUS_BAR_DYNAMIC_ISLAND_MEDIA_CONTROLS = "status_bar_dynamic_island_media_controls";
 
         /**
