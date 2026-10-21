@@ -129,6 +129,18 @@ enum class AxQsControl(
         defaultSpan = AxQsSpan(2, 2),
         minSpan = AxQsSpan.TileDefault,
         maxSpan = AxQsSpan(4, 4),
+    ),
+    APP_WIDGET_2(
+        id = "control:app_widget_2",
+        defaultSpan = AxQsSpan(2, 2),
+        minSpan = AxQsSpan.TileDefault,
+        maxSpan = AxQsSpan(4, 4),
+    ),
+    APP_WIDGET_3(
+        id = "control:app_widget_3",
+        defaultSpan = AxQsSpan(2, 2),
+        minSpan = AxQsSpan.TileDefault,
+        maxSpan = AxQsSpan(4, 4),
     );
 
     fun spans(columns: Int): AxQsControlSpans {
@@ -230,7 +242,10 @@ enum class AxQsControl(
         get() = isSlider || this == RINGER || isResizableContent
 
     val isResizableContent: Boolean
-        get() = this == PHOTO || this == APP_WIDGET
+        get() = this == PHOTO || isAppWidget
+
+    val isAppWidget: Boolean
+        get() = this == APP_WIDGET || this == APP_WIDGET_2 || this == APP_WIDGET_3
 
     fun contentSizes(columns: Int): List<AxQsSpan> =
         if (this == PHOTO) photoSizes(columns)

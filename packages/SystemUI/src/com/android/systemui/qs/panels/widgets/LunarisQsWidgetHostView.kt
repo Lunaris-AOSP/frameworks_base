@@ -32,13 +32,13 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.RemoteViews
 import android.widget.TextView
-import com.android.systemui.qs.panels.shared.model.AxQsLayout
 import com.android.systemui.qs.panels.shared.model.LunarisQsWidget
+import com.android.systemui.qs.panels.shared.model.LunarisQsWidgetKey
 
 internal class LunarisQsWidgetHostView(
     context: Context,
     private val widget: LunarisQsWidget,
-    private val panel: AxQsLayout,
+    private val key: LunarisQsWidgetKey,
     interactionHandler: RemoteViews.InteractionHandler,
     onLightBackground: Boolean,
     private val onUnavailable: () -> Unit,
@@ -143,7 +143,7 @@ internal class LunarisQsWidgetHostView(
                 service = ILunarisQsWidgetHost.Stub.asInterface(binder)
                 lastSize = null
                 callService {
-                    it.connect(panel.name, widget.appWidgetId, listener)
+                    it.connect(key.layout.name, key.control.id, widget.appWidgetId, listener)
                     it.setActive(listener, active)
                 }
                 if (active) resumeHost()

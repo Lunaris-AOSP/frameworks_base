@@ -51,6 +51,7 @@ import com.android.systemui.qs.panels.shared.model.AxQsTileStacks
 import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsPhotoFrame
 import com.android.systemui.qs.panels.shared.model.LunarisQsWidget
+import com.android.systemui.qs.panels.shared.model.LunarisQsWidgetKey
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderKey
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolder
@@ -126,29 +127,32 @@ constructor(
     private val appWidgets by
         hydrator.hydratedStateOf(
             traceName = "appWidgets",
-            initialValue = emptyMap<AxQsLayout, LunarisQsWidget>(),
+            initialValue = emptyMap<LunarisQsWidgetKey, LunarisQsWidget>(),
             source = repository.appWidgets,
         )
 
-    fun appWidget(layout: AxQsLayout): LunarisQsWidget =
-        appWidgets[layout]?.takeIf { it.userId == photoUserId } ?: LunarisQsWidget()
+    fun appWidget(layout: AxQsLayout, control: AxQsControl): LunarisQsWidget =
+        appWidgets[LunarisQsWidgetKey(layout, control)]?.takeIf { it.userId == photoUserId }
+            ?: LunarisQsWidget()
 
-    fun editAppWidget(layout: AxQsLayout, widthDp: Float, heightDp: Float) {
+    fun editAppWidget(layout: AxQsLayout, control: AxQsControl, widthDp: Float, heightDp: Float) {
         activityStarter.startActivity(
             Intent(context, LunarisQsWidgetActivity::class.java)
                 .putExtra(LunarisQsWidgetActivity.EXTRA_LAYOUT, layout.name)
+                .putExtra(LunarisQsWidgetActivity.EXTRA_CONTROL, control.id)
                 .putExtra(LunarisQsWidgetActivity.EXTRA_WIDTH, widthDp)
                 .putExtra(LunarisQsWidgetActivity.EXTRA_HEIGHT, heightDp),
             true, null, false, UserHandle.of(userRepository.getSelectedUserInfo().id),
         )
     }
 
-    fun removeAppWidget(layout: AxQsLayout) {
+    fun removeAppWidget(layout: AxQsLayout, control: AxQsControl) {
         try {
             context.startServiceAsUser(
                 Intent(context, LunarisQsWidgetService::class.java)
                     .setAction(LunarisQsWidgetService.ACTION_CLEAR)
-                    .putExtra(LunarisQsWidgetService.EXTRA_LAYOUT, layout.name),
+                    .putExtra(LunarisQsWidgetService.EXTRA_LAYOUT, layout.name)
+                    .putExtra(LunarisQsWidgetService.EXTRA_CONTROL, control.id),
                 UserHandle.of(userRepository.getSelectedUserInfo().id),
             )
         } catch (e: RuntimeException) {
@@ -741,7 +745,7 @@ constructor(
             defaultControls = defaultControls,
             defaultTiles = defaultTiles,
         )
-        AxQsLayout.entries.forEach(::removeAppWidget)
+        LunarisQsWidgetKey.entries.forEach { removeAppWidget(it.layout, it.control) }
     }
 
     override suspend fun onActivated(): Nothing = hydrator.activate()

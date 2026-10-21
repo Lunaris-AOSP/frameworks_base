@@ -453,10 +453,11 @@ private fun AxEditableGrid(
                     photo = axQsViewModel.photoFrame(layout),
                     modifier = Modifier.fillMaxSize(),
                 )
-            } else if (control == AxQsControl.APP_WIDGET) {
+            } else if (control.isAppWidget) {
                 LunarisQsWidgetCard(
-                    widget = axQsViewModel.appWidget(layout),
+                    widget = axQsViewModel.appWidget(layout, control),
                     layout = layout,
+                    control = control,
                     modifier = Modifier.fillMaxSize(),
                 )
             } else {
@@ -804,10 +805,10 @@ private fun AxEditableGrid(
                     onEditPhoto = { width, height ->
                         axQsViewModel.editPhoto(layout, width, height)
                     },
-                    onEditWidget = { width, height ->
-                        axQsViewModel.editAppWidget(layout, width, height)
+                    onEditWidget = { control, width, height ->
+                        axQsViewModel.editAppWidget(layout, control, width, height)
                     },
-                    onRemoveWidget = { axQsViewModel.removeAppWidget(layout) },
+                    onRemoveWidget = { axQsViewModel.removeAppWidget(layout, it) },
                     photoCornerDp = axQsViewModel.photoFrame(layout).cornerDp,
                     controlPreview = contentControlPreview,
                     sliderStyle = sliderStyle,
@@ -842,10 +843,10 @@ private fun AxEditableGrid(
                     onEditPhoto = { width, height ->
                         axQsViewModel.editPhoto(layout, width, height)
                     },
-                    onEditWidget = { width, height ->
-                        axQsViewModel.editAppWidget(layout, width, height)
+                    onEditWidget = { control, width, height ->
+                        axQsViewModel.editAppWidget(layout, control, width, height)
                     },
-                    onRemoveWidget = { axQsViewModel.removeAppWidget(layout) },
+                    onRemoveWidget = { axQsViewModel.removeAppWidget(layout, it) },
                     photoCornerDp = axQsViewModel.photoFrame(layout).cornerDp,
                     controlPreview = contentControlPreview,
                     sliderStyle = sliderStyle,
@@ -985,8 +986,8 @@ private fun AxEditableGridSection(
     onEditStack: (String) -> Unit,
     onEditFolder: (String) -> Unit,
     onEditPhoto: (Float, Float) -> Unit,
-    onEditWidget: (Float, Float) -> Unit,
-    onRemoveWidget: () -> Unit,
+    onEditWidget: (AxQsControl, Float, Float) -> Unit,
+    onRemoveWidget: (AxQsControl) -> Unit,
     photoCornerDp: Int,
     controlPreview: @Composable (AxQsControl, AxQsSpan, Int, LunarisQsSliderStyle) -> Unit,
     sliderStyle: (AxQsControl) -> LunarisQsSliderStyle,
@@ -1142,9 +1143,9 @@ private fun AxEditableGridSection(
                 }
                 val removeItem = {
                     listState.remove(item.id)
-                    if ((item.value as? AxEditGridValue.Control)?.control == AxQsControl.APP_WIDGET) {
-                        onRemoveWidget()
-                    }
+                    (item.value as? AxEditGridValue.Control)?.control
+                        ?.takeIf { it.isAppWidget }
+                        ?.let(onRemoveWidget)
                     (item.value as? AxEditGridValue.Folder)?.let { folder ->
                         restoredFolderTiles(folder.folder.tileSpecs, folder.tiles).forEach { tile ->
                             if (listState.items.none { it.id == tile.id }) listState.add(tile)
@@ -1195,16 +1196,22 @@ private fun AxEditableGridSection(
                     else TileState.Removable
                 val sliderControl =
                     (value as? AxEditGridValue.Control)?.control?.takeIf { it.isSlider }
-                val isPhoto = (value as? AxEditGridValue.Control)?.control == AxQsControl.PHOTO
-                val isWidget = (value as? AxEditGridValue.Control)?.control == AxQsControl.APP_WIDGET
+                val contentControl = (value as? AxEditGridValue.Control)?.control
+                val isPhoto = contentControl == AxQsControl.PHOTO
+                val isWidget = contentControl?.isAppWidget == true
                 val isContent = isPhoto || isWidget
                 val editContentLabel =
                     if (isWidget) stringResource(R.string.lunaris_qs_widget_choose) else editPhotoLabel
                 val editContent = {
-                    (if (isWidget) onEditWidget else onEditPhoto)(
-                        (cellWidth * item.span.columns + spacing * (item.span.columns - 1)).value,
-                        (measuredRowHeight * item.span.rows + spacing * (item.span.rows - 1)).value,
-                    )
+                    val width =
+                        (cellWidth * item.span.columns + spacing * (item.span.columns - 1)).value
+                    val height =
+                        (measuredRowHeight * item.span.rows + spacing * (item.span.rows - 1)).value
+                    if (contentControl?.isAppWidget == true) {
+                        onEditWidget(contentControl, width, height)
+                    } else {
+                        onEditPhoto(width, height)
+                    }
                 }
                 val orientationControl =
                     (value as? AxEditGridValue.Control)?.control?.takeIf { it.supportsOrientation }

@@ -17,12 +17,12 @@ import android.os.RemoteException
 import android.util.Log
 import android.widget.RemoteViews
 import com.android.systemui.qs.panels.data.repository.LunarisQsWidgetStore
-import com.android.systemui.qs.panels.shared.model.AxQsLayout
 import com.android.systemui.qs.panels.shared.model.LunarisQsWidget
+import com.android.systemui.qs.panels.shared.model.LunarisQsWidgetKey
 
 class LunarisQsWidgetService : Service() {
     private val main = Handler(Looper.getMainLooper())
-    private val sessions = mutableMapOf<AxQsLayout, Session>()
+    private val sessions = mutableMapOf<LunarisQsWidgetKey, Session>()
     private val clients = mutableMapOf<IBinder, Client>()
 
     private inner class Client(
@@ -35,9 +35,9 @@ class LunarisQsWidgetService : Service() {
         }
     }
 
-    private inner class Session(val layout: AxQsLayout, val widgetId: Int) : AppWidgetHostListener {
+    private inner class Session(val key: LunarisQsWidgetKey, val widgetId: Int) : AppWidgetHostListener {
         val host =
-            object : AppWidgetHost(this@LunarisQsWidgetService, LunarisQsWidget.hostId(layout)) {
+            object : AppWidgetHost(this@LunarisQsWidgetService, key.hostId) {
                 override fun onAppWidgetRemoved(appWidgetId: Int) {
                     if (appWidgetId == widgetId) notifyClients { it.onRemoved() }
                 }
@@ -116,7 +116,7 @@ class LunarisQsWidgetService : Service() {
     private fun closeIfUnused(session: Session) {
         if (clients.values.none { it.session === session }) {
             session.close()
-            sessions.remove(session.layout, session)
+            sessions.remove(session.key, session)
         }
     }
 
@@ -124,14 +124,15 @@ class LunarisQsWidgetService : Service() {
         object : ILunarisQsWidgetHost.Stub() {
             override fun connect(
                 layout: String,
+                controlId: String,
                 widgetId: Int,
                 listener: ILunarisQsWidgetListener,
             ) {
                 main.post {
-                    val panel = AxQsLayout.entries.firstOrNull { it.name == layout } ?: return@post
+                    val key = LunarisQsWidgetKey.from(layout, controlId) ?: return@post
                     remove(listener)
                     try {
-                        val saved = LunarisQsWidgetStore.read(this@LunarisQsWidgetService, panel)
+                        val saved = LunarisQsWidgetStore.read(this@LunarisQsWidgetService, key)
                         val manager = AppWidgetManager.getInstance(this@LunarisQsWidgetService)
                         val info = manager.getAppWidgetInfo(widgetId)
                         if (
@@ -143,7 +144,7 @@ class LunarisQsWidgetService : Service() {
                             listener.onRemoved()
                             return@post
                         }
-                        val old = sessions[panel]
+                        val old = sessions[key]
                         if (old != null && old.widgetId != widgetId) {
                             old.notifyClients { it.onRemoved() }
                             clients.values
@@ -151,7 +152,7 @@ class LunarisQsWidgetService : Service() {
                                 .toList()
                                 .forEach { remove(it.listener) }
                         }
-                        val session = sessions.getOrPut(panel) { Session(panel, widgetId) }
+                        val session = sessions.getOrPut(key) { Session(key, widgetId) }
                         if (!session.host.appWidgetIds.contains(widgetId)) {
                             closeIfUnused(session)
                             listener.onRemoved()
@@ -165,7 +166,7 @@ class LunarisQsWidgetService : Service() {
                     } catch (e: Exception) {
                         Log.w(TAG, "Cannot connect widget", e)
                         remove(listener)
-                        sessions[panel]?.let(::closeIfUnused)
+                        sessions[key]?.let(::closeIfUnused)
                         try {
                             listener.onRemoved()
                         } catch (_: RemoteException) {}
@@ -207,12 +208,14 @@ class LunarisQsWidgetService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_CLEAR) {
-            AxQsLayout.entries
-                .firstOrNull { it.name == intent.getStringExtra(EXTRA_LAYOUT) }
-                ?.let { layout ->
+            LunarisQsWidgetKey.from(
+                    intent.getStringExtra(EXTRA_LAYOUT),
+                    intent.getStringExtra(EXTRA_CONTROL),
+                )
+                ?.let { key ->
                     try {
-                        LunarisQsWidgetStore.save(this, layout, LunarisQsWidget(userId))
-                        sessions[layout]?.let { session ->
+                        LunarisQsWidgetStore.save(this, key, LunarisQsWidget(userId))
+                        sessions[key]?.let { session ->
                             session.notifyClients { it.onRemoved() }
                             clients.values
                                 .filter { it.session === session }
@@ -237,6 +240,7 @@ class LunarisQsWidgetService : Service() {
     companion object {
         const val ACTION_CLEAR = "com.android.systemui.qs.CLEAR_APP_WIDGET"
         const val EXTRA_LAYOUT = "layout"
+        const val EXTRA_CONTROL = "control_id"
         private const val TAG = "LunarisQsWidgetHost"
     }
 }

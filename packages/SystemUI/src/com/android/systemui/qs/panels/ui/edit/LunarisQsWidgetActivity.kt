@@ -21,15 +21,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.android.compose.theme.PlatformTheme
 import com.android.systemui.qs.panels.data.repository.LunarisQsWidgetStore
-import com.android.systemui.qs.panels.shared.model.AxQsLayout
 import com.android.systemui.qs.panels.shared.model.LunarisQsWidget
+import com.android.systemui.qs.panels.shared.model.LunarisQsWidgetKey
 import com.android.systemui.qs.panels.widgets.qsWidgetOptions
 import com.android.systemui.qs.panels.widgets.qsWidgetSize
 import com.android.systemui.res.R
 import kotlin.math.roundToInt
 
 class LunarisQsWidgetActivity : ComponentActivity() {
-    private lateinit var panel: AxQsLayout
+    private lateinit var key: LunarisQsWidgetKey
     private lateinit var host: AppWidgetHost
     private val manager by lazy { AppWidgetManager.getInstance(this) }
     private var pendingId = AppWidgetManager.INVALID_APPWIDGET_ID
@@ -41,17 +41,20 @@ class LunarisQsWidgetActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         requestWindowFeature(Window.FEATURE_NO_TITLE)
         enableEdgeToEdge()
-        panel =
-            AxQsLayout.entries.firstOrNull { it.name == intent.getStringExtra(EXTRA_LAYOUT) }
+        key =
+            LunarisQsWidgetKey.from(
+                intent.getStringExtra(EXTRA_LAYOUT),
+                intent.getStringExtra(EXTRA_CONTROL),
+            )
                 ?: run {
                     finish()
                     return
                 }
-        host = AppWidgetHost(this, LunarisQsWidget.hostId(panel))
+        host = AppWidgetHost(this, key.hostId)
         pendingId = savedInstanceState?.getInt(STATE_PENDING, -1) ?: -1
         waiting = savedInstanceState?.getBoolean(STATE_WAITING) ?: false
         try {
-            selected = LunarisQsWidgetStore.read(this, panel)
+            selected = LunarisQsWidgetStore.read(this, key)
             host.appWidgetIds
                 .filter { it != selected.appWidgetId && it != pendingId }
                 .forEach(host::deleteAppWidgetId)
@@ -62,7 +65,7 @@ class LunarisQsWidgetActivity : ComponentActivity() {
         setContent {
             PlatformTheme {
                 LunarisQsWidgetPicker(
-                    panel = panel,
+                    panel = key.layout,
                     frameWidth = dimension(EXTRA_WIDTH),
                     frameHeight = dimension(EXTRA_HEIGHT),
                     selected = selected,
@@ -142,7 +145,7 @@ class LunarisQsWidgetActivity : ComponentActivity() {
         val info = manager.getAppWidgetInfo(pendingId) ?: return fail()
         check(host.appWidgetIds.contains(pendingId))
         val widget = LunarisQsWidget(userId, pendingId, info.provider)
-        LunarisQsWidgetStore.save(this, panel, widget)
+        LunarisQsWidgetStore.save(this, key, widget)
         pendingId = AppWidgetManager.INVALID_APPWIDGET_ID
         selected = widget
         waiting = false
@@ -154,7 +157,7 @@ class LunarisQsWidgetActivity : ComponentActivity() {
         if (waiting || isFinishing) return
         waiting = true
         try {
-            LunarisQsWidgetStore.save(this, panel, LunarisQsWidget(userId))
+            LunarisQsWidgetStore.save(this, key, LunarisQsWidget(userId))
             setResult(RESULT_OK)
             finish()
         } catch (e: RuntimeException) {
@@ -167,7 +170,7 @@ class LunarisQsWidgetActivity : ComponentActivity() {
         val id = pendingId
         pendingId = AppWidgetManager.INVALID_APPWIDGET_ID
         try {
-            if (LunarisQsWidgetStore.read(this, panel).appWidgetId != id) host.deleteAppWidgetId(id)
+            if (LunarisQsWidgetStore.read(this, key).appWidgetId != id) host.deleteAppWidgetId(id)
         } catch (e: RuntimeException) {
             Log.w(TAG, "Cannot release pending widget", e)
         }
@@ -209,6 +212,7 @@ class LunarisQsWidgetActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_LAYOUT = "layout"
+        const val EXTRA_CONTROL = "control_id"
         const val EXTRA_WIDTH = "width_dp"
         const val EXTRA_HEIGHT = "height_dp"
         private const val STATE_PENDING = "pending_widget"

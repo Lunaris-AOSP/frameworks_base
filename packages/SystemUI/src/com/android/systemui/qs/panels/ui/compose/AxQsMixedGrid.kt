@@ -585,14 +585,19 @@ private fun AxLiveControl(
 ) {
     Box(modifier, contentAlignment = Alignment.Center) {
         when (control) {
-            AxQsControl.APP_WIDGET ->
+            AxQsControl.APP_WIDGET,
+            AxQsControl.APP_WIDGET_2,
+            AxQsControl.APP_WIDGET_3 ->
                 LunarisQsWidgetCard(
-                    widget = axQsViewModel.appWidget(layout),
+                    widget = axQsViewModel.appWidget(layout, control),
                     layout = layout,
+                    control = control,
                     playing = contentPlaying,
                     visible = contentVisible,
                     interactionHandler = axQsViewModel.widgetInteractionHandler,
-                    onChoose = { width, height -> axQsViewModel.editAppWidget(layout, width, height) },
+                    onChoose = { width, height ->
+                        axQsViewModel.editAppWidget(layout, control, width, height)
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
             AxQsControl.PHOTO ->

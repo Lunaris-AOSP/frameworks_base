@@ -54,6 +54,7 @@ import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsLayout
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.LunarisQsWidget
+import com.android.systemui.qs.panels.shared.model.LunarisQsWidgetKey
 import com.android.systemui.qs.panels.widgets.LunarisQsWidgetHostView
 import com.android.systemui.res.R
 import kotlinx.coroutines.delay
@@ -62,6 +63,7 @@ import kotlinx.coroutines.delay
 fun LunarisQsWidgetCard(
     widget: LunarisQsWidget = LunarisQsWidget(),
     layout: AxQsLayout = AxQsLayout.QS,
+    control: AxQsControl = AxQsControl.APP_WIDGET,
     playing: Boolean = false,
     visible: Boolean = false,
     interactionHandler: RemoteViews.InteractionHandler =
@@ -114,7 +116,7 @@ fun LunarisQsWidgetCard(
     val backgroundColor = AxTileDefaults.backgroundColor()
     val onLightBackground =
         backgroundColor.compositeOver(MaterialTheme.colorScheme.surface).luminance() > .5f
-    val shape = axQsControlShape(AxQsControl.APP_WIDGET, AxQsSpan(2, 2))
+    val shape = axQsControlShape(control, AxQsSpan(2, 2))
     BoxWithConstraints(
         modifier
             .onGloballyPositioned { inViewport = !it.boundsInWindow().isEmpty }
@@ -124,7 +126,7 @@ fun LunarisQsWidgetCard(
     ) {
         val width = maxWidth.value
         val height = maxHeight.value
-        key(widget, layout, unlockVersion, onLightBackground) {
+        key(widget, layout, control, unlockVersion, onLightBackground) {
             var keepHost by remember { mutableStateOf(false) }
             var unavailable by remember { mutableStateOf(false) }
             LaunchedEffect(active, shown) {
@@ -140,7 +142,7 @@ fun LunarisQsWidgetCard(
                         LunarisQsWidgetHostView(
                             it,
                             widget,
-                            layout,
+                            LunarisQsWidgetKey(layout, control),
                             interactionHandler,
                             onLightBackground,
                         ) {

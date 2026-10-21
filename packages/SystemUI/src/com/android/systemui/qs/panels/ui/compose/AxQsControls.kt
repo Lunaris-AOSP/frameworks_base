@@ -194,7 +194,10 @@ fun AxQsControlPreview(
     modifier: Modifier = Modifier,
 ) {
     when (control) {
-        AxQsControl.APP_WIDGET -> LunarisQsWidgetCard(modifier = modifier.fillMaxSize())
+        AxQsControl.APP_WIDGET,
+        AxQsControl.APP_WIDGET_2,
+        AxQsControl.APP_WIDGET_3 ->
+            LunarisQsWidgetCard(control = control, modifier = modifier.fillMaxSize())
         AxQsControl.PHOTO -> LunarisQsPhotoCard(modifier = modifier.fillMaxSize())
         AxQsControl.FLASHLIGHT ->
             LunarisFlashlightSlider(

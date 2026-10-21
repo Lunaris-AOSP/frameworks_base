@@ -77,6 +77,7 @@ import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.AxQsTileStacks
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolderController
+import com.android.systemui.qs.panels.shared.model.LunarisQsWidgetKey
 import com.android.systemui.qs.panels.ui.compose.AxLargeTileContent
 import com.android.systemui.qs.panels.ui.compose.AxQsPagerIndicator
 import com.android.systemui.qs.panels.ui.compose.AxTileDefaults
@@ -165,6 +166,8 @@ internal fun AxAvailableControls(
     modifier: Modifier = Modifier,
 ) {
     val hasFlashlight = LocalLunarisFlashlightSliderViewModel.current.hasFlashlight
+    val widgetControl =
+        LunarisQsWidgetKey.nextControl(currentIds) ?: LunarisQsWidgetKey.controls.last()
     val controls: List<AxAddItem> =
         listOf(
                 AxQsControl.AUTO_BRIGHTNESS to axString("ax_qs_auto_brightness", "Auto brightness"),
@@ -175,7 +178,7 @@ internal fun AxAvailableControls(
                 AxQsControl.FLASHLIGHT to stringResource(R.string.lunaris_qs_flashlight_slider),
                 AxQsControl.MEDIA to axString("ax_qs_media", "Media player"),
                 AxQsControl.PHOTO to stringResource(R.string.lunaris_qs_photo_title),
-                AxQsControl.APP_WIDGET to stringResource(R.string.lunaris_qs_widget_title),
+                widgetControl to stringResource(R.string.lunaris_qs_widget_title),
             )
             .filter { (control, _) ->
                 control != AxQsControl.FLASHLIGHT || hasFlashlight

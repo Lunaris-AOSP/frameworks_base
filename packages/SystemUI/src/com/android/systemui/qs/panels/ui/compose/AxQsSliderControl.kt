@@ -631,6 +631,8 @@ internal fun AxQsSliderPreview(
                 AxQsControl.VOLUME_MUTE,
                 AxQsControl.RINGER,
                 AxQsControl.APP_WIDGET,
+                AxQsControl.APP_WIDGET_2,
+                AxQsControl.APP_WIDGET_3,
                 AxQsControl.PHOTO,
                 AxQsControl.MEDIA -> Unit
             }
