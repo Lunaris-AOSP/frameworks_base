@@ -479,6 +479,7 @@ internal fun ContentScope.AxQsMixedGrid(
                         )
                         if (
                             separateQqs &&
+                                axQsViewModel.showNotificationMedia &&
                                 mediaViewModel.hasVisibleSessions(AxMediaSurface.SEPARATE_QQS)
                         ) {
                             Spacer(Modifier.layoutHeight(spacing))

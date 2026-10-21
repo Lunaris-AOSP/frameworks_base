@@ -418,6 +418,12 @@ constructor(
             initialValue = repository.showSliderPercentage.value,
             source = repository.showSliderPercentage,
         )
+    val showNotificationMedia by
+        hydrator.hydratedStateOf(
+            traceName = "showNotificationMedia",
+            initialValue = repository.showNotificationMedia.value,
+            source = repository.showNotificationMedia,
+        )
     val fullColorDualTargetTiles by
         hydrator.hydratedStateOf(
             traceName = "fullColorDualTargetTiles",
@@ -689,6 +695,8 @@ constructor(
     fun setQuickPanelOnLeft(onLeft: Boolean) = repository.setQuickPanelOnLeft(onLeft)
 
     fun setShowWeather(show: Boolean) = repository.setShowWeather(show)
+
+    fun setShowNotificationMedia(show: Boolean) = repository.setShowNotificationMedia(show)
 
     fun setShowSliderPercentage(show: Boolean) = repository.setShowSliderPercentage(show)
 

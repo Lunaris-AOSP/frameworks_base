@@ -401,6 +401,15 @@ fun LunariQsPanelSettings(
                         },
                     )
                 }
+                item("notification_media") {
+                    SettingsSwitch(
+                        title = stringResource(R.string.ax_qs_settings_notification_media),
+                        summary = stringResource(R.string.ax_qs_settings_notification_media_summary),
+                        checked = viewModel.showNotificationMedia,
+                        onCheckedChange = viewModel::setShowNotificationMedia,
+                        enabled = separate,
+                    )
+                }
                 item("left") {
                     SettingsSwitch(
                         title = stringResource(R.string.ax_qs_settings_left),

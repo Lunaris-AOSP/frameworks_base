@@ -13,6 +13,8 @@
     <string name="ax_qs_settings_weather_summary">Show your configured weather provider in the QS header</string>
     <string name="ax_qs_settings_split">Split Quick Settings</string>
     <string name="ax_qs_settings_split_summary">Open Quick Settings and notifications separately</string>
+    <string name="ax_qs_settings_notification_media">Media player in notifications</string>
+    <string name="ax_qs_settings_notification_media_summary">Show the media player in the notification panel when Split Quick Settings is enabled</string>
     <string name="ax_qs_settings_left">Quick Settings on the left</string>
     <string name="ax_qs_settings_left_summary">Swipe from the left edge to open Quick Settings when split panels are enabled</string>
     <string name="ax_qs_settings_tile_shape">Tile shape</string>

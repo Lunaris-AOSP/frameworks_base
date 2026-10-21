@@ -165,6 +165,7 @@ constructor(
             .distinctUntilChanged()
             .stateIn(applicationScope, SharingStarted.Eagerly, 2)
     val showWeather: StateFlow<Boolean> = boolSetting(SHOW_WEATHER, true)
+    val showNotificationMedia: StateFlow<Boolean> = boolSetting(SHOW_NOTIFICATION_MEDIA, true)
     val showSliderPercentage: StateFlow<Boolean> = boolSetting(SHOW_SLIDER_PERCENTAGE, false)
     val strokeStyle: StateFlow<Boolean> = boolSetting(STROKE_STYLE, false)
 
@@ -439,6 +440,8 @@ constructor(
     fun setSharedQqsRows(rows: Int) = putInt(SHARED_QQS_ROWS, rows.coerceIn(2, 4))
 
     fun setShowWeather(show: Boolean) = putInt(SHOW_WEATHER, show.toSetting())
+
+    fun setShowNotificationMedia(show: Boolean) = putInt(SHOW_NOTIFICATION_MEDIA, show.toSetting())
 
     fun setShowSliderPercentage(show: Boolean) = putInt(SHOW_SLIDER_PERCENTAGE, show.toSetting())
 
@@ -847,6 +850,7 @@ constructor(
         const val PORTRAIT_QS_TILE_LABELS = "ax_qs_show_tile_labels"
         const val SPLIT_SHADE_TILE_LABELS = "ax_qs_split_shade_show_tile_labels"
         const val SHOW_WEATHER = "ax_qs_show_weather"
+        const val SHOW_NOTIFICATION_MEDIA = "ax_qs_show_notification_media"
         const val SHOW_SLIDER_PERCENTAGE = "ax_qs_show_slider_percentage"
         private const val STROKE_STYLE = "ax_qs_stroke_style"
         private const val GRADIENT_ENABLED = "ax_qs_gradient_enabled"
