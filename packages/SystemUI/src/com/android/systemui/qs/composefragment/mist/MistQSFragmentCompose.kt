@@ -64,6 +64,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -71,6 +72,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
@@ -186,6 +188,7 @@ import com.android.systemui.qs.composefragment.ui.shouldComposeLiveAxQs
 import com.android.systemui.qs.composefragment.ui.toAxEditMode
 import com.android.systemui.qs.panels.ui.compose.AxQsControlPreview
 import com.android.systemui.qs.panels.ui.compose.AxQsMixedGrid
+import com.android.systemui.qs.panels.ui.compose.axSharedQsEntrance
 import com.android.systemui.qs.panels.ui.compose.LocalAxQsTileStyle
 import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsGradientSettings
 import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsStrokeStyle
@@ -255,6 +258,7 @@ constructor(
     private var bottomBarPositionInRoot = IntRect(IntOffset(0, 0), 0)
     private var bottomContentPadding by mutableIntStateOf(0)
     private var overlayHeaderHeightPx by mutableIntStateOf(0)
+    private var sharedLayoutActive by mutableStateOf(false)
     private val containerView: FrameLayoutTouchPassthrough?
         get() = view as? FrameLayoutTouchPassthrough
 
@@ -387,6 +391,13 @@ constructor(
      */
     @Composable
     private fun CollapsableQuickSettingsSTL() {
+        val sharedLayout =
+            axQsViewModel.useSharedQsLayout && !viewModel.isInSplitShade &&
+                LocalConfiguration.current.orientation != Configuration.ORIENTATION_LANDSCAPE
+        val currentSharedLayout by rememberUpdatedState(sharedLayout)
+        val sharedQsTransitioning by remember {
+            derivedStateOf { viewModel.expansionState.progress in 0.001f..0.999f }
+        }
         val nextCookie = remember {
             object {
                 var value = 0
@@ -395,7 +406,9 @@ constructor(
         val transitionToCookie = remember { mutableMapOf<TransitionState.Transition, Int>() }
         val sceneState =
             rememberMutableSceneTransitionLayoutState(
-                initialScene = remember { viewModel.expansionState.toIdleSceneKey() },
+                initialScene = remember {
+                    if (sharedLayout) QuickSettings else viewModel.expansionState.toIdleSceneKey()
+                },
                 transitions =
                     transitions {
                         from(QuickQuickSettings, QuickSettings) {
@@ -423,6 +436,20 @@ constructor(
                 deferTransitionProgress = true,
             )
 
+        SideEffect {
+            sharedLayoutActive = sharedLayout
+            qqsVisible.value = sceneState.shouldComposeLiveAxQs()
+        }
+        DisposableEffect(Unit) {
+            onDispose {
+                sharedLayoutActive = false
+                qqsVisible.value = false
+            }
+        }
+        LaunchedEffect(sharedLayout) {
+            scrollState.scrollTo(0)
+        }
+
         val showQuickSettings = viewModel.isQsVisibleAndAnyShadeExpanded
         LaunchedEffect(showQuickSettings) {
             snapshotFlow {
@@ -442,6 +469,7 @@ constructor(
                     sceneState,
                     viewModel.containerViewModel.editModeViewModel.isEditing,
                     snapshotFlow { viewModel.expansionState.progress },
+                    snapshotFlow { currentSharedLayout },
                 )
             }
             // Normally, the Edit mode will stop if the composable leaves, but if the shade
@@ -470,7 +498,8 @@ constructor(
 
         Box(
             Modifier.fillMaxSize().thenIf(sceneState.shouldComposeLiveAxQs()) {
-                Modifier.axQsEntrance { qqsSquishiness }
+                if (sharedLayout) Modifier.axSharedQsEntrance { qqsSquishiness }
+                else Modifier.axQsEntrance { qqsSquishiness }
             }
         ) {
             SceneTransitionLayout(
@@ -484,13 +513,13 @@ constructor(
                             QuickSettings.rootElementKey,
                             Modifier,
                         ) {
-                            QuickSettingsElement()
+                            QuickSettingsElement(sharedLayout = sharedLayout)
                         }
                     }
                 }
 
                 scene(QuickQuickSettings, alwaysCompose = true) {
-                    if (sceneState.shouldComposeLiveAxQs()) {
+                    if (!sharedLayout && sceneState.shouldComposeLiveAxQs()) {
                         LaunchedEffect(Unit) { viewModel.onQQSOpen() }
                         // Cannot pass the element modifier in because the top element has a `testTag`
                         // and this would overwrite it.
@@ -525,7 +554,8 @@ constructor(
                 QuickSettingsStatusOverlayHeader(
                     headerViewModel = viewModel.containerViewModel.shadeHeaderViewModel,
                     isTransitioning =
-                        sceneState.isTransitioningBetween(QuickQuickSettings, QuickSettings),
+                        if (sharedLayout) sharedQsTransitioning
+                        else sceneState.isTransitioningBetween(QuickQuickSettings, QuickSettings),
                     modifier =
                         Modifier.graphicsLayer {
                             alpha = headerAlpha
@@ -796,6 +826,9 @@ constructor(
                     }
                     if (lastQqsHeight != viewModel.qqsHeight) {
                         lastQqsHeight = viewModel.qqsHeight
+                        if (sharedLayoutActive) {
+                            qqsPositionOnRoot.bottom = qqsPositionOnRoot.top + viewModel.qqsHeight
+                        }
                         qqsHeightListener.value?.onQqsHeightChanged()
                     }
                 }
@@ -831,11 +864,6 @@ constructor(
     private fun ContentScope.QuickQuickSettingsElement(modifier: Modifier = Modifier) {
         val qqsPadding = viewModel.qqsHeaderHeight
         val bottomPadding = viewModel.qqsBottomPadding
-        DisposableEffect(Unit) {
-            qqsVisible.value = true
-
-            onDispose { qqsVisible.value = false }
-        }
         val squishiness by
             viewModel.quickQuickSettingsViewModel.squishinessViewModel.squishiness
                 .collectAsStateWithLifecycle()
@@ -926,14 +954,40 @@ constructor(
     }
 
     @Composable
-    private fun ContentScope.QuickSettingsElement(modifier: Modifier = Modifier) {
+    private fun ContentScope.QuickSettingsElement(
+        modifier: Modifier = Modifier,
+        sharedLayout: Boolean = false,
+    ) {
         val qsExtraPadding = dimensionResource(R.dimen.qs_panel_padding_top)
         val overlayShadeHeader = useOverlayShadeHeader()
+        val topPadding = if (overlayShadeHeader) quickSettingsContentTopPadding() else qsExtraPadding
+        val topPaddingPx = with(LocalDensity.current) { topPadding.roundToPx() }
+        val bottomPadding = viewModel.qqsBottomPadding
+        val onCollapsedHeightChanged: (Int) -> Unit = remember(topPaddingPx, bottomPadding) {
+            { height -> viewModel.qqsHeight = topPaddingPx + height + bottomPadding }
+        }
+        if (sharedLayout && !viewModel.isQsEnabled) {
+            SideEffect { onCollapsedHeightChanged(0) }
+        }
         Column(
             modifier =
-                modifier.collapseExpandSemanticAction(
-                    stringResource(id = R.string.accessibility_quick_settings_collapse)
-                )
+                modifier
+                    .thenIf(sharedLayout) {
+                        Modifier.onPlaced { coordinates ->
+                            val (left, top) = coordinates.positionInRoot().round()
+                            qqsPositionOnRoot.set(
+                                left, top, left + coordinates.size.width, top + viewModel.qqsHeight,
+                            )
+                        }
+                    }
+                    .collapseExpandSemanticAction(
+                        stringResource(
+                            id =
+                                if (sharedLayout && viewModel.isQsFullyCollapsed)
+                                    R.string.accessibility_quick_settings_expand
+                                else R.string.accessibility_quick_settings_collapse
+                        )
+                    )
         ) {
             if (viewModel.isQsEnabled) {
                 if (overlayShadeHeader) {
@@ -966,11 +1020,11 @@ constructor(
                     }
 
                     val isListening: () -> Boolean =
-                        remember(viewModel) {
+                        remember(viewModel, sharedLayout) {
                                 derivedStateOf {
                                     viewModel.isQsVisibleAndAnyShadeExpanded &&
-                                        viewModel.expansionState.progress >
-                                            QSFragmentComposeViewModel.QS_LISTENING_THRESHOLD &&
+                                        (sharedLayout || viewModel.expansionState.progress >
+                                            QSFragmentComposeViewModel.QS_LISTENING_THRESHOLD) &&
                                         !viewModel.isEditing &&
                                         !viewModel.isStackScrollerOverscrolling
                                 }
@@ -1001,6 +1055,8 @@ constructor(
                                 viewModel.containerViewModel.brightnessSliderViewModel,
                             volumeSliderViewModel = volumeSliderViewModel,
                             scrollState = scrollState,
+                            sharedLayout = sharedLayout,
+                            onCollapsedHeightChanged = onCollapsedHeightChanged,
                             modifier =
                                 Modifier.fillMaxSize()
                                     .sysuiResTag(ResIdTags.quickSettingsPanel)
@@ -1221,6 +1277,7 @@ private suspend fun synchronizeQsState(
     state: MutableSceneTransitionLayoutState,
     editMode: Flow<Boolean>,
     expansion: Flow<Float>,
+    sharedLayout: Flow<Boolean>,
 ) {
     coroutineScope {
         val animationScope = this
@@ -1232,13 +1289,19 @@ private suspend fun synchronizeQsState(
             currentTransition = null
         }
 
-        editMode.combine(expansion, ::Pair).collectLatest { (editMode, progress) ->
+        combine(editMode, expansion, sharedLayout, ::Triple).collectLatest { (editMode, progress, shared) ->
             if (editMode && state.currentScene != SceneKeys.EditMode) {
                 state.setTargetScene(SceneKeys.EditMode, animationScope)?.second?.join()
             } else if (!editMode && state.currentScene == SceneKeys.EditMode) {
                 state.setTargetScene(SceneKeys.QuickSettings, animationScope)?.second?.join()
             }
             if (!editMode) {
+                if (shared) {
+                    if (state.currentScene != QuickSettings || currentTransition != null) {
+                        snapTo(QuickSettings)
+                    }
+                    return@collectLatest
+                }
                 when (progress) {
                     0f -> snapTo(QuickQuickSettings)
                     1f -> snapTo(QuickSettings)

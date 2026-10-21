@@ -195,12 +195,13 @@ fun AxQsEditUi(
     var viewportBounds by remember { mutableStateOf(Rect.Zero) }
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val showQqsEditor =
-        !landscape && !splitShade && axQsViewModel.panelMode == AxQsPanelMode.TOGETHER
+        !landscape && !splitShade && axQsViewModel.panelMode == AxQsPanelMode.TOGETHER &&
+            !axQsViewModel.useSharedQsLayout
     var resetEpoch by remember { mutableStateOf(0) }
     var showResetDialog by remember { mutableStateOf(false) }
     val layout = when {
         splitShade -> AxQsLayout.SPLIT_SHADE
-        editQqs -> AxQsLayout.QQS
+        editQqs && showQqsEditor -> AxQsLayout.QQS
         else -> AxQsLayout.QS
     }
 
@@ -266,7 +267,15 @@ fun AxQsEditUi(
                 }
 
                 Text(
-                    text = axString("ax_qs_reorder_education", "Hold and drag to reorder controls and tiles"),
+                    text =
+                        if (axQsViewModel.useSharedQsLayout && !landscape && !splitShade) {
+                            stringResource(
+                                R.string.lunaris_qs_shared_editor_hint,
+                                axQsViewModel.sharedQqsRows,
+                            )
+                        } else {
+                            axString("ax_qs_reorder_education", "Hold and drag to reorder controls and tiles")
+                        },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,

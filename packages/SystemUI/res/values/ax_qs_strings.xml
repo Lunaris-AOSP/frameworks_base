@@ -5,6 +5,10 @@
     <string name="ax_qs_back_to_editor">Back to tile editor</string>
     <string name="ax_qs_settings_appearance">Appearance</string>
     <string name="ax_qs_settings_behavior">Panel behavior</string>
+    <string name="lunaris_qs_shared_layout">Shared QS layout</string>
+    <string name="lunaris_qs_shared_layout_summary">In portrait, keep the top tiles in place and reveal more when expanding. Uses the Full QS layout when split panels are off.</string>
+    <string name="lunaris_qs_shared_qqs_rows">Collapsed QS rows</string>
+    <string name="lunaris_qs_shared_editor_hint">Arrange once for both views. The top %1$d rows stay visible when collapsed; tall widgets are kept whole.</string>
     <string name="ax_qs_settings_weather">Show weather</string>
     <string name="ax_qs_settings_weather_summary">Show your configured weather provider in the QS header</string>
     <string name="ax_qs_settings_split">Split Quick Settings</string>

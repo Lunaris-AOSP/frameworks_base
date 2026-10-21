@@ -158,6 +158,12 @@ constructor(
             )
 
     val quickPanelOnLeft: StateFlow<Boolean> = boolSetting(QUICK_PANEL_ON_LEFT, false)
+    val sharedQsLayout: StateFlow<Boolean> = boolSetting(SHARED_QS_LAYOUT, false)
+    val sharedQqsRows: StateFlow<Int> =
+        intSetting(SHARED_QQS_ROWS, 2)
+            .map { it.coerceIn(2, 4) }
+            .distinctUntilChanged()
+            .stateIn(applicationScope, SharingStarted.Eagerly, 2)
     val showWeather: StateFlow<Boolean> = boolSetting(SHOW_WEATHER, true)
     val showSliderPercentage: StateFlow<Boolean> = boolSetting(SHOW_SLIDER_PERCENTAGE, false)
     val strokeStyle: StateFlow<Boolean> = boolSetting(STROKE_STYLE, false)
@@ -427,6 +433,10 @@ constructor(
     fun setQuickPanelOnLeft(onLeft: Boolean) {
         putInt(QUICK_PANEL_ON_LEFT, onLeft.toSetting())
     }
+
+    fun setSharedQsLayout(enabled: Boolean) = putInt(SHARED_QS_LAYOUT, enabled.toSetting())
+
+    fun setSharedQqsRows(rows: Int) = putInt(SHARED_QQS_ROWS, rows.coerceIn(2, 4))
 
     fun setShowWeather(show: Boolean) = putInt(SHOW_WEATHER, show.toSetting())
 
@@ -823,6 +833,8 @@ constructor(
         const val SPLIT_SHADE_CONTROL_POSITIONS = "ax_qs_split_shade_control_positions"
         const val SPLIT_SHADE_SPANS = "ax_qs_split_shade_spans"
         const val QUICK_PANEL_ON_LEFT = "ax_qs_quick_panel_on_left"
+        const val SHARED_QS_LAYOUT = "lunaris_qs_shared_layout"
+        const val SHARED_QQS_ROWS = "lunaris_qs_shared_qqs_rows"
         const val PORTRAIT_QQS_CONTROL_COLUMNS = "ax_qqs_control_columns"
         const val PORTRAIT_QQS_TILE_COLUMNS = "ax_qqs_tile_columns"
         const val PORTRAIT_QS_CONTROL_COLUMNS = "ax_qs_control_columns"

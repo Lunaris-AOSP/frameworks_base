@@ -101,6 +101,25 @@ constructor(
     }
 
     private val hydrator = Hydrator("AxQsViewModel")
+    val sharedQsLayout by
+        hydrator.hydratedStateOf(
+            traceName = "sharedQsLayout",
+            initialValue = repository.sharedQsLayout.value,
+            source = repository.sharedQsLayout,
+        )
+    val sharedQqsRows by
+        hydrator.hydratedStateOf(
+            traceName = "sharedQqsRows",
+            initialValue = repository.sharedQqsRows.value,
+            source = repository.sharedQqsRows,
+        )
+    val useSharedQsLayout: Boolean
+        get() = sharedQsLayout && panelMode == AxQsPanelMode.TOGETHER
+
+    fun setSharedQsLayout(enabled: Boolean) = repository.setSharedQsLayout(enabled)
+
+    fun setSharedQqsRows(rows: Int) = repository.setSharedQqsRows(rows)
+
     val isShadeBeingDragged by
         hydrator.hydratedStateOf(
             traceName = "isShadeBeingDragged",

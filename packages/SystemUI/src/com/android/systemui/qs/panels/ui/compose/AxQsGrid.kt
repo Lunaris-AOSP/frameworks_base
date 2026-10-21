@@ -231,6 +231,31 @@ fun <T> fitAxQsGridItems(
     maxRows: Int,
 ): List<AxQsGridItem<T>> = packItems(items, columns, maxRows).map { it.item }
 
+internal fun <T> positionAxQsGridItems(
+    items: List<AxQsGridItem<T>>,
+    columns: Int,
+    maxRows: Int?,
+): List<AxQsGridItem<T>> =
+    packItems(items, columns, maxRows).map {
+        it.item.copy(position = AxQsGridPosition(it.column, it.row))
+    }
+
+internal fun <T> axQsCollapsedControlRows(
+    positionedItems: List<AxQsGridItem<T>>,
+    requestedRows: Int,
+): Int {
+    val totalRows = positionedItems.maxOfOrNull { (it.position?.row ?: 0) + it.span.rows } ?: 0
+    var rows = requestedRows.coerceIn(0, totalRows)
+    do {
+        val previousRows = rows
+        positionedItems.forEach { item ->
+            val start = item.position?.row ?: 0
+            if (start < rows) rows = maxOf(rows, start + item.span.rows)
+        }
+    } while (rows != previousRows)
+    return rows
+}
+
 fun <T> canFitAxQsGridItems(
     items: List<AxQsGridItem<T>>,
     columns: Int,
@@ -296,6 +321,9 @@ fun <T> AxQsTileGrid(
     circleCells: Boolean,
     pagerState: PagerState,
     modifier: Modifier = Modifier,
+    userScrollEnabled: Boolean = true,
+    itemWrapper: @Composable (Int, Int, @Composable () -> Unit) -> Unit =
+        { _, _, content -> content() },
     content: @Composable (AxQsGridItem<T>) -> Unit,
     label: @Composable (AxQsGridItem<T>) -> Unit = {},
 ) {
@@ -328,9 +356,12 @@ fun <T> AxQsTileGrid(
             beyondViewportPageCount = 1,
             pageSpacing = pagerPadding,
             verticalAlignment = Alignment.Top,
+            userScrollEnabled = userScrollEnabled,
             overscrollEffect = null,
         ) { page ->
             val pageItems = pages.getOrNull(page).orEmpty()
+            val itemIndices =
+                remember(pageItems) { pageItems.mapIndexed { index, item -> item.id to index }.toMap() }
             AxQsGrid(
                 items = pageItems,
                 columns = columns,
@@ -338,22 +369,24 @@ fun <T> AxQsTileGrid(
                 spacing = spacing,
                 modifier = Modifier.fillMaxSize(),
             ) { item ->
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Box(
-                        Modifier.fillMaxWidth().height(tileHeight),
-                        contentAlignment = Alignment.Center,
+                itemWrapper(page, itemIndices.getValue(item.id)) {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        content(item)
-                    }
-                    if (showLabels) {
                         Box(
-                            modifier = Modifier.fillMaxWidth().height(AX_TILE_LABEL_HEIGHT),
+                            Modifier.fillMaxWidth().height(tileHeight),
                             contentAlignment = Alignment.Center,
                         ) {
-                            label(item)
+                            content(item)
+                        }
+                        if (showLabels) {
+                            Box(
+                                modifier = Modifier.fillMaxWidth().height(AX_TILE_LABEL_HEIGHT),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                label(item)
+                            }
                         }
                     }
                 }

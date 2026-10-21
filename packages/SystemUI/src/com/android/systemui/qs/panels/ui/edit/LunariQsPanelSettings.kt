@@ -126,7 +126,10 @@ fun LunariQsPanelSettings(
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var layout by rememberSaveable(initialLayout) { mutableStateOf(initialLayout) }
+    var selectedLayout by rememberSaveable(initialLayout) { mutableStateOf(initialLayout) }
+    val layout =
+        if (viewModel.useSharedQsLayout && selectedLayout == AxQsLayout.QQS) AxQsLayout.QS
+        else selectedLayout
     val title = stringResource(R.string.ax_qs_panel_settings)
     val defaults = remember { LunarisQsSpacing() }
     val separate = viewModel.panelMode == AxQsPanelMode.SEPARATE
@@ -366,6 +369,26 @@ fun LunariQsPanelSettings(
                 item("behavior") {
                     SettingsHeading(stringResource(R.string.ax_qs_settings_behavior))
                 }
+                item("shared_layout") {
+                    SettingsSwitch(
+                        title = stringResource(R.string.lunaris_qs_shared_layout),
+                        summary = stringResource(R.string.lunaris_qs_shared_layout_summary),
+                        checked = viewModel.sharedQsLayout,
+                        onCheckedChange = viewModel::setSharedQsLayout,
+                        enabled = !separate,
+                        position = SettingPosition.First,
+                    )
+                }
+                if (viewModel.useSharedQsLayout) {
+                    item("shared_qqs_rows") {
+                        SettingsChoice(
+                            title = stringResource(R.string.lunaris_qs_shared_qqs_rows),
+                            selected = viewModel.sharedQqsRows,
+                            options = (2..4).map { it to it.toString() },
+                            onSelect = viewModel::setSharedQqsRows,
+                        )
+                    }
+                }
                 item("split") {
                     SettingsSwitch(
                         title = stringResource(R.string.ax_qs_settings_split),
@@ -376,7 +399,6 @@ fun LunariQsPanelSettings(
                                 if (it) AxQsPanelMode.SEPARATE else AxQsPanelMode.TOGETHER
                             )
                         },
-                        position = SettingPosition.First,
                     )
                 }
                 item("left") {
@@ -428,10 +450,12 @@ fun LunariQsPanelSettings(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        AxQsLayout.entries.forEach { option ->
+                        AxQsLayout.entries.filter {
+                            !viewModel.useSharedQsLayout || it != AxQsLayout.QQS
+                        }.forEach { option ->
                             FilterChip(
                                 selected = layout == option,
-                                onClick = { layout = option },
+                                onClick = { selectedLayout = option },
                                 label = {
                                     Text(
                                         stringResource(

@@ -89,6 +89,8 @@ internal fun ContentScope.AxQsMixedGrid(
     volumeSliderViewModel: AudioStreamSliderViewModel? = null,
     scrollState: ScrollState,
     modifier: Modifier = Modifier,
+    sharedLayout: Boolean = false,
+    onCollapsedHeightChanged: (Int) -> Unit = {},
 ) {
     val tiles = viewModel.containerViewModel.tileGridViewModel.tileViewModels
     val values = LinkedHashMap<String, AxQsGridValue>()
@@ -224,9 +226,31 @@ internal fun ContentScope.AxQsMixedGrid(
             )
         }
     val fittedControlItems: List<AxQsGridItem<AxQsGridValue>> =
-        fitAxQsGridItems<AxQsGridValue>(controlItems, controlColumns, rows.controls)
+        if (sharedLayout) {
+            positionAxQsGridItems(controlItems, controlColumns, rows.controls)
+        } else {
+            fitAxQsGridItems<AxQsGridValue>(controlItems, controlColumns, rows.controls)
+        }
+    val collapsedControlRows =
+        if (sharedLayout) axQsCollapsedControlRows(fittedControlItems, axQsViewModel.sharedQqsRows)
+        else 0
+    val controlRowCount =
+        if (sharedLayout) axQsGridRowCount(fittedControlItems, controlColumns, rows.controls) else 0
+    val collapsedTileRows =
+        if (sharedLayout) (axQsViewModel.sharedQqsRows - controlRowCount).coerceIn(0, rows.tiles)
+        else 0
+    val expandedItemsVisible by remember(viewModel, sharedLayout) {
+        derivedStateOf { !sharedLayout || viewModel.expansionState.progress > 0f }
+    }
+    val listeningItems =
+        if (expandedItemsVisible) fittedControlItems + tileItems
+        else {
+            fittedControlItems.filter {
+                (it.position?.row ?: 0) + it.span.rows <= collapsedControlRows
+            } + tileItems.take(collapsedTileRows * tileColumns)
+        }
     val visibleTiles =
-        (fittedControlItems + tileItems)
+        listeningItems
             .flatMap {
                 when (val value = it.value) {
                     is AxQsGridValue.Tile -> listOf(value.viewModel)
@@ -245,17 +269,18 @@ internal fun ContentScope.AxQsMixedGrid(
     val separateQqs =
         qqs && !splitShade && axQsViewModel.panelMode == AxQsPanelMode.SEPARATE
     val qqsHideBypass = separateQqs && axQsViewModel.isQsBypassingShade
-    val contentVisible by remember(viewModel, qqs, splitShade, qqsHideBypass) {
+    val contentVisible by remember(viewModel, qqs, splitShade, qqsHideBypass, sharedLayout) {
         derivedStateOf {
             viewModel.isQsVisibleAndAnyShadeExpanded && !viewModel.isEditing &&
                 if (qqs) !qqsHideBypass && !viewModel.isQsFullyExpanded
-                else splitShade || !viewModel.isQsFullyCollapsed
+                else sharedLayout || splitShade || !viewModel.isQsFullyCollapsed
         }
     }
-    val contentPlaying by remember(viewModel, axQsViewModel, scrollState, layout, contentVisible) {
+    val contentPlaying by remember(viewModel, axQsViewModel, scrollState, layout, contentVisible, sharedLayout) {
         derivedStateOf {
             shouldPlayQsContent(
-                layout = layout,
+                layout =
+                    if (sharedLayout && viewModel.isQsFullyCollapsed) AxQsLayout.QQS else layout,
                 panelExpansion = viewModel.panelExpansionFraction,
                 qsExpansion = viewModel.expansionState.progress,
                 qsExpanded = viewModel.isQsExpanded,
@@ -267,6 +292,10 @@ internal fun ContentScope.AxQsMixedGrid(
         }
     }
     val controlContent: @Composable (AxQsGridItem<AxQsGridValue>) -> Unit = { item ->
+        val itemVisible =
+            contentVisible &&
+                (expandedItemsVisible ||
+                    (item.position?.row ?: 0) + item.span.rows <= collapsedControlRows)
         when (val value = item.value) {
             is AxQsGridValue.Folder ->
                 this@AxQsMixedGrid.LunarisQsTileFolder(
@@ -321,8 +350,8 @@ internal fun ContentScope.AxQsMixedGrid(
                     span = item.span,
                     axQsViewModel = axQsViewModel,
                     layout = layout,
-                    contentVisible = contentVisible,
-                    contentPlaying = contentPlaying,
+                    contentVisible = if (sharedLayout) itemVisible else contentVisible,
+                    contentPlaying = contentPlaying && (!sharedLayout || itemVisible),
                     mediaViewModel = mediaViewModel,
                     mediaViewModelFactory = viewModel.mediaViewModelFactory,
                     brightnessSliderViewModel = brightnessSliderViewModel,
@@ -389,6 +418,32 @@ internal fun ContentScope.AxQsMixedGrid(
                     allowCircles = allowCircleCells,
                 )
             when {
+                sharedLayout ->
+                    AxQsSharedPanel(
+                        toolbarViewModel = toolbarViewModel,
+                        shadeHeaderViewModel = viewModel.containerViewModel.shadeHeaderViewModel,
+                        controlItems = fittedControlItems,
+                        tileItems = tileItems,
+                        controlColumns = controlColumns,
+                        controlRows = controlRowCount,
+                        tileColumns = tileColumns,
+                        tileRows = rows.tiles,
+                        collapsedControlRows = collapsedControlRows,
+                        collapsedTileRows = collapsedTileRows,
+                        rowHeight = rowHeight,
+                        spacing = spacing,
+                        circleCells = circleCells,
+                        showTileLabels = showTileLabels,
+                        showWeather = showWeather,
+                        scrollState = scrollState,
+                        expansionProgress = { viewModel.expansionState.progress },
+                        isFullyVisible = { viewModel.isQsFullyExpanded && !viewModel.isEditing },
+                        onCollapsedHeightChanged = onCollapsedHeightChanged,
+                        modifier = Modifier.fillMaxSize().padding(horizontal = contentPadding),
+                        controlContent = controlContent,
+                        tileContent = tileContent,
+                        tileLabel = tileLabel,
+                    )
                 qqs && splitShade -> Unit
                 qqs ->
                     Column(
