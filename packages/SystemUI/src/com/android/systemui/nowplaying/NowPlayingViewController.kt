@@ -27,6 +27,7 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.palette.graphics.Palette
 import com.android.settingslib.Utils
+import com.android.systemui.axdynamicbar.ui.AxDynamicBarKeyguardExpansion
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.res.R
 import com.android.systemui.util.ScrimUtils
@@ -40,6 +41,7 @@ class NowPlayingViewController
 @Inject
 constructor(
     private val context: Context,
+    private val keyguardExpansion: AxDynamicBarKeyguardExpansion,
 ) : ScrimUtils.ScrimEventListener {
 
     private val nowPlayingView = NowPlayingView(context)
@@ -168,6 +170,23 @@ constructor(
             Log.e(TAG, "Error adding ScrimUtils listener", e)
         }
         
+        scope.launch {
+            keyguardExpansion.isExpanded.collect { expanded ->
+                if (expanded) {
+                    nowPlayingView.suppressed = true
+                    forceHide()
+                }
+            }
+        }
+        scope.launch {
+            keyguardExpansion.collapseSettled.collect {
+                if (!keyguardExpansion.isExpanded.value) {
+                    nowPlayingView.suppressed = false
+                    updateState()
+                }
+            }
+        }
+
         observeSettings()
         
         startMediaMonitoring()
@@ -369,7 +388,22 @@ constructor(
         updateState()
     }
 
+    private fun shouldShowNowPlaying(panelCollapsed: Boolean): Boolean =
+        !nowPlayingView.suppressed
+            && currentSettings.isEnabled
+            && isPlaying
+            && currentTrackTitle.isNotEmpty()
+            && !bouncerShowingOrKeyguardDismissing
+            && panelCollapsed
+            && !isScreenOff
+            && ((isKeyguardShowing && !isDozing && currentSettings.showOnLockscreen)
+                || (isDozing && currentSettings.showOnAod))
+
     private fun updateState() {
+        if (nowPlayingView.suppressed) {
+            cancelDebounceJobs()
+            return
+        }
         if (!currentSettings.isEnabled) {
             cancelDebounceJobs()
             nowPlayingView.hide()
@@ -383,13 +417,7 @@ constructor(
             true
         }
 
-        val shouldShow = isPlaying
-                && currentTrackTitle.isNotEmpty()
-                && !bouncerShowingOrKeyguardDismissing
-                && isPanelCollapsed
-                && !isScreenOff
-                && ((isKeyguardShowing && !isDozing && currentSettings.showOnLockscreen)
-                        || (isDozing && currentSettings.showOnAod))
+        val shouldShow = shouldShowNowPlaying(isPanelCollapsed)
 
         if (shouldShow) {
             hideDelayJob?.cancel()
@@ -401,13 +429,7 @@ constructor(
                 val stillCollapsed = try {
                     ScrimUtils.get()?.isPanelFullyCollapsed() ?: true
                 } catch (e: Exception) { true }
-                if (isPlaying
-                        && currentTrackTitle.isNotEmpty()
-                        && !bouncerShowingOrKeyguardDismissing
-                        && stillCollapsed
-                        && !isScreenOff
-                        && ((isKeyguardShowing && !isDozing && currentSettings.showOnLockscreen)
-                                || (isDozing && currentSettings.showOnAod))) {
+                if (shouldShowNowPlaying(stillCollapsed)) {
                     nowPlayingView.show()
                 }
                 showDelayJob = null
@@ -422,13 +444,7 @@ constructor(
                 val stillCollapsed = try {
                     ScrimUtils.get()?.isPanelFullyCollapsed() ?: true
                 } catch (e: Exception) { true }
-                if (!(isPlaying
-                            && currentTrackTitle.isNotEmpty()
-                            && !bouncerShowingOrKeyguardDismissing
-                            && stillCollapsed
-                            && !isScreenOff
-                            && ((isKeyguardShowing && !isDozing && currentSettings.showOnLockscreen)
-                                    || (isDozing && currentSettings.showOnAod)))) {
+                if (!shouldShowNowPlaying(stillCollapsed)) {
                     nowPlayingView.hide()
                 }
                 hideDelayJob = null
@@ -451,6 +467,7 @@ constructor(
 
     override fun onKeyguardShowingChanged(showing: Boolean) {
         isKeyguardShowing = showing
+        if (!showing) nowPlayingView.suppressed = false
         updateState()
     }
 

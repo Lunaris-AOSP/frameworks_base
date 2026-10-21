@@ -74,9 +74,11 @@ class NowPlayingView(context: Context) : FrameLayout(context) {
             field = value
             resetMarquee()
             if (value.isNotEmpty() && visible) {
-                post { 
-                    isVisible = true
-                    alpha = currentAlpha
+                post {
+                    if (!suppressed && visible) {
+                        isVisible = true
+                        alpha = currentAlpha
+                    }
                 }
             }
             invalidate()
@@ -209,11 +211,24 @@ class NowPlayingView(context: Context) : FrameLayout(context) {
         24f * resources.displayMetrics.density
     }
 
+    var suppressed: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            if (value) {
+                fadeAnimator?.removeAllListeners()
+                fadeAnimator?.cancel()
+                fadeAnimator = null
+                stopMarquee()
+                visible = false
+            }
+        }
+
     var visible: Boolean
         get() = isVisible
-        set(value) { 
-            isVisible = value
-            if (!value) {
+        set(value) {
+            isVisible = value && !suppressed
+            if (!isVisible) {
                 currentAlpha = 0f
                 alpha = 0f
             }
@@ -327,9 +342,10 @@ class NowPlayingView(context: Context) : FrameLayout(context) {
     }
 
     fun show() {
-        if (!hasDisplayContent()) return
-        
+        if (suppressed || !hasDisplayContent()) return
+
         post {
+            if (suppressed || !hasDisplayContent()) return@post
             visible = true
             isVisible = true
             fadeAnimator?.cancel()
@@ -355,6 +371,7 @@ class NowPlayingView(context: Context) : FrameLayout(context) {
 
     fun hide() {
         post {
+            if (suppressed) return@post
             fadeAnimator?.cancel()
             stopMarquee()
             

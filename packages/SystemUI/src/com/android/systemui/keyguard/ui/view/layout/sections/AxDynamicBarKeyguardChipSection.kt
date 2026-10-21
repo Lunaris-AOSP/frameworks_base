@@ -10,6 +10,7 @@ import androidx.constraintlayout.widget.ConstraintSet
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.android.compose.theme.PlatformTheme
+import com.android.internal.policy.SystemBarUtils
 import com.android.systemui.islandevents.model.IslandEvent
 import com.android.systemui.axdynamicbar.ui.AxDynamicBarChipViewModel
 import com.android.systemui.axdynamicbar.ui.compose.AxDynamicBarKeyguardChip
@@ -17,7 +18,6 @@ import com.android.systemui.keyguard.domain.interactor.KeyguardClockInteractor
 import com.android.systemui.keyguard.shared.model.ClockSize
 import com.android.systemui.keyguard.shared.model.KeyguardSection
 import com.android.systemui.lifecycle.repeatWhenAttached
-import com.android.systemui.plugins.keyguard.ui.clocks.ClockViewIds
 import com.android.systemui.res.R
 import com.android.systemui.media.MediaViewController
 import com.android.systemui.shade.ShadeDisplayAware
@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 private const val CHIP_ABOVE_LOCK_MARGIN_DP = 12f
+private const val EXPANDED_TOP_PROTECTION_DP = 16f
 private const val EXPANDED_BOTTOM_PROTECTION_DP = 16f
 private const val UNSET = -1
 
@@ -55,11 +56,13 @@ private val HIDDEN_VIEW_IDS = listOf(
     R.id.smartspace_page_indicator,
     R.id.keyguard_slice_view,
     R.id.keyguard_weather_area,
-    R.id.now_playing_view,
 )
 
 private fun Float.dpToPx(context: Context): Int =
     (this * context.resources.displayMetrics.density + 0.5f).toInt()
+
+private fun expandedTopMarginPx(context: Context): Int =
+    SystemBarUtils.getStatusBarHeight(context) + EXPANDED_TOP_PROTECTION_DP.dpToPx(context)
 
 class AxDynamicBarKeyguardChipSection
 @Inject
@@ -213,7 +216,8 @@ constructor(
                 expanded -> {
                     constrainWidth(chipViewId, ConstraintSet.MATCH_CONSTRAINT)
                     constrainHeight(chipViewId, ConstraintSet.MATCH_CONSTRAINT)
-                    connect(chipViewId, ConstraintSet.TOP, ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL, ConstraintSet.BOTTOM)
+                    // The small clock may be hidden or absent with a custom clock style.
+                    connect(chipViewId, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP, expandedTopMarginPx(context))
                     connect(chipViewId, ConstraintSet.BOTTOM, R.id.device_entry_icon_view, ConstraintSet.TOP, bottomProtectionPx)
                     connect(chipViewId, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START)
                     connect(chipViewId, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
@@ -241,13 +245,13 @@ constructor(
         val bottomProtectionPx = EXPANDED_BOTTOM_PROTECTION_DP.dpToPx(context)
         lp.width = ConstraintLayout.LayoutParams.MATCH_PARENT
         lp.height = 0
-        lp.topToBottom = ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL
+        lp.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
         lp.bottomToTop = R.id.device_entry_icon_view
         lp.startToStart = ConstraintLayout.LayoutParams.PARENT_ID
         lp.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
-        lp.topMargin = 0
+        lp.topMargin = expandedTopMarginPx(context)
         lp.bottomMargin = bottomProtectionPx
-        lp.topToTop = UNSET
+        lp.topToBottom = UNSET
         lp.bottomToBottom = UNSET
         lp.startToEnd = UNSET
         lp.endToStart = UNSET

@@ -260,8 +260,23 @@ internal fun rememberIslandColors(event: IslandEvent): IslandColorScheme {
 }
 
 @Composable
-internal fun rememberMediaColors(event: IslandEvent.Media): IslandColorScheme {
-    val raw = if (event.mediaColor != 0) Color(event.mediaColor) else PurpleAccent
+internal fun rememberMediaColors(
+    event: IslandEvent.Media,
+    useAlbumArt: Boolean = false,
+): IslandColorScheme {
+    val albumColor = if (useAlbumArt) {
+        event.albumArt?.let { rememberPaletteColor(it, preferLight = true) }
+    } else null
+    val raw = albumColor ?: if (event.mediaColor != 0) Color(event.mediaColor) else PurpleAccent
+    if (useAlbumArt) {
+        val accent = ensureContrast(raw, isDark = true)
+        return IslandColorScheme(
+            accent = accent,
+            onAccent = chipContentColorOn(accent),
+            tonal = accent.copy(alpha = AlphaFaint),
+            surfaceTint = darkenColor(accent, keep = 0.25f),
+        )
+    }
     return buildColorScheme(raw)
 }
 
@@ -309,8 +324,9 @@ internal fun chipAccentColorFor(event: IslandEvent): Color {
 }
 
 @Composable
-private fun rememberPaletteColor(drawable: Drawable): Color? {
-    val color by produceState<Color?>(null, drawable) {
+private fun rememberPaletteColor(drawable: Drawable, preferLight: Boolean = false): Color? {
+    val color by produceState<Color?>(null, drawable, preferLight) {
+        value = null
         
         val bitmap = try {
             withContext(Dispatchers.Main) { drawable.toBitmap(24, 24) }
@@ -319,11 +335,17 @@ private fun rememberPaletteColor(drawable: Drawable): Color? {
             withContext(Dispatchers.Default) {
                 try {
                     val palette = Palette.from(it).generate()
-                    val swatch =
+                    val swatch = if (preferLight) {
+                        palette.lightVibrantSwatch
+                            ?: palette.vibrantSwatch
+                            ?: palette.lightMutedSwatch
+                            ?: palette.dominantSwatch
+                    } else {
                         palette.darkVibrantSwatch
                             ?: palette.vibrantSwatch
                             ?: palette.darkMutedSwatch
                             ?: palette.dominantSwatch
+                    }
                     swatch?.let { s -> Color(s.rgb) }
                 } catch (_: Exception) {
                     null
