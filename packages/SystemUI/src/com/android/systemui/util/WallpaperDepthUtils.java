@@ -142,10 +142,7 @@ public class WallpaperDepthUtils {
                 applyWallpaperZoom();
                 ViewGroup parent = (ViewGroup) getParent();
                 if (parent != null && mLockScreenBackground.getParent() == null) {
-                    View scrimBehind = parent.findViewById(
-                            com.android.systemui.res.R.id.scrim_behind);
-                    int scrimIndex = parent.indexOfChild(scrimBehind);
-                    parent.addView(mLockScreenBackground, Math.max(0, scrimIndex));
+                    parent.addView(mLockScreenBackground, 0);
                 }
             }
 
