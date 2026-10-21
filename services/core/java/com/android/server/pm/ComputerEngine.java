@@ -1172,7 +1172,7 @@ public class ComputerEngine implements Computer {
 
     public final ApplicationInfo getApplicationInfo(String packageName,
             @PackageManager.ApplicationInfoFlagsBits long flags, int userId) {
-        if (QuickSwitchService.shouldHide(userId, packageName))
+        if (QuickSwitchService.shouldHide(Binder.getCallingUid(), userId, packageName))
             return null;
         if (isAppDetached(packageName, userId)) return null;
         if (shouldHideFromCaller(Binder.getCallingUid(), packageName, userId)) return null;
@@ -1189,7 +1189,7 @@ public class ComputerEngine implements Computer {
             @PackageManager.ApplicationInfoFlagsBits long flags,
             int filterCallingUid, int userId) {
         if (!mUserManager.exists(userId)) return null;
-        if (QuickSwitchService.shouldHide(userId, packageName))
+        if (QuickSwitchService.shouldHide(filterCallingUid, userId, packageName))
             return null;
         if (isAppDetached(packageName, userId)) return null;
         if (shouldHideFromCaller(filterCallingUid, packageName, userId)) return null;
@@ -1208,14 +1208,15 @@ public class ComputerEngine implements Computer {
             int callingUid, Context context, int userId, ParceledListSlice<PackageInfo> list) {
         List<PackageInfo> appList = new ArrayList<>(list.getList());
         appList.removeIf(info -> isAppDetached(info.packageName, userId));
-        return new ParceledListSlice<>(appList);
+        return QuickSwitchService.recreatePackageList(callingUid, context, userId,
+                new ParceledListSlice<>(appList));
     }
 
     public List<ApplicationInfo> recreateApplicationList(
             int callingUid, Context context, int userId, List<ApplicationInfo> list) {
         List<ApplicationInfo> appList = new ArrayList<>(list);
         appList.removeIf(info -> isAppDetached(info.packageName, userId));
-        return appList;
+        return QuickSwitchService.recreateApplicationList(callingUid, context, userId, appList);
     }
 
     protected ApplicationInfo getApplicationInfoInternalBody(String packageName,
@@ -1916,7 +1917,7 @@ public class ComputerEngine implements Computer {
 
     public final PackageInfo getPackageInfo(String packageName,
             @PackageManager.PackageInfoFlagsBits long flags, int userId) {
-        if (QuickSwitchService.shouldHide(userId, packageName))
+        if (QuickSwitchService.shouldHide(Binder.getCallingUid(), userId, packageName))
             return null;
         if (isAppDetached(packageName, userId)) return null;
         if (shouldHideFromCaller(Binder.getCallingUid(), packageName, userId)) return null;
@@ -1933,6 +1934,7 @@ public class ComputerEngine implements Computer {
     public final PackageInfo getPackageInfoInternal(String packageName, long versionCode,
             long flags, int filterCallingUid, int userId) {
         if (!mUserManager.exists(userId)) return null;
+        if (QuickSwitchService.shouldHide(filterCallingUid, userId, packageName)) return null;
         if (shouldHideFromCaller(filterCallingUid, packageName, userId)) return null;
         flags = updateFlagsForPackage(flags, userId);
         enforceCrossUserPermission(Binder.getCallingUid(), userId,
