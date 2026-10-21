@@ -34,8 +34,11 @@ import android.graphics.Rect;
 import android.graphics.Region;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.RemoteException;
 import android.os.Trace;
+import android.os.UserHandle;
+import android.provider.Settings;
 import android.util.Log;
 import android.view.Display;
 import android.view.IWindow;
@@ -117,7 +120,7 @@ public class NotificationShadeWindowControllerImpl implements NotificationShadeW
     private final ShadeWindowLogger mLogger;
     private final LayoutParams mShadeWindowLayoutParams;
     private final LayoutParams mLpChanged;
-    private final long mLockScreenDisplayTimeout;
+    private final long mDefaultLockScreenDisplayTimeout;
     private final float mKeyguardPreferredRefreshRate; // takes precedence over max
     private final float mKeyguardMaxRefreshRate;
     private final float mAODMaxRefreshRate;
@@ -200,7 +203,7 @@ public class NotificationShadeWindowControllerImpl implements NotificationShadeW
         mUserInteractor = userInteractor;
         mCommunalInteractor = communalInteractor;
         mLastKeyguardRotationAllowed = mKeyguardStateController.isKeyguardScreenRotationAllowed();
-        mLockScreenDisplayTimeout = context.getResources()
+        mDefaultLockScreenDisplayTimeout = context.getResources()
                 .getInteger(R.integer.config_lockScreenDisplayTimeout);
         mShadeInteractorLazy = shadeInteractorLazy;
         ((SysuiStatusBarStateController) statusBarStateController)
@@ -341,7 +344,7 @@ public class NotificationShadeWindowControllerImpl implements NotificationShadeW
         }
 
         mLpChanged.copyFrom(mLp);
-        SettingsObserver observer = new SettingsObserver(new Handler());
+        SettingsObserver observer = new SettingsObserver(new Handler(Looper.getMainLooper()));
         observer.observe(mContext);
         onThemeChanged();
 
@@ -605,6 +608,12 @@ public class NotificationShadeWindowControllerImpl implements NotificationShadeW
         }
     }
 
+    private long getLockScreenDisplayTimeout() {
+        final int configured = Settings.System.getIntForUser(mContext.getContentResolver(),
+                Settings.System.LOCKSCREEN_DISPLAY_TIMEOUT, -1, UserHandle.USER_CURRENT);
+        return configured > 0 ? configured : mDefaultLockScreenDisplayTimeout;
+    }
+
     private void applyUserActivityTimeout(NotificationShadeWindowState state) {
         final Boolean communalVisible = state.isCommunalVisibleAndNotOccluded();
         final Boolean keyguardShowing = state.isKeyguardShowingAndNotOccluded();
@@ -617,7 +626,7 @@ public class NotificationShadeWindowControllerImpl implements NotificationShadeW
             } else if (communalVisible) {
                 timeout = CommunalInteractor.AWAKE_INTERVAL_MS;
             } else if (keyguardShowing) {
-                timeout = mLockScreenDisplayTimeout;
+                timeout = getLockScreenDisplayTimeout();
             }
         }
         mLpChanged.userActivityTimeout = timeout;
@@ -1175,6 +1184,9 @@ public class NotificationShadeWindowControllerImpl implements NotificationShadeW
             context.getContentResolver().registerContentObserver(
                     LineageSettings.System.getUriFor(LineageSettings.System.LOCKSCREEN_ROTATION),
                     false, this);
+            context.getContentResolver().registerContentObserver(
+                    Settings.System.getUriFor(Settings.System.LOCKSCREEN_DISPLAY_TIMEOUT),
+                    false, this, UserHandle.USER_ALL);
         }
 
         public void unobserve(Context context) {
