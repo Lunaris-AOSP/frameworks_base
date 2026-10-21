@@ -99,18 +99,35 @@ internal fun ChargingExpanded(event: IslandEvent.Charging) {
 
 @Composable
 internal fun BluetoothExpanded(event: IslandEvent.Bluetooth, interactor: IslandActions) {
+    val artwork = event.deviceImage
+    val earbuds =
+        listOfNotNull(
+            event.leftBatteryLevel?.let {
+                BudBattery(R.string.ax_dynamic_bar_left_earbud, it, mirror = false)
+            },
+            event.rightBatteryLevel?.let {
+                BudBattery(R.string.ax_dynamic_bar_right_earbud, it, mirror = true)
+            },
+        )
+    val showSingleBattery = earbuds.isEmpty() && event.caseBatteryLevel == null
     ExpandedCardLayout(
         accentColor = IslandTone.ACCENT.tint,
+        iconSize = if (artwork != null) 56.dp else SizeIconBadge,
+        iconBackground = artwork == null,
         icon = {
-            event.deviceIcon?.let {
+            val image = artwork ?: event.deviceIcon
+            if (image != null) {
+                val size = if (artwork != null) 56.dp else SizeIconSm
                 Image(
-                    bitmap = it.toScaledBitmap(SizeIconSm),
+                    bitmap = image.toScaledBitmap(size),
                     contentDescription = event.deviceTypeLabel.ifEmpty {
                         stringResource(R.string.ax_dynamic_bar_bluetooth_device)
                     },
-                    modifier = Modifier.size(SizeIconSm),
+                    modifier = Modifier.size(size),
                 )
-            } ?: Icon(Icons.Filled.Bluetooth, null, tint = IslandTone.ACCENT.tint, modifier = Modifier.size(SizeIconSm))
+            } else {
+                Icon(Icons.Filled.Bluetooth, null, tint = IslandTone.ACCENT.tint, modifier = Modifier.size(SizeIconSm))
+            }
         },
         title = {
             Text(event.deviceName, color = OnCardText, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -122,9 +139,34 @@ internal fun BluetoothExpanded(event: IslandEvent.Bluetooth, interactor: IslandA
                     event.deviceTypeLabel.ifEmpty { stringResource(R.string.ax_dynamic_bar_connected) },
                     IslandTone.ACCENT.tint,
                 )
-                if (event.batteryLevel >= 0) {
-                    val batteryColor = if (event.batteryLevel > 20) IslandTone.POSITIVE.tint else IslandTone.ALERT.tint
-                    StatusChip("${event.batteryLevel}%", batteryColor)
+                if (showSingleBattery && event.batteryLevel >= 0) {
+                    StatusChip("${event.batteryLevel}%", batteryLevelColor(event.batteryLevel))
+                }
+            }
+            event.caseBatteryLevel?.let { level ->
+                Row(
+                    modifier = Modifier.semantics(mergeDescendants = true) {},
+                    horizontalArrangement = Arrangement.spacedBy(SpaceXs),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.dynamic_island_earbuds_case),
+                        contentDescription = null,
+                        tint = SubtleGray,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Text(
+                        stringResource(R.string.ax_dynamic_bar_earbuds_case),
+                        color = SubtleGray,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                    )
+                    Text(
+                        "$level%",
+                        color = batteryLevelColor(level),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 }
             }
         },
@@ -137,7 +179,59 @@ internal fun BluetoothExpanded(event: IslandEvent.Bluetooth, interactor: IslandA
                 onClick = { interactor.disconnectBluetooth(event.address) },
             )
         },
+        actions = {
+            if (earbuds.isNotEmpty()) BluetoothEarbudBatteries(earbuds)
+        },
     )
+}
+
+private data class BudBattery(val labelRes: Int, val level: Int, val mirror: Boolean)
+
+@Composable
+private fun BluetoothEarbudBatteries(batteries: List<BudBattery>) {
+    Row(
+        modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+        horizontalArrangement = Arrangement.spacedBy(SpaceMd),
+    ) {
+        batteries.forEach { battery ->
+            Row(
+                modifier =
+                    Modifier.weight(1f)
+                        .heightIn(min = 56.dp)
+                        .fillMaxHeight()
+                        .clip(ShapeCompact)
+                        .background(IslandTone.ACCENT.tint.copy(alpha = AlphaIconBg))
+                        .semantics(mergeDescendants = true) {}
+                        .padding(SpaceMd),
+                horizontalArrangement = Arrangement.spacedBy(SpaceSm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.dynamic_island_earbud),
+                    contentDescription = null,
+                    tint = OnCardText,
+                    modifier =
+                        Modifier.size(24.dp).graphicsLayer { scaleX = if (battery.mirror) -1f else 1f },
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(battery.labelRes),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = SubtleGray,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = "${battery.level}%",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = batteryLevelColor(battery.level),
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable
