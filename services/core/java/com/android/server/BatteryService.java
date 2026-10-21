@@ -745,26 +745,27 @@ public final class BatteryService extends SystemService {
             mLowBatteryShutdownDialog.dismiss();
         }
         
-        AlertDialog.Builder builder = new AlertDialog.Builder(mContext);
-        builder.setTitle("Critical Battery Warning");
-        builder.setMessage("Battery level is critically low (" + mHealthInfo.batteryLevel + "%).\n\n"
-                + "Device will shut down in 15 seconds to prevent data loss.\n\n"
-                + "Please connect your charger immediately!");
-        builder.setIcon(android.R.drawable.ic_dialog_alert);
+        AlertDialog.Builder builder = new AlertDialog.Builder(mContext,
+                com.android.internal.R.style.Theme_DeviceDefault_Dialog_BatteryWarning);
+        builder.setTitle(com.android.internal.R.string.low_battery_shutdown_title);
+        builder.setMessage(mContext.getString(
+                com.android.internal.R.string.low_battery_shutdown_message,
+                mHealthInfo.batteryLevel));
+        builder.setIcon(com.android.internal.R.drawable.ic_battery_alert);
         builder.setCancelable(false);
         
-        builder.setPositiveButton("I'll Connect Charger", (dialog, which) -> {
-            dialog.dismiss();
-        });
+        builder.setPositiveButton(com.android.internal.R.string.low_battery_connect_charger,
+                (dialog, which) -> dialog.dismiss());
         
-        builder.setNegativeButton("Shutdown Now", (dialog, which) -> {
-            dialog.dismiss();
-            Intent intent = new Intent(Intent.ACTION_REQUEST_SHUTDOWN);
-            intent.putExtra(Intent.EXTRA_KEY_CONFIRM, false);
-            intent.putExtra(Intent.EXTRA_REASON, PowerManager.SHUTDOWN_LOW_BATTERY);
-            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startShutdownActivity(intent);
-        });
+        builder.setNegativeButton(com.android.internal.R.string.low_battery_shutdown_now,
+                (dialog, which) -> {
+                    dialog.dismiss();
+                    Intent intent = new Intent(Intent.ACTION_REQUEST_SHUTDOWN);
+                    intent.putExtra(Intent.EXTRA_KEY_CONFIRM, false);
+                    intent.putExtra(Intent.EXTRA_REASON, PowerManager.SHUTDOWN_LOW_BATTERY);
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startShutdownActivity(intent);
+                });
         
         mLowBatteryShutdownDialog = builder.create();
         
@@ -1808,22 +1809,26 @@ public final class BatteryService extends SystemService {
             return;
         }
         
-        AlertDialog.Builder builder = new AlertDialog.Builder(mContext);
-        builder.setTitle("⚠️ Critical Battery Level");
-        builder.setMessage("Battery: " + mHealthInfo.batteryLevel + "%\n\n"
-                + "Your device battery is critically low.\n"
-                + "Please connect to a charger immediately to prevent automatic shutdown.");
-        builder.setIcon(com.android.internal.R.drawable.stat_sys_battery_charge);
+        AlertDialog.Builder builder = new AlertDialog.Builder(mContext,
+                com.android.internal.R.style.Theme_DeviceDefault_Dialog_BatteryWarning);
+        builder.setTitle(com.android.internal.R.string.critical_battery_warning_title);
+        builder.setMessage(mContext.getString(
+                com.android.internal.R.string.critical_battery_warning_message,
+                mHealthInfo.batteryLevel));
+        builder.setIcon(com.android.internal.R.drawable.ic_battery_alert);
         builder.setCancelable(true);
         
-        builder.setPositiveButton("OK", (dialog, which) -> dialog.dismiss());
+        builder.setPositiveButton(com.android.internal.R.string.ok,
+                (dialog, which) -> dialog.dismiss());
         
-        builder.setNeutralButton("Battery Saver", (dialog, which) -> {
-            dialog.dismiss();
-            Intent intent = new Intent(android.provider.Settings.ACTION_BATTERY_SAVER_SETTINGS);
-            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            mContext.startActivity(intent);
-        });
+        builder.setNeutralButton(com.android.internal.R.string.low_battery_saver,
+                (dialog, which) -> {
+                    dialog.dismiss();
+                    Intent intent = new Intent(
+                            android.provider.Settings.ACTION_BATTERY_SAVER_SETTINGS);
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    mContext.startActivity(intent);
+                });
         
         AlertDialog dialog = builder.create();
         if (dialog.getWindow() != null) {

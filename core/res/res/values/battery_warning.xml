@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Copyright (C) 2024-2026 Lunaris AOSP
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+         http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+-->
+<resources>
+    <color name="battery_warning_background">@color/system_neutral1_50</color>
+
+    <style name="Theme.DeviceDefault.Dialog.BatteryWarning"
+        parent="Theme.DeviceDefault.Dialog.Alert.DayNight">
+        <item name="colorBackground">@color/battery_warning_background</item>
+        <item name="dialogCornerRadius">28dp</item>
+        <item name="buttonCornerRadius">28dp</item>
+        <item name="alertDialogStyle">@style/AlertDialog.BatteryWarning</item>
+        <item name="buttonBarPositiveButtonStyle">@style/Widget.BatteryWarning.Button</item>
+        <item name="buttonBarNegativeButtonStyle">@style/Widget.BatteryWarning.Button.Outlined</item>
+        <item name="buttonBarNeutralButtonStyle">@style/Widget.BatteryWarning.Button.Outlined</item>
+    </style>
+
+    <style name="AlertDialog.BatteryWarning" parent="AlertDialog.DeviceDefault">
+        <item name="layout">@layout/battery_warning_dialog</item>
+    </style>
+
+    <style name="TextAppearance.BatteryWarning.Title" parent="TextAppearance.DeviceDefault.Large">
+        <item name="textColor">@color/materialColorOnSurface</item>
+        <item name="textSize">24sp</item>
+        <item name="fontFamily">@string/config_headlineFontFamily</item>
+        <item name="lineHeight">32sp</item>
+        <item name="gravity">center</item>
+        <item name="textAlignment">center</item>
+        <item name="hyphenationFrequency">full</item>
+    </style>
+
+    <style name="TextAppearance.BatteryWarning.Message" parent="TextAppearance.DeviceDefault.Medium">
+        <item name="textColor">@color/materialColorOnSurfaceVariant</item>
+        <item name="textSize">14sp</item>
+        <item name="fontFamily">@string/config_headlineFontFamily</item>
+        <item name="lineHeight">20sp</item>
+        <item name="gravity">center</item>
+        <item name="textAlignment">center</item>
+    </style>
+
+    <style name="Widget.BatteryWarning.Button" parent="Widget.DeviceDefault.Button">
+        <item name="background">@drawable/battery_warning_button_filled</item>
+        <item name="textColor">@color/materialColorOnPrimary</item>
+        <item name="textSize">14sp</item>
+        <item name="lineHeight">20sp</item>
+        <item name="fontFamily">@string/config_bodyFontFamilyMedium</item>
+        <item name="textAllCaps">false</item>
+        <item name="stateListAnimator">@null</item>
+        <item name="minWidth">0dp</item>
+        <item name="minHeight">48dp</item>
+    </style>
+
+    <style name="Widget.BatteryWarning.Button.Outlined">
+        <item name="background">@drawable/battery_warning_button_outline</item>
+        <item name="textColor">@color/materialColorOnSurface</item>
+    </style>
+</resources>

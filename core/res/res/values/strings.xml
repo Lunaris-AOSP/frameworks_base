@@ -708,6 +708,21 @@
     <string name="screen_lock">Screen lock</string>
     <!-- Button to turn off the phone, within the Phone Options dialog -->
     <string name="power_off">Power off</string>
+
+    <!-- Title of the warning shown just before a low-battery shutdown. [CHAR LIMIT=NONE] -->
+    <string name="low_battery_shutdown_title">Battery critically low</string>
+    <!-- Low-battery shutdown warning. The number is the remaining battery percentage. [CHAR LIMIT=NONE] -->
+    <string name="low_battery_shutdown_message">%1$d%% battery remaining. Your device will shut down in 15 seconds.\n\nConnect a charger now.</string>
+    <!-- Dismisses the low-battery shutdown warning so the user can connect a charger. [CHAR LIMIT=30] -->
+    <string name="low_battery_connect_charger">Connect charger</string>
+    <!-- Immediately shuts down the device from the low-battery warning. [CHAR LIMIT=30] -->
+    <string name="low_battery_shutdown_now">Shut down now</string>
+    <!-- Title of the critical battery warning. [CHAR LIMIT=NONE] -->
+    <string name="critical_battery_warning_title">Battery running low</string>
+    <!-- Critical battery warning. The number is the remaining battery percentage. [CHAR LIMIT=NONE] -->
+    <string name="critical_battery_warning_message">%1$d%% battery remaining. Connect a charger to keep your device on.</string>
+    <!-- Opens Battery Saver settings from the critical battery warning. [CHAR LIMIT=30] -->
+    <string name="low_battery_saver">Battery Saver</string>
     <!-- Spoken description for ringer silent option. [CHAR LIMIT=NONE] -->
     <string name="silent_mode_silent">Ringer off</string>
     <!-- Spoken description for ringer vibrate option. [CHAR LIMIT=NONE] -->

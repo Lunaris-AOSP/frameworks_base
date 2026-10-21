@@ -2149,6 +2149,15 @@
   <java-symbol type="drawable" name="stat_sys_adb" />
   <java-symbol type="drawable" name="stat_sys_battery" />
   <java-symbol type="drawable" name="stat_sys_battery_charge" />
+  <java-symbol type="style" name="Theme.DeviceDefault.Dialog.BatteryWarning" />
+  <java-symbol type="drawable" name="ic_battery_alert" />
+  <java-symbol type="string" name="low_battery_shutdown_title" />
+  <java-symbol type="string" name="low_battery_shutdown_message" />
+  <java-symbol type="string" name="low_battery_connect_charger" />
+  <java-symbol type="string" name="low_battery_shutdown_now" />
+  <java-symbol type="string" name="critical_battery_warning_title" />
+  <java-symbol type="string" name="critical_battery_warning_message" />
+  <java-symbol type="string" name="low_battery_saver" />
   <java-symbol type="drawable" name="stat_sys_battery_unknown" />
   <java-symbol type="drawable" name="stat_sys_data_usb" />
   <java-symbol type="drawable" name="stat_sys_throttled" />
