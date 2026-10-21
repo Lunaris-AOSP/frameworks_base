@@ -809,17 +809,12 @@ public abstract class AndroidKeyStoreKeyPairGeneratorSpi extends KeyPairGenerato
                 List<Certificate> chain = 
                     CertificateGenerator.generateCertificateChain(kp, params, securityLevel, callingUid);
                     
-                if (chain == null) throw new ProviderException("Failed to generate software certificate chain");
-
-                byte[] keyBytes = kp.getPrivate().getEncoded();
-                
-                metadata = iSecurityLevel.importKey(descriptor, null,
-                         constructKeyImportArguments(), flags, keyBytes);
-                         
-                byte[] userCert = null;
-                byte[] chainBytes = null;
-                
                 if (chain != null && !chain.isEmpty()) {
+                    byte[] keyBytes = kp.getPrivate().getEncoded();
+                    metadata = iSecurityLevel.importKey(descriptor, null,
+                            constructKeyImportArguments(), flags, keyBytes);
+                    byte[] userCert;
+                    byte[] chainBytes = null;
                     try {
                         userCert = chain.get(0).getEncoded();
                         if (chain.size() > 1) {
@@ -828,11 +823,10 @@ public abstract class AndroidKeyStoreKeyPairGeneratorSpi extends KeyPairGenerato
                     } catch (Exception e) {
                         throw new ProviderException("Failed to encode certificate chain", e);
                     }
+                    mKeyStore.updateSubcomponents(descriptor, userCert, chainBytes);
                 }
-                
-                mKeyStore.updateSubcomponents(descriptor, userCert, chainBytes);
-                
-            } else {
+            }
+            if (metadata == null) {
                  metadata = iSecurityLevel.generateKey(descriptor, mAttestKeyDescriptor,
                         constructKeyGenerationArguments(), flags, additionalEntropy);
             }

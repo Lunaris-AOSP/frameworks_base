@@ -258,7 +258,7 @@ public class TrickyStoreService {
         }
     }
 
-    public void refreshKeyBox() {
+    public synchronized void refreshKeyBox() {
         String raw = fetchFromAms(am -> am.getSpoofTrickyStoreKeyBox());
         if (raw == null || raw.isEmpty()) {
             mKeyBoxManager.clear();
@@ -458,7 +458,7 @@ public class TrickyStoreService {
         }
     }
 
-    private boolean isValidKeyboxXml(String xml) {
+    public static boolean isValidKeyboxXml(String xml) {
         boolean hasEcdsa = xml.contains("<Key algorithm=\"ecdsa\">");
         boolean hasRsa = xml.contains("<Key algorithm=\"rsa\">");
         boolean hasId = xml.contains("<serial>") || xml.contains("DeviceID");
@@ -648,8 +648,8 @@ public class TrickyStoreService {
             if (XPOSED_PACKAGES.contains(pkg)) continue;
             Mode mode = mPackageModes.get(pkg);
             if (mode == Mode.SKIP) continue;
-            if (mode == Mode.GENERATE) return true;
-            if (mode == Mode.AUTO && isTeeBroken()) return true;
+            if (mode == Mode.GENERATE) return hasKeyboxes();
+            if (mode == Mode.AUTO && hasKeyboxes() && isTeeBroken()) return true;
         }
         return false;
     }
@@ -704,6 +704,7 @@ public class TrickyStoreService {
     }
 
     public boolean hasKeyboxes() {
+        refreshKeyBox();
         return mKeyBoxManager.hasKeyboxes();
     }
 

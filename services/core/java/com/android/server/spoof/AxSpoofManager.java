@@ -25,6 +25,7 @@ import android.database.ContentObserver;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Binder;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.security.pif.PlayIntegritySpoofService;
@@ -33,6 +34,7 @@ import android.util.Log;
 
 import com.android.internal.util.lunaris.PixelDeviceRepository;
 import com.android.server.NtServiceInjector;
+import com.android.server.security.rkp.DuckRkpManager;
 
 import java.util.List;
 import java.util.Map;
@@ -46,6 +48,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
 
 import org.json.JSONObject;
+import org.json.JSONArray;
 
 public class AxSpoofManager implements IAxSpoofManager {
     private static final String TAG = "AxSpoofManager";
@@ -56,6 +59,7 @@ public class AxSpoofManager implements IAxSpoofManager {
             Settings.Secure.SPOOF_TRICKYSTORE_TARGET,
             Settings.Secure.SPOOF_TRICKYSTORE_KEYBOX,
             Settings.Secure.SPOOF_TRICKYSTORE_PATCH,
+            Settings.Secure.SPOOF_DUCK_RKP_ENABLED,
     };
 
     private static final long REFRESH_INTERVAL_MS = TimeUnit.HOURS.toMillis(1);
@@ -139,6 +143,7 @@ public class AxSpoofManager implements IAxSpoofManager {
     private ContentResolver mResolver;
     private ContentObserver mObserver;
     private volatile boolean mReady = false;
+    private volatile DuckRkpManager mDuckRkp;
 
     public AxSpoofManager() {
         mHandlerThread = new HandlerThread("AxSpoofManager");
@@ -154,6 +159,10 @@ public class AxSpoofManager implements IAxSpoofManager {
             return;
         }
         mResolver = mContext.getContentResolver();
+        mDuckRkp = new DuckRkpManager(mContext, mHandler, () -> mHandler.post(() -> {
+            TrickyStoreService.getInstance().initialize();
+            killGmsFamily(false);
+        }));
 
         for (String key : WATCHED_KEYS) {
             refreshKey(key);
@@ -169,6 +178,11 @@ public class AxSpoofManager implements IAxSpoofManager {
                 if (Settings.Secure.SPOOF_PIF_CONFIG.equals(last)) {
                     onPifConfigChanged();
                 }
+                if (Settings.Secure.SPOOF_TRICKYSTORE_KEYBOX.equals(last)
+                        || Settings.Secure.SPOOF_DUCK_RKP_ENABLED.equals(last)
+                        || "spoof_trickystore_enabled".equals(last)) {
+                    mDuckRkp.onSettingsChanged("spoof_trickystore_enabled".equals(last));
+                }
                 Log.i(TAG, "Spoof config refreshed: " + last);
             }
         };
@@ -176,6 +190,8 @@ public class AxSpoofManager implements IAxSpoofManager {
             mResolver.registerContentObserver(
                     Settings.Secure.getUriFor(key), false, mObserver, UserHandle.USER_ALL);
         }
+        mResolver.registerContentObserver(Settings.System.getUriFor("spoof_trickystore_enabled"),
+                false, mObserver, UserHandle.USER_SYSTEM);
 
         mActivated = Settings.Secure.getIntForUser(
                 mResolver, ACTIVATED_KEY, 0, UserHandle.USER_SYSTEM) != 0;
@@ -495,6 +511,10 @@ public class AxSpoofManager implements IAxSpoofManager {
     }
 
     private void killGmsFamily() {
+        killGmsFamily(true);
+    }
+
+    private void killGmsFamily(boolean includeRkpd) {
         // Never touch GMS/GSF before spoofing is activated (first Settings launch),
         // so Setup Wizard is never disturbed.
         if (!mActivated) {
@@ -504,6 +524,7 @@ public class AxSpoofManager implements IAxSpoofManager {
         try {
             ActivityManager am = mContext.getSystemService(ActivityManager.class);
             for (String pkg : GMS_FAMILY) {
+                if (!includeRkpd && "com.google.android.rkpdapp".equals(pkg)) continue;
                 am.forceStopPackage(pkg);
             }
         } catch (Exception e) {
@@ -723,8 +744,64 @@ public class AxSpoofManager implements IAxSpoofManager {
 
     @Override
     public String getTrickyStoreKeyBox() {
-        if (!mActivated) return null;
-        return getCached(Settings.Secure.SPOOF_TRICKYSTORE_KEYBOX);
+        if (!mActivated || mDuckRkp == null || !canReadTrickyStoreKeybox()) return null;
+        long token = Binder.clearCallingIdentity();
+        try {
+            return mDuckRkp.getKeybox();
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    @Override
+    public DuckRkpManager getDuckRkpManager() {
+        if (mDuckRkp == null) throw new IllegalStateException("RKP service is starting");
+        return mDuckRkp;
+    }
+
+    private boolean canReadTrickyStoreKeybox() {
+        int uid = Binder.getCallingUid();
+        if (uid == android.os.Process.SYSTEM_UID || uid == android.os.Process.ROOT_UID) return true;
+        String[] packages = mContext.getPackageManager().getPackagesForUid(uid);
+        if (packages == null) return false;
+        for (String pkg : packages) {
+            if (TrickyStoreService.XPOSED_PACKAGES.contains(pkg)) return false;
+        }
+        String targets = getCached(Settings.Secure.SPOOF_TRICKYSTORE_TARGET);
+        if (targets == null) return false;
+        boolean allowed = false;
+        try {
+            if (targets.trim().startsWith("[")) {
+                JSONArray entries = new JSONArray(targets);
+                for (int i = 0; i < entries.length(); i++) {
+                    JSONObject entry = entries.getJSONObject(i);
+                    for (String pkg : packages) {
+                        if (pkg.equals(entry.optString("package"))) {
+                            if ("SKIP".equalsIgnoreCase(entry.optString("mode"))) return false;
+                            allowed = true;
+                        }
+                    }
+                }
+            } else {
+                for (String raw : targets.split("\n")) {
+                    String target = raw.trim();
+                    if (target.isEmpty() || target.startsWith("#")) continue;
+                    boolean skipped = target.endsWith("-");
+                    if (skipped || target.endsWith("!") || target.endsWith("?")) {
+                        target = target.substring(0, target.length() - 1).trim();
+                    }
+                    for (String pkg : packages) {
+                        if (pkg.equals(target)) {
+                            if (skipped) return false;
+                            allowed = true;
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            return false;
+        }
+        return allowed;
     }
 
     @Override

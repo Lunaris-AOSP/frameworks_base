@@ -73,6 +73,14 @@ public class KeyBoxManager {
         return mKeyboxes.get(algorithm);
     }
 
+    public KeyBox getSigningKeybox(String algorithm) {
+        Map<String, KeyBox> keyboxes = mKeyboxes;
+        KeyBox keybox = keyboxes.get(algorithm);
+        if (keybox == null) keybox = keyboxes.get("EC");
+        if (keybox == null) keybox = keyboxes.get("RSA");
+        return keybox;
+    }
+
     /**
      * Parses [xmlContent] and, if it is acceptable, replaces the loaded keyboxes.
      * A truncated or keyless document leaves the previously loaded keyboxes untouched,
@@ -240,6 +248,7 @@ public class KeyBoxManager {
                         + " key(s); NumberOfKeyboxes is advisory, using what parsed");
             }
 
+            if (next.isEmpty()) return false;
             mKeyboxes = next;
             Log.i(TAG, "Parsed " + next.size() + " keyboxes");
             return true;
