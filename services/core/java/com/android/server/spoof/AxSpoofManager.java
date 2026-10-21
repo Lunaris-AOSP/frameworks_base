@@ -19,11 +19,8 @@ package com.android.server.spoof;
 import android.app.ActivityManager;
 import android.app.ActivityTaskManager;
 import android.app.TaskStackListener;
-import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
 import android.database.ContentObserver;
 import android.net.Uri;
 import android.os.Handler;
@@ -126,7 +123,6 @@ public class AxSpoofManager implements IAxSpoofManager {
 
     // Keep fingerprint requests off the handler that watches spoofing settings.
     private final ExecutorService mFingerprintExecutor = Executors.newSingleThreadExecutor();
-    private BroadcastReceiver mPackageAddedReceiver;
     private int mBootstrapRetries;
     // Nothing spoof-related runs until the user first opens Settings (after setup):
     // the config getters below return null, the refresh never starts and GMS is
@@ -190,23 +186,6 @@ public class AxSpoofManager implements IAxSpoofManager {
             Log.i(TAG, "Spoofing off until Settings is opened for the first time");
             registerSettingsWatcher();
         }
-
-        mPackageAddedReceiver = new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context ctx, Intent intent) {
-                // An update also broadcasts PACKAGE_ADDED; only new installs get targeted,
-                // so an app the user removed from the list isn't re-added on every update.
-                if (intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) return;
-                Uri data = intent.getData();
-                String pkg = data != null ? data.getSchemeSpecificPart() : null;
-                if (pkg != null) {
-                    mHandler.post(() -> onPackageAdded(pkg));
-                }
-            }
-        };
-        IntentFilter filter = new IntentFilter(Intent.ACTION_PACKAGE_ADDED);
-        filter.addDataScheme("package");
-        mContext.registerReceiverAsUser(mPackageAddedReceiver, UserHandle.ALL, filter, null, mHandler);
 
         if (mActivated) scheduleFirstRefresh();
 
@@ -342,41 +321,6 @@ public class AxSpoofManager implements IAxSpoofManager {
                 mResolver, Settings.Secure.SPOOF_TRICKYSTORE_TARGET,
                 TrickyStoreService.DEFAULT_TARGET_LIST, UserHandle.USER_SYSTEM);
         Log.i(TAG, "Seeded default TrickyStore targets");
-    }
-
-    /**
-     * Adds a newly-installed package to the TrickyStore target list in AUTO
-     * mode, unless it's already present or is a known Xposed/LSPosed manager
-     * (attesting through a hooked process breaks STRONG). Mirrors AlwaysStrong's
-     * inotify-driven auto-target, sourced from a live PACKAGE_ADDED broadcast
-     * instead of a native watcher since this already runs in system_server.
-     *
-     * Does nothing while the list is empty: Evolver seeds the default targets
-     * (GMS and friends) only when the list is empty, so writing a lone package
-     * here would leave those defaults unseeded. A JSON list can't be appended
-     * to as text either.
-     */
-    private void onPackageAdded(String pkg) {
-        if (!mActivated) return;
-        if (mResolver == null || TrickyStoreService.XPOSED_PACKAGES.contains(pkg)) return;
-
-        String current = Settings.Secure.getStringForUser(
-                mResolver, Settings.Secure.SPOOF_TRICKYSTORE_TARGET, UserHandle.USER_SYSTEM);
-        String existing = current != null ? current : "";
-        String trimmed = existing.trim();
-        if (trimmed.isEmpty() || trimmed.startsWith("[") || trimmed.startsWith("{")) return;
-
-        for (String raw : existing.split("\n")) {
-            String line = raw.trim();
-            String bare = line.endsWith("!") || line.endsWith("?") || line.endsWith("-")
-                    ? line.substring(0, line.length() - 1).trim() : line;
-            if (pkg.equals(bare)) return; // already targeted, in whatever mode
-        }
-
-        String updated = existing.endsWith("\n") ? existing + pkg : existing + "\n" + pkg;
-        Settings.Secure.putStringForUser(
-                mResolver, Settings.Secure.SPOOF_TRICKYSTORE_TARGET, updated, UserHandle.USER_SYSTEM);
-        Log.i(TAG, "Auto-targeted newly installed package: " + pkg);
     }
 
     /**
