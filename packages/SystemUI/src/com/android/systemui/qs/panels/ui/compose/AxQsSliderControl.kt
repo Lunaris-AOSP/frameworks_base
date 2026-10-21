@@ -19,6 +19,8 @@
 package com.android.systemui.qs.panels.ui.compose
 
 import android.media.AudioManager
+import android.os.UserHandle
+import android.provider.Settings
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
@@ -126,6 +128,7 @@ import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberObservedSetting
 import com.android.systemui.qs.tiles.ringer.LocalRingerSliderViewModel
 import com.android.systemui.res.R
 import com.android.systemui.utils.PolicyRestriction
@@ -695,16 +698,27 @@ private fun AxBrightnessSlider(
             BrightnessSliderViewModel.getIconForPercentage(percentage)
         }
     val interactionSource = remember { MutableInteractionSource() }
-    val hapticsViewModel =
-        rememberViewModel(traceName = "AxBrightnessSliderHaptics") {
-            viewModel.hapticsViewModelFactory.create(
-                interactionSource,
-                valueRange,
-                Orientation.Horizontal,
-                SliderHapticFeedbackConfig(maxVelocityToScale = 1f),
-                SeekableSliderTrackerConfig(),
-            )
+    val hapticsEnabled =
+        rememberObservedSetting(Settings.System.QS_BRIGHTNESS_SLIDER_HAPTIC, true) { context ->
+            Settings.System.getIntForUser(
+                context.contentResolver,
+                Settings.System.QS_BRIGHTNESS_SLIDER_HAPTIC,
+                1,
+                UserHandle.USER_CURRENT,
+            ) != 0
         }
+    val hapticsViewModel =
+        if (interactive && hapticsEnabled) {
+            rememberViewModel(traceName = "AxBrightnessSliderHaptics") {
+                viewModel.hapticsViewModelFactory.create(
+                    interactionSource,
+                    valueRange,
+                    Orientation.Horizontal,
+                    SliderHapticFeedbackConfig(maxVelocityToScale = 1f),
+                    SeekableSliderTrackerConfig(),
+                )
+            }
+        } else null
     val restriction by
         viewModel.policyRestriction.collectAsStateWithLifecycle(
             initialValue = PolicyRestriction.NoRestriction
@@ -716,7 +730,9 @@ private fun AxBrightnessSlider(
     val view = LocalView.current
     val toggleMode: () -> Unit = {
         viewModel.onIconClick()
-        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        if (hapticsEnabled) {
+            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        }
     }
     val longPressLabel =
         stringResource(
@@ -787,7 +803,7 @@ private fun AxBrightnessSlider(
         percentage = percentage,
         onValueChange = { newValue ->
             if (interactive && enabled && !overriddenByApp) {
-                hapticsViewModel.onValueChange(newValue)
+                hapticsViewModel?.onValueChange(newValue)
                 value = newValue.toInt()
                 if (!dragging) {
                     dragging = true
@@ -799,7 +815,7 @@ private fun AxBrightnessSlider(
         },
         onValueChangeFinished = {
             if (interactive && enabled && !overriddenByApp) {
-                hapticsViewModel.onValueChangeEnded()
+                hapticsViewModel?.onValueChangeEnded()
                 coroutineScope.launch { viewModel.onDrag(Drag.Stopped(GammaBrightness(value))) }
             }
             if (dragging) {
@@ -886,6 +902,15 @@ private fun AxVolumeSliderContent(
     modifier: Modifier = Modifier,
 ) {
     val value by axVolumeValueState(state)
+    val hapticsEnabled =
+        rememberObservedSetting(Settings.System.QS_VOLUME_SLIDER_HAPTIC, true) { context ->
+            Settings.System.getIntForUser(
+                context.contentResolver,
+                Settings.System.QS_VOLUME_SLIDER_HAPTIC,
+                1,
+                UserHandle.USER_CURRENT,
+            ) != 0
+        }
     val ringerViewModel = LocalRingerSliderViewModel.current
     val ringerMode by
         ringerViewModel.ringerModeChanges.collectAsStateWithLifecycle(
@@ -898,7 +923,9 @@ private fun AxVolumeSliderContent(
         val modes = ringerViewModel.availableModes
         val index = modes.indexOfFirst { it.mode == ringerViewModel.currentMode }
         ringerViewModel.setRingerMode(modes[(index + 1) % modes.size].mode)
-        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        if (hapticsEnabled) {
+            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        }
     }
     val longPressLabel = stringResource(R.string.lunaris_qs_slider_ringer_mode)
     val ringerDescription =
@@ -915,7 +942,9 @@ private fun AxVolumeSliderContent(
             value = value,
             state = state,
             interactionSource = interactionSource,
-            factory = if (interactive) viewModel.getSliderHapticsViewModelFactory() else null,
+            factory =
+                if (interactive && hapticsEnabled) viewModel.getSliderHapticsViewModelFactory()
+                else null,
         )
 
     AxQsSlider(
