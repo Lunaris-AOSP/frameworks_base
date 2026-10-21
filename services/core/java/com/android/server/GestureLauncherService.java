@@ -38,6 +38,9 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.hardware.TriggerEvent;
 import android.hardware.TriggerEventListener;
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.PowerManager;
@@ -72,6 +75,7 @@ public class GestureLauncherService extends SystemService {
     private static final boolean DBG = false;
     private static final boolean DBG_CAMERA_LIFT = false;
     private static final String TAG = "GestureLauncherService";
+    private static final String FLASHLIGHT_BRIGHTNESS_SETTING = "flashlight_brightness";
 
     /**
      * Time in milliseconds in which the power button must be pressed twice so it will be considered
@@ -952,27 +956,37 @@ public class GestureLauncherService extends SystemService {
                 return false;
             }
             if (DBG) Slog.d(TAG, "userSetupComplete = true, performing torch gesture.");
-    
-            android.hardware.camera2.CameraManager cameraManager =
-                    (android.hardware.camera2.CameraManager) mContext.getSystemService(
-                            Context.CAMERA_SERVICE);
+
+            CameraManager cameraManager =
+                    (CameraManager) mContext.getSystemService(Context.CAMERA_SERVICE);
             try {
                 for (String id : cameraManager.getCameraIdList()) {
-                    android.hardware.camera2.CameraCharacteristics c =
-                            cameraManager.getCameraCharacteristics(id);
-                    Boolean flash = c.get(
-                            android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE);
-                    Integer facing = c.get(
-                            android.hardware.camera2.CameraCharacteristics.LENS_FACING);
+                    CameraCharacteristics c = cameraManager.getCameraCharacteristics(id);
+                    Boolean flash = c.get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
+                    Integer facing = c.get(CameraCharacteristics.LENS_FACING);
                     if (flash != null && flash && facing != null
-                            && facing == android.hardware.camera2.CameraCharacteristics
-                                    .LENS_FACING_BACK) {
-                        mTorchEnabled = !mTorchEnabled;
-                        cameraManager.setTorchMode(id, mTorchEnabled);
+                            && facing == CameraCharacteristics.LENS_FACING_BACK) {
+                        boolean enabled = !mTorchEnabled;
+                        Integer maxLevel = c.get(
+                                CameraCharacteristics.FLASH_INFO_STRENGTH_MAXIMUM_LEVEL);
+                        if (enabled && maxLevel != null && maxLevel > 1) {
+                            Integer defaultLevel = c.get(
+                                    CameraCharacteristics.FLASH_INFO_STRENGTH_DEFAULT_LEVEL);
+                            float percent = Settings.System.getFloatForUser(
+                                    mContext.getContentResolver(), FLASHLIGHT_BRIGHTNESS_SETTING,
+                                    (float) (defaultLevel != null ? defaultLevel : 1) / maxLevel,
+                                    UserHandle.USER_CURRENT);
+                            int level = Math.max(1, Math.min(Math.round(percent * maxLevel),
+                                    maxLevel));
+                            cameraManager.turnOnTorchWithStrengthLevel(id, level);
+                        } else {
+                            cameraManager.setTorchMode(id, enabled);
+                        }
+                        mTorchEnabled = enabled;
                         break;
                     }
                 }
-            } catch (android.hardware.camera2.CameraAccessException e) {
+            } catch (CameraAccessException e) {
                 Slog.e(TAG, "Failed to toggle torch", e);
                 return false;
             }
