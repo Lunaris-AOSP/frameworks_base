@@ -35,6 +35,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import com.android.internal.annotations.GuardedBy
 import com.android.internal.logging.InstanceId
 import com.android.systemui.common.shared.model.ContentDescription
@@ -148,6 +149,8 @@ internal constructor(
     @GuardedBy("mediaMutex") private var publishedLockscreenArtworkSource: Drawable? = null
 
     @GuardedBy("mediaMutex") private var publishedLockscreenArtworkState: MediaSessionState? = null
+
+    @GuardedBy("mediaMutex") private var publishedMediaColor: Int? = null
 
     override fun addCurrentUserMediaEntry(data: MediaData): UpdateArtInfoModel? {
         return super.addCurrentUserMediaEntry(data).also { updateModel ->
@@ -298,7 +301,7 @@ internal constructor(
     }
 
     /**
-     * Keeps the lockscreen media-art listener in sync with the highest-priority active session.
+     * Keeps artwork and album-art color listeners in sync with the highest-priority active session.
      *
      * This is intentionally gated to the Compose pipeline. The legacy media panel owns this bridge
      * when that pipeline is selected.
@@ -314,11 +317,13 @@ internal constructor(
             }
         val sourceData = activeModel?.let { mutableUserEntries.value[it.instanceId] }
         val sourceDrawable = (activeModel?.background as? Icon.Loaded)?.drawable
+        val mediaColor = activeModel?.colorScheme?.primary?.toArgb()
         if (
             hasPublishedLockscreenArtwork &&
                 publishedLockscreenArtworkInstanceId == activeModel?.instanceId &&
                 publishedLockscreenArtworkSource === sourceDrawable &&
-                publishedLockscreenArtworkState == activeModel?.state
+                publishedLockscreenArtworkState == activeModel?.state &&
+                publishedMediaColor == mediaColor
         ) {
             return
         }
@@ -337,7 +342,10 @@ internal constructor(
         publishedLockscreenArtworkInstanceId = activeModel?.instanceId
         publishedLockscreenArtworkSource = sourceDrawable
         publishedLockscreenArtworkState = activeModel?.state
+        publishedMediaColor = mediaColor
         mediaSessionManager.onAlbumArtChanged(lockscreenDrawable)
+        // Pulse, clock styles and Now Playing also need colors when the legacy panel is absent.
+        mediaColor?.let { mediaSessionManager.onMediaColorsChanged(it) }
     }
 
     /** Returns an independent drawable so lockscreen processing cannot mutate Compose state. */

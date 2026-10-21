@@ -29,6 +29,7 @@ import androidx.palette.graphics.Palette
 import com.android.settingslib.Utils
 import com.android.systemui.axdynamicbar.ui.AxDynamicBarKeyguardExpansion
 import com.android.systemui.dagger.SysUISingleton
+import com.android.systemui.media.MediaSessionManager as SystemUIMediaSessionManager
 import com.android.systemui.res.R
 import com.android.systemui.util.ScrimUtils
 import com.android.systemui.statusbar.phone.LyricsFetcher
@@ -111,6 +112,17 @@ constructor(
     }
 
     private var currentAlbumArtColor: Int? = null
+    private var sharedMediaColor: Int? = null
+    private var albumArtColorJob: Job? = null
+
+    private val mediaColorListener = object : SystemUIMediaSessionManager.MediaDataListener {
+        override fun onMediaColorsChanged(color: Int) {
+            scope.launch {
+                sharedMediaColor = color
+                updateAlbumArtColor()
+            }
+        }
+    }
 
     private val expandedOverlay: NowPlayingExpandedOverlay by lazy {
         NowPlayingExpandedOverlay(
@@ -190,6 +202,7 @@ constructor(
         observeSettings()
         
         startMediaMonitoring()
+        SystemUIMediaSessionManager.get().addListener(mediaColorListener)
 
         nowPlayingView.isClickable = true
         nowPlayingView.isFocusable = true
@@ -315,18 +328,19 @@ constructor(
                 ?: meta.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
         }
 
+        albumArtColorJob?.cancel()
+        albumArtColorJob = null
+        currentAlbumArtColor = null
+        // The shared pipeline also resolves artwork from notifications and URIs, which may not
+        // be present as a bitmap in this session's metadata.
+        if (activeController == null) sharedMediaColor = null
+        updateAlbumArtColor()
         if (albumArt != null) {
-            scope.launch(Dispatchers.IO) {
-                val extracted = extractAlbumArtColor(albumArt)
-                withContext(Dispatchers.Main) {
-                    currentAlbumArtColor = extracted
-                    NowPlayingOverlayState.update { copy(albumArtColor = extracted) }
-                    nowPlayingView.textColor = resolveTextColor(currentSettings.colorMode)
-                }
+            albumArtColorJob = scope.launch {
+                val extracted = withContext(Dispatchers.Default) { extractAlbumArtColor(albumArt) }
+                currentAlbumArtColor = extracted
+                updateAlbumArtColor()
             }
-        } else {
-            currentAlbumArtColor = null
-            NowPlayingOverlayState.update { copy(albumArtColor = null) }
         }
 
         NowPlayingOverlayState.update {
@@ -347,12 +361,19 @@ constructor(
             NowPlayingSettingsRepository.COLOR_MODE_ACCENT ->
                 Utils.getColorAccentDefaultColor(context)
             NowPlayingSettingsRepository.COLOR_MODE_ALBUM ->
-                currentAlbumArtColor?.let { boostSaturation(it) }
+                (currentAlbumArtColor ?: sharedMediaColor)?.let { boostSaturation(it) }
                     ?: 0xFFFFFFFF.toInt()
             else -> 0xFFFFFFFF.toInt()
         }
 
+    private fun updateAlbumArtColor() {
+        val color = currentAlbumArtColor ?: sharedMediaColor
+        NowPlayingOverlayState.update { copy(albumArtColor = color) }
+        nowPlayingView.textColor = resolveTextColor(currentSettings.colorMode)
+    }
+
     private fun extractAlbumArtColor(bitmap: Bitmap): Int? {
+        if (bitmap.isRecycled) return null
         val palette = Palette.from(bitmap).generate()
         val swatch = palette.vibrantSwatch
             ?: palette.lightVibrantSwatch
@@ -533,6 +554,7 @@ constructor(
     }
 
     fun cleanup() {
+        SystemUIMediaSessionManager.get().removeListener(mediaColorListener)
         activeController?.unregisterCallback(mediaCallback)
         try {
             mediaSessionManager.removeOnActiveSessionsChangedListener(sessionsChangedListener)

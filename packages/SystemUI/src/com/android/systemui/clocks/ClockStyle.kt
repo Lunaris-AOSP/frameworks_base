@@ -167,15 +167,19 @@ class ClockStyle @JvmOverloads constructor(
 
     private val mediaDataListener = object : MediaSessionManager.MediaDataListener {
         override fun onPlaybackStateChanged(state: Int) {
-            if (state != PlaybackState.STATE_PLAYING) {
-                currentAlbumColor = null
-                if (albumArtColorEnabled) applyClockColors()
+            handler.post {
+                if (state != PlaybackState.STATE_PLAYING) {
+                    currentAlbumColor = null
+                    if (albumArtColorEnabled) applyClockColors()
+                }
             }
         }
 
         override fun onMediaColorsChanged(color: Int) {
-            currentAlbumColor = color
-            if (albumArtColorEnabled) applyClockColors()
+            handler.post {
+                currentAlbumColor = color
+                if (albumArtColorEnabled) applyClockColors()
+            }
         }
     }
 
