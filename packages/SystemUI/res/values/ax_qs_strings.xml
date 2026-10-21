@@ -34,6 +34,8 @@
     <string name="ax_qs_settings_side_padding_summary">Space between panel contents and screen edges</string>
     <string name="ax_qs_settings_top_padding">Top spacing</string>
     <string name="ax_qs_settings_top_padding_summary">Space below the clock and status icons</string>
+    <string name="ax_qs_settings_header_top_padding">QS top padding</string>
+    <string name="ax_qs_settings_header_top_padding_summary">Adjust space above the clock and status icons. Negative values move the panel up; positive values move it down.</string>
     <string name="ax_qs_settings_dp">%1$d dp</string>
     <string name="ax_qs_settings_reset_value">Reset %1$s</string>
     <string name="ax_qs_settings_decrease_value">Decrease %1$s</string>

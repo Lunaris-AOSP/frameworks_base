@@ -241,11 +241,13 @@ constructor(
             intSetting(TILE_GAP, LunarisQsSpacing().tileGap),
             intSetting(SIDE_PADDING, LunarisQsSpacing().sidePadding),
             intSetting(TOP_PADDING, LunarisQsSpacing().topPadding),
-        ) { tileGap, sidePadding, topPadding ->
+            intSetting(HEADER_TOP_OFFSET, LunarisQsSpacing().headerTopOffset),
+        ) { tileGap, sidePadding, topPadding, headerTopOffset ->
             LunarisQsSpacing(
                 tileGap = tileGap.coerceIn(LunarisQsSpacing.TILE_GAP_RANGE),
                 sidePadding = sidePadding.coerceIn(LunarisQsSpacing.SIDE_PADDING_RANGE),
                 topPadding = topPadding.coerceIn(LunarisQsSpacing.TOP_PADDING_RANGE),
+                headerTopOffset = headerTopOffset.coerceIn(LunarisQsSpacing.HEADER_TOP_OFFSET_RANGE),
             )
         }.distinctUntilChanged()
             .stateIn(applicationScope, SharingStarted.Eagerly, LunarisQsSpacing())
@@ -482,6 +484,9 @@ constructor(
 
     fun setTopPadding(padding: Int) =
         putInt(TOP_PADDING, padding.coerceIn(LunarisQsSpacing.TOP_PADDING_RANGE))
+
+    fun setHeaderTopOffset(offset: Int) =
+        putInt(HEADER_TOP_OFFSET, offset.coerceIn(LunarisQsSpacing.HEADER_TOP_OFFSET_RANGE))
 
     fun setSliderStyle(
         layout: AxQsLayout,
@@ -864,6 +869,7 @@ constructor(
         const val TILE_GAP = "ax_qs_tile_gap"
         const val SIDE_PADDING = "ax_qs_side_padding"
         const val TOP_PADDING = "ax_qs_top_padding"
+        const val HEADER_TOP_OFFSET = "ax_qs_header_top_offset"
 
         val SLIDER_KEYS =
             AxQsLayout.entries.flatMap { layout ->

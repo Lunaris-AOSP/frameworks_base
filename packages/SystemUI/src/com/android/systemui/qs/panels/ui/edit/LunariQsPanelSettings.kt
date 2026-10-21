@@ -442,6 +442,16 @@ fun LunariQsPanelSettings(
                         onValueChange = viewModel::setSidePadding,
                     )
                 }
+                item("header_top_offset") {
+                    SettingsSlider(
+                        title = stringResource(R.string.ax_qs_settings_header_top_padding),
+                        summary = stringResource(R.string.ax_qs_settings_header_top_padding_summary),
+                        value = viewModel.spacing.headerTopOffset,
+                        defaultValue = defaults.headerTopOffset,
+                        range = LunarisQsSpacing.HEADER_TOP_OFFSET_RANGE,
+                        onValueChange = viewModel::setHeaderTopOffset,
+                    )
+                }
                 item("top_padding") {
                     SettingsSlider(
                         title = stringResource(R.string.ax_qs_settings_top_padding),

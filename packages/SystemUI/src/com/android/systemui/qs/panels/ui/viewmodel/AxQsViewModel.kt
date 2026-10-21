@@ -727,6 +727,8 @@ constructor(
 
     fun setTopPadding(padding: Int) = repository.setTopPadding(padding)
 
+    fun setHeaderTopOffset(offset: Int) = repository.setHeaderTopOffset(offset)
+
     fun configuredColumns(layout: AxQsGridLayout): Int? =
         gridColumns[layout]?.coerceIn(columnRange(layout))
 

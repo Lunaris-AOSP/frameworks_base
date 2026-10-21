@@ -257,7 +257,7 @@ constructor(
     private val locationTemp = IntArray(2)
     private var bottomBarPositionInRoot = IntRect(IntOffset(0, 0), 0)
     private var bottomContentPadding by mutableIntStateOf(0)
-    private var overlayHeaderHeightPx by mutableIntStateOf(0)
+    private var overlayHeaderContentHeightPx by mutableIntStateOf(0)
     private var sharedLayoutActive by mutableStateOf(false)
     private val containerView: FrameLayoutTouchPassthrough?
         get() = view as? FrameLayoutTouchPassthrough
@@ -1154,15 +1154,6 @@ constructor(
         isTransitioning: Boolean,
         modifier: Modifier = Modifier,
     ) {
-        val displayCutoutTopPadding =
-            WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
-        val isLandscape =
-            LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-        val topPadding =
-            when {
-                isLandscape -> 4.dp
-                else -> displayCutoutTopPadding
-            }
         AxQuickSettingsHeader(
             viewModel = headerViewModel,
             carrierText = axQsViewModel.carrierText,
@@ -1171,13 +1162,23 @@ constructor(
             modifier =
                 modifier
                     .fillMaxWidth()
+                    .padding(top = quickSettingsHeaderTopPadding())
                     .onSizeChanged { size ->
                         if (size.height > 0) {
-                            overlayHeaderHeightPx = size.height
+                            overlayHeaderContentHeightPx = size.height
                         }
-                    }
-                    .padding(top = topPadding),
+                    },
         )
+    }
+
+    @Composable
+    private fun quickSettingsHeaderTopPadding(): Dp {
+        val isLandscape =
+            LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val defaultPadding =
+            if (isLandscape) 4.dp
+            else WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
+        return (defaultPadding + axQsViewModel.spacing.headerTopOffset.dp).coerceAtLeast(0.dp)
     }
 
     @Composable
@@ -1186,12 +1187,12 @@ constructor(
             WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
         val density = LocalDensity.current
         val headerHeight =
-            if (overlayHeaderHeightPx > 0) {
-                with(density) { overlayHeaderHeightPx.toDp() }
+            if (overlayHeaderContentHeightPx > 0) {
+                with(density) { overlayHeaderContentHeightPx.toDp() }
             } else {
                 statusBarHeight + 24.dp
             }
-        return headerHeight + axQsViewModel.spacing.topPadding.dp
+        return quickSettingsHeaderTopPadding() + headerHeight + axQsViewModel.spacing.topPadding.dp
     }
 
     private fun useOverlayShadeHeader() = true
