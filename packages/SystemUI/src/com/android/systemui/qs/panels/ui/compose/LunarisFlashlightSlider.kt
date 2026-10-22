@@ -17,7 +17,6 @@
 package com.android.systemui.qs.panels.ui.compose
 
 import android.view.HapticFeedbackConstants
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -73,7 +72,12 @@ internal fun LunarisFlashlightSlider(
         val valueRange = 1f..state.maxLevel.coerceAtLeast(2).toFloat()
         val targetValue =
             if (state.supportsStrength) level.toFloat() else if (state.enabled) 2f else 1f
-        val animatedValue by animateFloatAsState(targetValue, label = "LunarisFlashlightStrength")
+        val animatedValue = animateAxQsSliderValue(
+            value = targetValue,
+            valueRange = valueRange,
+            isDragging = dragLevel != null,
+            label = "LunarisFlashlightStrength",
+        )
         val enabled = interactive && state.available
         val label = stringResource(R.string.quick_settings_flashlight_label)
         val toggleLabel =
@@ -125,7 +129,7 @@ internal fun LunarisFlashlightSlider(
             }
         ) {
             AxQsSlider(
-                value = if (dragLevel != null) targetValue else animatedValue,
+                value = animatedValue,
                 percentage =
                     if (state.supportsStrength) level * 100f / state.maxLevel
                     else if (state.enabled) 100f else 0f,

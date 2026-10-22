@@ -313,7 +313,8 @@ fun RingerSliderTileContent(
     val animatedPosition =
         animateFloatAsState(
             targetValue = if (isDndEnabled) maxModeIndex / 2f else currentIndex.toFloat(),
-            animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 400f),
+            animationSpec =
+                spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow),
             label = "RingerPosition",
         )
     val activeBrush = gradient.sliderBrush()

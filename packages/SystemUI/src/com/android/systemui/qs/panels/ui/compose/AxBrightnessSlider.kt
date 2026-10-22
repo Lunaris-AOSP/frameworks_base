@@ -18,9 +18,9 @@
 package com.android.systemui.qs.panels.ui.compose
 
 import android.content.Context
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -91,9 +91,15 @@ fun AxBrightnessSlider(
     hapticsViewModelFactory: SliderHapticsViewModel.Factory? = null,
 ) {
     var value by remember(gammaValue) { mutableIntStateOf(gammaValue) }
-    val animatedValue by animateFloatAsState(targetValue = value.toFloat(), label = "AxBrightnessSliderValue")
     val coroutineScope = rememberCoroutineScope()
     val interactionSource = remember { MutableInteractionSource() }
+    val isDragging by interactionSource.collectIsDraggedAsState()
+    val animatedValue = animateAxQsSliderValue(
+        value = value.toFloat(),
+        valueRange = valueRange.first.toFloat()..valueRange.last.toFloat(),
+        isDragging = isDragging,
+        label = "AxBrightnessSliderValue",
+    )
 
     val currentHapticsViewModel: SliderHapticsViewModel? =
         hapticsViewModelFactory?.let { factory ->

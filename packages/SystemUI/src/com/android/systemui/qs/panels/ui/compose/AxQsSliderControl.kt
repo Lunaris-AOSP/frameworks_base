@@ -25,8 +25,9 @@ import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -60,8 +61,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -262,6 +263,28 @@ internal fun axQsSliderPercentage(value: Float, valueRange: ClosedFloatingPointR
     val range = valueRange.endInclusive - valueRange.start
     if (!value.isFinite() || !range.isFinite() || range <= 0f) return 0f
     return ((value - valueRange.start) / range * 100f).coerceIn(0f, 100f)
+}
+
+@Composable
+internal fun animateAxQsSliderValue(
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    isDragging: Boolean,
+    label: String,
+): Float {
+    val targetFraction = axQsSliderPercentage(value, valueRange) / 100f
+    val animatedFraction by animateFloatAsState(
+        targetValue = targetFraction,
+        animationSpec =
+            if (isDragging) {
+                spring(Spring.DampingRatioNoBouncy, Spring.StiffnessHigh)
+            } else {
+                spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow)
+            },
+        label = label,
+    )
+    val fraction = if (isDragging) targetFraction else animatedFraction.coerceIn(0f, 1f)
+    return valueRange.start + fraction * (valueRange.endInclusive - valueRange.start)
 }
 
 @Composable
@@ -686,10 +709,16 @@ private fun AxBrightnessSlider(
     if (gamma == BrightnessSliderViewModel.initialValue.value) return
 
     var value by remember(gamma) { mutableIntStateOf(gamma) }
-    val animatedValue by
-        animateFloatAsState(targetValue = value.toFloat(), label = "AxBrightnessSliderValue")
     val valueRange =
         viewModel.minBrightness.value.toFloat()..viewModel.maxBrightness.value.toFloat()
+    val interactionSource = remember { MutableInteractionSource() }
+    val isDragging by interactionSource.collectIsDraggedAsState()
+    val animatedValue = animateAxQsSliderValue(
+        value = value.toFloat(),
+        valueRange = valueRange,
+        isDragging = isDragging,
+        label = "AxBrightnessSliderValue",
+    )
     val percentage = axQsSliderPercentage(value.toFloat(), valueRange)
     val iconRes =
         if (viewModel.autoMode) {
@@ -697,7 +726,6 @@ private fun AxBrightnessSlider(
         } else {
             BrightnessSliderViewModel.getIconForPercentage(percentage)
         }
-    val interactionSource = remember { MutableInteractionSource() }
     val hapticsEnabled =
         rememberObservedSetting(Settings.System.QS_BRIGHTNESS_SLIDER_HAPTIC, true) { context ->
             Settings.System.getIntForUser(
@@ -901,7 +929,16 @@ private fun AxVolumeSliderContent(
     interactive: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    val value by axVolumeValueState(state)
+    val interactionSource = remember { MutableInteractionSource() }
+    val isDragging by interactionSource.collectIsDraggedAsState()
+    val value = key(state is SliderState.Empty, state.isEnabled, state.valueRange) {
+        animateAxQsSliderValue(
+            value = state.value,
+            valueRange = state.valueRange,
+            isDragging = isDragging,
+            label = "AxVolumeSliderValue",
+        )
+    }
     val hapticsEnabled =
         rememberObservedSetting(Settings.System.QS_VOLUME_SLIDER_HAPTIC, true) { context ->
             Settings.System.getIntForUser(
@@ -936,10 +973,9 @@ private fun AxVolumeSliderContent(
                 else -> R.string.ax_dynamic_bar_ring
             }
         )
-    val interactionSource = remember { MutableInteractionSource() }
     val hapticsViewModel =
         axVolumeHapticsViewModel(
-            value = value,
+            value = state.value,
             state = state,
             interactionSource = interactionSource,
             factory =
@@ -1006,13 +1042,13 @@ private fun AxVolumeSliderContent(
                         setProgress { targetValue ->
                             val direction =
                                 when {
-                                    targetValue > value -> 1
-                                    targetValue < value -> -1
+                                    targetValue > state.value -> 1
+                                    targetValue < state.value -> -1
                                     else -> 0
                                 }
                             viewModel.onValueChanged(
                                 state,
-                                (value + direction * state.step).coerceIn(
+                                (state.value + direction * state.step).coerceIn(
                                     state.valueRange.start,
                                     state.valueRange.endInclusive,
                                 ),
@@ -1027,26 +1063,6 @@ private fun AxVolumeSliderContent(
                 }
             },
     )
-}
-
-@Composable
-private fun axVolumeValueState(state: SliderState): State<Float> {
-    val value = remember { Animatable(state.value) }
-    var previousState by remember { mutableStateOf<SliderState?>(null) }
-    LaunchedEffect(state.value, state.isEnabled) {
-        val previous = previousState
-        previousState = state
-        if (
-            previous == null ||
-                previous is SliderState.Empty ||
-                previous.isEnabled != state.isEnabled
-        ) {
-            value.snapTo(state.value)
-        } else {
-            value.animateTo(state.value)
-        }
-    }
-    return value.asState()
 }
 
 @Composable
