@@ -88,6 +88,7 @@ public class RecordingService extends Service implements ScreenMediaRecorderList
     protected static final String EXTRA_PATH = "extra_path";
     private static final String EXTRA_AUDIO_SOURCE = "extra_useAudio";
     private static final String EXTRA_SHOW_TAPS = "extra_showTaps";
+    public static final String EXTRA_SHOW_FRONT_CAMERA = "extra_showFrontCamera";
     private static final String EXTRA_CAPTURE_TARGET = "extra_captureTarget";
     private static final String EXTRA_DISPLAY_ID = "extra_displayId";
     private static final String EXTRA_STOP_REASON = "extra_stopReason";
@@ -120,6 +121,7 @@ public class RecordingService extends Service implements ScreenMediaRecorderList
     private boolean mShowTaps;
     private boolean mOriginalShowTaps;
     private ScreenMediaRecorder mRecorder;
+    private ScreenRecordCameraOverlay mCameraOverlay;
     private final ScreenRecordingStartTimeStore mScreenRecordingStartTimeStore;
     private final Executor mLongExecutor;
     private final UiEventLogger mUiEventLogger;
@@ -319,6 +321,13 @@ public class RecordingService extends Service implements ScreenMediaRecorderList
                 if (startRecording()) {
                     updateState(true);
                     createRecordingNotification();
+                    if (captureTarget == null
+                            && intent.getBooleanExtra(EXTRA_SHOW_FRONT_CAMERA, false)) {
+                        stopCameraOverlay();
+                        mCameraOverlay = new ScreenRecordCameraOverlay(
+                                mUserContextTracker.getUserContext(), displayId);
+                        mCameraOverlay.show();
+                    }
                     mUiEventLogger.log(Events.ScreenRecordEvent.SCREEN_RECORD_START);
                 } else {
                     updateState(false);
@@ -405,6 +414,7 @@ public class RecordingService extends Service implements ScreenMediaRecorderList
 
     @Override
     public void onDestroy() {
+        stopCameraOverlay();
         mController.removeCallback((ScreenRecordUxController.StateChangeCallback) mBinder);
         super.onDestroy();
     }
@@ -661,7 +671,15 @@ public class RecordingService extends Service implements ScreenMediaRecorderList
         return count;
     }
 
+    private void stopCameraOverlay() {
+        if (mCameraOverlay != null) {
+            mCameraOverlay.hide();
+            mCameraOverlay = null;
+        }
+    }
+
     private void stopService(int userId, @StopReason int stopReason) {
+        stopCameraOverlay();
         if (userId == USER_ID_NOT_SPECIFIED) {
             userId = mUserContextTracker.getUserContext().getUserId();
             Log.w(getTag(), "Stopping service without specifying user! " + userId);

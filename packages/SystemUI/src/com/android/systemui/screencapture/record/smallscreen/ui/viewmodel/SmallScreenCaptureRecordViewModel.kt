@@ -221,6 +221,7 @@ constructor(
                 audioSource = options.audioSource,
                 displayId = displayId,
                 shouldShowTaps = captureTarget == null && options.shouldShowTaps,
+                shouldShowFrontCamera = captureTarget == null && options.shouldShowFrontCamera,
                 lowQuality = options.lowQuality,
                 longerDuration = options.longerDuration,
                 hevc = options.hevc && recordDetailsParametersViewModel.hasHevcEncoder,

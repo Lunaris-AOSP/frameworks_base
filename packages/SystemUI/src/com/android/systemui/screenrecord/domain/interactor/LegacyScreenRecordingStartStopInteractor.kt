@@ -44,21 +44,22 @@ constructor(private val userContextProvider: UserContextProvider) :
                 RecordingService.REQUEST_CODE,
                 with(parameters) {
                     RecordingService.getStartIntent(
-                        userContext,
-                        Activity.RESULT_OK,
-                        audioSource.ordinal,
-                        shouldShowTaps,
-                        displayId,
-                        captureTarget,
-                        lowQuality,
-                        longerDuration,
-                        hevc,
-                        resolutionMode,
-                        fpsMode,
-                        timeLimitMs,
-                        fileSizeBytes,
-                        bitrateMultiplier,
-                    )
+                            userContext,
+                            Activity.RESULT_OK,
+                            audioSource.ordinal,
+                            shouldShowTaps,
+                            displayId,
+                            captureTarget,
+                            lowQuality,
+                            longerDuration,
+                            hevc,
+                            resolutionMode,
+                            fpsMode,
+                            timeLimitMs,
+                            fileSizeBytes,
+                            bitrateMultiplier,
+                        )
+                        .putExtra(RecordingService.EXTRA_SHOW_FRONT_CAMERA, shouldShowFrontCamera)
                 },
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )

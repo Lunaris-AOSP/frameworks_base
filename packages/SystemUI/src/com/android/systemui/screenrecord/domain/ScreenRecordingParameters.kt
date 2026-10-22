@@ -32,4 +32,5 @@ data class ScreenRecordingParameters(
     val timeLimitMs: Int = 0,
     val fileSizeBytes: Long = 0L,
     val bitrateMultiplier: Float = 1.0f,
+    val shouldShowFrontCamera: Boolean = false,
 )

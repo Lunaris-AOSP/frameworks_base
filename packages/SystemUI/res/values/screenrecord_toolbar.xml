@@ -6,4 +6,6 @@
     <string name="screenrecord_resolution_dimensions">%1$d × %2$d</string>
     <string name="screenrecord_default_limit">Default (%1$s)</string>
     <string name="screenrecord_size_5gb">5 GB</string>
+    <string name="screenrecord_camera_unavailable">Selfie camera unavailable. Screen recording will continue.</string>
+    <string name="screenrecord_camera_preview">Selfie camera preview. Drag to move.</string>
 </resources>

@@ -50,7 +50,7 @@ object ScreenRecordingOptions {
                     }
                 } else ScreenRecordingAudioSource.NONE,
             shouldShowTaps = flag("screenrecord_show_taps"),
-            shouldShowFrontCamera = false,
+            shouldShowFrontCamera = flag("screenrecord_show_front_camera"),
             lowQuality = flag("screenrecord_use_low_quality"),
             longerDuration = flag("screenrecord_use_longer_timeout"),
             hevc = flag("screenrecord_use_hevc", 1),
@@ -78,6 +78,7 @@ object ScreenRecordingOptions {
         }
         with(options) {
             flag("screenrecord_show_taps", shouldShowTaps)
+            flag("screenrecord_show_front_camera", shouldShowFrontCamera)
             flag("screenrecord_use_low_quality", lowQuality)
             flag("screenrecord_use_longer_timeout", longerDuration)
             flag("screenrecord_use_audio", audioSource != ScreenRecordingAudioSource.NONE)

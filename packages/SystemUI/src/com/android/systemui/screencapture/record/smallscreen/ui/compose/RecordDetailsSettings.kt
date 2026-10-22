@@ -16,6 +16,7 @@
 
 package com.android.systemui.screencapture.record.smallscreen.ui.compose
 
+import android.content.pm.PackageManager
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
@@ -36,8 +37,10 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -59,6 +62,11 @@ fun RecordDetailsSettings(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
+    val context = LocalContext.current
+    val hasFrontCamera =
+        remember(context) {
+            context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_FRONT)
+        }
     Surface(
         modifier = modifier,
         color = MaterialTheme.colorScheme.surface,
@@ -122,19 +130,35 @@ fun RecordDetailsSettings(
             AnimatedVisibility(
                 targetViewModel.currentTarget is RecordDetailsTargetItemViewModel.EntireScreen
             ) {
-                RichSwitch(
-                    icon =
-                        loadIcon(
-                            viewModel = drawableLoaderViewModel,
-                            resId = R.drawable.ic_touch_expressive,
-                            contentDescription = null,
-                        ),
-                    label = stringResource(R.string.screen_record_should_show_touches_label),
-                    checked = parametersViewModel.options.shouldShowTaps,
-                    onCheckedChange = { parametersViewModel.setShouldShowTaps(it) },
-                    enabled = enabled,
-                    modifier = Modifier,
-                )
+                Column {
+                    if (hasFrontCamera) {
+                        RichSwitch(
+                            icon =
+                                loadIcon(
+                                    viewModel = drawableLoaderViewModel,
+                                    resId = R.drawable.ic_selfie_expressive,
+                                    contentDescription = null,
+                                ),
+                            label = stringResource(R.string.screen_record_should_show_camera_label),
+                            checked = parametersViewModel.options.shouldShowFrontCamera,
+                            onCheckedChange = { parametersViewModel.setShouldShowFrontCamera(it) },
+                            enabled = enabled,
+                        )
+                    }
+                    RichSwitch(
+                        icon =
+                            loadIcon(
+                                viewModel = drawableLoaderViewModel,
+                                resId = R.drawable.ic_touch_expressive,
+                                contentDescription = null,
+                            ),
+                        label = stringResource(R.string.screen_record_should_show_touches_label),
+                        checked = parametersViewModel.options.shouldShowTaps,
+                        onCheckedChange = { parametersViewModel.setShouldShowTaps(it) },
+                        enabled = enabled,
+                        modifier = Modifier,
+                    )
+                }
             }
             RecordDetailsOptions(parametersViewModel, drawableLoaderViewModel, enabled)
             Text(
