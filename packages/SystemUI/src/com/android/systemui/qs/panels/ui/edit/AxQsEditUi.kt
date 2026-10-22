@@ -61,7 +61,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -106,6 +105,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.android.axion.compose.dialog.AxAlertDialog
 import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsControlSpans
 import com.android.systemui.qs.panels.shared.model.AxQsGridItem
@@ -208,7 +208,7 @@ fun AxQsEditUi(
     LaunchedEffect(showQqsEditor) { if (!showQqsEditor) editQqs = false }
 
     if (showResetDialog) {
-        AlertDialog(
+        AxAlertDialog(
             onDismissRequest = { showResetDialog = false },
             title = { Text(stringResource(com.android.internal.R.string.reset)) },
             text = { Text("Reset all Quick Settings tiles to default layout?") },

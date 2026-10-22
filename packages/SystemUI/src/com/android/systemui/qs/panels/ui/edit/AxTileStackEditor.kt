@@ -29,7 +29,6 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +46,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.android.axion.compose.dialog.AxAlertDialog
 import com.android.systemui.qs.panels.shared.model.AxQsTileStacks
 import com.android.systemui.qs.panels.ui.compose.AxTileStack
 import com.android.systemui.qs.panels.ui.viewmodel.EditTileViewModel
@@ -87,7 +87,7 @@ internal fun AxTileStackEditor(
     val move: (Int, Int) -> Unit = { from, to ->
         selectedSpecs = selectedSpecs.toMutableList().apply { add(to, removeAt(from)) }
     }
-    AlertDialog(
+    AxAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.lunaris_qs_stack_edit)) },
         text = {

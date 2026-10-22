@@ -128,7 +128,8 @@ fun SystemUIDialogFactory.createBottomSheet(
     isDraggable: Boolean = true,
     // TODO(b/337205027): remove maxWidth parameter when aligned to M3 spec
     maxWidth: Dp = Dp.Unspecified,
-    useAxBlur: Boolean = false,
+    useAxBlur: Boolean = true,
+    surfaceColor: @Composable () -> Color = { MaterialTheme.colorScheme.surfaceContainer },
 ): ComponentSystemUIDialog {
     return create(
         context = context,
@@ -182,6 +183,7 @@ fun SystemUIDialogFactory.createBottomSheet(
             ) {
                 val radius = dimensionResource(R.dimen.bottom_sheet_corner_radius)
                 val shape = RoundedCornerShape(topStart = radius, topEnd = radius)
+                val backgroundColor = surfaceColor()
                 val surfaceModifier =
                     Modifier.bottomSheetPaddings()
                         // consume input so it doesn't get to the parent Composable
@@ -198,7 +200,7 @@ fun SystemUIDialogFactory.createBottomSheet(
                         if (useAxBlur) {
                             Color.Transparent
                         } else {
-                            MaterialTheme.colorScheme.surfaceContainer
+                            backgroundColor
                         },
                 ) {
                     Box {
@@ -207,6 +209,7 @@ fun SystemUIDialogFactory.createBottomSheet(
                                 modifier = Modifier.matchParentSize(),
                                 shape = shape,
                                 cornerRadius = radius,
+                                surfaceColor = backgroundColor,
                             )
                         }
                         Box(

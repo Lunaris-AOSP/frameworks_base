@@ -743,6 +743,7 @@ public final class ThreadedRenderer extends HardwareRenderer {
     private void updateRootDisplayList(View view, DrawCallbacks callbacks) {
         Trace.traceBegin(Trace.TRACE_TAG_VIEW, "Record View#draw()");
         updateViewTreeDisplayList(view);
+        callbacks.onContentDrawn();
 
         // Consume and set the frame callback after we dispatch draw to the view above, but before
         // onPostDraw below which may reset the callback for the next frame.  This ensures that
@@ -805,6 +806,8 @@ public final class ThreadedRenderer extends HardwareRenderer {
      * a threaded renderer instance.
      */
     interface DrawCallbacks {
+        void onContentDrawn();
+
         /**
          * Invoked before a view is drawn by a threaded renderer.
          * This method can be used to apply transformations to the

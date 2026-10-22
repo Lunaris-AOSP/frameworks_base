@@ -140,6 +140,7 @@ class UsbModePickerDialogDelegate @Inject constructor(
                 UsbModePickerBottomSheet(dialog, modes, statusText, functions)
             },
             useAxBlur = true,
+            surfaceColor = { com.android.axion.blur.AxBlurSurfaceDefaults.surfaceColor() },
         )
 
         currentDialog?.show()

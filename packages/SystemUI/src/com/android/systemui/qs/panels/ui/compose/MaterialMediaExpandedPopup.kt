@@ -23,9 +23,7 @@ import android.graphics.drawable.ColorDrawable
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.MediaMetadata
-import android.provider.Settings
 import android.view.HapticFeedbackConstants
-import android.view.WindowManager
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -91,6 +89,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.android.axion.blur.AxBlurSurfaceDefaults
+import com.android.axion.blur.axBlurBackground
 import com.android.settingslib.media.MediaOutputConstants
 import com.android.systemui.media.dialog.MediaOutputDialogReceiver
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CustomColorScheme
@@ -104,14 +104,6 @@ internal fun MaterialMediaExpandedPopup(
     val context = LocalContext.current
     val view = LocalView.current
     val controller = mediaState.controller
-
-    val blurEnabled = remember {
-        Settings.Global.getInt(
-            context.contentResolver,
-            Settings.Global.DISABLE_WINDOW_BLURS,
-            if (android.os.SystemProperties.getBoolean("ro.custom.blur.enable", false)) 0 else 1
-        ) != 1
-    }
 
     var localIsPlaying by remember(controller, mediaState.isPlaying) {
         mutableStateOf(mediaState.isPlaying)
@@ -196,21 +188,18 @@ internal fun MaterialMediaExpandedPopup(
         SideEffect {
             dialogWindowProvider?.window?.let { w ->
                 w.setBackgroundDrawable(ColorDrawable(android.graphics.Color.TRANSPARENT))
-                if (blurEnabled) {
-                    w.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
-                    val lp = w.attributes
-                    lp.blurBehindRadius = 150
-                    w.attributes = lp
-                } else {
-                    w.clearFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
-                }
             }
         }
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = if (blurEnabled) 0.25f else 0.55f))
+                .axBlurBackground(
+                    enabled = true,
+                    fallbackColor = Color.Black.copy(alpha = 0.55f),
+                    tintColor = Color.Black.copy(alpha = 0.25f),
+                    cornerRadius = 0.dp,
+                )
                 .pointerInput(Unit) {
                     detectTapGestures(onTap = { onDismiss() })
                 },
@@ -222,7 +211,14 @@ internal fun MaterialMediaExpandedPopup(
                     .scale(popupScale.value)
                     .alpha(popupAlpha.value)
                     .clip(RoundedCornerShape(32.dp))
-                    .background(CustomColorScheme.current.qsTileColor)
+                    .axBlurBackground(
+                        enabled = true,
+                        fallbackColor = CustomColorScheme.current.qsTileColor,
+                        tintColor = AxBlurSurfaceDefaults.tintColor(
+                            CustomColorScheme.current.qsTileColor
+                        ),
+                        cornerRadius = 32.dp,
+                    )
                     .padding(24.dp)
                     .clickable(enabled = false) {},
                 horizontalAlignment = Alignment.CenterHorizontally,

@@ -23,7 +23,6 @@ import android.graphics.drawable.ColorDrawable
 import android.os.UserHandle
 import android.provider.Settings
 import android.view.HapticFeedbackConstants
-import android.view.WindowManager
 import android.hardware.display.ColorDisplayManager
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -73,6 +72,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.android.axion.blur.axBlurBackground
 import com.android.compose.ui.graphics.painter.rememberDrawablePainter
 import com.android.settingslib.display.BrightnessUtils
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CustomColorScheme
@@ -110,14 +110,6 @@ fun MaterialBrightnessExpandedPopup(
         )
     }
 
-    val blurEnabled = remember {
-        Settings.Global.getInt(
-            cr,
-            Settings.Global.DISABLE_WINDOW_BLURS,
-            if (android.os.SystemProperties.getBoolean("ro.custom.blur.enable", false)) 0 else 1
-        ) != 1
-    }
-
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
@@ -129,21 +121,18 @@ fun MaterialBrightnessExpandedPopup(
         SideEffect {
             dialogWindowProvider?.window?.let { w ->
                 w.setBackgroundDrawable(ColorDrawable(android.graphics.Color.TRANSPARENT))
-                if (blurEnabled) {
-                    w.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
-                    val lp = w.attributes
-                    lp.blurBehindRadius = 150
-                    w.attributes = lp
-                } else {
-                    w.clearFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
-                }
             }
         }
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = if (blurEnabled) 0.25f else 0.55f))
+                .axBlurBackground(
+                    enabled = true,
+                    fallbackColor = Color.Black.copy(alpha = 0.55f),
+                    tintColor = Color.Black.copy(alpha = 0.25f),
+                    cornerRadius = 0.dp,
+                )
                 .pointerInput(Unit) {
                     detectTapGestures(onTap = { onDismiss() })
                 },

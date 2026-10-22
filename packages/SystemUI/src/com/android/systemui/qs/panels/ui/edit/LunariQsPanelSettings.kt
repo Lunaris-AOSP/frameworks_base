@@ -61,7 +61,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.RestartAlt
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -105,6 +104,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.android.axion.compose.dialog.AxAlertDialog
 import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsGridLayout
 import com.android.systemui.qs.panels.shared.model.AxQsLayout
@@ -761,7 +761,7 @@ private fun SettingsChoice(
         )
     }
     if (showDialog && enabled) {
-        AlertDialog(
+        AxAlertDialog(
             onDismissRequest = { showDialog = false },
             title = { Text(title) },
             text = {
@@ -859,7 +859,7 @@ private fun GradientColorPickerDialog(
         hexInput = colorHex(AndroidColor.HSVToColor(floatArrayOf(hue, saturation, value)))
     }
 
-    AlertDialog(
+    AxAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {

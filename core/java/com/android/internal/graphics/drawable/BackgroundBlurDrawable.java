@@ -36,7 +36,6 @@ import android.util.ArraySet;
 import android.util.Log;
 import android.util.LongSparseArray;
 import android.view.ViewRootImpl;
-import android.view.ViewTreeObserver;
 
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
@@ -232,8 +231,8 @@ public final class BackgroundBlurDrawable extends Drawable {
     private void updatePath() {
         mTmpRadii[0] = mTmpRadii[1] = mCornerRadiusTL;
         mTmpRadii[2] = mTmpRadii[3] = mCornerRadiusTR;
-        mTmpRadii[4] = mTmpRadii[5] = mCornerRadiusBL;
-        mTmpRadii[6] = mTmpRadii[7] = mCornerRadiusBR;
+        mTmpRadii[4] = mTmpRadii[5] = mCornerRadiusBR;
+        mTmpRadii[6] = mTmpRadii[7] = mCornerRadiusBL;
         mRectPath.reset();
         if (getAlpha() == 0 || !isVisible()) {
             return;
@@ -281,7 +280,6 @@ public final class BackgroundBlurDrawable extends Drawable {
         private final ViewRootImpl mViewRoot;
         private BlurRegion[] mTmpBlurRegionsForFrame = new BlurRegion[0];
         private boolean mHasUiUpdates;
-        private ViewTreeObserver.OnPreDrawListener mOnPreDrawListener;
 
         public Aggregator(ViewRootImpl viewRoot) {
             mViewRoot = viewRoot;
@@ -325,41 +323,27 @@ public final class BackgroundBlurDrawable extends Drawable {
                 }
             }
 
-            if (mOnPreDrawListener == null && mViewRoot.getView() != null
-                    && hasRegions()) {
-                registerPreDrawListener();
-
-                if (mHasUiUpdates) {
-                    mViewRoot.getView().invalidate();
-                }
+            if (mHasUiUpdates && mViewRoot.getView() != null) {
+                mViewRoot.getView().invalidate();
             }
         }
 
-        private void registerPreDrawListener() {
-            mOnPreDrawListener = () -> {
-                final boolean hasUiUpdates = hasUpdates();
+        @UiThread
+        public void onFrameDraw() {
+            final boolean hasUiUpdates = hasUpdates();
 
-                if (hasUiUpdates || hasRegions()) {
-                    final BlurRegion[] blurRegionsForNextFrame = getBlurRegionsCopyForRT();
+            if (hasUiUpdates || hasRegions()) {
+                final BlurRegion[] blurRegionsForNextFrame = getBlurRegionsCopyForRT();
 
-                    mViewRoot.registerRtFrameCallback(frame -> {
-                        synchronized (mRtLock) {
-                            mLastFrameNumber = frame;
-                            mLastFrameBlurRegions = blurRegionsForNextFrame;
-                            handleDispatchBlurTransactionLocked(
-                                    frame, blurRegionsForNextFrame, hasUiUpdates);
-                        }
-                    });
-                }
-                if (!hasRegions() && mViewRoot.getView() != null) {
-                    mViewRoot.getView().getViewTreeObserver()
-                            .removeOnPreDrawListener(mOnPreDrawListener);
-                    mOnPreDrawListener = null;
-                }
-                return true;
-            };
-
-            mViewRoot.getView().getViewTreeObserver().addOnPreDrawListener(mOnPreDrawListener);
+                mViewRoot.registerRtFrameCallback(frame -> {
+                    synchronized (mRtLock) {
+                        mLastFrameNumber = frame;
+                        mLastFrameBlurRegions = blurRegionsForNextFrame;
+                        handleDispatchBlurTransactionLocked(
+                                frame, blurRegionsForNextFrame, hasUiUpdates);
+                    }
+                });
+            }
         }
 
         // Called from a thread pool

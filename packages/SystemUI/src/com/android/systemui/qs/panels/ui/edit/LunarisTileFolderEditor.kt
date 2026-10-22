@@ -33,7 +33,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -52,6 +51,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.android.axion.compose.dialog.AxAlertDialog
 import com.android.compose.theme.LocalAndroidColorScheme
 import com.android.systemui.animation.Expandable as SystemUiExpandable
 import com.android.systemui.common.ui.compose.Icon as TileIconView
@@ -125,7 +125,7 @@ internal fun LunarisTileFolderEditor(
     val move: (Int, Int) -> Unit = { from, to ->
         selectedSpecs = selectedSpecs.toMutableList().apply { add(to, removeAt(from)) }
     }
-    AlertDialog(
+    AxAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.lunaris_qs_folder_edit)) },
         text = {

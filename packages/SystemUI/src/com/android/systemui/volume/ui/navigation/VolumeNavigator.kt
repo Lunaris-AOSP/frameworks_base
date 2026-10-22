@@ -133,6 +133,7 @@ constructor(
             // TODO(b/337205027) change maxWidth
             maxWidth = 800.dp,
             useAxBlur = true,
+            surfaceColor = { com.android.axion.blur.AxBlurSurfaceDefaults.surfaceColor() },
         )
     }
 }
