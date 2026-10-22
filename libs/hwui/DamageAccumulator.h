@@ -61,6 +61,9 @@ public:
 
     void computeCurrentTransform(Matrix4* outMatrix) const;
 
+    float computeCurrentAlpha() const;
+    SkRect computeCurrentClip(const SkRect& bounds) const;
+
     SkRect computeClipAndTransform(const SkRect& bounds, Matrix4* outMatrix) const;
 
     void finish(SkRect* totalDirty);

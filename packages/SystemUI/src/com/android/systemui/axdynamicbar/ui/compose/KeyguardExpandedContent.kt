@@ -3,8 +3,6 @@
 package com.android.systemui.axdynamicbar.ui.compose
 
 import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.EnterExitState
-import androidx.compose.runtime.CompositionLocalProvider
 
 import android.view.MotionEvent
 import androidx.compose.animation.AnimatedContent
@@ -186,22 +184,11 @@ internal fun AnimatedVisibilityScope.KeyguardExpandedContent(
         if (event is IslandEvent.Media) {
             KeyguardMediaPanel(event, interactor, Modifier.align(Alignment.BottomCenter))
         } else {
-            val motionScheme = MaterialTheme.motionScheme
-            val blurAlpha by transition.animateFloat(
-                transitionSpec = {
-                    if (targetState == EnterExitState.Visible) motionScheme.defaultEffectsSpec()
-                    else tween(250)
-                },
-                label = "keyguard_panel_blur_alpha",
-            ) { if (it == EnterExitState.Visible) 1f else 0f }
-            val parentBlurAlpha = LocalBlurAlpha.current
-            CompositionLocalProvider(LocalBlurAlpha provides parentBlurAlpha * blurAlpha) {
-                when (event) {
-                    is IslandEvent.Timer -> KeyguardTimerPanel(event, interactor)
-                    is IslandEvent.Stopwatch -> KeyguardStopwatchPanel(event, interactor)
-                    is IslandEvent.AudioRecording -> KeyguardAudioRecordingPanel(event, interactor)
-                    else -> KeyguardGenericPanel(event, interactor, hapticsViewModelFactory)
-                }
+            when (event) {
+                is IslandEvent.Timer -> KeyguardTimerPanel(event, interactor)
+                is IslandEvent.Stopwatch -> KeyguardStopwatchPanel(event, interactor)
+                is IslandEvent.AudioRecording -> KeyguardAudioRecordingPanel(event, interactor)
+                else -> KeyguardGenericPanel(event, interactor, hapticsViewModelFactory)
             }
         }
     }

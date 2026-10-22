@@ -5,10 +5,6 @@ import android.graphics.PixelFormat
 import android.view.Gravity
 import android.view.WindowManager
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.EnterExitState
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.runtime.CompositionLocalProvider
-import com.android.systemui.axdynamicbar.shared.LocalBlurAlpha
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -309,79 +305,72 @@ private fun OverlayContent(viewModel: AxDynamicBarChipViewModel, statusBarHeight
             transformOrigin = origin,
         ),
     ) {
-        val blurAlpha by transition.animateFloat(
-            transitionSpec = { tween(if (targetState == EnterExitState.Visible) 250 else 200) },
-            label = "expanded_blur_alpha",
-        ) { if (it == EnterExitState.Visible) 1f else 0f }
-        CompositionLocalProvider(LocalBlurAlpha provides blurAlpha) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .pointerInput(Unit) {
+                    val slop = viewConfiguration.touchSlop
+                    awaitEachGesture {
 
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .pointerInput(Unit) {
-                        val slop = viewConfiguration.touchSlop
-                        awaitEachGesture {
+                        var ev: PointerEvent
+                        do {
+                            ev = awaitPointerEvent(PointerEventPass.Final)
+                        } while (!ev.changes.any { it.changedToDownIgnoreConsumed() })
 
-                            var ev: PointerEvent
-                            do {
-                                ev = awaitPointerEvent(PointerEventPass.Final)
-                            } while (!ev.changes.any { it.changedToDownIgnoreConsumed() })
+                        val downChange =
+                            ev.changes.firstOrNull { it.changedToDownIgnoreConsumed() }
+                                ?: ev.changes.firstOrNull()
+                                ?: return@awaitEachGesture
 
-                            val downChange =
-                                ev.changes.firstOrNull { it.changedToDownIgnoreConsumed() }
-                                    ?: ev.changes.firstOrNull()
-                                    ?: return@awaitEachGesture
+                        val pointerId = downChange.id
+                        val downPos = downChange.position
+                        val downConsumed = downChange.isConsumed
+                        var hasExceededSlop = false
 
-                            val pointerId = downChange.id
-                            val downPos = downChange.position
-                            val downConsumed = downChange.isConsumed
-                            var hasExceededSlop = false
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Final)
+                            val change =
+                                event.changes.firstOrNull { it.id == pointerId }
+                                    ?: event.changes.firstOrNull()
+                                    ?: break
 
-                            while (true) {
-                                val event = awaitPointerEvent(PointerEventPass.Final)
-                                val change =
-                                    event.changes.firstOrNull { it.id == pointerId }
-                                        ?: event.changes.firstOrNull()
-                                        ?: break
+                            val dx = change.position.x - downPos.x
+                            val dy = change.position.y - downPos.y
+                            if (dx * dx + dy * dy > slop * slop) {
+                                hasExceededSlop = true
+                            }
 
-                                val dx = change.position.x - downPos.x
-                                val dy = change.position.y - downPos.y
-                                if (dx * dx + dy * dy > slop * slop) {
-                                    hasExceededSlop = true
+                            if (!change.pressed) {
+                                if (!downConsumed && !change.isConsumed && !hasExceededSlop) {
+                                    change.consume()
+                                    viewModel.statusBarExpansion.collapse()
                                 }
-
-                                if (!change.pressed) {
-                                    if (!downConsumed && !change.isConsumed && !hasExceededSlop) {
-                                        change.consume()
-                                        viewModel.statusBarExpansion.collapse()
-                                    }
-                                    break
-                                }
+                                break
                             }
                         }
                     }
-                    .padding(top = topPad),
-                contentAlignment = Alignment.TopCenter,
-            ) {
-                chipState?.let { state ->
-                    val filtered = state.allEvents.filter { it !is IslandEvent.AospChip }
-                    if (filtered.isEmpty()) return@let
-                    Box(
-                        modifier =
-                            Modifier.clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                onClick = {}
-                            )
-                    ) {
-                        ExpandedIslandContent(
-                            events = filtered,
-                            interactor = viewModel.interactor,
-                            onCollapse = { viewModel.statusBarExpansion.collapse() },
-                            pinnedEventId = state.event.id,
-                            hapticsViewModelFactory = viewModel.interactor.sliderHapticsViewModelFactory,
+                }
+                .padding(top = topPad),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            chipState?.let { state ->
+                val filtered = state.allEvents.filter { it !is IslandEvent.AospChip }
+                if (filtered.isEmpty()) return@let
+                Box(
+                    modifier =
+                        Modifier.clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = {}
                         )
-                    }
+                ) {
+                    ExpandedIslandContent(
+                        events = filtered,
+                        interactor = viewModel.interactor,
+                        onCollapse = { viewModel.statusBarExpansion.collapse() },
+                        pinnedEventId = state.event.id,
+                        hapticsViewModelFactory = viewModel.interactor.sliderHapticsViewModelFactory,
+                    )
                 }
             }
         }
@@ -400,30 +389,24 @@ private fun OverlayContent(viewModel: AxDynamicBarChipViewModel, statusBarHeight
             transformOrigin = origin,
         ),
     ) {
-        val blurAlpha by transition.animateFloat(
-            transitionSpec = { tween(if (targetState == EnterExitState.Visible) 300 else 250) },
-            label = "alert_blur_alpha",
-        ) { if (it == EnterExitState.Visible) 1f else 0f }
-        CompositionLocalProvider(LocalBlurAlpha provides blurAlpha) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = topPad),
-                contentAlignment = Alignment.TopCenter,
-            ) {
-                val alert = lastAlert.value
-                if (alert != null) {
-                    NotificationAlertCard(
-                        notification = alert,
-                        interactor = viewModel.interactor,
-                        onDismiss = { viewModel.interactor.dismissNotificationAlert() },
-                        initiallyCompact = compactNotifs,
-                        modifier =
-                            Modifier.widthIn(max = ExpandedMaxWidth)
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp),
-                    )
-                }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = topPad),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            val alert = lastAlert.value
+            if (alert != null) {
+                NotificationAlertCard(
+                    notification = alert,
+                    interactor = viewModel.interactor,
+                    onDismiss = { viewModel.interactor.dismissNotificationAlert() },
+                    initiallyCompact = compactNotifs,
+                    modifier =
+                        Modifier.widthIn(max = ExpandedMaxWidth)
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp),
+                )
             }
         }
     }

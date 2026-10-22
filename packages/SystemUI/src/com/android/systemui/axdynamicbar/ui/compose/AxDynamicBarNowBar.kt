@@ -2,10 +2,8 @@ package com.android.systemui.axdynamicbar.ui.compose
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.runtime.LaunchedEffect
 import kotlin.math.abs
 import androidx.compose.animation.core.animateIntAsState
@@ -95,15 +93,6 @@ fun AxDynamicBarNowBar(
         enter = slideInVertically(motionScheme.defaultSpatialSpec()) { -it } + fadeIn(motionScheme.defaultEffectsSpec()),
         exit = slideOutVertically(motionScheme.fastSpatialSpec()) { -it } + fadeOut(motionScheme.fastEffectsSpec()),
     ) {
-        // Captured here, before AnimatedContent shadows `transition` with its own scope.
-        val visibilityBlurAlpha by transition.animateFloat(
-            transitionSpec = {
-                if (targetState == EnterExitState.Visible) motionScheme.defaultEffectsSpec()
-                else motionScheme.fastEffectsSpec()
-            },
-            label = "nowbar_blur_visibility",
-        ) { if (it == EnterExitState.Visible) 1f else 0f }
-
         state?.let { chipState ->
             val displayEvent = chipState.notificationAlert ?: chipState.event
             val isAlert = chipState.notificationAlert != null
@@ -117,13 +106,6 @@ fun AxDynamicBarNowBar(
                 contentKey = { if (it.isAlert) "alert" else it.event::class.simpleName },
                 label = "nowbar_event",
             ) { display ->
-                val contentBlurAlpha by transition.animateFloat(
-                    transitionSpec = {
-                        if (targetState == EnterExitState.Visible) motionScheme.defaultEffectsSpec()
-                        else motionScheme.fastEffectsSpec()
-                    },
-                    label = "nowbar_blur_content",
-                ) { if (it == EnterExitState.Visible) 1f else 0f }
                 var targetWidthPx by remember { mutableIntStateOf(0) }
                 val animatedWidthPx by animateIntAsState(
                     targetWidthPx, MaterialTheme.motionScheme.defaultSpatialSpec(), label = "nowbar_w",
@@ -204,7 +186,6 @@ fun AxDynamicBarNowBar(
                             .islandBlur(
                                 cornerRadius = RadiusXl,
                                 fallbackColor = accent,
-                                alpha = visibilityBlurAlpha * contentBlurAlpha,
                             )
                             .background(accent.copy(alpha = AlphaGlass))
                             .then(

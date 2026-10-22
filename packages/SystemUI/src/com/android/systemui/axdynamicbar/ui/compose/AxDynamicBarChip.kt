@@ -1,8 +1,6 @@
 package com.android.systemui.axdynamicbar.ui.compose
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.EnterExitState
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.border
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -220,14 +218,6 @@ fun AxDynamicBarChip(
                 }
             },
     ) {
-        val visibilityBlurAlpha by transition.animateFloat(
-            transitionSpec = {
-                if (targetState == EnterExitState.Visible) motionScheme.defaultEffectsSpec()
-                else motionScheme.fastEffectsSpec()
-            },
-            label = "chip_blur_visibility",
-        ) { if (it == EnterExitState.Visible) 1f else 0f }
-
         state?.let { chipState ->
             val isAlert = chipState.notificationAlert != null
 
@@ -258,13 +248,6 @@ fun AxDynamicBarChip(
                     },
                     label = "chip_event",
                 ) {
-                    val contentBlurAlpha by transition.animateFloat(
-                        transitionSpec = {
-                            if (targetState == EnterExitState.Visible) motionScheme.defaultEffectsSpec()
-                            else motionScheme.fastEffectsSpec()
-                        },
-                        label = "chip_blur_content",
-                    ) { if (it == EnterExitState.Visible) 1f else 0f }
                     val event = displayEvent
                     val rawAccent = islandChipColorFor(event)
                     val accent by animateColorAsState(rawAccent, MaterialTheme.motionScheme.fastEffectsSpec(), label = "accent")
@@ -301,7 +284,6 @@ fun AxDynamicBarChip(
                                 .islandBlur(
                                     cornerRadius = 14.dp,
                                     fallbackColor = accent,
-                                    alpha = visibilityBlurAlpha * contentBlurAlpha,
                                 )
                                 .background(accent.copy(alpha = AlphaGlass)),
                         )
@@ -321,7 +303,6 @@ fun AxDynamicBarChip(
                                 .islandBlur(
                                     cornerRadius = ChipHeight / 2,
                                     fallbackColor = accent,
-                                    alpha = visibilityBlurAlpha * contentBlurAlpha,
                                 )
                                 .background(accent.copy(alpha = AlphaGlass))
                                 .then(

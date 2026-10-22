@@ -587,15 +587,18 @@ struct {
     jclass clazz;
     jmethodID callPositionChanged;
     jmethodID callPositionChanged2;
+    jmethodID callPositionChangedWithRenderState;
     jmethodID callApplyStretch;
     jmethodID callPositionLost;
 } gPositionListener;
 
 static void android_view_RenderNode_requestPositionUpdates(JNIEnv* env, jobject,
-        jlong renderNodePtr, jobject listener) {
+                                                           jlong renderNodePtr, jobject listener,
+                                                           jboolean needsRenderState) {
     class PositionListenerTrampoline : public RenderNode::PositionListener {
     public:
-        PositionListenerTrampoline(JNIEnv* env, jobject listener) {
+        PositionListenerTrampoline(JNIEnv* env, jobject listener, bool needsRenderState)
+                : mNeedsRenderState(needsRenderState) {
             env->GetJavaVM(&mVm);
             mListener = env->NewGlobalRef(listener);
         }
@@ -612,9 +615,9 @@ static void android_view_RenderNode_requestPositionUpdates(JNIEnv* env, jobject,
             const bool enableClip = Properties::clipSurfaceViews;
 
             Matrix4 transform;
-            SkIRect clipBounds;
+            SkIRect clipBounds = SkIRect::MakeEmpty();
             uirenderer::Rect initialClipBounds;
-            if (enableClip) {
+            if (enableClip && !mNeedsRenderState) {
                 // SurfaceView never draws beyond its bounds regardless of if it can or not,
                 // so if clip-to-bounds is disabled just use the bounds as the starting point
                 // regardless
@@ -626,6 +629,14 @@ static void android_view_RenderNode_requestPositionUpdates(JNIEnv* env, jobject,
                                 .roundOut();
             } else {
                 info.damageAccumulator->computeCurrentTransform(&transform);
+            }
+            const float alpha =
+                    mNeedsRenderState ? info.damageAccumulator->computeCurrentAlpha() : 1.0f;
+            if (mNeedsRenderState) {
+                clipBounds = info.damageAccumulator
+                                     ->computeCurrentClip(
+                                             SkRect::MakeIWH(props.getWidth(), props.getHeight()))
+                                     .roundOut();
             }
             bool useStretchShader =
                     Properties::getStretchEffectBehavior() != StretchEffectBehavior::UniformScale;
@@ -648,11 +659,13 @@ static void android_view_RenderNode_requestPositionUpdates(JNIEnv* env, jobject,
                 bounds.roundOut();
             }
 
-            if (mPreviousPosition == bounds && mPreviousClip == clipBounds) {
+            if (mPreviousPosition == bounds && mPreviousClip == clipBounds &&
+                mPreviousAlpha == alpha) {
                 return;
             }
             mPreviousPosition = bounds;
             mPreviousClip = clipBounds;
+            mPreviousAlpha = alpha;
 
             ATRACE_NAME("Update SurfaceView position");
 
@@ -664,7 +677,15 @@ static void android_view_RenderNode_requestPositionUpdates(JNIEnv* env, jobject,
             // this callback is dispatched, then we lose the position
             // information for this frame.
             jboolean keepListening;
-            if (!enableClip) {
+            if (mNeedsRenderState) {
+                keepListening = env->CallStaticBooleanMethod(
+                        gPositionListener.clazz,
+                        gPositionListener.callPositionChangedWithRenderState, mListener,
+                        static_cast<jlong>(info.canvasContext.getFrameNumber()),
+                        static_cast<jint>(clipBounds.fLeft), static_cast<jint>(clipBounds.fTop),
+                        static_cast<jint>(clipBounds.fRight), static_cast<jint>(clipBounds.fBottom),
+                        static_cast<jfloat>(alpha));
+            } else if (!enableClip) {
                 keepListening = env->CallStaticBooleanMethod(
                         gPositionListener.clazz, gPositionListener.callPositionChanged, mListener,
                         static_cast<jlong>(info.canvasContext.getFrameNumber()),
@@ -689,10 +710,13 @@ static void android_view_RenderNode_requestPositionUpdates(JNIEnv* env, jobject,
         virtual void onPositionLost(RenderNode& node, const TreeInfo* info) override {
             if (CC_UNLIKELY(!mListener || (info && !info->updateWindowPositions))) return;
 
-            if (mPreviousPosition.isEmpty()) {
+            if (mPreviousPosition.isEmpty() &&
+                (!mNeedsRenderState || mPreviousAlpha < 0.0f)) {
                 return;
             }
             mPreviousPosition.setEmpty();
+            mPreviousClip.setEmpty();
+            mPreviousAlpha = -1.0f;
 
             ATRACE_NAME("SurfaceView position lost");
             JNIEnv* env = jnienv();
@@ -798,10 +822,13 @@ static void android_view_RenderNode_requestPositionUpdates(JNIEnv* env, jobject,
         jobject mListener;
         uirenderer::Rect mPreviousPosition;
         uirenderer::Rect mPreviousClip;
+        const bool mNeedsRenderState;
+        float mPreviousAlpha = -1.0f;
     };
 
     RenderNode* renderNode = reinterpret_cast<RenderNode*>(renderNodePtr);
-    renderNode->setPositionListener(new PositionListenerTrampoline(env, listener));
+    renderNode->setPositionListener(
+            new PositionListenerTrampoline(env, listener, needsRenderState));
 }
 
 // ----------------------------------------------------------------------------
@@ -822,7 +849,7 @@ static const JNINativeMethod gMethods[] = {
         {"nAddAnimator", "(JJ)V", (void*)android_view_RenderNode_addAnimator},
         {"nEndAllAnimators", "(J)V", (void*)android_view_RenderNode_endAllAnimators},
         {"nForceEndAnimators", "(J)V", (void*)android_view_RenderNode_forceEndAnimators},
-        {"nRequestPositionUpdates", "(JLjava/lang/ref/WeakReference;)V",
+        {"nRequestPositionUpdates", "(JLjava/lang/ref/WeakReference;Z)V",
          (void*)android_view_RenderNode_requestPositionUpdates},
 
         // ----------------------------------------------------------------------------
@@ -929,6 +956,9 @@ int register_android_view_RenderNode(JNIEnv* env) {
             env, clazz, "callPositionChanged", "(Ljava/lang/ref/WeakReference;JIIII)Z");
     gPositionListener.callPositionChanged2 = GetStaticMethodIDOrDie(
             env, clazz, "callPositionChanged2", "(Ljava/lang/ref/WeakReference;JIIIIIIIIII)Z");
+    gPositionListener.callPositionChangedWithRenderState =
+            GetStaticMethodIDOrDie(env, clazz, "callPositionChangedWithRenderState",
+                                   "(Ljava/lang/ref/WeakReference;JIIIIF)Z");
     gPositionListener.callApplyStretch = GetStaticMethodIDOrDie(
             env, clazz, "callApplyStretch", "(Ljava/lang/ref/WeakReference;JFFFFFFFFFF)Z");
     gPositionListener.callPositionLost = GetStaticMethodIDOrDie(

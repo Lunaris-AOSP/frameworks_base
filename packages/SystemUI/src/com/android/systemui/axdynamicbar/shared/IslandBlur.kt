@@ -21,7 +21,6 @@ import android.view.ViewTreeObserver
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
@@ -55,9 +54,6 @@ import com.android.axion.blur.AxBlurSurfaceDefaults
 import com.android.axion.blur.LocalAxBlurEnabled
 import kotlin.math.roundToInt
 
-/** Platform blur drawables need the same opacity as their enclosing Compose transitions. */
-internal val LocalBlurAlpha = compositionLocalOf { 1f }
-
 /**
  * Draws frost inside the surface's clip, before its tint and padding. Uses the renderer directly
  * because this branch's axBlurBackground modifier does not expose a surface alpha parameter.
@@ -66,14 +62,12 @@ internal val LocalBlurAlpha = compositionLocalOf { 1f }
 internal fun Modifier.islandBlur(
     cornerRadius: Dp,
     fallbackColor: Color,
-    alpha: Float = LocalBlurAlpha.current,
 ): Modifier {
     val view = LocalView.current
     val enabled = LocalAxBlurEnabled.current
     val blur = remember(view) { AxBlurBackgroundRenderer(view) }
     val radiusPx = with(LocalDensity.current) { cornerRadius.toPx() }
     val tintArgb = AxBlurSurfaceDefaults.tintColor(fallbackColor).toArgb()
-    val surfaceAlpha = (alpha.coerceIn(0f, 1f) * 255).roundToInt()
 
     DisposableEffect(blur) {
         blur.onAttachedToWindow()
@@ -81,7 +75,6 @@ internal fun Modifier.islandBlur(
     }
     SideEffect {
         blur.setEnabled(enabled)
-        blur.setSurfaceAlpha(surfaceAlpha)
     }
 
     return islandBlurFrameTracking(enabled).drawWithContent {
@@ -97,7 +90,6 @@ internal fun Modifier.islandBlur(
                         size.height.roundToInt(),
                         radiusPx,
                         tintArgb,
-                        surfaceAlpha,
                     )
             }
         }
