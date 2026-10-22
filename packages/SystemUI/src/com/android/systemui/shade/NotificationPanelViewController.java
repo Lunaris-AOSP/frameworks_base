@@ -1529,9 +1529,9 @@ public final class NotificationPanelViewController implements
                             }
                             mIsSpringBackAnimation = height == target;
                             setShadeOverscroll(amount);
-                            // Content can change height while the shade is rebounding.
-                            float expandedHeight = mIsSpringBackAnimation
-                                    ? getMaxPanelTransitionDistance() : height;
+                            float currentTarget = getMaxPanelTransitionDistance();
+                            float expandedHeight = target > 0f
+                                    ? (height / target) * currentTarget : currentTarget;
                             if (expandedHeight != mExpandedHeight) {
                                 setExpandedHeightInternal(expandedHeight);
                             }

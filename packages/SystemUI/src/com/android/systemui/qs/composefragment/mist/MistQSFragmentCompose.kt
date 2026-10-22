@@ -150,6 +150,7 @@ import com.android.systemui.qs.composefragment.viewmodel.QSFragmentComposeViewMo
 import com.android.systemui.qs.flags.QSComposeFragment
 import com.android.systemui.qs.panels.shared.model.QSFragmentComposeClippingTableLog
 import com.android.systemui.qs.panels.shared.model.AxQsLayout
+import com.android.systemui.qs.panels.shared.model.AxQsPanelMode
 import com.android.systemui.qs.panels.ui.compose.AxQuickSettingsHeader
 import com.android.systemui.qs.panels.ui.compose.EditMode
 import com.android.systemui.qs.panels.ui.compose.QuickQuickSettings
@@ -161,6 +162,7 @@ import com.android.systemui.shade.ShadeDisplayAware
 import com.android.systemui.shade.ShadeHeaderController
 import com.android.systemui.shade.ui.composable.WithStatusIconContext
 import com.android.systemui.shade.ui.viewmodel.ShadeHeaderViewModel
+import com.android.systemui.statusbar.StatusBarState
 import com.android.systemui.statusbar.phone.ui.TintedIconManager
 import com.android.systemui.statusbar.policy.ConfigurationController
 import com.android.systemui.statusbar.policy.ConfigurationController.ConfigurationListener
@@ -391,6 +393,9 @@ constructor(
      */
     @Composable
     private fun CollapsableQuickSettingsSTL() {
+        val separateShade =
+            axQsViewModel.panelMode == AxQsPanelMode.SEPARATE && !viewModel.isInSplitShade &&
+                viewModel.statusBarState == StatusBarState.SHADE
         val sharedLayout =
             axQsViewModel.useSharedQsLayout && !viewModel.isInSplitShade &&
                 LocalConfiguration.current.orientation != Configuration.ORIENTATION_LANDSCAPE
@@ -498,8 +503,12 @@ constructor(
 
         Box(
             Modifier.fillMaxSize().thenIf(sceneState.shouldComposeLiveAxQs()) {
-                if (sharedLayout) Modifier.axSharedQsEntrance { qqsSquishiness }
-                else Modifier.axQsEntrance { qqsSquishiness }
+                when {
+                    separateShade ->
+                        Modifier.axSharedQsEntrance { viewModel.panelExpansionFraction }
+                    sharedLayout -> Modifier.axSharedQsEntrance { qqsSquishiness }
+                    else -> Modifier.axQsEntrance { qqsSquishiness }
+                }
             }
         ) {
             SceneTransitionLayout(
