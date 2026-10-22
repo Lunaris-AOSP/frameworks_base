@@ -27,12 +27,16 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.platform.ViewConfiguration
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardTouchHandlingViewModel
+import com.android.systemui.keyguard.ui.viewmodel.KeyguardTouchHandlingViewModel.Companion.LONG_PRESS_ADDITIONAL_DELAY_MS
 import com.android.systemui.lifecycle.rememberViewModel
 import com.android.systemui.plugins.keyguard.VRectF
 
@@ -46,32 +50,44 @@ fun LockscreenTouchHandling(
     val viewModel = rememberViewModel("LockscreenLongPress") { viewModelFactory.create() }
     val (settingsMenuBounds, setSettingsMenuBounds) = remember { mutableStateOf(VRectF.ZERO) }
     val interactionSource = remember { MutableInteractionSource() }
+    val defaultViewConfiguration = LocalViewConfiguration.current
+    val longPressViewConfiguration =
+        remember(defaultViewConfiguration) {
+            object : ViewConfiguration by defaultViewConfiguration {
+                override val longPressTimeoutMillis =
+                    defaultViewConfiguration.longPressTimeoutMillis + LONG_PRESS_ADDITIONAL_DELAY_MS
+            }
+        }
 
-    Box(
-        modifier =
-            modifier
-                .pointerInput(viewModel.isLongPressHandlingEnabled) {
-                    detectTapGestures(
-                        onTap = { viewModel.onClick(it.x, it.y) },
-                        onDoubleTap = { viewModel.onDoubleClick() },
-                        onLongPress = {
-                            if (viewModel.isLongPressHandlingEnabled) {
-                                viewModel.onLongPress(isA11yAction = false)
+    CompositionLocalProvider(LocalViewConfiguration provides longPressViewConfiguration) {
+        Box(
+            modifier =
+                modifier
+                    .pointerInput(viewModel.isLongPressHandlingEnabled) {
+                        detectTapGestures(
+                            onTap = { viewModel.onClick(it.x, it.y) },
+                            onDoubleTap = { viewModel.onDoubleClick() },
+                            onLongPress = {
+                                if (viewModel.isLongPressHandlingEnabled) {
+                                    viewModel.onLongPress(isA11yAction = false)
+                                }
+                            },
+                        )
+                    }
+                    .pointerInput(settingsMenuBounds) {
+                        awaitEachGesture {
+                            val pointerInputChange = awaitFirstDown()
+                            if (!settingsMenuBounds.contains(pointerInputChange.position)) {
+                                viewModel.onTouchedOutside()
                             }
-                        },
-                    )
-                }
-                .pointerInput(settingsMenuBounds) {
-                    awaitEachGesture {
-                        val pointerInputChange = awaitFirstDown()
-                        if (!settingsMenuBounds.contains(pointerInputChange.position)) {
-                            viewModel.onTouchedOutside()
                         }
                     }
-                }
-                // Passing null for the indication removes the ripple effect.
-                .indication(interactionSource, null)
-    ) {
-        content(setSettingsMenuBounds)
+                    // Passing null for the indication removes the ripple effect.
+                    .indication(interactionSource, null)
+        ) {
+            CompositionLocalProvider(LocalViewConfiguration provides defaultViewConfiguration) {
+                content(setSettingsMenuBounds)
+            }
+        }
     }
 }

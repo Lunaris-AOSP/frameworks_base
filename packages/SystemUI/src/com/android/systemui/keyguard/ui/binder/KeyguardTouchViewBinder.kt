@@ -18,6 +18,7 @@
 package com.android.systemui.keyguard.ui.binder
 
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.lifecycle.Lifecycle
@@ -26,6 +27,7 @@ import com.android.app.tracing.coroutines.launchTraced as launch
 import com.android.systemui.common.ui.view.TouchHandlingView
 import com.android.systemui.deviceentry.ui.view.UdfpsAccessibilityOverlayOverlappingTouchHandlingView
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardTouchHandlingViewModel
+import com.android.systemui.keyguard.ui.viewmodel.KeyguardTouchHandlingViewModel.Companion.LONG_PRESS_ADDITIONAL_DELAY_MS
 import com.android.systemui.lifecycle.WindowLifecycleState
 import com.android.systemui.lifecycle.repeatWhenAttached
 import com.android.systemui.lifecycle.setSnapshotBinding
@@ -53,6 +55,9 @@ object KeyguardTouchViewBinder {
         onSingleTap: (x: Int, y: Int) -> Unit,
         falsingManager: FalsingManager,
     ) {
+        view.longPressDuration = {
+            ViewConfiguration.getLongPressTimeout().toLong() + LONG_PRESS_ADDITIONAL_DELAY_MS
+        }
         view.accessibilityHintLongPressAction =
             AccessibilityNodeInfo.AccessibilityAction(
                 AccessibilityNodeInfoCompat.ACTION_LONG_CLICK,

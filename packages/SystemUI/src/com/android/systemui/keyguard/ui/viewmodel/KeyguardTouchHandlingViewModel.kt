@@ -126,4 +126,8 @@ constructor(
     interface Factory {
         fun create(): KeyguardTouchHandlingViewModel
     }
+
+    companion object {
+        const val LONG_PRESS_ADDITIONAL_DELAY_MS = 500L
+    }
 }
