@@ -18,6 +18,7 @@
 
 package com.android.systemui.crdroid.header;
 
+import android.app.ActivityManager;
 import android.content.Context;
 import android.content.res.Resources;
 import android.database.ContentObserver;
@@ -30,6 +31,7 @@ import android.net.Uri;
 import android.util.Log;
 import android.os.Handler;
 import android.os.UserHandle;
+import android.os.UserManager;
 import android.provider.Settings;
 
 import java.io.File;
@@ -134,6 +136,12 @@ public class FileHeaderProvider implements
 
     private void loadHeaderImage() {
         if (mContext == null) return;
+
+        UserManager userManager = mContext.getSystemService(UserManager.class);
+        if (userManager == null || !userManager.isUserUnlocked(ActivityManager.getCurrentUser())) {
+            if (DEBUG) Log.d(TAG, "User storage locked, deferring custom header load");
+            return;
+        }
         
         String path = getCustomHeaderPath();
         if (path == null || path.isEmpty()) {

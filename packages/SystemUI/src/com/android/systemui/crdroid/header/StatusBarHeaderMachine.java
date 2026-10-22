@@ -18,6 +18,7 @@
 
 package com.android.systemui.crdroid.header;
 
+import android.app.ActivityManager;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -86,6 +87,11 @@ public class StatusBarHeaderMachine {
                 if (mScreenOn) {
                     if (DEBUG) Log.i(TAG, "status bar header background alarm triggered");
                     doUpdateStatusHeaderObservers(false);
+                }
+            } else if (Intent.ACTION_USER_UNLOCKED.equals(intent.getAction())) {
+                if (intent.getIntExtra(Intent.EXTRA_USER_HANDLE, UserHandle.USER_NULL)
+                        == ActivityManager.getCurrentUser()) {
+                    updateEnablement();
                 }
             } else if (Intent.ACTION_SCREEN_OFF.equals(intent.getAction())) {
                 mScreenOn = false;
@@ -291,21 +297,19 @@ public class StatusBarHeaderMachine {
         }
         if (customHeader) {
             if (DEBUG) Log.i(TAG, "enable provider " + provider.getName());
-            provider.enableProvider();
 
             if (!mAttached) {
-                // we dont want to wait for the alarm
-                doUpdateStatusHeaderObservers(true);
                 IntentFilter filter = new IntentFilter();
                 filter.addAction(Intent.ACTION_SCREEN_ON);
                 filter.addAction(Intent.ACTION_SCREEN_OFF);
+                filter.addAction(Intent.ACTION_USER_UNLOCKED);
                 filter.addAction(STATUS_BAR_HEADER_UPDATE_ACTION);
-                mContext.registerReceiver(mBroadcastReceiver, filter, Context.RECEIVER_EXPORTED);
+                mContext.registerReceiverAsUser(mBroadcastReceiver, UserHandle.ALL, filter,
+                        null, mHandler, Context.RECEIVER_EXPORTED);
                 mAttached = true;
-            } else {
-                // we dont want to wait for the alarm if provider has changed its header image
-                doUpdateStatusHeaderObservers(true);
             }
+            provider.enableProvider();
+            doUpdateStatusHeaderObservers(true);
         } else {
             if (DEBUG) Log.i(TAG, "disable provider " + provider.getName());
             provider.disableProvider();
