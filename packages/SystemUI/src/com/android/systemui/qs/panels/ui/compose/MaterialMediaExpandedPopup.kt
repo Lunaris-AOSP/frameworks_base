@@ -19,6 +19,7 @@ package com.android.systemui.qs.panels.ui.compose
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
@@ -109,6 +110,9 @@ internal fun MaterialMediaExpandedPopup(mediaState: SharedMediaState, onDismiss:
     val view = LocalView.current
     val controller = mediaState.controller
     val seekBarStyle = rememberMediaSeekBarStyle()
+    val artwork = remember(mediaState.albumArt, context.resources) {
+        mediaState.albumArt?.let { BitmapDrawable(context.resources, it) }
+    }
 
     var localIsPlaying by
         remember(controller, mediaState.isPlaying) { mutableStateOf(mediaState.isPlaying) }
@@ -340,6 +344,7 @@ internal fun MaterialMediaExpandedPopup(mediaState: SharedMediaState, onDismiss:
                                 isScrubbing = false
                             },
                             style = seekBarStyle,
+                            artwork = artwork,
                             isPlaying = localIsPlaying,
                             isScrubbing = isScrubbing,
                             enabled = controller != null && durationMs > 0L,

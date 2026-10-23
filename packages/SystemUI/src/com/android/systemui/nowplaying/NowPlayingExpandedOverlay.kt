@@ -17,6 +17,7 @@ package com.android.systemui.nowplaying
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.LayerDrawable
 import android.graphics.PixelFormat
 import android.media.AudioManager
@@ -682,6 +683,10 @@ private fun NowPlayingSeekBar(
     onSeekTo: (Long) -> Unit,
 ) {
     val durationMs = state.duration
+    val resources = LocalContext.current.resources
+    val artwork = remember(state.albumArt, resources) {
+        state.albumArt?.let { BitmapDrawable(resources, it) }
+    }
 
     val serverFraction = if (durationMs > 0L)
         (state.position.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
@@ -743,9 +748,13 @@ private fun NowPlayingSeekBar(
             }
         }
 
-        if (state.seekBarStyle == MediaSeekBarStyle.GLOWING) {
+        if (
+            state.seekBarStyle == MediaSeekBarStyle.GLOWING ||
+                state.seekBarStyle == MediaSeekBarStyle.GRADIENT_WAVE
+        ) {
             StyledMediaSeekBar(
                 style = state.seekBarStyle,
+                artwork = artwork,
                 positionMs = progressMs,
                 durationMs = durationMs,
                 isPlaying = state.isPlaying,

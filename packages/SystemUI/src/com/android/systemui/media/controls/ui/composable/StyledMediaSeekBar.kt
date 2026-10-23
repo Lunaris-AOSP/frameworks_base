@@ -17,6 +17,7 @@
 package com.android.systemui.media.controls.ui.composable
 
 import android.graphics.Color
+import android.graphics.drawable.Drawable
 import android.view.View
 import android.widget.SeekBar
 import androidx.compose.runtime.Composable
@@ -31,12 +32,14 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 import com.android.systemui.media.controls.ui.drawable.SquigglyProgress
 import com.android.systemui.media.controls.ui.view.GlowingSeekBar
+import com.android.systemui.media.controls.ui.view.GradientWaveSeekBar
 import com.android.systemui.media.controls.ui.view.WaveformSeekBar
 import com.android.systemui.res.R
 
 @Composable
 fun StyledMediaSeekBar(
     style: MediaSeekBarStyle,
+    artwork: Drawable?,
     positionMs: Long,
     durationMs: Long,
     isPlaying: Boolean,
@@ -56,6 +59,7 @@ fun StyledMediaSeekBar(
             factory = { context ->
                 val bar =
                     when (style) {
+                        MediaSeekBarStyle.GRADIENT_WAVE -> GradientWaveSeekBar(context)
                         MediaSeekBarStyle.GLOWING -> GlowingSeekBar(context)
                         MediaSeekBarStyle.WAVEFORM ->
                             WaveformSeekBar(context).apply {
@@ -118,6 +122,11 @@ fun StyledMediaSeekBar(
                 }
                 bar.isEnabled = interactive && durationMs > 0L
                 when (bar) {
+                    is GradientWaveSeekBar -> {
+                        bar.setArtwork(artwork)
+                        bar.isScrubbing = isScrubbing || isTrackingTouch
+                        bar.setPlaybackState(isPlaying)
+                    }
                     is GlowingSeekBar -> {
                         bar.isScrubbing = isScrubbing || isTrackingTouch
                         bar.setPlaybackState(isPlaying)
@@ -135,6 +144,7 @@ fun StyledMediaSeekBar(
             },
             onRelease = { bar ->
                 bar.setOnSeekBarChangeListener(null)
+                (bar as? GradientWaveSeekBar)?.setPlaybackState(false, animate = false)
                 (bar as? GlowingSeekBar)?.setPlaybackState(false, animate = false)
                 (bar as? WaveformSeekBar)?.stopWaveAnimation()
                 (bar.progressDrawable as? SquigglyProgress)?.animate = false

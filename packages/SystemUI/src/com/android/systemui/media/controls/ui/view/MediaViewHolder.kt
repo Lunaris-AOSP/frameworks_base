@@ -17,6 +17,7 @@
 package com.android.systemui.media.controls.ui.view
 
 import android.graphics.Typeface
+import android.graphics.drawable.Drawable
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -78,6 +79,11 @@ class MediaViewHolder constructor(itemView: View) {
     // Seekbar views - dynamically replaced based on settings
     var seekBar: SeekBar = itemView.requireViewById(R.id.media_progress_bar)
         private set
+    var seekBarArtwork: Drawable? = null
+        set(value) {
+            field = value
+            (seekBar as? GradientWaveSeekBar)?.setArtwork(value)
+        }
     // These views are only shown while the user is actively scrubbing
     val scrubbingElapsedTimeView: TextView =
         itemView.requireViewById(R.id.media_scrubbing_elapsed_time)
@@ -109,6 +115,7 @@ class MediaViewHolder constructor(itemView: View) {
         val style = MediaSeekBarStyle.read(player.context)
         val currentStyle = when (seekBar) {
             is WaveformSeekBar -> MediaSeekBarStyle.WAVEFORM
+            is GradientWaveSeekBar -> MediaSeekBarStyle.GRADIENT_WAVE
             is GlowingSeekBar -> MediaSeekBarStyle.GLOWING
             else -> MediaSeekBarStyle.DEFAULT
         }
@@ -118,6 +125,7 @@ class MediaViewHolder constructor(itemView: View) {
         val index = parent.indexOfChild(oldBar)
         val replacement = when (style) {
             MediaSeekBarStyle.WAVEFORM -> WaveformSeekBar(player.context)
+            MediaSeekBarStyle.GRADIENT_WAVE -> GradientWaveSeekBar(player.context)
             MediaSeekBarStyle.GLOWING -> GlowingSeekBar(player.context)
             MediaSeekBarStyle.DEFAULT -> SeekBar(player.context, null, 0, R.style.MediaPlayer_ProgressBar)
         }.apply {
@@ -134,6 +142,7 @@ class MediaViewHolder constructor(itemView: View) {
             progressTintList = oldBar.progressTintList
             progressBackgroundTintList = oldBar.progressBackgroundTintList
             thumbTintList = oldBar.thumbTintList
+            if (this is GradientWaveSeekBar) setArtwork(seekBarArtwork)
             if (this is WaveformSeekBar) {
                 progressTintList?.defaultColor?.let { setWaveformColor(it) }
                 thumbTintList?.defaultColor?.let { setThumbColor(it) }

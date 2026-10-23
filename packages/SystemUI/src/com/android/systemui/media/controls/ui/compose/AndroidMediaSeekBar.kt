@@ -19,6 +19,7 @@ package com.android.systemui.media.controls.ui.compose
 
 import android.annotation.SuppressLint
 import android.content.res.ColorStateList
+import android.graphics.drawable.Drawable
 import android.view.MotionEvent
 import android.view.View
 import android.widget.SeekBar
@@ -37,6 +38,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 import com.android.systemui.media.controls.ui.drawable.SquigglyProgress
 import com.android.systemui.media.controls.ui.view.GlowingSeekBar
+import com.android.systemui.media.controls.ui.view.GradientWaveSeekBar
 import com.android.systemui.media.controls.ui.view.WaveformSeekBar
 import com.android.systemui.res.R
 import kotlin.math.roundToInt
@@ -51,6 +53,7 @@ internal fun AndroidMediaSeekBar(
     onScrubChange: (Float) -> Unit,
     onScrubFinished: (Offset) -> Unit,
     style: MediaSeekBarStyle,
+    artwork: Drawable?,
     isPlaying: Boolean,
     enabled: Boolean,
     contentDescription: String,
@@ -72,6 +75,7 @@ internal fun AndroidMediaSeekBar(
             factory = { context ->
                 val seekBar =
                     when (style) {
+                        MediaSeekBarStyle.GRADIENT_WAVE -> GradientWaveSeekBar(context)
                         MediaSeekBarStyle.GLOWING -> GlowingSeekBar(context)
                         MediaSeekBarStyle.WAVEFORM ->
                             WaveformSeekBar(context).apply {
@@ -178,6 +182,11 @@ internal fun AndroidMediaSeekBar(
                 seekBar.progressBackgroundTintList = backgroundTint
                 val scrubbing = isScrubbing || isTrackingTouch
                 val animate = isPlaying && !scrubbing && animationsAllowed
+                (seekBar as? GradientWaveSeekBar)?.apply {
+                    setArtwork(artwork)
+                    this.isScrubbing = scrubbing
+                    setPlaybackState(isPlaying, animate = animationsAllowed)
+                }
                 (seekBar as? GlowingSeekBar)?.apply {
                     this.isScrubbing = scrubbing
                     setPlaybackState(isPlaying, animate = animationsAllowed)
@@ -192,6 +201,7 @@ internal fun AndroidMediaSeekBar(
                 seekBar.setOnSeekBarChangeListener(null)
                 (seekBar.progressDrawable as? SquigglyProgress)?.animate = false
                 (seekBar as? WaveformSeekBar)?.stopWaveAnimation()
+                (seekBar as? GradientWaveSeekBar)?.setPlaybackState(false, animate = false)
                 (seekBar as? GlowingSeekBar)?.setPlaybackState(false, animate = false)
                 if (isTrackingTouch) {
                     seekBar.parent?.requestDisallowInterceptTouchEvent(false)

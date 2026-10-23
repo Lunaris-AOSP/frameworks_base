@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 import com.android.systemui.media.controls.ui.compose.AndroidMediaSeekBar
 import com.android.systemui.media.remedia.domain.model.MediaSessionModel
@@ -47,7 +48,10 @@ internal fun MediaSeekBar(
     val seekBarStyle by
         viewModel.seekBarStyle.collectAsStateWithLifecycle(initialValue = MediaSeekBarStyle.DEFAULT)
     val height =
-        if (seekBarStyle == MediaSeekBarStyle.GLOWING) 34.dp else if (dense) 20.dp else 32.dp
+        if (
+            seekBarStyle == MediaSeekBarStyle.GLOWING ||
+                seekBarStyle == MediaSeekBarStyle.GRADIENT_WAVE
+        ) 34.dp else if (dense) 20.dp else 32.dp
     val progress = session?.let(viewModel::progress) ?: 0f
     val seekDescription =
         session
@@ -67,6 +71,7 @@ internal fun MediaSeekBar(
             onScrubChange = { value -> session?.let { viewModel.onScrubChange(it, value) } },
             onScrubFinished = { delta -> session?.let { viewModel.onScrubFinished(it, delta) } },
             style = seekBarStyle,
+            artwork = (session?.background as? Icon.Loaded)?.drawable,
             isPlaying = session?.state == MediaSessionState.Playing,
             animationsAllowed = !isShadeInteracting,
             enabled = interactive && session?.canBeScrubbed == true,

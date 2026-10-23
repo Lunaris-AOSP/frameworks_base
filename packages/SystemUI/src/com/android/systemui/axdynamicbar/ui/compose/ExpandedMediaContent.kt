@@ -393,7 +393,11 @@ private fun MediaSeekBar(
     seekBarStyle: MediaSeekBarStyle = MediaSeekBarStyle.DEFAULT,
 ) {
     val mediaProgress = rememberMediaProgress(event)
-    val seekBarHeight = if (seekBarStyle == MediaSeekBarStyle.GLOWING) 34.dp else SeekBarHeight
+    val seekBarHeight =
+        if (
+            seekBarStyle == MediaSeekBarStyle.GLOWING ||
+                seekBarStyle == MediaSeekBarStyle.GRADIENT_WAVE
+        ) 34.dp else SeekBarHeight
     val isPlaying = event.isPlaying
     val durationMs = event.duration
     val positionMs = mediaProgress.positionMs
@@ -480,9 +484,13 @@ private fun MediaSeekBar(
                 },
             contentAlignment = Alignment.Center,
         ) {
-            if (seekBarStyle == MediaSeekBarStyle.GLOWING) {
+            if (
+                seekBarStyle == MediaSeekBarStyle.GLOWING ||
+                    seekBarStyle == MediaSeekBarStyle.GRADIENT_WAVE
+            ) {
                 StyledMediaSeekBar(
                     style = seekBarStyle,
+                    artwork = event.albumArt,
                     positionMs = displayMs,
                     durationMs = durationMs,
                     isPlaying = isPlaying,

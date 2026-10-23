@@ -32,7 +32,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 enum class MediaSeekBarStyle(val value: Int) {
     DEFAULT(0),
     WAVEFORM(1),
-    GLOWING(2);
+    GLOWING(2),
+    GRADIENT_WAVE(3);
 
     companion object {
         fun fromValue(value: Int): MediaSeekBarStyle =

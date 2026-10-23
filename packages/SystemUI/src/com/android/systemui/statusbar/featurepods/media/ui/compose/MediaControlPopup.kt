@@ -17,6 +17,7 @@
 package com.android.systemui.statusbar.featurepods.media.ui.compose
 
 import android.content.Context
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
 import android.text.format.DateUtils
@@ -152,6 +153,7 @@ fun MediaControlPopup(
             if (model.durationMs > 0L) {
                 MediaProgressSection(
                     modifier = Modifier.islandPopupRow(1),
+                    artwork = artworkDrawable,
                     positionMs = model.positionMs,
                     durationMs = model.durationMs,
                     isPlaying = model.isPlaying,
@@ -221,6 +223,7 @@ private fun MediaArtwork(model: MediaControlChipModel) {
 
 @Composable
 private fun MediaProgressSection(
+    artwork: Drawable?,
     positionMs: Long,
     durationMs: Long,
     isPlaying: Boolean,
@@ -230,7 +233,11 @@ private fun MediaProgressSection(
     seekBarStyle: MediaSeekBarStyle = MediaSeekBarStyle.DEFAULT,
     modifier: Modifier = Modifier,
 ) {
-    val seekBarHeight = if (seekBarStyle == MediaSeekBarStyle.GLOWING) 34.dp else 28.dp
+    val seekBarHeight =
+        if (
+            seekBarStyle == MediaSeekBarStyle.GLOWING ||
+                seekBarStyle == MediaSeekBarStyle.GRADIENT_WAVE
+        ) 34.dp else 28.dp
     var isScrubbing by remember { mutableStateOf(false) }
     var displayedPositionMs by remember { mutableStateOf(positionMs.coerceIn(0L, durationMs)) }
     val currentSeekAction by rememberUpdatedState(onSeekTo)
@@ -306,9 +313,13 @@ private fun MediaProgressSection(
                     )
                 }
 
-            if (seekBarStyle == MediaSeekBarStyle.GLOWING) {
+            if (
+                seekBarStyle == MediaSeekBarStyle.GLOWING ||
+                    seekBarStyle == MediaSeekBarStyle.GRADIENT_WAVE
+            ) {
                 StyledMediaSeekBar(
                     style = seekBarStyle,
+                    artwork = artwork,
                     positionMs = displayedPositionMs,
                     durationMs = durationMs,
                     isPlaying = isPlaying,

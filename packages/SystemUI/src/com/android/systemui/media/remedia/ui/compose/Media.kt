@@ -661,6 +661,7 @@ private fun ContentScope.CardForegroundContent(
                 ) {
                     Navigation(
                         viewModel = viewModel.navigation,
+                        artwork = viewModel.background,
                         isSeekBarVisible = true,
                         areActionsVisible =
                             viewModel.actionButtonLayout ==
@@ -695,6 +696,7 @@ private fun ContentScope.CardForegroundContent(
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                     Navigation(
                         viewModel = viewModel.navigation,
+                        artwork = viewModel.background,
                         isSeekBarVisible = false,
                         areActionsVisible =
                             viewModel.actionButtonLayout ==
@@ -853,6 +855,7 @@ private fun CardBackground(
 @Composable
 private fun ContentScope.Navigation(
     viewModel: MediaNavigationViewModel,
+    artwork: Icon?,
     isSeekBarVisible: Boolean,
     areActionsVisible: Boolean,
     modifier: Modifier = Modifier,
@@ -897,6 +900,7 @@ private fun ContentScope.Navigation(
                                 onScrubChange = viewModel.onScrubChange,
                                 onScrubFinished = viewModel.onScrubFinished,
                                 style = viewModel.seekBarStyle,
+                                artwork = (artwork as? Icon.Loaded)?.drawable,
                                 isPlaying = viewModel.isPlaying,
                                 isScrubbing = viewModel.isScrubbing,
                                 enabled = true,

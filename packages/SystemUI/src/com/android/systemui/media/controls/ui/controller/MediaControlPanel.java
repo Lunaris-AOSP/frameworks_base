@@ -1027,6 +1027,7 @@ public class MediaControlPanel {
                 }
                 mArtworkBoundId = reqId;
 
+                mMediaViewHolder.setSeekBarArtwork(albumArt);
                 MediaSessionManager.Companion.get().onAlbumArtChanged(albumArt);
                 MediaSessionManager.Companion.get().onMediaColorsChanged(colorScheme.getAccent1().getS100());
                 mPulseAudioBridge.onMediaColorsChanged(colorScheme.getAccent1().getS100());
