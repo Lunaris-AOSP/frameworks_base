@@ -60,8 +60,9 @@ constructor(
                 combine(
                     mediaControlChipInteractor.mediaControlChipModel,
                     mediaControlChipInteractor.mediaSeekBarStyle,
-                ) { model, seekBarStyle ->
-                    toPopupChipModel(model, seekBarStyle)
+                    mediaControlChipInteractor.useRedesignedMedia,
+                ) { model, seekBarStyle, useRedesignedMedia ->
+                    toPopupChipModel(model, seekBarStyle, useRedesignedMedia)
                 },
         )
 
@@ -69,7 +70,11 @@ constructor(
         hydrator.activate()
     }
 
-    private fun toPopupChipModel(model: MediaControlChipModel?, seekBarStyle: MediaSeekBarStyle): PopupChipModel {
+    private fun toPopupChipModel(
+        model: MediaControlChipModel?,
+        seekBarStyle: MediaSeekBarStyle,
+        useRedesignedMedia: Boolean,
+    ): PopupChipModel {
         if (model == null || model.songName.isNullOrEmpty()) {
             return PopupChipModel.Hidden(PopupChipId.MediaControl)
         }
@@ -88,7 +93,7 @@ constructor(
             chipText = normalizeSongTitle(model.songName.toString(), model.artistName?.toString()),
             colors = ColorsModel.DynamicIsland,
             hoverBehavior = createHoverBehavior(model),
-            popupContent = PopupContentModel.Media(model, seekBarStyle),
+            popupContent = PopupContentModel.Media(model, seekBarStyle, useRedesignedMedia),
         )
     }
 

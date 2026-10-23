@@ -38,6 +38,7 @@ import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.media.NotificationMediaManager
 import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 import com.android.systemui.media.controls.shared.model.MediaAction
+import com.android.systemui.media.controls.shared.model.MediaButton
 import com.android.systemui.media.controls.shared.model.MediaData
 import com.android.systemui.media.remedia.data.model.MediaDataModel
 import com.android.systemui.media.remedia.data.repository.MediaRepositoryImpl
@@ -47,8 +48,10 @@ import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.featurepods.media.shared.model.MediaControlChipModel
 import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.MEDIA_CONTROLS
+import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.REDESIGNED_MEDIA
 import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.SHOW_LYRICS
 import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.observeDynamicIslandFeatureEnabled
+import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.readDynamicIslandFeatureEnabled
 import com.android.systemui.statusbar.NotificationLockscreenUserManager
 import com.android.systemui.statusbar.policy.KeyguardStateController
 import javax.inject.Inject
@@ -170,6 +173,14 @@ constructor(
     val mediaSeekBarStyle: StateFlow<MediaSeekBarStyle> =
         MediaSeekBarStyle.observe(context)
             .stateIn(backgroundScope, SharingStarted.WhileSubscribed(), MediaSeekBarStyle.read(context))
+
+    val useRedesignedMedia: StateFlow<Boolean> =
+        observeDynamicIslandFeatureEnabled(context, REDESIGNED_MEDIA)
+            .stateIn(
+                backgroundScope,
+                SharingStarted.WhileSubscribed(),
+                context.contentResolver.readDynamicIslandFeatureEnabled(REDESIGNED_MEDIA),
+            )
 
     /** The currently active [MediaControlChipModel] */
     val mediaControlChipModel: StateFlow<MediaControlChipModel?> =
@@ -492,9 +503,44 @@ private fun MediaController.resolvePlaybackInfo(context: Context): PlaybackInfo 
         durationMs = durationMs,
         positionMs = playbackState?.computeActualPosition(durationMs) ?: 0L,
         canSeek =
-            playbackState?.actions?.and(PlaybackState.ACTION_SEEK_TO) != 0L && durationMs > 0L,
+            (playbackState?.actions ?: 0L) and PlaybackState.ACTION_SEEK_TO != 0L && durationMs > 0L,
         isPlaying = playbackState?.isActivePlaybackState() == true,
         playOrPause = playbackState?.toPlayPauseAction(context = context, controller = this),
+        previousAction =
+            if (playbackState?.supportsPlaybackAction(PlaybackState.ACTION_SKIP_TO_PREVIOUS) == true)
+                MediaAction(
+                    icon = context.getDrawable(R.drawable.ic_skip_previous_filled),
+                    action = Runnable { transportControls.skipToPrevious() },
+                    contentDescription = context.getString(R.string.controls_media_button_prev),
+                    background = null,
+                ) else null,
+        nextAction =
+            if (playbackState?.supportsPlaybackAction(PlaybackState.ACTION_SKIP_TO_NEXT) == true)
+                MediaAction(
+                    icon = context.getDrawable(R.drawable.ic_skip_next_filled),
+                    action = Runnable { transportControls.skipToNext() },
+                    contentDescription = context.getString(R.string.controls_media_button_next),
+                    background = null,
+                ) else null,
+        customActions =
+            playbackState?.customActions.orEmpty().take(2).map { customAction ->
+                MediaAction(
+                    icon = runCatching {
+                        android.graphics.drawable.Icon.createWithResource(packageName, customAction.icon)
+                            .loadDrawable(context)
+                    }.getOrNull(),
+                    action = Runnable {
+                        transportControls.sendCustomAction(customAction, customAction.extras)
+                    },
+                    contentDescription = customAction.name,
+                    background = null,
+                )
+            },
+        playbackSpeed =
+            if (playbackState?.state == PlaybackState.STATE_PLAYING ||
+                playbackState?.state == PlaybackState.STATE_FAST_FORWARDING ||
+                playbackState?.state == PlaybackState.STATE_REWINDING
+            ) playbackState.playbackSpeed else 0f,
     )
 }
 
@@ -558,6 +604,10 @@ private data class PlaybackInfo(
     val canSeek: Boolean,
     val isPlaying: Boolean,
     val playOrPause: MediaAction?,
+    val previousAction: MediaAction?,
+    val nextAction: MediaAction?,
+    val customActions: List<MediaAction>,
+    val playbackSpeed: Float,
 )
 
 private data class MediaControlState(
@@ -579,5 +629,12 @@ private fun MediaControlChipModel.withPlaybackInfo(playbackInfo: PlaybackInfo?):
         positionMs = playbackInfo.positionMs,
         canBeScrubbed = canBeScrubbed || playbackInfo.canSeek,
         isPlaying = playbackInfo.isPlaying,
+        customActions = playbackInfo.customActions,
+        playbackSpeed = playbackInfo.playbackSpeed,
+        transportActions = MediaButton(
+            playOrPause = playbackInfo.playOrPause,
+            prevOrCustom = playbackInfo.previousAction,
+            nextOrCustom = playbackInfo.nextAction,
+        ),
     )
 }

@@ -23,6 +23,7 @@ import android.graphics.drawable.GradientDrawable
 import android.view.View
 import android.view.ViewGroup
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -50,9 +51,13 @@ import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFea
 import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.observeDynamicIslandPopupColorMode
 import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.readDynamicIslandPopupColorMode
 
-private class PopupBlurHost(context: Context, private val cornerRadiusPx: Float) : View(context) {
+private class PopupBlurHost(
+    context: Context,
+    private val cornerRadiusPx: Float,
+    private val overlayColor: Int = AxBlurColors.surfaceLightTint(context),
+    private val fallbackColor: Int = overlayColor and 0x00FFFFFF or (0xCC shl 24),
+) : View(context) {
     private val blur = AxBlurBackgroundRenderer(this)
-    private val overlayColor = AxBlurColors.surfaceLightTint(context)
 
     private val bgDrawable: GradientDrawable = GradientDrawable().also { d ->
         d.setColor(0x00000000)
@@ -83,12 +88,28 @@ private class PopupBlurHost(context: Context, private val cornerRadiusPx: Float)
             bgDrawable.setBounds(0, 0, width, height)
             bgDrawable.cornerRadius = minOf(cornerRadiusPx, width / 2f, height / 2f)
             if (!blur.drawBackgroundWithOverlayColor(canvas, bgDrawable, overlayColor)) {
-                bgDrawable.setColor(overlayColor and 0x00FFFFFF or (0xCC shl 24))
+                bgDrawable.setColor(fallbackColor)
                 bgDrawable.draw(canvas)
                 bgDrawable.setColor(0x00000000)
             }
         }
     }
+}
+
+@Composable
+internal fun RedesignedMediaPopupBackground() {
+    val radius = with(LocalDensity.current) { DynamicIslandMotion.CardCornerRadius.toPx() }
+    AndroidView(
+        factory = { context ->
+            PopupBlurHost(
+                context = context,
+                cornerRadiusPx = radius,
+                overlayColor = 0x750E0E10,
+                fallbackColor = 0xE6141416.toInt(),
+            )
+        },
+        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(DynamicIslandMotion.CardCornerRadius)),
+    )
 }
 
 @Composable

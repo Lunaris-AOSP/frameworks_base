@@ -18,6 +18,7 @@ package com.android.systemui.statusbar.featurepods.media.shared.model
 
 import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.media.controls.shared.model.MediaAction
+import com.android.systemui.media.controls.shared.model.MediaButton
 
 /** Model used to display and control media from the status bar island. */
 data class MediaControlChipModel(
@@ -38,4 +39,7 @@ data class MediaControlChipModel(
     val packageName: String? = null,
     val lyrics: String? = null,
     val syncedLyrics: String? = null,
+    val customActions: List<MediaAction> = emptyList(),
+    val playbackSpeed: Float = 1f,
+    val transportActions: MediaButton? = null,
 )

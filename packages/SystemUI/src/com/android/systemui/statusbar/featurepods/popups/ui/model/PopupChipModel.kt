@@ -109,6 +109,7 @@ sealed interface PopupContentModel {
     data class Media(
         val model: MediaControlChipModel,
         val seekBarStyle: MediaSeekBarStyle = MediaSeekBarStyle.DEFAULT,
+        val useRedesignedMedia: Boolean = true,
     ) : PopupContentModel
 
     data class ScreenRecord(val model: ScreenRecordPopupModel) : PopupContentModel

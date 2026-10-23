@@ -46,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.android.systemui.statusbar.featurepods.media.shared.model.MediaControlChipModel
 import com.android.systemui.statusbar.featurepods.popups.ui.compose.PopupSurface
+import com.android.systemui.statusbar.featurepods.popups.ui.compose.rememberPopupColorMode
+import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.POPUP_COLOR_MODE_SOLID_BLACK
 
 private val PopupShape = RoundedCornerShape(34.dp)
 
@@ -55,6 +57,7 @@ data class LyricLine(val timestampMs: Long, val text: String)
 fun LyricsCard(
     model: MediaControlChipModel,
     modifier: Modifier = Modifier,
+    useRedesignedMedia: Boolean = false,
 ) {
     val syncedLyrics = model.syncedLyrics
     val plainLyrics = model.lyrics
@@ -65,6 +68,7 @@ fun LyricsCard(
 
     PopupSurface(
         shape = PopupShape,
+        colorMode = if (useRedesignedMedia) POPUP_COLOR_MODE_SOLID_BLACK else rememberPopupColorMode(),
         modifier = modifier.widthIn(min = 320.dp, max = 400.dp).height(200.dp),
     ) {
         if (lyricLines.isNotEmpty()) {

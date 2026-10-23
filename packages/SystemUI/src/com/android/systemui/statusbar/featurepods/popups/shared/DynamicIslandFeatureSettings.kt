@@ -48,6 +48,7 @@ object DynamicIslandFeatureSettings {
     const val RECENT_APPS = "status_bar_dynamic_island_recent_apps"
 
     const val MEDIA_CONTROLS = "status_bar_dynamic_island_media_controls"
+    const val REDESIGNED_MEDIA = "status_bar_dynamic_island_redesigned_media"
     const val SCREEN_RECORDING = "status_bar_dynamic_island_screen_recording"
     const val ALARMS = "status_bar_dynamic_island_alarms"
     const val FLASHLIGHT = "status_bar_dynamic_island_flashlight"

@@ -62,6 +62,7 @@ import com.android.systemui.statusbar.featurepods.av.ui.compose.AvControlsChipPo
 import com.android.systemui.statusbar.featurepods.flashlight.ui.compose.FlashlightPopup
 import com.android.systemui.statusbar.featurepods.livescore.ui.compose.LiveScorePopup
 import com.android.systemui.statusbar.featurepods.media.ui.compose.MediaControlPopup
+import com.android.systemui.statusbar.featurepods.media.ui.compose.RedesignedMediaPopup
 import com.android.systemui.statusbar.featurepods.media.ui.compose.LyricsCard
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
@@ -136,6 +137,16 @@ fun StatusBarPopup(
             fastEnter =
                 (viewModel.popupContent as? PopupContentModel.SystemEvent)?.kind ==
                     SystemEventKind.Unlock,
+            useRedesignedMediaBackground =
+                (viewModel.popupContent as? PopupContentModel.Media)?.useRedesignedMedia == true,
+            secondaryContent = {
+                val media = viewModel.popupContent as? PopupContentModel.Media
+                if (media != null &&
+                    (!media.model.lyrics.isNullOrBlank() || !media.model.syncedLyrics.isNullOrBlank())
+                ) {
+                    LyricsCard(model = media.model, useRedesignedMedia = media.useRedesignedMedia)
+                }
+            },
         ) {
             val pagerScope = rememberCoroutineScope()
             val pageFollow = remember { Animatable(0f) }
@@ -231,15 +242,8 @@ private fun IslandPopupContent(viewModel: PopupChipModel.Shown) {
         is PopupContentModel.Media -> {
             val model = popupContent.model
             val seekBarStyle = popupContent.seekBarStyle
-            val hasLyrics = !model.lyrics.isNullOrBlank() || !model.syncedLyrics.isNullOrBlank()
-            if (hasLyrics) {
-                androidx.compose.foundation.layout.Column(
-                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
-                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
-                ) {
-                    MediaControlPopup(model = model, seekBarStyle = seekBarStyle)
-                    LyricsCard(model = model)
-                }
+            if (popupContent.useRedesignedMedia) {
+                RedesignedMediaPopup(model = model, seekBarStyle = seekBarStyle)
             } else {
                 MediaControlPopup(model = model, seekBarStyle = seekBarStyle)
             }

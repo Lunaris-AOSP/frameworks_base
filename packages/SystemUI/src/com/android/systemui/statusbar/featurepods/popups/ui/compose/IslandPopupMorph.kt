@@ -147,6 +147,8 @@ internal fun IslandPopupMorph(
     onDismissRequest: () -> Unit,
     onHidden: () -> Unit,
     fastEnter: Boolean = false,
+    useRedesignedMediaBackground: Boolean = false,
+    secondaryContent: @Composable () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     val density = LocalDensity.current
@@ -163,6 +165,7 @@ internal fun IslandPopupMorph(
     val neck = remember { Path() }
     val screenLocation = remember { IntArray(2) }
     var contentSize by remember { mutableStateOf(IntSize.Zero) }
+    var secondarySize by remember { mutableStateOf(IntSize.Zero) }
     var rootSize by remember { mutableStateOf(IntSize.Zero) }
     var screenOffset by remember { mutableStateOf<Offset?>(null) }
     var motion by remember { mutableStateOf<IslandPopupGeometry?>(null) }
@@ -326,6 +329,13 @@ internal fun IslandPopupMorph(
             if (isVisible && !fastEnter) DynamicIslandMotion.contentReveal(expansion) else 1f
     val currentBodyAlpha by rememberUpdatedState(bodyAlpha)
     val currentBounds by rememberUpdatedState(frame)
+    val secondaryBounds = Rect(
+        frame.center.x - secondarySize.width / 2f,
+        frame.bottom + gap,
+        frame.center.x + secondarySize.width / 2f,
+        frame.bottom + gap + secondarySize.height,
+    )
+    val currentSecondaryBounds by rememberUpdatedState(secondaryBounds)
     val surfaceReveal = ((expansion - 0.82f) / 0.18f).coerceIn(0f, 1f)
     val contentClip = object : Shape {
         override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
@@ -361,7 +371,8 @@ internal fun IslandPopupMorph(
                         val event = awaitPointerEvent(PointerEventPass.Initial)
                         event.changes.forEach { change ->
                             if (change.changedToDownIgnoreConsumed() &&
-                                !currentBounds.contains(change.position)) {
+                                !currentBounds.contains(change.position) &&
+                                !currentSecondaryBounds.contains(change.position)) {
                                 change.consume()
                                 currentOnDismiss()
                             }
@@ -393,11 +404,15 @@ internal fun IslandPopupMorph(
             }, propagateMinConstraints = true) {
                 if (geometry != null) {
                     CompositionLocalProvider(LocalIslandPopupRevealMillis provides 260f) {
-                        PopupSurface(
-                            shape = RoundedCornerShape(DynamicIslandMotion.CardCornerRadius),
-                            shadowElevation = 0.dp,
-                            animateContentAsUnit = false,
-                        ) {}
+                        if (useRedesignedMediaBackground) {
+                            RedesignedMediaPopupBackground()
+                        } else {
+                            PopupSurface(
+                                shape = RoundedCornerShape(DynamicIslandMotion.CardCornerRadius),
+                                shadowElevation = 0.dp,
+                                animateContentAsUnit = false,
+                            ) {}
+                        }
                     }
                 }
             }
@@ -414,22 +429,43 @@ internal fun IslandPopupMorph(
                     LocalIslandPopupContentOnly provides true,
                 ) { content() }
             }
+            Box(
+                Modifier.graphicsLayer {
+                    alpha = if (geometry != null) bodyAlpha else 0f
+                }.then(if (bodyAlpha < 0.5f) Modifier.clearAndSetSemantics {} else Modifier),
+            ) {
+                CompositionLocalProvider(
+                    LocalIslandPopupRevealMillis provides
+                        if (isVisible) revealMillis.value else Float.POSITIVE_INFINITY,
+                    LocalIslandPopupContentOnly provides false,
+                ) { secondaryContent() }
+            }
         },
     ) { measurables, constraints ->
         val maxWidth = (constraints.maxWidth - margin * 2).coerceAtLeast(0)
         val top = targetTop.roundToInt().coerceAtLeast(0)
         val maxHeight = (constraints.maxHeight - top - margin).coerceAtLeast(0)
         val card = measurables[1].measure(Constraints(maxWidth = maxWidth, maxHeight = maxHeight))
+        val secondary = measurables[2].measure(Constraints(
+            maxWidth = maxWidth,
+            maxHeight = (maxHeight - card.height - gap.roundToInt()).coerceAtLeast(0),
+        ))
+        secondarySize = IntSize(secondary.width, secondary.height)
         val background = measurables[0].measure(Constraints.fixed(
             frame.width.roundToInt().coerceAtLeast(1),
             frame.height.roundToInt().coerceAtLeast(1),
         ))
         contentSize = IntSize(card.width, card.height)
-        val windowHeight = constraints.constrainHeight(top + card.height + margin)
+        val secondaryHeight = if (secondary.height > 0) secondary.height + gap.roundToInt() else 0
+        val windowHeight = constraints.constrainHeight(top + card.height + secondaryHeight + margin)
         rootSize = IntSize(constraints.maxWidth, windowHeight)
         layout(rootSize.width, windowHeight) {
             background.place(frame.left.roundToInt(), frame.top.roundToInt())
             card.place((frame.center.x - card.width / 2f).roundToInt(), frame.top.roundToInt())
+            secondary.place(
+                (frame.center.x - secondary.width / 2f).roundToInt(),
+                (frame.bottom + gap).roundToInt(),
+            )
         }
     }
 }
