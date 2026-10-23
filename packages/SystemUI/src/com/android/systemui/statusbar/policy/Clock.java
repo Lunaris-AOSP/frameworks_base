@@ -40,6 +40,7 @@ import android.os.SystemClock;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.text.Spannable;
+import android.text.Annotation;
 import android.text.SpannableStringBuilder;
 import android.text.TextUtils;
 import android.text.format.DateFormat;
@@ -680,6 +681,14 @@ public class Clock extends TextView implements
         }
 
         SpannableStringBuilder formatted = new SpannableStringBuilder(result);
+
+        if (dateString != null && !dateResult.isEmpty()) {
+            int dateStart = mClockDatePosition == STYLE_DATE_RIGHT ? timeResult.length() : 0;
+            int dateEnd = mClockDatePosition == STYLE_DATE_RIGHT
+                    ? formatted.length() : dateResult.length() + 1;
+            formatted.setSpan(new Annotation("status_bar_clock_date", ""), dateStart, dateEnd,
+                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
 
         if (mClockDateDisplay != CLOCK_DATE_DISPLAY_NORMAL) {
             if (dateString != null) {

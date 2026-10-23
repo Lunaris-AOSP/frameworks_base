@@ -29,10 +29,14 @@ import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInterac
 import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.media.controls.ui.controller.MediaHierarchyManager
 import com.android.systemui.res.R
+import com.android.systemui.lifecycle.repeatWhenAttached
+import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.observeDynamicIslandEnabled
+import com.android.systemui.statusbar.featurepods.popups.ui.view.DynamicIslandIconFader
 import com.android.systemui.statusbar.featurepods.popups.ui.compose.StatusBarDynamicIslandContainer
 import com.android.systemui.statusbar.featurepods.popups.ui.viewmodel.StatusBarPopupChipsViewModelStore
 import com.android.systemui.statusbar.phone.KeyguardStatusBarView
 import javax.inject.Inject
+import kotlinx.coroutines.flow.collect
 
 class KeyguardDynamicIslandViewBinder
 @Inject
@@ -43,6 +47,7 @@ constructor(
     private val mediaHierarchyManager: MediaHierarchyManager,
 ) {
     fun bind(view: KeyguardStatusBarView) {
+        val iconFader = DynamicIslandIconFader(view)
         val composeView = ComposeView(view.context).apply {
             layoutParams =
                 RelativeLayout.LayoutParams(
@@ -71,6 +76,7 @@ constructor(
                     PlatformTheme {
                         StatusBarDynamicIslandContainer(
                             chips = viewModel.lockscreenPopupChips,
+                            onIslandBoundsChanged = iconFader::update,
                             onMediaControlPopupVisibilityChanged = {
                                 mediaHierarchyManager.isMediaControlPopupShowing = it
                             },
@@ -80,5 +86,9 @@ constructor(
             }
         }
         view.addView(composeView)
+        iconFader.attach(composeView)
+        view.repeatWhenAttached {
+            observeDynamicIslandEnabled(view.context).collect { iconFader.setEnabled(it) }
+        }
     }
 }

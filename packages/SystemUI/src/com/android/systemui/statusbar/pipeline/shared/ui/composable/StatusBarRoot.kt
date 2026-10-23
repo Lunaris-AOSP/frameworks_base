@@ -22,7 +22,6 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.view.ViewTreeObserver
 import android.widget.LinearLayout
 import androidx.annotation.VisibleForTesting
 import androidx.compose.foundation.layout.Arrangement
@@ -34,6 +33,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.State
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.collectAsState
@@ -45,7 +46,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onLayoutRectChanged
@@ -90,8 +90,10 @@ import com.android.systemui.statusbar.core.StatusBarConnectedDisplays
 import com.android.systemui.statusbar.core.StatusBarForDesktop
 import com.android.systemui.statusbar.events.domain.interactor.SystemStatusEventAnimationInteractor
 import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.observeDynamicIslandEnabled
-import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.readDynamicIslandEnabled
 import com.android.systemui.statusbar.featurepods.popups.ui.compose.StatusBarDynamicIslandContainer
+import com.android.systemui.statusbar.featurepods.popups.ui.compose.LocalDynamicIslandIconBounds
+import com.android.systemui.statusbar.featurepods.popups.ui.compose.dynamicIslandIconFade
+import com.android.systemui.statusbar.featurepods.popups.ui.view.DynamicIslandIconFader
 import com.android.systemui.statusbar.layout.ui.viewmodel.AppHandlesViewModel
 import com.android.systemui.statusbar.notification.icon.ui.viewbinder.ConnectedDisplaysStatusBarNotificationIconViewStore
 import com.android.systemui.statusbar.notification.icon.ui.viewbinder.NotificationIconContainerStatusBarViewBinder
@@ -268,20 +270,11 @@ fun StatusBarRoot(
                     inflater.inflate(R.layout.status_bar, parent, false) as PhoneStatusBarView
 
                 val islandBoundsState = mutableStateOf(android.graphics.Rect())
-                var statusIconContainerRef: StatusIconContainer? = null
-                var overlapDotParentRef: ViewGroup? = null
-
-                dynamicIslandSettingEnabled = readDynamicIslandEnabled(context)
+                val iconFader = DynamicIslandIconFader(phoneStatusBarView) { bounds ->
+                    islandBoundsState.value = bounds
+                }
                 phoneStatusBarView.repeatWhenAttached {
-                    observeDynamicIslandEnabled(context).collect { enabled ->
-                        dynamicIslandSettingEnabled = enabled
-                        if (!enabled) {
-                            islandBoundsState.value = android.graphics.Rect()
-                            overlapDotParentRef?.let { dotParent ->
-                                resetOverlapState(statusIconContainerRef, dotParent)
-                            }
-                        }
-                    }
+                    observeDynamicIslandEnabled(context).collect { iconFader.setEnabled(it) }
                 }
 
                 if (StatusBarChipsModernization.isEnabled) {
@@ -355,70 +348,23 @@ fun StatusBarRoot(
                                     mediaHierarchyManager.isMediaControlPopupShowing =
                                         popupShowing
                                 },
-                                onIslandBoundsChanged = { bounds ->
-                                    islandBoundsState.value = bounds
-                                    collapseOverlappingStatusIcons(
-                                        statusIconContainerRef,
-                                        overlapDotParentRef,
-                                        bounds,
-                                    )
-                                },
+                                onIslandBoundsChanged = iconFader::update,
                             )
                         }
                     }
                 centeredArea.addView(composeView)
 
-                val islandVisibilityResetListener =
-                    ViewTreeObserver.OnGlobalLayoutListener {
-                        if (
-                            centeredArea.visibility != View.VISIBLE ||
-                                composeView.visibility != View.VISIBLE
-                        ) {
-                            islandBoundsState.value = android.graphics.Rect()
-                            collapseOverlappingStatusIcons(
-                                statusIconContainerRef,
-                                overlapDotParentRef,
-                                android.graphics.Rect(),
-                            )
-                        }
-                    }
-                centeredArea.viewTreeObserver.addOnGlobalLayoutListener(
-                    islandVisibilityResetListener
-                )
+                iconFader.attach(composeView)
 
                 // If the flag is enabled, create and add a compose section to the end
                 // of the system_icons container
                 if (SystemStatusIconsInCompose.isEnabled) {
                     phoneStatusBarView.requireViewById<View>(R.id.system_icons).visibility =
                         View.GONE
-                    addEndSideComposable(phoneStatusBarView, statusBarViewModel)
+                    addEndSideComposable(phoneStatusBarView, statusBarViewModel, islandBoundsState)
                 } else {
                     val statusIconContainer =
                         phoneStatusBarView.requireViewById<StatusIconContainer>(R.id.statusIcons)
-                    statusIconContainerRef = statusIconContainer
-                    overlapDotParentRef =
-                        phoneStatusBarView.requireViewById(R.id.status_bar_end_side_content)
-
-                    val statusIconsGlobalLayoutListener =
-                        ViewTreeObserver.OnGlobalLayoutListener {
-                            overlapDotParentRef?.let { dotParent ->
-                                applyOverlapState(statusIconContainer, dotParent, lastIslandBounds)
-                            }
-                        }
-                    statusIconContainer.viewTreeObserver.addOnGlobalLayoutListener(
-                        statusIconsGlobalLayoutListener
-                    )
-                    statusIconContainer.addOnAttachStateChangeListener(
-                        object : View.OnAttachStateChangeListener {
-                            override fun onViewAttachedToWindow(v: View) {}
-
-                            override fun onViewDetachedFromWindow(v: View) {
-                                statusIconContainer.viewTreeObserver.removeOnGlobalLayoutListener(
-                                    statusIconsGlobalLayoutListener
-                                )
-                            }
-                        }
-                    )
                     val darkIconManager =
                         darkIconManagerFactory.create(
                             statusIconContainer,
@@ -523,6 +469,7 @@ private fun addStartSideComposable(
                         modifier =
                             Modifier.padding(horizontal = 4.dp)
                                 .wrapContentSize()
+                                .dynamicIslandIconFade(islandBoundsState.value)
                                 .onGloballyPositioned { coordinates ->
                                     val boundsInWindow = coordinates.boundsInWindow()
                                     val bounds =
@@ -569,7 +516,6 @@ private fun addStartSideComposable(
                 }
                 val chipsVisibilityModel = statusBarViewModel.ongoingActivityChips
                 if (chipsVisibilityModel.areChipsAllowed) {
-                    var overlapsIsland by remember { mutableStateOf(false) }
                     OngoingActivityChips(
                         chips = chipsVisibilityModel.chips,
                         iconViewStore = iconViewStore,
@@ -577,22 +523,7 @@ private fun addStartSideComposable(
                         modifier =
                             Modifier.sysUiResTagContainer()
                                 .widthIn(max = chipsMaxWidth)
-                                .alpha(if (overlapsIsland) 0f else 1f)
-                                .onGloballyPositioned { coordinates ->
-                                    val b = coordinates.boundsInWindow()
-                                    val chipRect =
-                                        android.graphics.Rect(
-                                            b.left.toInt(),
-                                            b.top.toInt(),
-                                            b.right.toInt(),
-                                            b.bottom.toInt(),
-                                        )
-                                    overlapsIsland =
-                                        android.graphics.Rect.intersects(
-                                            chipRect,
-                                            islandBoundsState.value,
-                                        )
-                                },
+                                .dynamicIslandIconFade(islandBoundsState.value),
                     )
                 }
             }
@@ -703,6 +634,7 @@ private fun addBatteryComposable(
 private fun addEndSideComposable(
     phoneStatusBarView: PhoneStatusBarView,
     statusBarViewModel: HomeStatusBarViewModel,
+    islandBoundsState: State<Rect>,
 ) {
     val endSideContainerView =
         phoneStatusBarView.requireViewById<View>(R.id.status_bar_end_side_container)
@@ -711,42 +643,44 @@ private fun addEndSideComposable(
             setContent {
                 val endSideWidth by rememberViewWidthAsState(endSideContainerView)
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier =
-                        Modifier.widthIn(max = with(LocalDensity.current) { endSideWidth.toDp() }),
-                ) {
-                    SystemStatusIconsContainer(
-                        viewModelFactory = statusBarViewModel.systemStatusIconsViewModelFactory,
-                        isDark = statusBarViewModel.areaDark,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
+                CompositionLocalProvider(LocalDynamicIslandIconBounds provides islandBoundsState) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier =
+                            Modifier.widthIn(max = with(LocalDensity.current) { endSideWidth.toDp() }),
+                    ) {
+                        SystemStatusIconsContainer(
+                            viewModelFactory = statusBarViewModel.systemStatusIconsViewModelFactory,
+                            isDark = statusBarViewModel.areaDark,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
 
-                    if (RudimentaryBattery.isEnabled) {
-                        BatteryWithChargeStatus(
-                            viewModelFactory = statusBarViewModel.batteryNextToPercentViewModel,
-                            isDarkProvider = { statusBarViewModel.areaDark },
-                            showPercentMode = ShowPercentMode.FollowSetting,
-                            modifier = Modifier.sysUiResTagContainer().wrapContentSize(),
-                        )
-                    } else {
-                        val height =
-                            with(LocalDensity.current) {
-                                BatteryViewModel.getStatusBarBatteryHeight(LocalContext.current)
-                                    .toDp()
-                            }
-                        val viewModel =
-                            rememberViewModel(traceName = "UnifiedBattery") {
-                                statusBarViewModel.unifiedBatteryViewModel.create()
-                            }
-                        BatteryWithPercent(
-                            viewModel = viewModel,
-                            isDarkProvider = { statusBarViewModel.areaDark },
-                            modifier =
-                                Modifier.sysUiResTagContainer().wrapContentWidth(),
-                            showPercent = viewModel.isBatteryPercentSettingEnabled,
-                        )
+                        if (RudimentaryBattery.isEnabled) {
+                            BatteryWithChargeStatus(
+                                viewModelFactory = statusBarViewModel.batteryNextToPercentViewModel,
+                                isDarkProvider = { statusBarViewModel.areaDark },
+                                showPercentMode = ShowPercentMode.FollowSetting,
+                                modifier = Modifier.sysUiResTagContainer().wrapContentSize().dynamicIslandIconFade(),
+                            )
+                        } else {
+                            val height =
+                                with(LocalDensity.current) {
+                                    BatteryViewModel.getStatusBarBatteryHeight(LocalContext.current)
+                                        .toDp()
+                                }
+                            val viewModel =
+                                rememberViewModel(traceName = "UnifiedBattery") {
+                                    statusBarViewModel.unifiedBatteryViewModel.create()
+                                }
+                            BatteryWithPercent(
+                                viewModel = viewModel,
+                                isDarkProvider = { statusBarViewModel.areaDark },
+                                modifier =
+                                    Modifier.sysUiResTagContainer().wrapContentWidth().dynamicIslandIconFade(),
+                                showPercent = viewModel.isBatteryPercentSettingEnabled,
+                            )
+                        }
                     }
                 }
             }
@@ -821,82 +755,4 @@ private fun rememberViewWidthAsState(view: View): MutableIntState {
         onDispose { view.removeOnLayoutChangeListener(layoutListener) }
     }
     return viewWidth
-}
-
-private var overlapDotView: View? = null
-private var pendingOverlapCheck: Runnable? = null
-
-private var lastIslandBounds = android.graphics.Rect()
-private var dynamicIslandSettingEnabled = false
-
-private fun collapseOverlappingStatusIcons(
-    statusIconContainer: StatusIconContainer?,
-    dotParent: ViewGroup?,
-    islandBounds: android.graphics.Rect,
-) {
-    if (statusIconContainer == null || dotParent == null || !dynamicIslandSettingEnabled) return
-    lastIslandBounds = islandBounds
-    pendingOverlapCheck?.let { statusIconContainer.removeCallbacks(it) }
-    val runnable = Runnable {
-        applyOverlapState(statusIconContainer, dotParent, islandBounds)
-    }
-    pendingOverlapCheck = runnable
-    statusIconContainer.postDelayed(runnable, 300L)
-}
-
-private fun applyOverlapState(
-    statusIconContainer: StatusIconContainer,
-    dotParent: ViewGroup,
-    islandBounds: android.graphics.Rect,
-) {
-    if (!dynamicIslandSettingEnabled) return
-    val childRect = android.graphics.Rect()
-    val loc = IntArray(2)
-    var anyOverlap = false
-
-    for (i in 0 until statusIconContainer.childCount) {
-        val child = statusIconContainer.getChildAt(i)
-        if (child.width == 0) continue
-        child.getLocationInWindow(loc)
-        childRect.set(loc[0], loc[1], loc[0] + child.width, loc[1] + child.height)
-        val overlaps = android.graphics.Rect.intersects(childRect, islandBounds)
-        val newVisibility = if (overlaps) View.INVISIBLE else View.VISIBLE
-        if (child.visibility != newVisibility) {
-            child.visibility = newVisibility
-        }
-        if (overlaps) anyOverlap = true
-    }
-
-    // Added as a sibling of StatusIconContainer, not a child of it -- StatusIconContainer
-    // expects its children to be status-icon views and can crash if a plain View is added.
-    val dot =
-        overlapDotView
-            ?: android.widget.TextView(dotParent.context)
-                .apply {
-                    text = "•"
-                    textSize = 10f
-                    setTextColor(android.graphics.Color.WHITE)
-                    gravity = Gravity.CENTER
-                    dotParent.addView(this, 0)
-                }
-                .also { overlapDotView = it }
-    val dotVisibility = if (anyOverlap) View.VISIBLE else View.GONE
-    if (dot.visibility != dotVisibility) {
-        dot.visibility = dotVisibility
-    }
-}
-
-private fun resetOverlapState(
-    statusIconContainer: StatusIconContainer?,
-    dotParent: ViewGroup,
-) {
-    pendingOverlapCheck?.let { statusIconContainer?.removeCallbacks(it) }
-    pendingOverlapCheck = null
-    lastIslandBounds = android.graphics.Rect()
-    statusIconContainer?.let {
-        for (i in 0 until it.childCount) {
-            it.getChildAt(i).visibility = View.VISIBLE
-        }
-    }
-    overlapDotView?.visibility = View.GONE
 }

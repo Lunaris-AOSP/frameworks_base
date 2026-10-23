@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import com.android.systemui.common.ui.compose.Icon
 import com.android.systemui.compose.modifiers.sysuiResTag
 import com.android.systemui.lifecycle.rememberViewModel
+import com.android.systemui.statusbar.featurepods.popups.ui.compose.dynamicIslandIconFade
 import com.android.systemui.statusbar.pipeline.mobile.ui.compose.MobileIcons
 import com.android.systemui.statusbar.systemstatusicons.ui.viewmodel.SystemStatusIconViewModel
 import com.android.systemui.statusbar.systemstatusicons.ui.viewmodel.SystemStatusIconsViewModel
@@ -67,7 +68,10 @@ fun SystemStatusIcons(
                     when (iconViewModel) {
                         is SystemStatusIconViewModel.Default ->
                             iconViewModel.icon?.let {
-                                Icon(icon = it, modifier = Modifier.size(20.dp).padding(1.dp))
+                                Icon(
+                                    icon = it,
+                                    modifier = Modifier.size(20.dp).padding(1.dp).dynamicIslandIconFade(),
+                                )
                             }
 
                         is SystemStatusIconViewModel.MobileIcons -> {

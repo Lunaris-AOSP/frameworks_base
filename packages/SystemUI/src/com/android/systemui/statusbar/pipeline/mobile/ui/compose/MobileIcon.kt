@@ -57,6 +57,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.systemui.Flags
 import com.android.systemui.common.ui.compose.load
 import com.android.systemui.res.R
+import com.android.systemui.statusbar.featurepods.popups.ui.compose.dynamicIslandIconFade
 import com.android.systemui.statusbar.pipeline.mobile.domain.model.SignalIconModel
 import com.android.systemui.statusbar.pipeline.mobile.ui.viewmodel.MobileIconViewModelCommon
 
@@ -95,7 +96,7 @@ fun MobileIcon(viewModel: MobileIconViewModelCommon, modifier: Modifier = Modifi
             },
     ) {
         if (activityContainerVisible) {
-            Column {
+            Column(modifier = Modifier.dynamicIslandIconFade()) {
                 ActivityIndicators(
                     activityInVisible = activityInVisible,
                     activityOutVisible = activityOutVisible,
@@ -106,7 +107,10 @@ fun MobileIcon(viewModel: MobileIconViewModelCommon, modifier: Modifier = Modifi
 
         networkTypeIcon?.let { networkIcon ->
             val height = with(LocalDensity.current) { MobileIconDimensions.IconHeightSp.toDp() }
-            Box(modifier = Modifier.height(height), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier.height(height).dynamicIslandIconFade(),
+                contentAlignment = Alignment.Center,
+            ) {
                 Image(
                     painter = painterResource(networkIcon.resId),
                     contentDescription = networkIcon.contentDescription?.load(),
@@ -119,7 +123,11 @@ fun MobileIcon(viewModel: MobileIconViewModelCommon, modifier: Modifier = Modifi
 
         Spacer(Modifier.size(spacing))
 
-        MobileSignalIcon(viewModel = icon as SignalIconModel.Cellular, color = contentColor)
+        MobileSignalIcon(
+            viewModel = icon as SignalIconModel.Cellular,
+            color = contentColor,
+            modifier = Modifier.dynamicIslandIconFade(),
+        )
 
         Spacer(Modifier.size(spacing))
 
@@ -131,7 +139,7 @@ fun MobileIcon(viewModel: MobileIconViewModelCommon, modifier: Modifier = Modifi
             Image(
                 painter = painterResource(R.drawable.stat_sys_roaming_updated),
                 contentDescription = stringResource(R.string.data_connection_roaming),
-                modifier = Modifier.height(height).offset(y = paddingTop),
+                modifier = Modifier.height(height).offset(y = paddingTop).dynamicIslandIconFade(),
                 colorFilter = ColorFilter.tint(contentColor, BlendMode.SrcIn),
                 contentScale = ContentScale.FillHeight,
             )

@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -42,6 +43,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,6 +75,13 @@ fun StatusBarDynamicIslandContainer(
     onIslandBoundsChanged: (android.graphics.Rect) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val currentOnIslandBoundsChanged by rememberUpdatedState(onIslandBoundsChanged)
+    DisposableEffect(Unit) {
+        onDispose { currentOnIslandBoundsChanged(android.graphics.Rect()) }
+    }
+    LaunchedEffect(chips.isEmpty()) {
+        if (chips.isEmpty()) currentOnIslandBoundsChanged(android.graphics.Rect())
+    }
     val cutoutSpec = rememberDynamicIslandCutoutSpec()
     val (_, heightScale) = rememberDynamicIslandSizeScale()
     var selectedChipId by remember { mutableStateOf<PopupChipId?>(null) }

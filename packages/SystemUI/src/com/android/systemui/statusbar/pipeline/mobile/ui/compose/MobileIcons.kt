@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.android.systemui.statusbar.featurepods.popups.ui.compose.dynamicIslandIconFade
 import com.android.systemui.statusbar.pipeline.mobile.ui.viewmodel.MobileIconsViewModel
 import com.android.systemui.statusbar.pipeline.mobile.ui.viewmodel.StackedMobileIconViewModel
 import com.android.systemui.statusbar.pipeline.shared.ui.composable.StackedMobileIcon
@@ -39,7 +40,10 @@ fun MobileIcons(
 ) {
     val isStackable by viewModel.isStackable.collectAsStateWithLifecycle()
     if (isStackable) {
-        StackedMobileIcon(viewModel = stackedMobileIconViewModel, modifier = modifier)
+        StackedMobileIcon(
+            viewModel = stackedMobileIconViewModel,
+            modifier = modifier.dynamicIslandIconFade(),
+        )
     } else {
         val mobileSubViewModels by viewModel.mobileSubViewModels.collectAsStateWithLifecycle()
         val iconPaddingSp = 4.sp
