@@ -57,6 +57,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -79,6 +80,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -88,6 +90,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -155,6 +158,7 @@ import com.android.systemui.common.ui.compose.singleton
 import com.android.systemui.communal.ui.compose.extensions.detectLongPressGesture
 import com.android.systemui.compose.modifiers.sysuiResTag
 import com.android.systemui.lifecycle.rememberViewModel
+import com.android.systemui.media.controls.ui.compose.AndroidMediaSeekBar
 import com.android.systemui.media.remedia.shared.model.MediaCardActionButtonLayout
 import com.android.systemui.media.remedia.shared.model.MediaColorScheme
 import com.android.systemui.media.remedia.shared.model.MediaSessionState
@@ -877,6 +881,29 @@ private fun ContentScope.Navigation(
                 if (isSeekBarVisible) {
                     // To allow the seek bar slider to fade in and out, it's tagged as an element.
                     Element(key = Media.Elements.SeekBarSlider, modifier = Modifier.weight(1f)) {
+                        val currentNavigation by rememberUpdatedState(viewModel)
+                        DisposableEffect(viewModel.useWaveform) {
+                            onDispose {
+                                if (currentNavigation.isScrubbing) {
+                                    currentNavigation.onScrubFinished(Offset(0f, Float.MAX_VALUE))
+                                }
+                            }
+                        }
+                        if (viewModel.useWaveform) {
+                            AndroidMediaSeekBar(
+                                progress = viewModel.progress,
+                                onScrubChange = viewModel.onScrubChange,
+                                onScrubFinished = viewModel.onScrubFinished,
+                                useWaveform = true,
+                                isPlaying = viewModel.isSquiggly && !viewModel.isScrubbing,
+                                enabled = true,
+                                contentDescription = viewModel.contentDescription,
+                                color = colors.activeTrackColor,
+                                backgroundColor = colors.inactiveTrackColor,
+                                modifier = Modifier.fillMaxWidth().height(48.dp),
+                            )
+                            return@Element
+                        }
                         val sliderDragDelta = remember {
                             // Not a mutableStateOf - this is never accessed in composition and
                             // using an anonymous object avoids generics boxing of inline Offset.

@@ -20,6 +20,7 @@ import android.content.Context
 import android.icu.text.MeasureFormat
 import android.icu.util.Measure
 import android.icu.util.MeasureUnit
+import android.provider.Settings
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -32,12 +33,14 @@ import com.android.systemui.classifier.Classifier
 import com.android.systemui.common.shared.model.ContentDescription
 import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.lifecycle.ExclusiveActivatable
+import com.android.systemui.lifecycle.Hydrator
 import com.android.systemui.media.remedia.domain.interactor.MediaInteractor
 import com.android.systemui.media.remedia.domain.model.MediaActionModel
 import com.android.systemui.media.remedia.shared.model.MediaColorScheme
 import com.android.systemui.media.remedia.shared.model.MediaSessionState
 import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.res.R
+import com.android.systemui.shared.settings.data.repository.SystemSettingsRepository
 import com.android.systemui.statusbar.notification.collection.provider.VisualStabilityProvider
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
@@ -46,7 +49,6 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToLong
 import kotlin.time.Duration.Companion.milliseconds
-import kotlinx.coroutines.awaitCancellation
 
 /** Models UI state for a media element. */
 class MediaViewModel
@@ -55,9 +57,21 @@ constructor(
     private val interactor: MediaInteractor,
     private val falsingSystem: MediaFalsingSystem,
     val visualStabilityProvider: VisualStabilityProvider,
+    systemSettingsRepository: SystemSettingsRepository,
     @Assisted private val context: Context,
     @Assisted private val carouselVisibility: MediaCarouselVisibility,
 ) : ExclusiveActivatable() {
+    private val hydrator = Hydrator("MediaViewModel")
+    private val useWaveformSeekBar by
+        hydrator.hydratedStateOf(
+            traceName = "useWaveformSeekBar",
+            initialValue = false,
+            source =
+                systemSettingsRepository.boolSetting(
+                    Settings.System.MEDIA_WAVEFORM_SEEKBAR,
+                    defaultValue = false,
+                ),
+        )
 
     /** Whether the user is actively moving the thumb of the seek bar. */
     private var isScrubbing: Boolean by mutableStateOf(false)
@@ -116,6 +130,7 @@ constructor(
                                     session.state != MediaSessionState.Paused &&
                                         !isCurrentSessionAndScrubbing,
                                 isScrubbing = isCurrentSessionAndScrubbing,
+                                useWaveform = useWaveformSeekBar,
                                 onScrubChange = { progress ->
                                     check(selectedCardIndex == sessionIndex) {
                                         "Can't seek on a card that's not the selected card!"
@@ -324,7 +339,7 @@ constructor(
 
     override suspend fun onActivated(): Nothing {
         visualStabilityProvider.addPersistentReorderingAllowedListener { interactor.reorderMedia() }
-        awaitCancellation()
+        hydrator.activate()
     }
 
     private fun MediaActionModel.toPlayPauseActionViewModel(

@@ -19,24 +19,26 @@ package com.android.systemui.qs.panels.ui.compose
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.database.ContentObserver
 import android.graphics.drawable.ColorDrawable
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.MediaMetadata
+import android.os.Handler
+import android.os.Looper
+import android.os.UserHandle
+import android.provider.Settings
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,17 +60,18 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.VolumeDown
 import androidx.compose.material.icons.filled.VolumeUp
-import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -76,13 +79,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -92,40 +99,47 @@ import androidx.compose.ui.window.DialogProperties
 import com.android.axion.blur.AxBlurSurfaceDefaults
 import com.android.axion.blur.axBlurBackground
 import com.android.settingslib.media.MediaOutputConstants
+import com.android.systemui.Dependency
+import com.android.systemui.media.controls.ui.compose.AndroidMediaSeekBar
 import com.android.systemui.media.dialog.MediaOutputDialogReceiver
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CustomColorScheme
+import com.android.systemui.res.R
+import com.android.systemui.settings.UserTracker
+import kotlin.math.abs
 import kotlinx.coroutines.delay
 
 @Composable
-internal fun MaterialMediaExpandedPopup(
-    mediaState: SharedMediaState,
-    onDismiss: () -> Unit,
-) {
+internal fun MaterialMediaExpandedPopup(mediaState: SharedMediaState, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val view = LocalView.current
     val controller = mediaState.controller
+    val useWaveform = rememberWaveformSeekBarSetting()
 
-    var localIsPlaying by remember(controller, mediaState.isPlaying) {
-        mutableStateOf(mediaState.isPlaying)
-    }
+    var localIsPlaying by
+        remember(controller, mediaState.isPlaying) { mutableStateOf(mediaState.isPlaying) }
 
-    val durationMs = remember(controller, mediaState.title) {
-        controller?.metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
-    }
-    var positionMs by remember(controller) {
-        mutableFloatStateOf((controller?.playbackState?.position ?: 0L).toFloat())
-    }
+    val durationMs =
+        remember(controller, mediaState.title) {
+            controller?.metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
+        }
+    var positionMs by
+        remember(controller) {
+            mutableFloatStateOf((controller?.playbackState?.position ?: 0L).toFloat())
+        }
     var isScrubbing by remember { mutableStateOf(false) }
+
+    DisposableEffect(controller?.sessionToken, useWaveform) { onDispose { isScrubbing = false } }
 
     val popupScale = remember { Animatable(0.82f) }
     val popupAlpha = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
         popupScale.animateTo(
             targetValue = 1f,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioMediumBouncy,
-                stiffness = Spring.StiffnessMediumLow,
-            ),
+            animationSpec =
+                spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMediumLow,
+                ),
         )
     }
     LaunchedEffect(Unit) {
@@ -143,18 +157,21 @@ internal fun MaterialMediaExpandedPopup(
 
     val deviceIcon = remember {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        val outputs = try {
-            audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-        } catch (_: Exception) { emptyArray() }
+        val outputs =
+            try {
+                audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            } catch (_: Exception) {
+                emptyArray()
+            }
         when {
             outputs.any {
                 it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-                it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+                    it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
             } -> Icons.Filled.Bluetooth
             outputs.any {
                 it.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
-                it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
-                it.type == AudioDeviceInfo.TYPE_USB_HEADSET
+                    it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+                    it.type == AudioDeviceInfo.TYPE_USB_HEADSET
             } -> Icons.Filled.Headset
             else -> Icons.Filled.Smartphone
         }
@@ -165,7 +182,11 @@ internal fun MaterialMediaExpandedPopup(
         context.sendBroadcast(
             Intent(MediaOutputConstants.ACTION_LAUNCH_MEDIA_OUTPUT_DIALOG).apply {
                 putExtra(MediaOutputConstants.EXTRA_PACKAGE_NAME, pkg)
-                component = ComponentName("com.android.systemui", MediaOutputDialogReceiver::class.java.name)
+                component =
+                    ComponentName(
+                        "com.android.systemui",
+                        MediaOutputDialogReceiver::class.java.name,
+                    )
             }
         )
     }
@@ -179,12 +200,11 @@ internal fun MaterialMediaExpandedPopup(
 
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false,
-        )
+        properties =
+            DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
     ) {
-        val dialogWindowProvider = LocalView.current.parent as? androidx.compose.ui.window.DialogWindowProvider
+        val dialogWindowProvider =
+            LocalView.current.parent as? androidx.compose.ui.window.DialogWindowProvider
         SideEffect {
             dialogWindowProvider?.window?.let { w ->
                 w.setBackgroundDrawable(ColorDrawable(android.graphics.Color.TRANSPARENT))
@@ -192,35 +212,34 @@ internal fun MaterialMediaExpandedPopup(
         }
 
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .axBlurBackground(
-                    enabled = true,
-                    fallbackColor = Color.Black.copy(alpha = 0.55f),
-                    tintColor = Color.Black.copy(alpha = 0.25f),
-                    cornerRadius = 0.dp,
-                )
-                .pointerInput(Unit) {
-                    detectTapGestures(onTap = { onDismiss() })
-                },
+            modifier =
+                Modifier.fillMaxSize()
+                    .axBlurBackground(
+                        enabled = true,
+                        fallbackColor = Color.Black.copy(alpha = 0.55f),
+                        tintColor = Color.Black.copy(alpha = 0.25f),
+                        cornerRadius = 0.dp,
+                    )
+                    .pointerInput(Unit) { detectTapGestures(onTap = { onDismiss() }) },
             contentAlignment = Alignment.Center,
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth(0.86f)
-                    .scale(popupScale.value)
-                    .alpha(popupAlpha.value)
-                    .clip(RoundedCornerShape(32.dp))
-                    .axBlurBackground(
-                        enabled = true,
-                        fallbackColor = CustomColorScheme.current.qsTileColor,
-                        tintColor = AxBlurSurfaceDefaults.tintColor(
-                            CustomColorScheme.current.qsTileColor
-                        ),
-                        cornerRadius = 32.dp,
-                    )
-                    .padding(24.dp)
-                    .clickable(enabled = false) {},
+                modifier =
+                    Modifier.fillMaxWidth(0.86f)
+                        .scale(popupScale.value)
+                        .alpha(popupAlpha.value)
+                        .clip(RoundedCornerShape(32.dp))
+                        .axBlurBackground(
+                            enabled = true,
+                            fallbackColor = CustomColorScheme.current.qsTileColor,
+                            tintColor =
+                                AxBlurSurfaceDefaults.tintColor(
+                                    CustomColorScheme.current.qsTileColor
+                                ),
+                            cornerRadius = 32.dp,
+                        )
+                        .padding(24.dp)
+                        .clickable(enabled = false) {},
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Row(
@@ -235,11 +254,11 @@ internal fun MaterialMediaExpandedPopup(
                         fontWeight = FontWeight.SemiBold,
                     )
                     Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.3f))
-                            .clickable { launchMediaOutputDialog() },
+                        modifier =
+                            Modifier.size(32.dp)
+                                .clip(CircleShape)
+                                .background(Color.Black.copy(alpha = 0.3f))
+                                .clickable { launchMediaOutputDialog() },
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
@@ -258,18 +277,18 @@ internal fun MaterialMediaExpandedPopup(
                         painter = BitmapPainter(mediaState.albumArt.asImageBitmap()),
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxWidth(0.82f)
-                            .aspectRatio(1f)
-                            .clip(RoundedCornerShape(20.dp)),
+                        modifier =
+                            Modifier.fillMaxWidth(0.82f)
+                                .aspectRatio(1f)
+                                .clip(RoundedCornerShape(20.dp)),
                     )
                 } else {
                     Box(
-                        modifier = Modifier
-                            .fillMaxWidth(0.82f)
-                            .aspectRatio(1f)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(Color.White.copy(alpha = 0.15f)),
+                        modifier =
+                            Modifier.fillMaxWidth(0.82f)
+                                .aspectRatio(1f)
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(Color.White.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
@@ -307,48 +326,91 @@ internal fun MaterialMediaExpandedPopup(
                 val durationSafe = durationMs.coerceAtLeast(1L).toFloat()
                 val progressFraction = (positionMs / durationSafe).coerceIn(0f, 1f)
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(20.dp)
-                        .pointerInput(durationMs) {
-                            detectHorizontalDragGestures(
-                                onDragStart = { isScrubbing = true },
-                                onDragEnd = {
+                if (useWaveform) {
+                    key(controller?.sessionToken) {
+                        AndroidMediaSeekBar(
+                            progress = progressFraction,
+                            onScrubChange = { fraction ->
+                                isScrubbing = true
+                                positionMs = fraction * durationSafe
+                            },
+                            onScrubFinished = { delta ->
+                                if (isScrubbing && abs(delta.x) >= abs(delta.y)) {
                                     controller?.transportControls?.seekTo(positionMs.toLong())
-                                    isScrubbing = false
-                                },
-                                onDragCancel = { isScrubbing = false },
-                                onHorizontalDrag = { change, _ ->
-                                    change.consume()
-                                    val fraction = (change.position.x / size.width.toFloat()).coerceIn(0f, 1f)
-                                    positionMs = fraction * durationSafe
-                                },
-                            )
-                        },
-                    contentAlignment = Alignment.CenterStart,
-                ) {
+                                } else {
+                                    positionMs =
+                                        (controller?.playbackState?.position ?: 0L).toFloat()
+                                }
+                                isScrubbing = false
+                            },
+                            useWaveform = true,
+                            isPlaying = localIsPlaying && !isScrubbing,
+                            enabled = controller != null && durationMs > 0L,
+                            contentDescription =
+                                stringResource(
+                                    R.string.controls_media_seekbar_description,
+                                    formatMs(positionMs.toLong()),
+                                    formatMs(durationMs),
+                                ),
+                            color = Color.White,
+                            backgroundColor = Color.White.copy(alpha = 0.25f),
+                            modifier = Modifier.fillMaxWidth().height(32.dp),
+                        )
+                    }
+                } else {
                     Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(3.dp)
-                            .clip(RoundedCornerShape(1.5.dp))
-                            .background(Color.White.copy(alpha = 0.25f)),
-                    )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(progressFraction)
-                            .height(3.dp)
-                            .clip(RoundedCornerShape(1.5.dp))
-                            .background(Color.White),
-                    )
+                        modifier =
+                            Modifier.fillMaxWidth().height(20.dp).pointerInput(durationMs) {
+                                detectHorizontalDragGestures(
+                                    onDragStart = { isScrubbing = true },
+                                    onDragEnd = {
+                                        controller?.transportControls?.seekTo(positionMs.toLong())
+                                        isScrubbing = false
+                                    },
+                                    onDragCancel = { isScrubbing = false },
+                                    onHorizontalDrag = { change, _ ->
+                                        change.consume()
+                                        val fraction =
+                                            (change.position.x / size.width.toFloat()).coerceIn(
+                                                0f,
+                                                1f,
+                                            )
+                                        positionMs = fraction * durationSafe
+                                    },
+                                )
+                            },
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        Box(
+                            modifier =
+                                Modifier.fillMaxWidth()
+                                    .height(3.dp)
+                                    .clip(RoundedCornerShape(1.5.dp))
+                                    .background(Color.White.copy(alpha = 0.25f))
+                        )
+                        Box(
+                            modifier =
+                                Modifier.fillMaxWidth(progressFraction)
+                                    .height(3.dp)
+                                    .clip(RoundedCornerShape(1.5.dp))
+                                    .background(Color.White)
+                        )
+                    }
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text(formatMs(positionMs.toLong()), color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
-                    Text(formatMs(durationMs), color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
+                    Text(
+                        formatMs(positionMs.toLong()),
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 12.sp,
+                    )
+                    Text(
+                        formatMs(durationMs),
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 12.sp,
+                    )
                 }
 
                 Spacer(Modifier.height(12.dp))
@@ -371,10 +433,10 @@ internal fun MaterialMediaExpandedPopup(
                     }
 
                     Box(
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.25f)),
+                        modifier =
+                            Modifier.size(56.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.25f)),
                         contentAlignment = Alignment.Center,
                     ) {
                         IconButton(
@@ -390,9 +452,14 @@ internal fun MaterialMediaExpandedPopup(
                             },
                             modifier = Modifier.size(56.dp),
                         ) {
-                            Crossfade(targetState = localIsPlaying, animationSpec = tween(200), label = "popup_play_pause") { playing ->
+                            Crossfade(
+                                targetState = localIsPlaying,
+                                animationSpec = tween(200),
+                                label = "popup_play_pause",
+                            ) { playing ->
                                 Icon(
-                                    imageVector = if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                    imageVector =
+                                        if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                                     contentDescription = if (playing) "Pause" else "Play",
                                     tint = Color.White,
                                     modifier = Modifier.size(32.dp),
@@ -419,7 +486,9 @@ internal fun MaterialMediaExpandedPopup(
                 val audioManager = remember {
                     context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
                 }
-                val maxVolume = remember { audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC) }
+                val maxVolume = remember {
+                    audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                }
                 var volume by remember {
                     mutableIntStateOf(audioManager.getStreamVolume(AudioManager.STREAM_MUSIC))
                 }
@@ -427,46 +496,107 @@ internal fun MaterialMediaExpandedPopup(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Filled.VolumeDown, contentDescription = null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
+                    Icon(
+                        Icons.Filled.VolumeDown,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(18.dp),
+                    )
 
                     val volumeFraction = (volume.toFloat() / maxVolume.toFloat()).coerceIn(0f, 1f)
 
                     Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 8.dp)
-                            .height(20.dp)
-                            .pointerInput(maxVolume) {
-                                detectHorizontalDragGestures(
-                                    onHorizontalDrag = { change, _ ->
-                                        change.consume()
-                                        val fraction = (change.position.x / size.width.toFloat()).coerceIn(0f, 1f)
-                                        volume = (fraction * maxVolume).toInt()
-                                        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, volume, 0)
-                                    },
-                                )
-                            },
+                        modifier =
+                            Modifier.weight(1f)
+                                .padding(horizontal = 8.dp)
+                                .height(20.dp)
+                                .pointerInput(maxVolume) {
+                                    detectHorizontalDragGestures(
+                                        onHorizontalDrag = { change, _ ->
+                                            change.consume()
+                                            val fraction =
+                                                (change.position.x / size.width.toFloat()).coerceIn(
+                                                    0f,
+                                                    1f,
+                                                )
+                                            volume = (fraction * maxVolume).toInt()
+                                            audioManager.setStreamVolume(
+                                                AudioManager.STREAM_MUSIC,
+                                                volume,
+                                                0,
+                                            )
+                                        }
+                                    )
+                                },
                         contentAlignment = Alignment.CenterStart,
                     ) {
                         Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(3.dp)
-                                .clip(RoundedCornerShape(1.5.dp))
-                                .background(Color.White.copy(alpha = 0.25f)),
+                            modifier =
+                                Modifier.fillMaxWidth()
+                                    .height(3.dp)
+                                    .clip(RoundedCornerShape(1.5.dp))
+                                    .background(Color.White.copy(alpha = 0.25f))
                         )
                         Box(
-                            modifier = Modifier
-                                .fillMaxWidth(volumeFraction)
-                                .height(3.dp)
-                                .clip(RoundedCornerShape(1.5.dp))
-                                .background(Color.White),
+                            modifier =
+                                Modifier.fillMaxWidth(volumeFraction)
+                                    .height(3.dp)
+                                    .clip(RoundedCornerShape(1.5.dp))
+                                    .background(Color.White)
                         )
                     }
 
-                    Icon(Icons.Filled.VolumeUp, contentDescription = null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
+                    Icon(
+                        Icons.Filled.VolumeUp,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(18.dp),
+                    )
                 }
             }
         }
     }
+}
+
+@Composable
+private fun rememberWaveformSeekBarSetting(): Boolean {
+    val context = LocalContext.current
+    val resolver = context.contentResolver
+    val userTracker = remember { Dependency.get(UserTracker::class.java) }
+    var enabled by remember(resolver, userTracker) { mutableStateOf(false) }
+
+    DisposableEffect(resolver, userTracker) {
+        fun refresh() {
+            enabled =
+                Settings.System.getIntForUser(
+                    resolver,
+                    Settings.System.MEDIA_WAVEFORM_SEEKBAR,
+                    0,
+                    userTracker.userId,
+                ) == 1
+        }
+
+        val observer =
+            object : ContentObserver(Handler(Looper.getMainLooper())) {
+                override fun onChange(selfChange: Boolean) = refresh()
+            }
+        val userCallback =
+            object : UserTracker.Callback {
+                override fun onUserChanged(newUser: Int, userContext: Context) = refresh()
+            }
+        resolver.registerContentObserver(
+            Settings.System.getUriFor(Settings.System.MEDIA_WAVEFORM_SEEKBAR),
+            false,
+            observer,
+            UserHandle.USER_ALL,
+        )
+        userTracker.addCallback(userCallback, context.mainExecutor)
+        refresh()
+        onDispose {
+            resolver.unregisterContentObserver(observer)
+            userTracker.removeCallback(userCallback)
+        }
+    }
+
+    return enabled
 }

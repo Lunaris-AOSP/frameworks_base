@@ -17,40 +17,23 @@
 
 package com.android.systemui.qs.panels.ui.media
 
-import android.annotation.SuppressLint
-import android.content.res.ColorStateList
 import android.text.format.DateUtils
-import android.view.MotionEvent
-import android.view.View
-import android.widget.SeekBar
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.android.systemui.media.controls.ui.drawable.SquigglyProgress
-import com.android.systemui.media.controls.ui.view.WaveformSeekBar
+import com.android.systemui.media.controls.ui.compose.AndroidMediaSeekBar
 import com.android.systemui.media.remedia.domain.model.MediaSessionModel
 import com.android.systemui.media.remedia.shared.model.MediaSessionState
 import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.res.R
 
-private class SeekBarStateHolder {
-    var lastColorArgb: Int = 0
-    var lastProgressBackgroundTintList: ColorStateList? = null
-}
-
 @Composable
-@SuppressLint("ClickableViewAccessibility")
 internal fun MediaSeekBar(
     session: MediaSessionModel?,
     viewModel: AxMediaViewModel,
@@ -61,8 +44,8 @@ internal fun MediaSeekBar(
 ) {
     val height = if (dense) 20.dp else 32.dp
     val isShadeInteracting by viewModel.isShadeInteracting.collectAsStateWithLifecycle()
-    val currentSession by rememberUpdatedState(session)
-    val currentViewModel by rememberUpdatedState(viewModel)
+    val useWaveform by
+        viewModel.useWaveformSeekBar.collectAsStateWithLifecycle(initialValue = false)
     val progress = session?.let(viewModel::progress) ?: 0f
     val seekDescription =
         session
@@ -75,108 +58,18 @@ internal fun MediaSeekBar(
             }
             .orEmpty()
 
-    val stateHolder = remember { SeekBarStateHolder() }
-
-    Column(modifier = modifier) {
-        AndroidView(
-            factory = { context ->
-                var start = Offset.Zero
-                var delta = Offset.Zero
-                WaveformSeekBar(context).apply {
-                    followsMediaColors = false
-                    layoutDirection = View.LAYOUT_DIRECTION_LTR
-                    splitTrack = false
-                    setPadding(0, 0, 0, 0)
-                    thumbOffset = 0
-                    setOnTouchListener { view, event ->
-                        val position = Offset(event.x, event.y)
-                        when (event.actionMasked) {
-                            MotionEvent.ACTION_DOWN -> {
-                                view.parent?.requestDisallowInterceptTouchEvent(true)
-                                start = position
-                                delta = Offset.Zero
-                            }
-                            MotionEvent.ACTION_MOVE -> delta = position - start
-                            MotionEvent.ACTION_UP,
-                            MotionEvent.ACTION_CANCEL -> {
-                                delta = position - start
-                                view.parent?.requestDisallowInterceptTouchEvent(false)
-                            }
-                        }
-                        false
-                    }
-                    setOnSeekBarChangeListener(
-                        object : SeekBar.OnSeekBarChangeListener {
-                            override fun onProgressChanged(
-                                seekBar: SeekBar,
-                                progress: Int,
-                                fromUser: Boolean,
-                            ) {
-                                val media = currentSession
-                                if (fromUser && media != null && seekBar.max > 0) {
-                                    currentViewModel.onScrubChange(
-                                        media,
-                                        progress.toFloat() / seekBar.max,
-                                    )
-                                }
-                            }
-
-                            override fun onStartTrackingTouch(seekBar: SeekBar) = Unit
-
-                            override fun onStopTrackingTouch(seekBar: SeekBar) {
-                                currentSession?.let { currentViewModel.onScrubFinished(it, delta) }
-                            }
-                        }
-                    )
-                }
-            },
-            update = { seekBar ->
-                val duration =
-                    session?.durationMs?.coerceIn(1L, Int.MAX_VALUE.toLong())?.toInt() ?: 1
-                if (seekBar.max != duration) {
-                    seekBar.max = duration
-                }
-                if (!seekBar.isPressed) {
-                    seekBar.progress = (progress * duration).toInt().coerceIn(0, duration)
-                }
-                val enabled = interactive && session?.canBeScrubbed == true
-                if (seekBar.isEnabled != enabled) {
-                    seekBar.isEnabled = enabled
-                }
-                seekBar.contentDescription = seekDescription
-
-                val accent = colors.primary.toArgb()
-                if (stateHolder.lastColorArgb != accent || seekBar.progressTintList?.defaultColor != accent) {
-                    stateHolder.lastColorArgb = accent
-                    val tint = ColorStateList.valueOf(accent)
-                    val bgTint = ColorStateList.valueOf(colors.foreground.copy(alpha = 0.3f).toArgb())
-                    stateHolder.lastProgressBackgroundTintList = bgTint
-
-                    seekBar.setWaveformColor(accent)
-                    seekBar.setThumbColor(accent)
-                    seekBar.thumbTintList = tint
-                    seekBar.progressTintList = tint
-                    seekBar.progressBackgroundTintList = bgTint
-                }
-
-                val playing =
-                    session?.state == MediaSessionState.Playing &&
-                        !seekBar.isPressed &&
-                        !isShadeInteracting
-                val squiggly = seekBar.progressDrawable as? SquigglyProgress
-                if (squiggly != null) {
-                    if (squiggly.animate != playing) {
-                        squiggly.animate = playing
-                    }
-                    squiggly.setTint(accent)
-                }
-                if (playing) {
-                    seekBar.startWaveAnimation()
-                } else {
-                    seekBar.stopWaveAnimation()
-                }
-            },
-            modifier = Modifier.fillMaxWidth().height(height),
+    key(session?.key) {
+        AndroidMediaSeekBar(
+            progress = progress,
+            onScrubChange = { value -> session?.let { viewModel.onScrubChange(it, value) } },
+            onScrubFinished = { delta -> session?.let { viewModel.onScrubFinished(it, delta) } },
+            useWaveform = useWaveform,
+            isPlaying = session?.state == MediaSessionState.Playing && !isShadeInteracting,
+            enabled = interactive && session?.canBeScrubbed == true,
+            contentDescription = seekDescription,
+            color = colors.primary,
+            backgroundColor = colors.foreground.copy(alpha = 0.3f),
+            modifier = modifier.fillMaxWidth().height(height),
         )
     }
 }

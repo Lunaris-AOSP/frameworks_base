@@ -17,6 +17,7 @@
 
 package com.android.systemui.qs.panels.ui.viewmodel
 
+import android.provider.Settings
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -42,6 +43,7 @@ import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.qs.panels.data.repository.AxMediaHistoryRepository
 import com.android.systemui.qs.panels.shared.model.AxMediaSurface
 import com.android.systemui.shade.domain.interactor.ShadeInteractor
+import com.android.systemui.shared.settings.data.repository.SystemSettingsRepository
 import javax.inject.Inject
 import kotlin.math.abs
 import kotlin.math.roundToLong
@@ -61,6 +63,7 @@ constructor(
     @Main private val mainDispatcher: CoroutineDispatcher,
     private val shadeInteractor: ShadeInteractor,
     private val keyguardTransitionInteractor: KeyguardTransitionInteractor,
+    systemSettingsRepository: SystemSettingsRepository,
 ) {
     private var scrubbingSessionKey: Any? by mutableStateOf(null)
     private var gutsSessionKey: Any? by mutableStateOf(null)
@@ -78,8 +81,14 @@ constructor(
     val showOnLockscreen = mediaCarouselInteractor.allowMediaOnLockscreen
     val isShadeExpanded: StateFlow<Boolean> = shadeInteractor.isAnyExpanded
     val isShadeInteracting: StateFlow<Boolean> = shadeInteractor.isUserInteracting
-    val currentKeyguardState: StateFlow<KeyguardState> = keyguardTransitionInteractor.currentKeyguardState
+    val currentKeyguardState: StateFlow<KeyguardState> =
+        keyguardTransitionInteractor.currentKeyguardState
     val lastMediaPackage = mediaHistoryRepository.lastMediaPackage
+    val useWaveformSeekBar =
+        systemSettingsRepository.boolSetting(
+            Settings.System.MEDIA_WAVEFORM_SEEKBAR,
+            defaultValue = false,
+        )
 
     init {
         mediaHistoryRepository.startListening()
@@ -132,8 +141,7 @@ constructor(
         falsingSystem.runIfNotFalseTap(FalsingManager.LOW_PENALTY, ::closeGuts)
     }
 
-    fun isSwipeFalseTouch(): Boolean =
-        falsingSystem.isFalseTouch(Classifier.MEDIA_CAROUSEL_SWIPE)
+    fun isSwipeFalseTouch(): Boolean = falsingSystem.isFalseTouch(Classifier.MEDIA_CAROUSEL_SWIPE)
 
     fun dismissBySwipe(surface: AxMediaSurface) {
         if (!surface.dismissible) return
