@@ -26,6 +26,7 @@ import android.provider.Settings
 import android.util.Log
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.*
+import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 
 data class NowPlayingSettings(
     val isEnabled: Boolean,
@@ -39,7 +40,7 @@ data class NowPlayingSettings(
     val showOnAod: Boolean,
     val showOnLockscreen: Boolean,
     val tapToExpand: Boolean = true,
-    val useWaveformSeekBar: Boolean = false,
+    val seekBarStyle: MediaSeekBarStyle = MediaSeekBarStyle.DEFAULT,
     val useLyricsMode: Boolean = false
 )
 
@@ -65,7 +66,7 @@ class NowPlayingSettingsRepository(context: Context) {
         observeSettingInt(SETTING_SHOW_ON_AOD, 1),
         observeSettingInt(SETTING_SHOW_ON_LOCKSCREEN, 1),
         observeSettingInt(SETTING_TAP_TO_EXPAND, 1),
-        observeSettingInt(SETTING_WAVEFORM_SEEKBAR, 0),
+        MediaSeekBarStyle.observe(context),
         observeSettingInt(SETTING_LYRICS_MODE, 0),
     ) { flows: Array<Any?> ->
         val enabled = flows[0] as Int
@@ -79,7 +80,7 @@ class NowPlayingSettingsRepository(context: Context) {
         val showAod = flows[8] as Int
         val showLock = flows[9] as Int
         val tapToExpand = flows[10] as Int
-        val waveform = flows[11] as Int
+        val seekBarStyle = flows[11] as MediaSeekBarStyle
         val lyricsMode = flows[12] as Int
         val position = (positionInt / 100f).coerceIn(0.1f, 1.0f)
         val iconStyleClamped = iconStyle.coerceIn(0, 2)
@@ -99,7 +100,7 @@ class NowPlayingSettingsRepository(context: Context) {
             showOnAod = showAod == 1,
             showOnLockscreen = showLock == 1,
             tapToExpand = tapToExpand == 1,
-            useWaveformSeekBar = waveform == 1,
+            seekBarStyle = seekBarStyle,
             useLyricsMode = lyricsMode == 1,
         )
     }.distinctUntilChanged()
@@ -160,9 +161,9 @@ class NowPlayingSettingsRepository(context: Context) {
             tapToExpand = Settings.System.getIntForUser(
                 resolver, SETTING_TAP_TO_EXPAND, 1, UserHandle.USER_CURRENT
             ) == 1,
-            useWaveformSeekBar = Settings.System.getIntForUser(
+            seekBarStyle = MediaSeekBarStyle.fromValue(Settings.System.getIntForUser(
                 resolver, SETTING_WAVEFORM_SEEKBAR, 0, UserHandle.USER_CURRENT
-            ) == 1,
+            )),
             useLyricsMode = Settings.System.getIntForUser(
                 resolver, SETTING_LYRICS_MODE, 0, UserHandle.USER_CURRENT
             ) == 1,

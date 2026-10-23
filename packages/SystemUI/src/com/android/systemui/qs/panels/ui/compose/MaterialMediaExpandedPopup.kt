@@ -19,15 +19,10 @@ package com.android.systemui.qs.panels.ui.compose
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.database.ContentObserver
 import android.graphics.drawable.ColorDrawable
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.MediaMetadata
-import android.os.Handler
-import android.os.Looper
-import android.os.UserHandle
-import android.provider.Settings
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
@@ -96,15 +91,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.axion.blur.AxBlurSurfaceDefaults
 import com.android.axion.blur.axBlurBackground
 import com.android.settingslib.media.MediaOutputConstants
-import com.android.systemui.Dependency
+import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 import com.android.systemui.media.controls.ui.compose.AndroidMediaSeekBar
 import com.android.systemui.media.dialog.MediaOutputDialogReceiver
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CustomColorScheme
 import com.android.systemui.res.R
-import com.android.systemui.settings.UserTracker
 import kotlin.math.abs
 import kotlinx.coroutines.delay
 
@@ -113,7 +108,7 @@ internal fun MaterialMediaExpandedPopup(mediaState: SharedMediaState, onDismiss:
     val context = LocalContext.current
     val view = LocalView.current
     val controller = mediaState.controller
-    val useWaveform = rememberWaveformSeekBarSetting()
+    val seekBarStyle = rememberMediaSeekBarStyle()
 
     var localIsPlaying by
         remember(controller, mediaState.isPlaying) { mutableStateOf(mediaState.isPlaying) }
@@ -128,7 +123,7 @@ internal fun MaterialMediaExpandedPopup(mediaState: SharedMediaState, onDismiss:
         }
     var isScrubbing by remember { mutableStateOf(false) }
 
-    DisposableEffect(controller?.sessionToken, useWaveform) { onDispose { isScrubbing = false } }
+    DisposableEffect(controller?.sessionToken, seekBarStyle) { onDispose { isScrubbing = false } }
 
     val popupScale = remember { Animatable(0.82f) }
     val popupAlpha = remember { Animatable(0f) }
@@ -326,10 +321,11 @@ internal fun MaterialMediaExpandedPopup(mediaState: SharedMediaState, onDismiss:
                 val durationSafe = durationMs.coerceAtLeast(1L).toFloat()
                 val progressFraction = (positionMs / durationSafe).coerceIn(0f, 1f)
 
-                if (useWaveform) {
+                if (seekBarStyle != MediaSeekBarStyle.DEFAULT) {
                     key(controller?.sessionToken) {
                         AndroidMediaSeekBar(
                             progress = progressFraction,
+                            durationMs = durationMs,
                             onScrubChange = { fraction ->
                                 isScrubbing = true
                                 positionMs = fraction * durationSafe
@@ -343,8 +339,9 @@ internal fun MaterialMediaExpandedPopup(mediaState: SharedMediaState, onDismiss:
                                 }
                                 isScrubbing = false
                             },
-                            useWaveform = true,
-                            isPlaying = localIsPlaying && !isScrubbing,
+                            style = seekBarStyle,
+                            isPlaying = localIsPlaying,
+                            isScrubbing = isScrubbing,
                             enabled = controller != null && durationMs > 0L,
                             contentDescription =
                                 stringResource(
@@ -354,7 +351,7 @@ internal fun MaterialMediaExpandedPopup(mediaState: SharedMediaState, onDismiss:
                                 ),
                             color = Color.White,
                             backgroundColor = Color.White.copy(alpha = 0.25f),
-                            modifier = Modifier.fillMaxWidth().height(32.dp),
+                            modifier = Modifier.fillMaxWidth().height(34.dp),
                         )
                     }
                 } else {
@@ -559,44 +556,12 @@ internal fun MaterialMediaExpandedPopup(mediaState: SharedMediaState, onDismiss:
 }
 
 @Composable
-private fun rememberWaveformSeekBarSetting(): Boolean {
+private fun rememberMediaSeekBarStyle(): MediaSeekBarStyle {
     val context = LocalContext.current
-    val resolver = context.contentResolver
-    val userTracker = remember { Dependency.get(UserTracker::class.java) }
-    var enabled by remember(resolver, userTracker) { mutableStateOf(false) }
-
-    DisposableEffect(resolver, userTracker) {
-        fun refresh() {
-            enabled =
-                Settings.System.getIntForUser(
-                    resolver,
-                    Settings.System.MEDIA_WAVEFORM_SEEKBAR,
-                    0,
-                    userTracker.userId,
-                ) == 1
-        }
-
-        val observer =
-            object : ContentObserver(Handler(Looper.getMainLooper())) {
-                override fun onChange(selfChange: Boolean) = refresh()
-            }
-        val userCallback =
-            object : UserTracker.Callback {
-                override fun onUserChanged(newUser: Int, userContext: Context) = refresh()
-            }
-        resolver.registerContentObserver(
-            Settings.System.getUriFor(Settings.System.MEDIA_WAVEFORM_SEEKBAR),
-            false,
-            observer,
-            UserHandle.USER_ALL,
+    val styleFlow = remember(context) { MediaSeekBarStyle.observe(context) }
+    val style by
+        styleFlow.collectAsStateWithLifecycle(
+            initialValue = remember(context) { MediaSeekBarStyle.read(context) }
         )
-        userTracker.addCallback(userCallback, context.mainExecutor)
-        refresh()
-        onDispose {
-            resolver.unregisterContentObserver(observer)
-            userTracker.removeCallback(userCallback)
-        }
-    }
-
-    return enabled
+    return style
 }

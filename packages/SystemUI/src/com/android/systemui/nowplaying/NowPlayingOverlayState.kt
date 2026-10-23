@@ -19,6 +19,7 @@ import android.graphics.Bitmap
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 
 data class NowPlayingMediaState(
     val track: String = "",
@@ -33,7 +34,7 @@ data class NowPlayingMediaState(
     val albumArtColor: Int? = null,
     val outputDeviceName: String = "",
     val albumArt: Bitmap? = null,
-    val useWaveformSeekBar: Boolean = false,
+    val seekBarStyle: MediaSeekBarStyle = MediaSeekBarStyle.DEFAULT,
 )
 
 object NowPlayingOverlayState {

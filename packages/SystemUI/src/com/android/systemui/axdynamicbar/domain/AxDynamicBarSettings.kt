@@ -9,6 +9,8 @@ import com.android.systemui.islandevents.model.IslandEvent
 import com.android.systemui.axdynamicbar.shared.EVENT_TYPE_IDS
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Main
+import com.android.systemui.media.controls.shared.MediaSeekBarStyle
+import com.android.systemui.settings.UserTracker
 import com.android.systemui.util.settings.GlobalSettings
 import com.android.systemui.util.settings.SecureSettings
 import javax.inject.Inject
@@ -23,6 +25,7 @@ class AxDynamicBarSettings @Inject constructor(
     private val secureSettings: SecureSettings,
     private val context: android.content.Context,
     private val globalSettings: GlobalSettings,
+    private val userTracker: UserTracker,
 ) {
     companion object {
         const val KEY_ENABLED = "ax_dynamic_bar_enabled"
@@ -48,8 +51,8 @@ class AxDynamicBarSettings @Inject constructor(
     private val _keyguardBatteryChipMode = MutableStateFlow(1)
     val keyguardBatteryChipMode: StateFlow<Int> = _keyguardBatteryChipMode.asStateFlow()
 
-    private val _useWaveformSeekBar = MutableStateFlow(false)
-    val useWaveformSeekBar: StateFlow<Boolean> = _useWaveformSeekBar.asStateFlow()
+    private val _seekBarStyle = MutableStateFlow(MediaSeekBarStyle.DEFAULT)
+    val seekBarStyle: StateFlow<MediaSeekBarStyle> = _seekBarStyle.asStateFlow()
     
     private val _chipStyle = MutableStateFlow(0)
     val chipStyle: StateFlow<Int> = _chipStyle.asStateFlow()
@@ -75,10 +78,16 @@ class AxDynamicBarSettings @Inject constructor(
         }
 
     private var initialized = false
+    private val userCallback = object : UserTracker.Callback {
+        override fun onUserChanged(newUser: Int, userContext: android.content.Context) {
+            refresh()
+        }
+    }
 
     fun init() {
         if (initialized) return
         initialized = true
+        userTracker.addCallback(userCallback, context.mainExecutor)
         refresh()
         secureSettings.registerContentObserverForUserSync(
             KEY_ENABLED,
@@ -138,6 +147,7 @@ class AxDynamicBarSettings @Inject constructor(
     fun destroy() {
         if (!initialized) return
         initialized = false
+        userTracker.removeCallback(userCallback)
         secureSettings.getContentResolver().unregisterContentObserver(settingsObserver)
         contentResolver.unregisterContentObserver(settingsObserver)
         globalSettings.getContentResolver().unregisterContentObserver(settingsObserver)
@@ -154,9 +164,7 @@ class AxDynamicBarSettings @Inject constructor(
             secureSettings.getIntForUser(KEY_KEYGUARD_MUSIC_PILL_ENABLED, 0, UserHandle.USER_CURRENT) == 1
         _chipStyle.value =
             secureSettings.getIntForUser(KEY_CHIP_STYLE, 0, UserHandle.USER_CURRENT)
-        _useWaveformSeekBar.value =
-            Settings.System.getIntForUser(
-                contentResolver, Settings.System.MEDIA_WAVEFORM_SEEKBAR, 0, UserHandle.USER_CURRENT,) == 1
+        _seekBarStyle.value = MediaSeekBarStyle.read(context, userTracker.userId)
         _compactNotifications.value =
             secureSettings.getIntForUser(KEY_COMPACT_NOTIFICATIONS, 1, UserHandle.USER_CURRENT) == 1
         _isHeadsUpEnabled.value =

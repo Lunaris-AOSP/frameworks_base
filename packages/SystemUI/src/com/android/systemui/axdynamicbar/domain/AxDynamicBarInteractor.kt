@@ -12,6 +12,7 @@ import com.android.systemui.axdynamicbar.shared.IslandActions
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.haptics.slider.compose.ui.SliderHapticsViewModel
+import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.plugins.statusbar.StatusBarStateController
 import com.android.systemui.shade.data.repository.ShadeRepository
@@ -74,7 +75,7 @@ constructor(
     val qsExpansion: StateFlow<Float> = shadeInteractor.qsExpansion
     
     val legacyShadeExpansion: StateFlow<Float> = shadeRepository.legacyShadeExpansion
-    val mediaUseWaveform: StateFlow<Boolean> = settings.useWaveformSeekBar
+    val mediaSeekBarStyle: StateFlow<MediaSeekBarStyle> = settings.seekBarStyle
     private val _isOnKeyguard = MutableStateFlow(false)
     val isOnKeyguard: StateFlow<Boolean> = _isOnKeyguard.asStateFlow()
     private val _isKeyguardFadingAway = MutableStateFlow(false)

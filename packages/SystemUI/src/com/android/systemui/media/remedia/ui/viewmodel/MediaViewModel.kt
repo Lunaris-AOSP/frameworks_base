@@ -34,6 +34,7 @@ import com.android.systemui.common.shared.model.ContentDescription
 import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.lifecycle.ExclusiveActivatable
 import com.android.systemui.lifecycle.Hydrator
+import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 import com.android.systemui.media.remedia.domain.interactor.MediaInteractor
 import com.android.systemui.media.remedia.domain.model.MediaActionModel
 import com.android.systemui.media.remedia.shared.model.MediaColorScheme
@@ -49,6 +50,7 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToLong
 import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.coroutines.flow.map
 
 /** Models UI state for a media element. */
 class MediaViewModel
@@ -62,15 +64,17 @@ constructor(
     @Assisted private val carouselVisibility: MediaCarouselVisibility,
 ) : ExclusiveActivatable() {
     private val hydrator = Hydrator("MediaViewModel")
-    private val useWaveformSeekBar by
+    private val seekBarStyle by
         hydrator.hydratedStateOf(
-            traceName = "useWaveformSeekBar",
-            initialValue = false,
+            traceName = "seekBarStyle",
+            initialValue = MediaSeekBarStyle.DEFAULT,
             source =
-                systemSettingsRepository.boolSetting(
-                    Settings.System.MEDIA_WAVEFORM_SEEKBAR,
-                    defaultValue = false,
-                ),
+                systemSettingsRepository
+                    .intSetting(
+                        Settings.System.MEDIA_WAVEFORM_SEEKBAR,
+                        defaultValue = MediaSeekBarStyle.DEFAULT.value,
+                    )
+                    .map(MediaSeekBarStyle::fromValue),
         )
 
     /** Whether the user is actively moving the thumb of the seek bar. */
@@ -130,7 +134,9 @@ constructor(
                                     session.state != MediaSessionState.Paused &&
                                         !isCurrentSessionAndScrubbing,
                                 isScrubbing = isCurrentSessionAndScrubbing,
-                                useWaveform = useWaveformSeekBar,
+                                seekBarStyle = seekBarStyle,
+                                durationMs = session.durationMs,
+                                isPlaying = session.state == MediaSessionState.Playing,
                                 onScrubChange = { progress ->
                                     check(selectedCardIndex == sessionIndex) {
                                         "Can't seek on a card that's not the selected card!"

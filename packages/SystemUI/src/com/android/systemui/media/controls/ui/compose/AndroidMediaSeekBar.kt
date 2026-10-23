@@ -34,27 +34,31 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.viewinterop.AndroidView
+import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 import com.android.systemui.media.controls.ui.drawable.SquigglyProgress
+import com.android.systemui.media.controls.ui.view.GlowingSeekBar
 import com.android.systemui.media.controls.ui.view.WaveformSeekBar
 import com.android.systemui.res.R
 import kotlin.math.roundToInt
 
-private const val SEEK_BAR_MAX = 10_000
 private val CANCELLED_DRAG = Offset(0f, Float.MAX_VALUE)
 
 @Composable
 @SuppressLint("ClickableViewAccessibility")
 internal fun AndroidMediaSeekBar(
     progress: Float,
+    durationMs: Long,
     onScrubChange: (Float) -> Unit,
     onScrubFinished: (Offset) -> Unit,
-    useWaveform: Boolean,
+    style: MediaSeekBarStyle,
     isPlaying: Boolean,
     enabled: Boolean,
     contentDescription: String,
     color: Color,
     backgroundColor: Color,
     modifier: Modifier = Modifier,
+    isScrubbing: Boolean = false,
+    animationsAllowed: Boolean = true,
 ) {
     val currentOnScrubChange by rememberUpdatedState(onScrubChange)
     val currentOnScrubFinished by rememberUpdatedState(onScrubFinished)
@@ -62,49 +66,53 @@ internal fun AndroidMediaSeekBar(
     val backgroundTint =
         remember(backgroundColor) { ColorStateList.valueOf(backgroundColor.toArgb()) }
 
-    key(useWaveform, enabled) {
+    key(style, enabled) {
         var isTrackingTouch by remember { mutableStateOf(false) }
         AndroidView(
             factory = { context ->
                 val seekBar =
-                    if (useWaveform) {
-                        WaveformSeekBar(context).apply {
-                            followsMediaColors = false
-                            setWaveformColor(tint.defaultColor)
-                            setThumbColor(tint.defaultColor)
-                        }
-                    } else {
-                        SeekBar(context).apply {
-                            thumb = context.getDrawable(R.drawable.media_seekbar_thumb)
-                            progressDrawable =
-                                SquigglyProgress().apply {
-                                    waveLength =
-                                        resources.getDimension(
-                                            R.dimen.qs_media_seekbar_progress_wavelength
-                                        )
-                                    lineAmplitude =
-                                        resources.getDimension(
-                                            R.dimen.qs_media_seekbar_progress_amplitude
-                                        )
-                                    phaseSpeed =
-                                        resources.getDimension(
-                                            R.dimen.qs_media_seekbar_progress_phase
-                                        )
-                                    strokeWidth =
-                                        resources.getDimension(
-                                            R.dimen.qs_media_seekbar_progress_stroke_width
-                                        )
-                                }
-                        }
+                    when (style) {
+                        MediaSeekBarStyle.GLOWING -> GlowingSeekBar(context)
+                        MediaSeekBarStyle.WAVEFORM ->
+                            WaveformSeekBar(context).apply {
+                                followsMediaColors = false
+                                setWaveformColor(tint.defaultColor)
+                                setThumbColor(tint.defaultColor)
+                            }
+                        MediaSeekBarStyle.DEFAULT ->
+                            SeekBar(context).apply {
+                                thumb = context.getDrawable(R.drawable.media_seekbar_thumb)
+                                progressDrawable =
+                                    SquigglyProgress().apply {
+                                        waveLength =
+                                            resources.getDimension(
+                                                R.dimen.qs_media_seekbar_progress_wavelength
+                                            )
+                                        lineAmplitude =
+                                            resources.getDimension(
+                                                R.dimen.qs_media_seekbar_progress_amplitude
+                                            )
+                                        phaseSpeed =
+                                            resources.getDimension(
+                                                R.dimen.qs_media_seekbar_progress_phase
+                                            )
+                                        strokeWidth =
+                                            resources.getDimension(
+                                                R.dimen.qs_media_seekbar_progress_stroke_width
+                                            )
+                                    }
+                            }
                     }
                 var start = Offset.Zero
                 var delta = Offset.Zero
                 seekBar.apply {
-                    max = SEEK_BAR_MAX
+                    max = durationMs.coerceIn(1L, Int.MAX_VALUE.toLong()).toInt()
                     layoutDirection = View.LAYOUT_DIRECTION_LTR
                     splitTrack = false
                     setPadding(0, 0, 0, 0)
-                    thumbOffset = if (useWaveform) 0 else (thumb?.intrinsicWidth ?: 0) / 2
+                    thumbOffset =
+                        if (style == MediaSeekBarStyle.DEFAULT) (thumb?.intrinsicWidth ?: 0) / 2
+                        else 0
                     setOnTouchListener { view, event ->
                         val position = Offset(event.x, event.y)
                         when (event.actionMasked) {
@@ -150,8 +158,12 @@ internal fun AndroidMediaSeekBar(
                 }
             },
             update = { seekBar ->
+                seekBar.max = durationMs.coerceIn(1L, Int.MAX_VALUE.toLong()).toInt()
                 if (!isTrackingTouch) {
-                    seekBar.progress = (progress.coerceIn(0f, 1f) * SEEK_BAR_MAX).roundToInt()
+                    seekBar.progress =
+                        (progress.coerceIn(0f, 1f) * seekBar.max)
+                            .roundToInt()
+                            .coerceIn(0, seekBar.max)
                 }
                 seekBar.isEnabled = enabled
                 seekBar.contentDescription = contentDescription
@@ -164,7 +176,12 @@ internal fun AndroidMediaSeekBar(
                     }
                 }
                 seekBar.progressBackgroundTintList = backgroundTint
-                val animate = isPlaying && !isTrackingTouch
+                val scrubbing = isScrubbing || isTrackingTouch
+                val animate = isPlaying && !scrubbing && animationsAllowed
+                (seekBar as? GlowingSeekBar)?.apply {
+                    this.isScrubbing = scrubbing
+                    setPlaybackState(isPlaying, animate = animationsAllowed)
+                }
                 (seekBar.progressDrawable as? SquigglyProgress)?.apply { this.animate = animate }
                 (seekBar as? WaveformSeekBar)?.apply {
                     if (animate) startWaveAnimation() else stopWaveAnimation()
@@ -175,6 +192,7 @@ internal fun AndroidMediaSeekBar(
                 seekBar.setOnSeekBarChangeListener(null)
                 (seekBar.progressDrawable as? SquigglyProgress)?.animate = false
                 (seekBar as? WaveformSeekBar)?.stopWaveAnimation()
+                (seekBar as? GlowingSeekBar)?.setPlaybackState(false, animate = false)
                 if (isTrackingTouch) {
                     seekBar.parent?.requestDisallowInterceptTouchEvent(false)
                     currentOnScrubFinished(CANCELLED_DRAG)

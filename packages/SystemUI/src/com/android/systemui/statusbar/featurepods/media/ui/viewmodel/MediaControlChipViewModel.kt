@@ -21,6 +21,7 @@ import com.android.systemui.common.shared.model.ContentDescription
 import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.lifecycle.ExclusiveActivatable
 import com.android.systemui.lifecycle.Hydrator
+import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 import com.android.systemui.statusbar.featurepods.media.domain.interactor.MediaControlChipInteractor
 import com.android.systemui.statusbar.featurepods.media.shared.model.MediaControlChipModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.ChipIcon
@@ -58,9 +59,9 @@ constructor(
             source =
                 combine(
                     mediaControlChipInteractor.mediaControlChipModel,
-                    mediaControlChipInteractor.mediaUseWaveform,
-                ) { model, useWaveform ->
-                    toPopupChipModel(model, useWaveform)
+                    mediaControlChipInteractor.mediaSeekBarStyle,
+                ) { model, seekBarStyle ->
+                    toPopupChipModel(model, seekBarStyle)
                 },
         )
 
@@ -68,7 +69,7 @@ constructor(
         hydrator.activate()
     }
 
-    private fun toPopupChipModel(model: MediaControlChipModel?, useWaveform: Boolean): PopupChipModel {
+    private fun toPopupChipModel(model: MediaControlChipModel?, seekBarStyle: MediaSeekBarStyle): PopupChipModel {
         if (model == null || model.songName.isNullOrEmpty()) {
             return PopupChipModel.Hidden(PopupChipId.MediaControl)
         }
@@ -87,7 +88,7 @@ constructor(
             chipText = normalizeSongTitle(model.songName.toString(), model.artistName?.toString()),
             colors = ColorsModel.DynamicIsland,
             hoverBehavior = createHoverBehavior(model),
-            popupContent = PopupContentModel.Media(model, useWaveform),
+            popupContent = PopupContentModel.Media(model, seekBarStyle),
         )
     }
 

@@ -158,6 +158,7 @@ import com.android.systemui.common.ui.compose.singleton
 import com.android.systemui.communal.ui.compose.extensions.detectLongPressGesture
 import com.android.systemui.compose.modifiers.sysuiResTag
 import com.android.systemui.lifecycle.rememberViewModel
+import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 import com.android.systemui.media.controls.ui.compose.AndroidMediaSeekBar
 import com.android.systemui.media.remedia.shared.model.MediaCardActionButtonLayout
 import com.android.systemui.media.remedia.shared.model.MediaColorScheme
@@ -882,20 +883,22 @@ private fun ContentScope.Navigation(
                     // To allow the seek bar slider to fade in and out, it's tagged as an element.
                     Element(key = Media.Elements.SeekBarSlider, modifier = Modifier.weight(1f)) {
                         val currentNavigation by rememberUpdatedState(viewModel)
-                        DisposableEffect(viewModel.useWaveform) {
+                        DisposableEffect(viewModel.seekBarStyle) {
                             onDispose {
                                 if (currentNavigation.isScrubbing) {
                                     currentNavigation.onScrubFinished(Offset(0f, Float.MAX_VALUE))
                                 }
                             }
                         }
-                        if (viewModel.useWaveform) {
+                        if (viewModel.seekBarStyle != MediaSeekBarStyle.DEFAULT) {
                             AndroidMediaSeekBar(
                                 progress = viewModel.progress,
+                                durationMs = viewModel.durationMs,
                                 onScrubChange = viewModel.onScrubChange,
                                 onScrubFinished = viewModel.onScrubFinished,
-                                useWaveform = true,
-                                isPlaying = viewModel.isSquiggly && !viewModel.isScrubbing,
+                                style = viewModel.seekBarStyle,
+                                isPlaying = viewModel.isPlaying,
+                                isScrubbing = viewModel.isScrubbing,
                                 enabled = true,
                                 contentDescription = viewModel.contentDescription,
                                 color = colors.activeTrackColor,

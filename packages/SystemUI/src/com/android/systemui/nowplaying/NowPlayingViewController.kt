@@ -255,7 +255,7 @@ constructor(
             lyricsMode = settings.useLyricsMode
             updateTextSize(settings.trackTextSize, settings.artistTextSize)
             NowPlayingOverlayState.update {
-                copy(useWaveformSeekBar = settings.useWaveformSeekBar)
+                copy(seekBarStyle = settings.seekBarStyle)
             }
         }
         
@@ -349,7 +349,7 @@ constructor(
                 artist = currentArtist,
                 packageName = currentPackageName,
                 albumArt = albumArt,
-                useWaveformSeekBar = currentSettings.useWaveformSeekBar,
+                seekBarStyle = currentSettings.seekBarStyle,
             )
         }
         

@@ -17,7 +17,6 @@
 package com.android.systemui.media.controls.ui.view
 
 import android.graphics.Typeface
-import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -35,6 +34,7 @@ import com.android.systemui.FontStyles.GSF_HEADLINE_SMALL
 import com.android.systemui.FontStyles.GSF_LABEL_MEDIUM
 import com.android.systemui.FontStyles.GSF_TITLE_MEDIUM
 import com.android.systemui.FontStyles.GSF_TITLE_MEDIUM_EMPHASIZED
+import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 import com.android.systemui.res.R
 import com.android.systemui.surfaceeffects.loadingeffect.LoadingEffectView
 import com.android.systemui.surfaceeffects.ripple.MultiRippleView
@@ -102,63 +102,50 @@ class MediaViewHolder constructor(itemView: View) {
     val pageRight = itemView.requireViewById<ImageButton>(R.id.page_right)
     
     init {
-        replaceSeekBarIfNeeded()
+        refreshSeekBarStyle()
     }
 
-    private fun replaceSeekBarIfNeeded() {
-        val waveformEnabled = Settings.System.getInt(
-            player.context.contentResolver,
-            Settings.System.MEDIA_WAVEFORM_SEEKBAR,
-            0
-        ) == 1
-
-        if (waveformEnabled && seekBar !is WaveformSeekBar) {
-            val parent = seekBar.parent as ViewGroup
-            val layoutParams = seekBar.layoutParams
-            val index = parent.indexOfChild(seekBar)
-            
-            val oldProgress = seekBar.progress
-            val oldMax = seekBar.max
-            val oldEnabled = seekBar.isEnabled
-            val oldId = seekBar.id
-            
-            parent.removeView(seekBar)
-            
-            val waveformSeekBar = WaveformSeekBar(player.context).apply {
-                id = oldId
-                this.layoutParams = layoutParams
-                progress = oldProgress
-                max = oldMax
-                isEnabled = oldEnabled
-                layoutDirection = View.LAYOUT_DIRECTION_LTR
-            }
-            
-            parent.addView(waveformSeekBar, index)
-            seekBar = waveformSeekBar
-        } else if (!waveformEnabled && seekBar is WaveformSeekBar) {
-            val parent = seekBar.parent as ViewGroup
-            val layoutParams = seekBar.layoutParams
-            val index = parent.indexOfChild(seekBar)
-            
-            val oldProgress = seekBar.progress
-            val oldMax = seekBar.max
-            val oldEnabled = seekBar.isEnabled
-            val oldId = seekBar.id
-            
-            parent.removeView(seekBar)
-            
-            val defaultSeekBar = SeekBar(player.context).apply {
-                id = oldId
-                this.layoutParams = layoutParams
-                progress = oldProgress
-                max = oldMax
-                isEnabled = oldEnabled
-                layoutDirection = View.LAYOUT_DIRECTION_LTR
-            }
-            
-            parent.addView(defaultSeekBar, index)
-            seekBar = defaultSeekBar
+    fun refreshSeekBarStyle(): Boolean {
+        val style = MediaSeekBarStyle.read(player.context)
+        val currentStyle = when (seekBar) {
+            is WaveformSeekBar -> MediaSeekBarStyle.WAVEFORM
+            is GlowingSeekBar -> MediaSeekBarStyle.GLOWING
+            else -> MediaSeekBarStyle.DEFAULT
         }
+        if (currentStyle == style) return false
+        val oldBar = seekBar
+        val parent = oldBar.parent as ViewGroup
+        val index = parent.indexOfChild(oldBar)
+        val replacement = when (style) {
+            MediaSeekBarStyle.WAVEFORM -> WaveformSeekBar(player.context)
+            MediaSeekBarStyle.GLOWING -> GlowingSeekBar(player.context)
+            MediaSeekBarStyle.DEFAULT -> SeekBar(player.context, null, 0, R.style.MediaPlayer_ProgressBar)
+        }.apply {
+            id = oldBar.id
+            layoutParams = oldBar.layoutParams
+            max = oldBar.max
+            progress = oldBar.progress
+            isEnabled = oldBar.isEnabled
+            visibility = oldBar.visibility
+            contentDescription = oldBar.contentDescription
+            maxHeight = oldBar.maxHeight
+            setPadding(oldBar.paddingLeft, oldBar.paddingTop, oldBar.paddingRight, oldBar.paddingBottom)
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
+            progressTintList = oldBar.progressTintList
+            progressBackgroundTintList = oldBar.progressBackgroundTintList
+            thumbTintList = oldBar.thumbTintList
+            if (this is WaveformSeekBar) {
+                progressTintList?.defaultColor?.let { setWaveformColor(it) }
+                thumbTintList?.defaultColor?.let { setThumbColor(it) }
+            }
+        }
+        oldBar.setOnSeekBarChangeListener(null)
+        oldBar.setOnTouchListener(null)
+        if (oldBar.isPressed) parent.requestDisallowInterceptTouchEvent(false)
+        parent.removeView(oldBar)
+        parent.addView(replacement, index)
+        seekBar = replacement
+        return true
     }
 
     fun getAction(id: Int): ImageButton {

@@ -3,6 +3,7 @@ package com.android.systemui.axdynamicbar.ui
 import com.android.systemui.animation.Expandable
 import com.android.systemui.axdynamicbar.domain.AxDynamicBarInteractor
 import com.android.systemui.islandevents.model.IslandEvent
+import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 import com.android.systemui.statusbar.chips.ui.model.OngoingActivityChipModel
 import com.android.systemui.biometrics.AuthController
 import com.android.systemui.biometrics.domain.interactor.UdfpsOverlayInteractor
@@ -98,7 +99,7 @@ constructor(
             .map { "media" !in it }
             .distinctUntilChanged()
             .stateIn(applicationScope, SharingStarted.Eagerly, true)
-    val mediaUseWaveform: StateFlow<Boolean> = interactor.mediaUseWaveform
+    val mediaSeekBarStyle: StateFlow<MediaSeekBarStyle> = interactor.mediaSeekBarStyle
     val chipStyle: StateFlow<Int> = interactor.settings.chipStyle
 
     val keyguardBatteryInfo: StateFlow<KeyguardBatteryInfo> =

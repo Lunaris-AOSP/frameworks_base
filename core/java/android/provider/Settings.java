@@ -7955,6 +7955,7 @@ public final class Settings {
         public static final String SCREEN_OFF_ANIMATION = "screen_off_animation";
 
         /**
+         * Media seekbar style: 0 for default, 1 for waveform, 2 for glowing.
          * @hide
          */
         public static final String MEDIA_WAVEFORM_SEEKBAR = "media_waveform_seekbar";

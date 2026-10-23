@@ -226,18 +226,18 @@ private fun IslandPopupContent(viewModel: PopupChipModel.Shown) {
     when (val popupContent = viewModel.popupContent) {
         is PopupContentModel.Media -> {
             val model = popupContent.model
-            val useWaveform = popupContent.useWaveform
+            val seekBarStyle = popupContent.seekBarStyle
             val hasLyrics = !model.lyrics.isNullOrBlank() || !model.syncedLyrics.isNullOrBlank()
             if (hasLyrics) {
                 androidx.compose.foundation.layout.Column(
                     horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
                     verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
                 ) {
-                    MediaControlPopup(model = model, useWaveform = useWaveform)
+                    MediaControlPopup(model = model, seekBarStyle = seekBarStyle)
                     LyricsCard(model = model)
                 }
             } else {
-                MediaControlPopup(model = model, useWaveform = useWaveform)
+                MediaControlPopup(model = model, seekBarStyle = seekBarStyle)
             }
         }
         is PopupContentModel.ScreenRecord -> ScreenRecordPopup(model = popupContent.model)

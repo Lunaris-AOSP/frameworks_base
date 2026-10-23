@@ -17,6 +17,7 @@
 package com.android.systemui.statusbar.featurepods.popups.ui.model
 
 import com.android.systemui.haptics.slider.compose.ui.SliderHapticsViewModel
+import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 import com.android.systemui.statusbar.featurepods.alarm.shared.model.AlarmPopupModel
 import com.android.systemui.statusbar.featurepods.flashlight.shared.model.FlashlightPopupModel
 import com.android.systemui.common.shared.model.Icon
@@ -107,7 +108,7 @@ sealed interface PopupContentModel {
 
     data class Media(
         val model: MediaControlChipModel,
-        val useWaveform: Boolean = false,
+        val seekBarStyle: MediaSeekBarStyle = MediaSeekBarStyle.DEFAULT,
     ) : PopupContentModel
 
     data class ScreenRecord(val model: ScreenRecordPopupModel) : PopupContentModel

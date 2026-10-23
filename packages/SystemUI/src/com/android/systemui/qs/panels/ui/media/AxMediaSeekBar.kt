@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 import com.android.systemui.media.controls.ui.compose.AndroidMediaSeekBar
 import com.android.systemui.media.remedia.domain.model.MediaSessionModel
 import com.android.systemui.media.remedia.shared.model.MediaSessionState
@@ -42,10 +43,11 @@ internal fun MediaSeekBar(
     interactive: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val height = if (dense) 20.dp else 32.dp
     val isShadeInteracting by viewModel.isShadeInteracting.collectAsStateWithLifecycle()
-    val useWaveform by
-        viewModel.useWaveformSeekBar.collectAsStateWithLifecycle(initialValue = false)
+    val seekBarStyle by
+        viewModel.seekBarStyle.collectAsStateWithLifecycle(initialValue = MediaSeekBarStyle.DEFAULT)
+    val height =
+        if (seekBarStyle == MediaSeekBarStyle.GLOWING) 34.dp else if (dense) 20.dp else 32.dp
     val progress = session?.let(viewModel::progress) ?: 0f
     val seekDescription =
         session
@@ -61,10 +63,12 @@ internal fun MediaSeekBar(
     key(session?.key) {
         AndroidMediaSeekBar(
             progress = progress,
+            durationMs = session?.durationMs ?: 0L,
             onScrubChange = { value -> session?.let { viewModel.onScrubChange(it, value) } },
             onScrubFinished = { delta -> session?.let { viewModel.onScrubFinished(it, delta) } },
-            useWaveform = useWaveform,
-            isPlaying = session?.state == MediaSessionState.Playing && !isShadeInteracting,
+            style = seekBarStyle,
+            isPlaying = session?.state == MediaSessionState.Playing,
+            animationsAllowed = !isShadeInteracting,
             enabled = interactive && session?.canBeScrubbed == true,
             contentDescription = seekDescription,
             color = colors.primary,

@@ -18,6 +18,7 @@ package com.android.systemui.media.remedia.ui.viewmodel
 
 import androidx.annotation.FloatRange
 import androidx.compose.ui.geometry.Offset
+import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 
 /**
  * Models UI state for the navigation component of the UI (potentially containing the seek bar and
@@ -62,7 +63,9 @@ sealed interface MediaNavigationViewModel {
         val onScrubFinished: (delta: Offset) -> Unit,
         /** Accessibility string to attach to the seekbar UI element. */
         val contentDescription: String,
-        val useWaveform: Boolean = false,
+        val seekBarStyle: MediaSeekBarStyle = MediaSeekBarStyle.DEFAULT,
+        val durationMs: Long = 0L,
+        val isPlaying: Boolean = isSquiggly,
     ) : MediaNavigationViewModel
 
     /** The seek bar should be hidden. */

@@ -111,6 +111,8 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.android.compose.theme.PlatformTheme
 import com.android.systemui.media.controls.ui.drawable.SquigglyProgress
+import com.android.systemui.media.controls.ui.composable.StyledMediaSeekBar
+import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 import com.android.systemui.media.controls.ui.view.WaveformSeekBar
 import com.android.systemui.res.R
 import kotlinx.coroutines.delay
@@ -688,8 +690,12 @@ private fun NowPlayingSeekBar(
     var isScrubbing by remember { mutableStateOf(false) }
     val onSeekRef = rememberUpdatedState(onSeekTo)
 
+    DisposableEffect(state.seekBarStyle) {
+        onDispose { isScrubbing = false }
+    }
+
     LaunchedEffect(
-        state.positionUpdateTime, durationMs, state.isPlaying
+        state.positionUpdateTime, durationMs, state.isPlaying, isScrubbing
     ) {
         if (isScrubbing) return@LaunchedEffect
         val correctedStartMs: Long = if (state.isPlaying && durationMs > 0L
@@ -737,7 +743,23 @@ private fun NowPlayingSeekBar(
             }
         }
 
-        if (state.useWaveformSeekBar) {
+        if (state.seekBarStyle == MediaSeekBarStyle.GLOWING) {
+            StyledMediaSeekBar(
+                style = state.seekBarStyle,
+                positionMs = progressMs,
+                durationMs = durationMs,
+                isPlaying = state.isPlaying,
+                isScrubbing = isScrubbing,
+                interactive = true,
+                onScrubStart = { isScrubbing = true },
+                onScrubStop = { isScrubbing = false },
+                onSeek = { position ->
+                    displayFraction = if (durationMs > 0L) position.toFloat() / durationMs else 0f
+                    onSeekRef.value(position)
+                },
+                modifier = Modifier.fillMaxWidth().height(34.dp),
+            )
+        } else if (state.seekBarStyle == MediaSeekBarStyle.WAVEFORM) {
             NowPlayingWaveformBar(
                 displayFraction = displayFraction,
                 durationMs = durationMs,

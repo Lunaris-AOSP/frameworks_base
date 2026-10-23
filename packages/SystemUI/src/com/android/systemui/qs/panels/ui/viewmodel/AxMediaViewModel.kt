@@ -33,6 +33,7 @@ import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInteractor
 import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.media.controls.domain.pipeline.interactor.MediaCarouselInteractor
+import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 import com.android.systemui.media.remedia.domain.interactor.MediaInteractor
 import com.android.systemui.media.remedia.domain.model.MediaActionModel
 import com.android.systemui.media.remedia.domain.model.MediaOutputDeviceModel
@@ -50,6 +51,7 @@ import kotlin.math.roundToLong
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 
 class AxMediaViewModel
 @Inject
@@ -84,11 +86,13 @@ constructor(
     val currentKeyguardState: StateFlow<KeyguardState> =
         keyguardTransitionInteractor.currentKeyguardState
     val lastMediaPackage = mediaHistoryRepository.lastMediaPackage
-    val useWaveformSeekBar =
-        systemSettingsRepository.boolSetting(
-            Settings.System.MEDIA_WAVEFORM_SEEKBAR,
-            defaultValue = false,
-        )
+    val seekBarStyle =
+        systemSettingsRepository
+            .intSetting(
+                Settings.System.MEDIA_WAVEFORM_SEEKBAR,
+                defaultValue = MediaSeekBarStyle.DEFAULT.value,
+            )
+            .map(MediaSeekBarStyle::fromValue)
 
     init {
         mediaHistoryRepository.startListening()
