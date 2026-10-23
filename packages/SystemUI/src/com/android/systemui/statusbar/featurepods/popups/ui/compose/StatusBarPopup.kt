@@ -66,6 +66,7 @@ import com.android.systemui.statusbar.featurepods.media.ui.compose.LyricsCard
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentModel
+import com.android.systemui.statusbar.featurepods.popups.ui.model.SystemEventKind
 import com.android.systemui.statusbar.featurepods.screenrecord.ui.compose.ScreenRecordPopup
 import com.android.systemui.statusbar.featurepods.sharescreen.ui.compose.ShareScreenPrivacyIndicatorPopup
 import com.android.systemui.statusbar.featurepods.stopwatch.ui.compose.StopwatchPopup
@@ -132,6 +133,9 @@ fun StatusBarPopup(
             topInsetPx = topInsetPx,
             onDismissRequest = { currentHidePopup() },
             onHidden = onHidden,
+            fastEnter =
+                (viewModel.popupContent as? PopupContentModel.SystemEvent)?.kind ==
+                    SystemEventKind.Unlock,
         ) {
             val pagerScope = rememberCoroutineScope()
             val pageFollow = remember { Animatable(0f) }

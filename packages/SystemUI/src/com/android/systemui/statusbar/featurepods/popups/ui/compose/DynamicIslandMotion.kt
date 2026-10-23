@@ -57,6 +57,7 @@ internal object DynamicIslandMotion {
     val OpenWidth = springFor(0.40f, 0.76f, 0.4f)
     val OpenHeight = springFor(0.48f, 0.78f, 0.4f)
     val OpenPosition = springFor(0.46f, 0.74f, 0.4f)
+    val FastOpen = springFor(0.24f, 0.85f, 0.4f)
     val CloseWidth = springFor(0.30f, 0.92f, 0.4f)
     val CloseHeight = springFor(0.34f, 0.90f, 0.4f)
     val ClosePosition = springFor(0.40f, 0.90f, 0.4f)
@@ -67,6 +68,7 @@ internal object DynamicIslandMotion {
 
     const val ContentDelayMillis = 230
     const val ContentEnterMillis = 150
+    const val FastContentEnterMillis = 120
     const val ContentExitMillis = 80
     const val PillContentDelayMillis = 330
     const val PillRegrowDelayMillis = 420

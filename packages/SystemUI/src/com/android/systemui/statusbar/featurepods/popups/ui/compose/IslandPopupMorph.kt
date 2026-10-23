@@ -146,6 +146,7 @@ internal fun IslandPopupMorph(
     topInsetPx: Int,
     onDismissRequest: () -> Unit,
     onHidden: () -> Unit,
+    fastEnter: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val density = LocalDensity.current
@@ -193,31 +194,47 @@ internal fun IslandPopupMorph(
         if (ready && motion == null) motion = IslandPopupGeometry(origin)
     }
 
-    LaunchedEffect(motion, isVisible, origin, destination) {
+    LaunchedEffect(motion, isVisible, origin, destination, fastEnter) {
         val geometry = motion ?: return@LaunchedEffect
         coroutineScope {
             launch {
                 geometry.width.animateTo(
                     if (isVisible) destination.width else origin.height * 1.6f,
-                    if (isVisible) DynamicIslandMotion.OpenWidth else DynamicIslandMotion.CloseWidth,
+                    when {
+                        !isVisible -> DynamicIslandMotion.CloseWidth
+                        fastEnter -> DynamicIslandMotion.FastOpen
+                        else -> DynamicIslandMotion.OpenWidth
+                    },
                 )
             }
             launch {
                 geometry.height.animateTo(
                     if (isVisible) destination.height else origin.height * 0.8f,
-                    if (isVisible) DynamicIslandMotion.OpenHeight else DynamicIslandMotion.CloseHeight,
+                    when {
+                        !isVisible -> DynamicIslandMotion.CloseHeight
+                        fastEnter -> DynamicIslandMotion.FastOpen
+                        else -> DynamicIslandMotion.OpenHeight
+                    },
                 )
             }
             launch {
                 geometry.centerX.animateTo(
                     if (isVisible) destination.center.x else origin.center.x,
-                    if (isVisible) DynamicIslandMotion.OpenPosition else DynamicIslandMotion.ClosePosition,
+                    when {
+                        !isVisible -> DynamicIslandMotion.ClosePosition
+                        fastEnter -> DynamicIslandMotion.FastOpen
+                        else -> DynamicIslandMotion.OpenPosition
+                    },
                 )
             }
             launch {
                 geometry.centerY.animateTo(
                     if (isVisible) destination.center.y else origin.center.y,
-                    if (isVisible) DynamicIslandMotion.OpenPosition else DynamicIslandMotion.ClosePosition,
+                    when {
+                        !isVisible -> DynamicIslandMotion.ClosePosition
+                        fastEnter -> DynamicIslandMotion.FastOpen
+                        else -> DynamicIslandMotion.OpenPosition
+                    },
                 )
             }
         }
@@ -251,7 +268,7 @@ internal fun IslandPopupMorph(
         }
     }
 
-    LaunchedEffect(isVisible, motion, screenOffset != null) {
+    LaunchedEffect(isVisible, motion, screenOffset != null, fastEnter) {
         val geometry = motion
         if (geometry == null) {
             if (!isVisible && screenOffset != null && !ready) currentOnHidden()
@@ -260,20 +277,31 @@ internal fun IslandPopupMorph(
         if (isVisible) {
             coroutineScope {
                 launch {
-                    contentFade.animateTo(1f, tween(
-                        DynamicIslandMotion.ContentEnterMillis,
-                        delayMillis = if (contentFade.value == 0f)
-                            DynamicIslandMotion.ContentDelayMillis else 0,
-                        easing = LinearEasing,
-                    ))
+                    contentFade.animateTo(
+                        1f,
+                        tween(
+                            if (fastEnter) DynamicIslandMotion.FastContentEnterMillis
+                            else DynamicIslandMotion.ContentEnterMillis,
+                            delayMillis =
+                                if (!fastEnter && contentFade.value == 0f)
+                                    DynamicIslandMotion.ContentDelayMillis
+                                else 0,
+                            easing = LinearEasing,
+                        ),
+                    )
                 }
                 launch {
-                    revealMillis.animateTo(260f, tween(
-                        260,
-                        delayMillis = if (revealMillis.value == 0f)
-                            DynamicIslandMotion.ContentDelayMillis else 0,
-                        easing = LinearEasing,
-                    ))
+                    revealMillis.animateTo(
+                        260f,
+                        tween(
+                            if (fastEnter) DynamicIslandMotion.FastContentEnterMillis else 260,
+                            delayMillis =
+                                if (!fastEnter && revealMillis.value == 0f)
+                                    DynamicIslandMotion.ContentDelayMillis
+                                else 0,
+                            easing = LinearEasing,
+                        ),
+                    )
                 }
             }
         } else {
@@ -292,8 +320,10 @@ internal fun IslandPopupMorph(
     val frame = geometry?.bounds ?: Rect.Zero
     val expansion = ((frame.height - origin.height) /
         (destination.height - origin.height).coerceAtLeast(1f)).coerceIn(0f, 1f)
-    val bodyAlpha = contentFade.value *
-        if (isVisible) DynamicIslandMotion.contentReveal(expansion) else 1f
+    // Unlock feedback should appear during expansion, without waiting for the card to settle.
+    val bodyAlpha =
+        contentFade.value *
+            if (isVisible && !fastEnter) DynamicIslandMotion.contentReveal(expansion) else 1f
     val currentBodyAlpha by rememberUpdatedState(bodyAlpha)
     val currentBounds by rememberUpdatedState(frame)
     val surfaceReveal = ((expansion - 0.82f) / 0.18f).coerceIn(0f, 1f)
