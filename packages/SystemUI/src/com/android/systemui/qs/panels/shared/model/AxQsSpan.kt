@@ -359,7 +359,16 @@ enum class AxQsPanelMode(val settingValue: Int) {
 enum class AxQsTileStyle(val settingValue: Int) {
     PILL(0),
     ROUNDED_SQUARE(1),
-    DYNAMIC(2);
+    DYNAMIC(2),
+    DYNAMIC_INVERTED(3);
+
+    fun usesPillShape(isActive: Boolean): Boolean =
+        when (this) {
+            PILL -> true
+            ROUNDED_SQUARE -> false
+            DYNAMIC -> isActive
+            DYNAMIC_INVERTED -> !isActive
+        }
 
     companion object {
         fun fromSetting(value: Int): AxQsTileStyle =

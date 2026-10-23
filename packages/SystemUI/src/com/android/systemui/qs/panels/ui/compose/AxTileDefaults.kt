@@ -117,12 +117,7 @@ object AxTileDefaults {
 }
 
 private fun usesPillShape(span: AxQsSpan, style: AxQsTileStyle, state: Int): Boolean =
-    span.rows == 1 &&
-        when (style) {
-            AxQsTileStyle.PILL -> true
-            AxQsTileStyle.ROUNDED_SQUARE -> false
-            AxQsTileStyle.DYNAMIC -> state == STATE_ACTIVE
-        }
+    span.rows == 1 && style.usesPillShape(isActive = state == STATE_ACTIVE)
 
 internal fun axQsTileShape(
     span: AxQsSpan,

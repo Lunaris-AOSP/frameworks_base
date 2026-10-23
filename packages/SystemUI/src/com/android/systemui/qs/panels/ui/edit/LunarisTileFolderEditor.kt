@@ -56,7 +56,6 @@ import com.android.compose.theme.LocalAndroidColorScheme
 import com.android.systemui.animation.Expandable as SystemUiExpandable
 import com.android.systemui.common.ui.compose.Icon as TileIconView
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
-import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolder
 import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolderController
 import com.android.systemui.qs.panels.ui.compose.LocalAxQsTileStyle
@@ -91,7 +90,9 @@ internal fun LunarisEditTileFolder(
                         Modifier.fillMaxSize()
                             .background(
                                 LocalAndroidColorScheme.current.surfaceEffect2,
-                                RoundedCornerShape(if (style == AxQsTileStyle.PILL) 50 else 25),
+                                RoundedCornerShape(
+                                    if (style.usesPillShape(isActive = false)) 50 else 25
+                                ),
                             ),
                         contentAlignment = Alignment.Center,
                     ) {

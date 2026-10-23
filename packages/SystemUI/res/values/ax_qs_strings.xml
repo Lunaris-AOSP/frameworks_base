@@ -25,6 +25,7 @@
     <string name="ax_qs_settings_shape_pill">Pill</string>
     <string name="ax_qs_settings_shape_rounded">Rounded square</string>
     <string name="ax_qs_settings_shape_dynamic">Dynamic (pill when active)</string>
+    <string name="ax_qs_settings_shape_dynamic_inverted">Dynamic invert (pill when inactive)</string>
     <string name="ax_qs_settings_percentages">Show slider percentages</string>
     <string name="ax_qs_settings_percentages_summary">Show values on brightness, volume, and flashlight sliders</string>
     <string name="ax_qs_settings_spacing">Spacing</string>

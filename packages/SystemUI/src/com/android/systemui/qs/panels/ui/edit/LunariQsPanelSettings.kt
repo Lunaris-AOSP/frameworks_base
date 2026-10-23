@@ -236,6 +236,8 @@ fun LunariQsPanelSettings(
                                     stringResource(R.string.ax_qs_settings_shape_rounded),
                                 AxQsTileStyle.DYNAMIC.settingValue to
                                     stringResource(R.string.ax_qs_settings_shape_dynamic),
+                                AxQsTileStyle.DYNAMIC_INVERTED.settingValue to
+                                    stringResource(R.string.ax_qs_settings_shape_dynamic_inverted),
                             ),
                         onSelect = { viewModel.setTileStyle(AxQsTileStyle.fromSetting(it)) },
                     )

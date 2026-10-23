@@ -357,12 +357,7 @@ private fun ContentScope.LunarisFolderLiveTile(tile: TileViewModel, preview: Boo
             val state by tile.state.collectAsStateWithLifecycle(tile.currentState)
             val corner by
                 animateIntAsState(
-                    if (
-                        style == AxQsTileStyle.PILL ||
-                            (style == AxQsTileStyle.DYNAMIC && state.state == STATE_ACTIVE)
-                    )
-                        50
-                    else 25,
+                    if (style.usesPillShape(isActive = state.state == STATE_ACTIVE)) 50 else 25,
                     label = "LunarisFolderTileShape",
                 )
             RoundedCornerShape(percent = corner)
@@ -407,13 +402,7 @@ private fun LunarisFolderSmallTile(tile: TileViewModel) {
                 ?: TileIcon.Resource(R.drawable.ic_error_outline, null)
         }
     val style = LocalAxQsTileStyle.current
-    val corner =
-        if (
-            style == AxQsTileStyle.PILL ||
-                (style == AxQsTileStyle.DYNAMIC && state.state == STATE_ACTIVE)
-        )
-            50
-        else 25
+    val corner = if (style.usesPillShape(isActive = state.state == STATE_ACTIVE)) 50 else 25
     Box(
         Modifier.fillMaxSize()
             .clearAndSetSemantics {}
@@ -456,6 +445,8 @@ internal fun LunarisFolderShapePicker(
             AxQsTileStyle.PILL to stringResource(R.string.ax_qs_settings_shape_pill),
             AxQsTileStyle.ROUNDED_SQUARE to stringResource(R.string.ax_qs_settings_shape_rounded),
             AxQsTileStyle.DYNAMIC to stringResource(R.string.ax_qs_settings_shape_dynamic),
+            AxQsTileStyle.DYNAMIC_INVERTED to
+                stringResource(R.string.ax_qs_settings_shape_dynamic_inverted),
         )
     Box {
         TextButton(onClick = { expanded = true }) {
