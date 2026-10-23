@@ -51,6 +51,8 @@ import org.lunaris.clockmaker.ClockDesign
 import org.lunaris.clockmaker.ClockDesignAppearance
 import org.lunaris.clockmaker.ClockDesignView
 import org.lunaris.clockmaker.ClockEffects
+import org.lunaris.clockmaker.ClockGlass
+import org.lunaris.clockmaker.ClockGlassController
 
 class ClockStyle @JvmOverloads constructor(
     context: Context,
@@ -90,6 +92,10 @@ class ClockStyle @JvmOverloads constructor(
 
     private var gradientEnabled = false
     private var hyperBlurEnabled = false
+    private var textGlassEnabled = false
+    private var textGlassIntensity = ClockGlass.DEFAULT_INTENSITY
+    private var textGlassLift = ClockGlass.DEFAULT_LIFT
+    private val textGlass = ClockGlassController(this)
     private var gradientColorStart = DEFAULT_GRADIENT_COLOR_START
     private var gradientColorEnd = DEFAULT_GRADIENT_COLOR_END
     private var gradientAnchorY = DEFAULT_GRADIENT_ANCHOR_Y
@@ -220,6 +226,9 @@ class ClockStyle @JvmOverloads constructor(
             CLOCK_TILT_Y_KEY,
             CLOCK_ROTATION_KEY,
             CLOCK_HYPER_BLUR_KEY,
+            ClockGlass.ENABLED_SETTING,
+            ClockGlass.INTENSITY_SETTING,
+            ClockGlass.LIFT_SETTING,
         )
         statusBarStateController.addCallback(statusBarStateListener)
         if (albumArtColorEnabled) {
@@ -357,6 +366,18 @@ class ClockStyle @JvmOverloads constructor(
             }
             CLOCK_GRADIENT_ENABLED_KEY -> {
                 gradientEnabled = TunerService.parseInteger(newValue, 0) != 0
+                applyClockColors()
+            }
+            ClockGlass.ENABLED_SETTING -> {
+                textGlassEnabled = TunerService.parseInteger(newValue, 0) != 0
+                applyClockColors()
+            }
+            ClockGlass.INTENSITY_SETTING -> {
+                textGlassIntensity = TunerService.parseInteger(newValue, ClockGlass.DEFAULT_INTENSITY).coerceIn(0, 100)
+                applyClockColors()
+            }
+            ClockGlass.LIFT_SETTING -> {
+                textGlassLift = TunerService.parseInteger(newValue, ClockGlass.DEFAULT_LIFT).coerceIn(0, 100)
                 applyClockColors()
             }
             CLOCK_HYPER_BLUR_KEY -> {
@@ -500,6 +521,7 @@ class ClockStyle @JvmOverloads constructor(
     }
 
     private fun updateClockView() {
+        textGlass.clear()
         removePendingLayoutListener()
         currentClockView?.let { (it.parent as? ViewGroup)?.removeView(it) }
         currentClockView = null
@@ -721,6 +743,16 @@ class ClockStyle @JvmOverloads constructor(
     }
 
     private fun applyClockColors() {
+        textGlass.beginUpdate()
+        textGlass.userId = ActivityManager.getCurrentUser()
+        try {
+            applyClockColorsToViews()
+        } finally {
+            textGlass.commit()
+        }
+    }
+
+    private fun applyClockColorsToViews() {
         (currentClockView as? ClockDesignView)?.let {
             it.setAppearance(ClockDesignAppearance(resolveClockColor(), gradientEnabled,
                 gradientColorStart, gradientColorEnd, gradientAnchorY, gradientRadius,
@@ -731,7 +763,8 @@ class ClockStyle @JvmOverloads constructor(
         applyHyperClockColors()
         if (styledTextViews.isEmpty()) return
         val whiteColor = context.getColor(android.R.color.white)
-        val useGradient = gradientEnabled && !isDozing
+        val useGlass = textGlassEnabled && !isDozing && clockStyle !in 93..102
+        val useGradient = gradientEnabled && !isDozing && !useGlass
         for (i in textClocks.indices) {
             val tc = textClocks[i]
             (tc.getTag(R.id.original_typeface) as? Typeface)?.let { tc.typeface = it }
@@ -741,6 +774,11 @@ class ClockStyle @JvmOverloads constructor(
                 isDozing -> {
                     clearGradientFromView(tc)
                     tc.setTextColor(whiteColor)
+                }
+                useGlass -> {
+                    clearGradientFromView(tc)
+                    tc.setTextColor(if (isWhiteOriginal) resolveClockColor() else originalColor)
+                    textGlass.add(tc, textGlassIntensity, textGlassLift)
                 }
                 !isWhiteOriginal -> {
                     clearGradientFromView(tc)
@@ -766,6 +804,11 @@ class ClockStyle @JvmOverloads constructor(
                 isDozing -> {
                     clearGradientFromView(tv)
                     tv.setTextColor(whiteColor)
+                }
+                useGlass -> {
+                    clearGradientFromView(tv)
+                    tv.setTextColor(if (isWhiteOriginal) resolveClockColor() else originalColor)
+                    textGlass.add(tv, textGlassIntensity, textGlassLift)
                 }
                 !isWhiteOriginal -> {
                     clearGradientFromView(tv)

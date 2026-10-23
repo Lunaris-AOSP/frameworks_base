@@ -140,6 +140,7 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
     var onQuickLookClick: ((QuickLookAction) -> Unit)? = null
         set(value) { field = value; refreshTime() }
     private val main = Handler(Looper.getMainLooper())
+    private val glass = ClockGlassController(this)
     private val quickLook = ClockQuickLook(context) { refreshTime() }
     private val selectionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val pendingFonts = mutableSetOf<String>()
@@ -194,6 +195,7 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
     }
 
     fun setDesign(value: ClockDesign) {
+        glass.clear()
         val rebuild = childCount != value.elements.size ||
             design.elements.map { it.id to it.kind } != value.elements.map { it.id to it.kind }
         design = value
@@ -226,6 +228,10 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
         scheduleTick()
     }
 
+    fun setGlassPreview(background: ClockGlass?, coordinateRoot: View) {
+        glass.setPreview(background, coordinateRoot)
+    }
+
     private fun scheduleTick() {
         main.removeCallbacks(tick)
         if (isAttachedToWindow && isShown && windowVisibility == VISIBLE &&
@@ -247,6 +253,7 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
     }
 
     private fun applyElements() {
+        glass.clear()
         design.elements.forEachIndexed { index, element ->
             val view = getChildAt(index)
             view.visibility = if (element.visible &&
@@ -359,6 +366,8 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
     }
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        glass.beginUpdate()
+        glass.userId = userId
         design.elements.forEachIndexed { index, element ->
             val child = getChildAt(index)
             val x = (element.x * width - child.measuredWidth / 2f).roundToInt()
@@ -370,7 +379,7 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
                 return@forEachIndexed
             }
             val inheritGradient = element.color == null && appearance.gradient
-            child.paint.shader = if (!appearance.dozing && (element.gradient || inheritGradient)) {
+            child.paint.shader = if (!appearance.dozing && !element.glass && (element.gradient || inheritGradient)) {
                 val start = if (element.gradient) element.gradientStart else appearance.gradientStart
                 val end = if (element.gradient) element.gradientEnd else appearance.gradientEnd
                 val center = if (element.gradient) child.height / 2f else height * appearance.gradientAnchor / 100f - y
@@ -382,7 +391,11 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
                 child.setShadowLayer((element.shadowSoftness * width / 360f).coerceAtLeast(0.01f),
                     0f, width / 180f, (element.shadowColor and 0xFFFFFF) or (alpha shl 24))
             } else child.setShadowLayer(0f, 0f, 0f, 0)
+            if (element.glass && !appearance.dozing) {
+                glass.add(child, element.blurIntensity, element.blurLift)
+            }
         }
+        glass.commit()
     }
 
     override fun dispatchDraw(canvas: Canvas) {

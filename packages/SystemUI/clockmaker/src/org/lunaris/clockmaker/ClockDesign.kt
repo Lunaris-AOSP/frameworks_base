@@ -50,6 +50,9 @@ data class ClockElement(
     val imageBorderWidth: Int = 0,
     val imageBorderColor: Int = Color.WHITE,
     val quickLookDateFallback: Boolean = true,
+    val glass: Boolean = false,
+    val blurIntensity: Int = ClockGlass.DEFAULT_INTENSITY,
+    val blurLift: Int = ClockGlass.DEFAULT_LIFT,
 ) {
     fun resizeImage(width: Int? = null, height: Int? = null): ClockElement {
         if (!imageAspectLocked) return copy(imageWidth = (width ?: imageWidth).coerceIn(16, 360),
@@ -75,6 +78,7 @@ data class ClockElement(
         .put("imageShape", imageShape)
         .put("imageBorderWidth", imageBorderWidth).put("imageBorderColor", imageBorderColor)
         .put("quickLookDateFallback", quickLookDateFallback)
+        .put("glass", glass).put("blurIntensity", blurIntensity).put("blurLift", blurLift)
 
     companion object {
         const val MIN_POSITION = -4f
@@ -130,6 +134,9 @@ data class ClockElement(
                 imageBorderWidth = j.optInt("imageBorderWidth", 0).coerceIn(0, 24),
                 imageBorderColor = j.optInt("imageBorderColor", Color.WHITE),
                 quickLookDateFallback = j.optBoolean("quickLookDateFallback", true),
+                glass = j.optBoolean("glass"),
+                blurIntensity = j.optInt("blurIntensity", ClockGlass.DEFAULT_INTENSITY).coerceIn(0, 100),
+                blurLift = j.optInt("blurLift", ClockGlass.DEFAULT_LIFT).coerceIn(0, 100),
             )
         }
     }
