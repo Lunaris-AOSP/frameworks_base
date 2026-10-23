@@ -1212,13 +1212,7 @@ internal fun PillEventText(
         is IslandEvent.Vpn -> MarqueeLabel(stringResource(R.string.ax_dynamic_bar_vpn_active), overrideColor ?: IndigoAccent, modifier)
         is IslandEvent.Clipboard ->
             MarqueeLabel(event.preview.ifEmpty { stringResource(R.string.ax_dynamic_bar_copied) }, overrideColor ?: IndigoAccent, modifier)
-        is IslandEvent.Call -> {
-            if (event.callStartTimeMs > 0L) {
-                CallTimerText(event, modifier, overrideColor)
-            } else {
-                NotifBellBadge(modifier, notifCount)
-            }
-        }
+        is IslandEvent.Call -> CallTimerText(event, modifier, overrideColor)
         is IslandEvent.Notification -> {
             val name = event.title
             if (name != null) {
@@ -1468,7 +1462,7 @@ private fun StopwatchText(event: IslandEvent.Stopwatch, modifier: Modifier, over
 @Composable
 private fun CallTimerText(event: IslandEvent.Call, modifier: Modifier, overrideColor: Color? = null) {
     val isActive = event.callType == "Phone:active"
-    if (isActive) {
+    if (isActive && event.callStartTimeMs > 0L) {
         var elapsedMs by remember(event.callStartTimeMs) {
             mutableLongStateOf((System.currentTimeMillis() - event.callStartTimeMs).coerceAtLeast(0L))
         }
@@ -1481,7 +1475,11 @@ private fun CallTimerText(event: IslandEvent.Call, modifier: Modifier, overrideC
         val color = overrideColor ?: GreenAccent
         Text(formatElapsedTime(elapsedMs), color = color, style = PillMono, modifier = modifier)
     } else {
-        MarqueeLabel(stringResource(R.string.ax_dynamic_bar_incoming_call), overrideColor ?: BlueAccent, modifier)
+        MarqueeLabel(
+            stringResource(if (isActive) R.string.ax_dynamic_bar_call else R.string.ax_dynamic_bar_incoming_call),
+            overrideColor ?: if (isActive) GreenAccent else BlueAccent,
+            modifier,
+        )
     }
 }
 

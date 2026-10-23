@@ -922,10 +922,7 @@ private fun KeyguardPrimaryText(event: IslandEvent, color: Color, modifier: Modi
             )
         }
         is IslandEvent.Alarm -> MarqueeText(event.label.ifEmpty { stringResource(R.string.ax_dynamic_bar_alarm) }, color, modifier)
-        is IslandEvent.Call -> {
-                if (event.callStartTimeMs > 0) CallTimerText(event, modifier, color)
-                else MarqueeText(event.callType ?: stringResource(R.string.ax_dynamic_bar_call), color, modifier)
-        }
+        is IslandEvent.Call -> CallTimerText(event, modifier, color)
         is IslandEvent.Torch -> MarqueeText(
             if (event.supportsLevel) "${(event.level.toFloat() / event.maxLevel * 100).toInt()}%"
             else stringResource(R.string.ax_dynamic_bar_flashlight),
@@ -1081,7 +1078,7 @@ private fun String.takeIfDistinctFrom(vararg others: String?): String? {
 @Composable
 private fun CallTimerText(event: IslandEvent.Call, modifier: Modifier, overrideColor: Color? = null) {
     val isActive = event.callType == "Phone:active"
-    if (isActive) {
+    if (isActive && event.callStartTimeMs > 0L) {
         var elapsedMs by remember(event.callStartTimeMs) {
             mutableLongStateOf((System.currentTimeMillis() - event.callStartTimeMs).coerceAtLeast(0L))
         }
@@ -1094,7 +1091,11 @@ private fun CallTimerText(event: IslandEvent.Call, modifier: Modifier, overrideC
         val color = overrideColor ?: GreenAccent
         Text(formatElapsedTime(elapsedMs), color = color, style = PillMono, modifier = modifier)
     } else {
-        MarqueeText(stringResource(R.string.ax_dynamic_bar_incoming_call), overrideColor ?: BlueAccent, modifier)
+        MarqueeText(
+            stringResource(if (isActive) R.string.ax_dynamic_bar_call else R.string.ax_dynamic_bar_incoming_call),
+            overrideColor ?: if (isActive) GreenAccent else BlueAccent,
+            modifier,
+        )
     }
 }
 

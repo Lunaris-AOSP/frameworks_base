@@ -320,6 +320,16 @@ constructor(
                 is IslandEvent.Call -> {
                     icon = event.callerPhoto ?: event.appIcon
                     iconRes = android.R.drawable.sym_action_call
+                    prominentText =
+                        context.getString(
+                            when {
+                                event.callType == "Phone:incoming" ->
+                                    R.string.dynamic_island_incoming_call
+                                event.callStartTimeMs > 0L ->
+                                    R.string.ongoing_call_content_description
+                                else -> R.string.dynamic_island_event_call
+                            }
+                        )
                     val extras = event.sbn.notification.extras
                     val answerIntent =
                         extras.getParcelable(
@@ -461,6 +471,10 @@ constructor(
                 .distinct()
                 .filter { it.isNotBlank() }
                 .joinToString(": ")
+        val callStartTimeMs =
+            (event as? IslandEvent.Call)
+                ?.takeIf { it.callType == "Phone:active" && it.callStartTimeMs > 0L }
+                ?.callStartTimeMs
         return PopupChipModel.Shown(
             chipId = PopupChipId.SystemEvent(event.id),
             sourcePackageName =
@@ -516,14 +530,11 @@ constructor(
                     is IslandEvent.Hotspot -> event.numDevices.toString()
                     else -> title
                 },
-            callStartTimeMs =
-                (event as? IslandEvent.Call)
-                    ?.takeIf { it.callType == "Phone:active" }
-                    ?.callStartTimeMs,
+            callStartTimeMs = callStartTimeMs,
             autoPopupRequest =
                 when (event) {
                     is IslandEvent.Call ->
-                        event.callStartTimeMs.takeIf { event.callType == "Phone:incoming" }
+                        event.createdAt.takeIf { event.callType == "Phone:incoming" }
                     is IslandEvent.BiometricUnlock -> event.createdAt
                     is IslandEvent.Notification -> event.createdAt
                     else -> null
@@ -543,10 +554,7 @@ constructor(
                     text = text,
                     actions = actions,
                     progress = progress?.coerceIn(0f, 1f)?.takeIf { bluetoothBatteries.isEmpty() },
-                    callStartTimeMs =
-                        (event as? IslandEvent.Call)
-                            ?.takeIf { it.callType == "Phone:active" }
-                            ?.callStartTimeMs,
+                    callStartTimeMs = callStartTimeMs,
                     timerEndTimeMs = timerEndTimeMs,
                     timerEndElapsedRealtimeMs = (event as? IslandEvent.Timer)?.endElapsedRealtimeMs,
                     timerRemainingMs = (event as? IslandEvent.Timer)?.remainingMs,

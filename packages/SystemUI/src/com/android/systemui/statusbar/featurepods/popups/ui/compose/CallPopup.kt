@@ -28,11 +28,7 @@ import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentMo
 
 @Composable
 internal fun CallPopup(model: PopupContentModel.SystemEvent, modifier: Modifier = Modifier) {
-    val status =
-        stringResource(
-            if (model.callStartTimeMs == null) R.string.dynamic_island_incoming_call
-            else R.string.ongoing_call_content_description
-        )
+    val status = model.prominentText ?: stringResource(R.string.dynamic_island_event_call)
     LunarisBarCard(modifier) {
         LunarisBarCardHeader(
             title = model.title,

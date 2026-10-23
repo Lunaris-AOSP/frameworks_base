@@ -295,8 +295,9 @@ sealed class IslandEvent(open val priority: Int, val id: String) : Comparable<Is
         val appIcon: Drawable? = null,
         val callerPhoto: Drawable? = null,
         val callType: String = "Phone:incoming",
-        val callStartTimeMs: Long = System.currentTimeMillis(),
+        val callStartTimeMs: Long = 0L,
         val actions: List<NotificationAction> = emptyList(),
+        val createdAt: Long = System.currentTimeMillis(),
     ) : IslandEvent(priority = 100, id = "call_${sbn.key}") {
         override val behavior = EventBehavior(autoDismissMs = null, suppressOnDismiss = false)
 
