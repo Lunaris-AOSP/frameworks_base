@@ -23,13 +23,11 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -56,14 +54,19 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -88,9 +91,8 @@ import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.SystemEventKind
 import com.android.systemui.statusbar.featurepods.screenrecord.shared.model.ScreenRecordPopupModel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 /** Single centered status bar capsule styled like a compact dynamic island. */
@@ -103,9 +105,9 @@ fun StatusBarDynamicIslandChip(
     onTap: () -> Unit,
     modifier: Modifier = Modifier,
     onChipBoundsChanged: (Rect) -> Unit = {},
+    popupAttached: Boolean = viewModel.isPopupShown,
 ) {
     val isMediaChip = viewModel.popupContent is PopupContentModel.Media
-    val chipShape = RoundedCornerShape(50)
     val colors = viewModel.colors
     val (widthScale, heightScale) = rememberDynamicIslandSizeScale()
     val chipContentColor =
@@ -145,6 +147,7 @@ fun StatusBarDynamicIslandChip(
             heightScale = heightScale,
             chipContentColor = chipContentColor,
             chipOutline = chipOutline,
+            popupAttached = popupAttached,
             modifier = modifier.then(boundsModifier),
         )
         return
@@ -176,15 +179,10 @@ fun StatusBarDynamicIslandChip(
         ((CompactIslandMaxWidth * widthScale) - 24.dp - leadingDecorationWidth - trailingDecorationWidth)
             .coerceAtLeast(56.dp)
 
-    val collapseState = rememberDynamicIslandCollapseState(viewModel.isPopupShown)
+    val collapseState = rememberDynamicIslandCollapseState(viewModel.isPopupShown, popupAttached)
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    val pressScale by
-        animateFloatAsState(
-            targetValue = if (isPressed) 0.95f else 1f,
-            animationSpec = spring(dampingRatio = 0.55f, stiffness = 900f),
-            label = "chipPressScale",
-        )
+    val pressScale by rememberIslandPressScale(isPressed)
 
     Row(
         modifier =
@@ -196,12 +194,10 @@ fun StatusBarDynamicIslandChip(
                     max = compactWidth ?: (CompactIslandMaxWidth * widthScale),
                 )
                 .graphicsLayer {
-                    scaleX = collapseState.scaleX * pressScale
-                    scaleY = collapseState.scaleY * pressScale
+                    scaleX = pressScale
+                    scaleY = pressScale
                 }
-                .clip(chipShape)
-                .background(Color.Black)
-                .border(width = 1.dp, color = chipOutline, shape = chipShape)
+                .islandCompactMorph(collapseState, chipOutline)
                 .combinedClickable(
                     interactionSource = interactionSource,
                     indication = null,
@@ -214,7 +210,11 @@ fun StatusBarDynamicIslandChip(
                     top = 7.dp * heightScale,
                     bottom = 7.dp * heightScale,
                 )
-                .graphicsLayer { alpha = collapseState.contentAlpha },
+                .graphicsLayer {
+                    alpha = collapseState.contentAlpha
+                    scaleX = collapseState.contentScale
+                    scaleY = collapseState.contentScale
+                },
         horizontalArrangement =
             if (isMediaChip) Arrangement.SpaceBetween else Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -312,17 +312,13 @@ private fun UtilityStatusIslandChip(
     heightScale: Float = 1f,
     chipContentColor: Color,
     chipOutline: Color,
+    popupAttached: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val collapseState = rememberDynamicIslandCollapseState(viewModel.isPopupShown)
+    val collapseState = rememberDynamicIslandCollapseState(viewModel.isPopupShown, popupAttached)
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    val pressScale by
-        animateFloatAsState(
-            targetValue = if (isPressed) 0.95f else 1f,
-            animationSpec = spring(dampingRatio = 0.55f, stiffness = 900f),
-            label = "utilityChipPressScale",
-        )
+    val pressScale by rememberIslandPressScale(isPressed)
     val isSystemEvent = viewModel.popupContent is PopupContentModel.SystemEvent
     val isFlashlight = viewModel.popupContent is PopupContentModel.Flashlight
     val hasBalancedSegments = isSystemEvent || isFlashlight
@@ -391,9 +387,10 @@ private fun UtilityStatusIslandChip(
         modifier =
             modifier
                 .graphicsLayer {
-                    scaleX = collapseState.scaleX * pressScale
-                    scaleY = collapseState.scaleY * pressScale
+                    scaleX = pressScale
+                    scaleY = pressScale
                 }
+                .islandCompactMorph(collapseState, chipOutline)
                 .defaultMinSize(minHeight = 32.dp * heightScale)
                 .then(
                     if (isFlashlight) {
@@ -406,14 +403,16 @@ private fun UtilityStatusIslandChip(
                     contentDescription = viewModel.contentDescription.orEmpty()
                 } else Modifier)
                 .clip(RoundedCornerShape(50))
-                .background(Color.Black)
-                .border(width = 1.dp, color = chipOutline, shape = RoundedCornerShape(50))
                 .clickable(
                     interactionSource = interactionSource,
                     indication = null,
                     onClick = onTap,
                 )
-                .graphicsLayer { alpha = collapseState.contentAlpha },
+                .graphicsLayer {
+                    alpha = collapseState.contentAlpha
+                    scaleX = collapseState.contentScale
+                    scaleY = collapseState.contentScale
+                },
         horizontalArrangement = Arrangement.spacedBy(0.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -727,6 +726,7 @@ internal fun CompanionChip(
     onTap: () -> Unit,
     modifier: Modifier = Modifier,
     onBoundsChanged: (Rect) -> Unit = {},
+    popupAttached: Boolean = viewModel.isPopupShown,
 ) {
     val colors = viewModel.colors
     val chipContentColor =
@@ -736,46 +736,35 @@ internal fun CompanionChip(
     val view = LocalView.current
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    val pressScale by
-        animateFloatAsState(
-            targetValue = if (isPressed) 0.9f else 1f,
-            animationSpec = spring(dampingRatio = 0.55f, stiffness = 900f),
-            label = "companionPressScale",
-        )
+    val pressScale by rememberIslandPressScale(isPressed)
     val appear = remember { Animatable(0.3f) }
     LaunchedEffect(Unit) { appear.animateTo(1f, spring(dampingRatio = 0.68f, stiffness = 480f)) }
-    val popupOpen = viewModel.isPopupShown
-    val collapse by
-        animateFloatAsState(
-            targetValue = if (popupOpen) 0f else 1f,
-            animationSpec =
-                if (popupOpen) {
-                    spring(dampingRatio = 0.9f, stiffness = 500f)
-                } else {
-                    spring(dampingRatio = 0.65f, stiffness = 520f)
-                },
-            label = "companionCollapse",
-        )
+    val collapseState = rememberDynamicIslandCollapseState(viewModel.isPopupShown, popupAttached)
 
     Box(
         modifier =
             modifier
-                .graphicsLayer {
-                    val s = pressScale * appear.value * collapse
-                    scaleX = s
-                    scaleY = s
-                    alpha = appear.value * collapse
-                }
                 .size(diameter)
                 .onGloballyPositioned { onBoundsChanged(it.boundsInScreen(view)) }
-                .clip(CircleShape)
-                .background(Color.Black)
-                .border(width = 1.dp, color = chipOutline, shape = CircleShape)
+                .graphicsLayer {
+                    scaleX = pressScale * appear.value
+                    scaleY = pressScale * appear.value
+                    alpha = appear.value
+                }
+                .islandCompactMorph(collapseState, chipOutline)
                 .clickable(
                     interactionSource = interactionSource,
                     indication = null,
-                    onClick = onTap,
-                ),
+                    onClick = {
+                        view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                        onTap()
+                    },
+                )
+                .graphicsLayer {
+                    alpha = collapseState.contentAlpha
+                    scaleX = collapseState.contentScale
+                    scaleY = collapseState.contentScale
+                },
         contentAlignment = Alignment.Center,
     ) {
         val chipIcon = viewModel.icons.firstOrNull()
@@ -813,40 +802,122 @@ internal fun rememberDynamicIslandSizeScale(): Pair<Float, Float> {
 }
 
 private data class DynamicIslandCollapseState(
-    val scaleX: Float,
-    val scaleY: Float,
+    val widthFraction: Float,
+    val heightFraction: Float,
     val contentAlpha: Float,
+    val contentScale: Float,
+    val surfaceAlpha: Float,
+    val restDiameterPx: Float?,
+    val pulseScale: Float,
 )
 
-@Composable
-private fun rememberDynamicIslandCollapseState(isOpen: Boolean): DynamicIslandCollapseState {
-    val progress = remember { Animatable(if (isOpen) 1f else 0f, visibilityThreshold = 0.0005f) }
-    val currentIsOpen by rememberUpdatedState(isOpen)
-
-    LaunchedEffect(Unit) {
-        snapshotFlow { currentIsOpen }
-            .drop(1)
-            .collectLatest { open ->
-                if (open) {
-                    progress.animateTo(
-                        targetValue = 1f,
-                        animationSpec = spring(dampingRatio = 0.9f, stiffness = 500f),
-                    )
-                } else {
-                    progress.animateTo(
-                        targetValue = 0f,
-                        animationSpec = spring(dampingRatio = 0.65f, stiffness = 520f),
-                    )
-                }
-            }
+private fun Modifier.islandCompactMorph(state: DynamicIslandCollapseState, outline: Color): Modifier =
+    graphicsLayer {
+        scaleX = state.pulseScale
+        scaleY = state.pulseScale
+    }.drawWithContent {
+        val rest = (state.restDiameterPx ?: (size.height * 0.45f))
+            .coerceAtMost(minOf(size.width, size.height))
+        val width = (rest + (size.width - rest) * state.widthFraction).coerceAtLeast(0f)
+        val height = (rest + (size.height - rest) * state.heightFraction).coerceAtLeast(0f)
+        val left = (size.width - width) / 2f
+        val top = (size.height - height) / 2f
+        val radius = minOf(width, height) / 2f
+        drawRoundRect(Color.Black, topLeft = Offset(left, top), size = Size(width, height),
+            cornerRadius = CornerRadius(radius), alpha = state.surfaceAlpha)
+        val stroke = 1.dp.toPx()
+        drawRoundRect(outline, topLeft = Offset(left + stroke / 2f, top + stroke / 2f),
+            size = Size((width - stroke).coerceAtLeast(0f), (height - stroke).coerceAtLeast(0f)),
+            cornerRadius = CornerRadius((radius - stroke / 2f).coerceAtLeast(0f)),
+            alpha = state.surfaceAlpha, style = Stroke(stroke))
+        val path = Path().apply {
+            addRoundRect(RoundRect(left, top, left + width, top + height,
+                CornerRadius(radius)))
+        }
+        clipPath(path) { this@drawWithContent.drawContent() }
     }
 
-    val p = progress.value
-    val squash = p.coerceIn(0f, 1f)
-    val scaleX = (1f - p).coerceAtLeast(0f)
-    val scaleY = 1f - 0.18f * squash
-    val contentAlpha = ((1f - p) / 0.62f).coerceIn(0f, 1f)
-    return DynamicIslandCollapseState(scaleX = scaleX, scaleY = scaleY, contentAlpha = contentAlpha)
+@Composable
+private fun rememberDynamicIslandCollapseState(
+    isOpen: Boolean,
+    popupAttached: Boolean,
+): DynamicIslandCollapseState {
+    val initialSize = if (isOpen) 0f else 1f
+    val width = remember { IslandMotionSpring(initialSize) }
+    val height = remember { IslandMotionSpring(initialSize) }
+    val contentAlpha = remember { Animatable(initialSize) }
+    val contentScale = remember { Animatable(if (isOpen) 0.9f else 1f) }
+    val surfaceAlpha = remember { Animatable(initialSize) }
+    val fadeDelay = remember { Animatable(0f) }
+    val returnDelay = remember { Animatable(0f) }
+    val pulse = remember { Animatable(0f) }
+    var wasAttached by remember { mutableStateOf(popupAttached) }
+    val restDiameter = islandRestDiameterPx()
+
+    LaunchedEffect(isOpen, popupAttached) {
+        coroutineScope {
+            if (!isOpen && popupAttached) {
+                val shrinking = launch {
+                    coroutineScope {
+                        launch { width.animateTo(0f, DynamicIslandMotion.springFor(0.34f, 0.86f)) }
+                        launch { height.animateTo(0f, DynamicIslandMotion.springFor(0.34f, 0.86f)) }
+                    }
+                }
+                returnDelay.snapTo(0f)
+                returnDelay.animateTo(1f, tween(DynamicIslandMotion.PillRegrowDelayMillis,
+                    easing = LinearEasing))
+                shrinking.cancelAndJoin()
+            }
+            launch {
+                width.animateTo(if (isOpen) 0f else 1f,
+                    if (isOpen) DynamicIslandMotion.springFor(0.34f, 0.86f)
+                    else DynamicIslandMotion.springFor(0.38f, 0.70f))
+            }
+            launch {
+                height.animateTo(if (isOpen) 0f else 1f,
+                    if (isOpen) DynamicIslandMotion.springFor(0.34f, 0.86f)
+                    else DynamicIslandMotion.springFor(0.34f, 0.75f))
+            }
+        }
+    }
+
+    LaunchedEffect(isOpen) {
+        coroutineScope {
+            launch {
+                if (isOpen) {
+                    fadeDelay.snapTo(0f)
+                    fadeDelay.animateTo(1f, tween(260, easing = LinearEasing))
+                    surfaceAlpha.animateTo(0f, DynamicIslandMotion.PillFade)
+                } else {
+                    surfaceAlpha.animateTo(1f, DynamicIslandMotion.springFor(0.10f, 1f))
+                }
+            }
+            launch {
+                contentAlpha.animateTo(if (isOpen) 0f else 1f,
+                    if (isOpen) tween(110, easing = LinearEasing)
+                    else tween(200, delayMillis = DynamicIslandMotion.PillContentDelayMillis,
+                        easing = DynamicIslandMotion.ContentIn))
+            }
+            launch {
+                contentScale.animateTo(if (isOpen) 0.9f else 1f,
+                    if (isOpen) tween(110, easing = LinearEasing)
+                    else tween(200, delayMillis = DynamicIslandMotion.PillContentDelayMillis,
+                        easing = DynamicIslandMotion.ButtonDown))
+            }
+        }
+    }
+
+    LaunchedEffect(popupAttached) {
+        val returning = wasAttached && !popupAttached
+        wasAttached = popupAttached
+        if (returning) {
+            pulse.animateTo(0f, DynamicIslandMotion.springFor(0.30f, 0.55f, 0.0005f),
+                initialVelocity = pulse.velocity + 1.4f)
+        }
+    }
+
+    return DynamicIslandCollapseState(width.value, height.value, contentAlpha.value,
+        contentScale.value, surfaceAlpha.value, restDiameter, 1f + pulse.value)
 }
 
 private fun LayoutCoordinates.boundsInScreen(view: android.view.View): Rect {

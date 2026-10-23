@@ -54,7 +54,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
@@ -117,8 +116,6 @@ fun StatusBarDynamicIslandContainer(
             popupVisible = true
         } else if (popupAnchorChip != null) {
             popupVisible = false
-            delay(220)
-            popupAnchorChip = null
         }
     }
 
@@ -184,6 +181,23 @@ fun StatusBarDynamicIslandContainer(
                 },
         contentAlignment = Alignment.Center,
     ) {
+        popupAnchorChip?.let { anchoredChip ->
+            StatusBarPopup(
+                viewModel = shownChip ?: anchoredChip,
+                isVisible = popupVisible,
+                chipBoundsInScreen = popupOriginBounds,
+                canPage = chips.size > 1,
+                pageDirection = lastDirection,
+                onPage = { direction -> selectRelative(direction) },
+                onHidden = {
+                    if (shownChip == null) {
+                        popupAnchorChip = null
+                        popupOriginBounds = null
+                    }
+                },
+            )
+        }
+
         if (selectedChip == null) return@Box
 
         Row(
@@ -200,6 +214,7 @@ fun StatusBarDynamicIslandContainer(
                 } else {
                     CompanionChip(
                         viewModel = companionChip,
+                        popupAttached = popupAnchorChip?.chipId == companionChip.chipId,
                         diameter = companionDiameter,
                         onTap = { companionChip.showPopup() },
                         onBoundsChanged = { companionChipBounds = it },
@@ -245,6 +260,7 @@ fun StatusBarDynamicIslandContainer(
 
                 StatusBarDynamicIslandChip(
                     viewModel = chip,
+                    popupAttached = popupAnchorChip?.chipId == chip.chipId,
                     pageCount = effectivePageCount,
                     cutoutSpec = cutoutSpec,
                     onChipBoundsChanged = { bounds -> mainChipBounds = bounds },
@@ -319,6 +335,7 @@ fun StatusBarDynamicIslandContainer(
                     Spacer(modifier = Modifier.width(DynamicIslandCompanionGap))
                     CompanionChip(
                         viewModel = companionChip,
+                        popupAttached = popupAnchorChip?.chipId == companionChip.chipId,
                         diameter = companionDiameter,
                         onTap = { companionChip.showPopup() },
                         onBoundsChanged = { companionChipBounds = it },
@@ -327,17 +344,6 @@ fun StatusBarDynamicIslandContainer(
                     Spacer(modifier = Modifier.width(companionBalance))
                 }
             }
-        }
-
-        popupAnchorChip?.let { anchoredChip ->
-            StatusBarPopup(
-                viewModel = shownChip ?: anchoredChip,
-                isVisible = popupVisible,
-                chipBoundsInScreen = popupOriginBounds,
-                canPage = chips.size > 1,
-                pageDirection = lastDirection,
-                onPage = { direction -> selectRelative(direction) },
-            )
         }
     }
 }

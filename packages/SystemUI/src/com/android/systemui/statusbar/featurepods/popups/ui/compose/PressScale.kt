@@ -17,45 +17,45 @@
 package com.android.systemui.statusbar.featurepods.popups.ui.compose
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import kotlinx.coroutines.launch
-
-private val PressDownSpring = spring<Float>(stiffness = Spring.StiffnessMediumLow)
-private val ReleaseSpring =
-    spring<Float>(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
 
 fun Modifier.pressScale(
     enabled: Boolean = true,
-    pressedScale: Float = 0.90f,
+    pressedScale: Float = 0.86f,
     onClick: () -> Unit,
 ): Modifier = composed {
-    val scale = remember { Animatable(1f) }
-    val scope = rememberCoroutineScope()
+    val press = remember { Animatable(0f) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
     val currentOnClick by rememberUpdatedState(onClick)
 
+    LaunchedEffect(isPressed, enabled) {
+        if (isPressed && enabled) {
+            press.animateTo(1f, tween(110, easing = DynamicIslandMotion.ButtonDown))
+        } else {
+            press.animateTo(0f, tween(380, easing = DynamicIslandMotion.ButtonUp))
+        }
+    }
+
     graphicsLayer {
-            scaleX = scale.value
-            scaleY = scale.value
+            val scale = 1f - (1f - pressedScale) * press.value
+            scaleX = scale
+            scaleY = scale
         }
-        .pointerInput(enabled) {
-            if (!enabled) return@pointerInput
-            detectTapGestures(
-                onPress = {
-                    scope.launch { scale.animateTo(pressedScale, PressDownSpring) }
-                    tryAwaitRelease()
-                    scope.launch { scale.animateTo(1f, ReleaseSpring) }
-                },
-                onTap = { currentOnClick() },
-            )
-        }
+        .clickable(
+            enabled = enabled,
+            interactionSource = interactionSource,
+            indication = null,
+            onClick = { currentOnClick() },
+        )
 }

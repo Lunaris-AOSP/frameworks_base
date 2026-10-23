@@ -16,13 +16,11 @@
 
 package com.android.systemui.statusbar.featurepods.popups.ui.compose
 
+import android.content.Context
 import android.view.ViewTreeObserver
 import android.view.WindowManager
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -33,37 +31,31 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.dimensionResource
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.window.PopupPositionProvider
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.featurepods.alarm.ui.compose.AlarmPopup
 import com.android.systemui.statusbar.featurepods.av.ui.compose.AvControlsChipPopup
@@ -77,16 +69,9 @@ import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentMo
 import com.android.systemui.statusbar.featurepods.screenrecord.ui.compose.ScreenRecordPopup
 import com.android.systemui.statusbar.featurepods.sharescreen.ui.compose.ShareScreenPrivacyIndicatorPopup
 import com.android.systemui.statusbar.featurepods.stopwatch.ui.compose.StopwatchPopup
-import kotlinx.coroutines.coroutineScope
-import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.POPUP_COLOR_MODE_BLUR
 import kotlinx.coroutines.launch
 
-/**
- * Displays a popup in the status bar area. The offset is calculated to draw the popup below the
- * status bar. When [chipBoundsInScreen] is provided, the popup grows out of the chip's on-screen
- * position and aspect ratio with an independent-axis squish animation, rather than a generic
- * uniform scale-in.
- */
+/** Displays an island card that grows from, and returns to, the tapped capsule. */
 @Composable
 fun StatusBarPopup(
     viewModel: PopupChipModel.Shown,
@@ -95,179 +80,58 @@ fun StatusBarPopup(
     canPage: Boolean = false,
     pageDirection: Int = 1,
     onPage: (Int) -> Unit = {},
+    onHidden: () -> Unit = {},
 ) {
-    val density = Density(LocalContext.current)
+    val density = LocalDensity.current
+    val topInsetPx = with(density) {
+        dimensionResource(R.dimen.status_bar_height).roundToPx() + 8.dp.roundToPx()
+    }
+    val currentHidePopup by rememberUpdatedState(viewModel.hidePopup)
     Popup(
-        alignment = Alignment.TopCenter,
-        properties =
-            PopupProperties(
-                // Keep Back dismissal without taking IME focus from the app below the popup.
-                flags =
-                    WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
-                        WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM,
-                dismissOnBackPress = true,
-                dismissOnClickOutside = true,
-            ),
-        offset =
-            IntOffset(
-                x = 0,
-                y = with(density) { dimensionResource(R.dimen.status_bar_height).roundToPx() },
-            ),
-        onDismissRequest = { viewModel.hidePopup() },
+        popupPositionProvider = remember {
+            object : PopupPositionProvider {
+                override fun calculatePosition(
+                    anchorBounds: IntRect,
+                    windowSize: IntSize,
+                    layoutDirection: LayoutDirection,
+                    popupContentSize: IntSize,
+                ) = IntOffset.Zero
+            }
+        },
+        properties = PopupProperties(
+            flags = WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
+                WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+        ),
+        onDismissRequest = { currentHidePopup() },
     ) {
         val popupView = LocalView.current
-        var popupBoundsInScreen by remember { mutableStateOf<Rect?>(null) }
-
-        val transformOrigin by remember {
-            derivedStateOf {
-                val chip = chipBoundsInScreen
-                val popup = popupBoundsInScreen
-                if (chip == null || popup == null || popup.width <= 0f) {
-                    TransformOrigin(0.5f, 0f)
-                } else {
-                    val pivotX =
-                        ((chip.center.x - popup.left) / popup.width).coerceIn(0.05f, 0.95f)
-                    val pivotY =
-                        if (popup.height > 0f) {
-                            ((chip.center.y - popup.top) / popup.height).coerceIn(0f, 0.3f)
-                        } else {
-                            0f
-                        }
-                    TransformOrigin(pivotX, pivotY)
-                }
-            }
-        }
-
-        val initialScaleFromChip by remember {
-            derivedStateOf {
-                val chip = chipBoundsInScreen
-                val popup = popupBoundsInScreen
-                if (chip == null || popup == null || popup.width <= 0f || popup.height <= 0f) {
-                    Offset(0.4f, 0.4f)
-                } else {
-                    Offset(
-                        x = (chip.width / popup.width).coerceIn(0.2f, 1f),
-                        y = (chip.height / popup.height).coerceIn(0.15f, 1f),
-                    )
-                }
-            }
-        }
-
-        val scaleX = remember { Animatable(initialScaleFromChip.x) }
-        val scaleY = remember { Animatable(initialScaleFromChip.y) }
-        val alpha = remember { Animatable(0f) }
-        val translationY = remember { Animatable(-24f) }
-        val colorMode = rememberPopupColorMode()
-        val skipMotionOnDismiss = colorMode == POPUP_COLOR_MODE_BLUR
-
-        LaunchedEffect(isVisible, popupBoundsInScreen != null) {
-            if (isVisible && popupBoundsInScreen != null) {
-                scaleX.snapTo(initialScaleFromChip.x)
-                scaleY.snapTo(initialScaleFromChip.y)
-                alpha.snapTo(0f)
-                translationY.snapTo(-24f)
-                coroutineScope {
-                    launch {
-                        scaleX.animateTo(
-                            targetValue = 1f,
-                            animationSpec =
-                                spring(
-                                    dampingRatio = 0.72f,
-                                    stiffness = 520f,
-                                ),
-                        )
-                    }
-                    launch {
-                        scaleY.animateTo(
-                            targetValue = 1f,
-                            animationSpec =
-                                spring(
-                                    dampingRatio = 0.76f,
-                                    stiffness = 520f,
-                                ),
-                        )
-                    }
-                    launch {
-                        translationY.animateTo(
-                            targetValue = 0f,
-                            animationSpec =
-                                spring(
-                                    dampingRatio = 0.72f,
-                                    stiffness = 520f,
-                                ),
-                        )
-                    }
-                    launch {
-                        alpha.animateTo(
-                            1f,
-                            animationSpec = tween(190, easing = FastOutSlowInEasing),
-                        )
-                    }
-                }
-            } else if (!isVisible) {
-                if (skipMotionOnDismiss) {
-                    coroutineScope {
-                        launch {
-                            scaleX.animateTo(
-                                targetValue = 0.01f,
-                                animationSpec = tween(130),
-                            )
-                        }
-                        launch {
-                            scaleY.animateTo(
-                                targetValue = 0.01f,
-                                animationSpec = tween(130),
-                            )
-                        }
-                        launch { alpha.animateTo(0f, animationSpec = tween(120)) }
-                    }
-                } else {
-                    coroutineScope {
-                        launch {
-                            scaleX.animateTo(
-                                targetValue = initialScaleFromChip.x,
-                                animationSpec =
-                                    spring(
-                                        dampingRatio = 0.8f,
-                                        stiffness = Spring.StiffnessMediumLow,
-                                    ),
-                            )
-                        }
-                        launch {
-                            scaleY.animateTo(
-                                targetValue = initialScaleFromChip.y,
-                                animationSpec =
-                                    spring(
-                                        dampingRatio = 0.8f,
-                                        stiffness = Spring.StiffnessMediumLow,
-                                    ),
-                            )
-                        }
-                        launch {
-                            translationY.animateTo(-16f, animationSpec = spring(stiffness = Spring.StiffnessMedium))
-                        }
-                        launch { alpha.animateTo(0f, animationSpec = tween(160)) }
-                    }
-                }
-            }
-        }
-
         DisposableEffect(popupView) {
+            val windowView = popupView.rootView
+            val params = windowView.layoutParams as? WindowManager.LayoutParams
+            if (params != null && windowView.isAttachedToWindow) {
+                params.layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                params.setFitInsetsTypes(0)
+                params.windowAnimations = 0
+                val manager = windowView.context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                manager.updateViewLayout(windowView, params)
+            }
             val listener = ViewTreeObserver.OnWindowFocusChangeListener { hasFocus ->
-                if (!hasFocus) {
-                    viewModel.hidePopup()
-                }
+                if (!hasFocus) currentHidePopup()
             }
             popupView.viewTreeObserver.addOnWindowFocusChangeListener(listener)
-            onDispose {
-                popupView.viewTreeObserver.removeOnWindowFocusChangeListener(listener)
-            }
+            onDispose { popupView.viewTreeObserver.removeOnWindowFocusChangeListener(listener) }
         }
-
-        AnimatedVisibility(
-            visible = isVisible,
-            enter = fadeIn(animationSpec = tween(60)),
-            exit = fadeOut(animationSpec = tween(160)),
+        IslandPopupMorph(
+            isVisible = isVisible,
+            chipBoundsInScreen = chipBoundsInScreen,
+            topInsetPx = topInsetPx,
+            onDismissRequest = { currentHidePopup() },
+            onHidden = onHidden,
         ) {
             val pagerScope = rememberCoroutineScope()
             val pageFollow = remember { Animatable(0f) }
@@ -276,21 +140,7 @@ fun StatusBarPopup(
             val maxFollowPx = with(density) { 40.dp.toPx() }
             val currentOnPage by rememberUpdatedState(onPage)
 
-            Box(
-                modifier =
-                    Modifier.padding(8.dp)
-                        .wrapContentSize()
-                        .onGloballyPositioned { coordinates ->
-                            popupBoundsInScreen = coordinates.boundsInScreen(popupView)
-                        }
-                        .graphicsLayer {
-                            this.scaleX = scaleX.value
-                            this.scaleY = scaleY.value
-                            this.alpha = alpha.value
-                            this.translationY = translationY.value
-                            this.transformOrigin = transformOrigin
-                        }
-            ) {
+            Box(modifier = Modifier.wrapContentSize()) {
                 Box(
                     modifier =
                         Modifier.then(
@@ -358,9 +208,7 @@ fun StatusBarPopup(
                                 fadeIn(animationSpec = tween(200))) togetherWith
                                 (slideOutHorizontally(animationSpec = tween(240)) { w -> -dir * w } +
                                     fadeOut(animationSpec = tween(140))) using
-                                SizeTransform(clip = false) { _, _ ->
-                                    spring(dampingRatio = 0.9f, stiffness = 380f)
-                                }
+                                null
                         },
                         label = "island_popup_pager",
                     ) { chip ->
@@ -370,12 +218,6 @@ fun StatusBarPopup(
             }
         }
     }
-}
-
-private fun LayoutCoordinates.boundsInScreen(view: android.view.View): Rect {
-    val location = IntArray(2)
-    view.getLocationOnScreen(location)
-    return boundsInRoot().translate(Offset(location[0].toFloat(), location[1].toFloat()))
 }
 
 /** Renders the per-feature card for [viewModel]; the swipe pager slides between these. */

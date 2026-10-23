@@ -23,6 +23,7 @@ import android.graphics.drawable.GradientDrawable
 import android.view.View
 import android.view.ViewGroup
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -80,6 +81,7 @@ private class PopupBlurHost(context: Context, private val cornerRadiusPx: Float)
     override fun draw(canvas: Canvas) {
         if (width > 0 && height > 0) {
             bgDrawable.setBounds(0, 0, width, height)
+            bgDrawable.cornerRadius = minOf(cornerRadiusPx, width / 2f, height / 2f)
             if (!blur.drawBackgroundWithOverlayColor(canvas, bgDrawable, overlayColor)) {
                 bgDrawable.setColor(overlayColor and 0x00FFFFFF or (0xCC shl 24))
                 bgDrawable.draw(canvas)
@@ -104,19 +106,42 @@ fun PopupSurface(
     modifier: Modifier = Modifier,
     shadowElevation: Dp = 12.dp,
     colorMode: Int = rememberPopupColorMode(),
+    animateContentAsUnit: Boolean = true,
     content: @Composable () -> Unit,
 ) {
+    val islandMotion = LocalIslandPopupRevealMillis.current != null
+    val surfaceShape = if (islandMotion) RoundedCornerShape(DynamicIslandMotion.CardCornerRadius) else shape
+    val animatedContent: @Composable () -> Unit = {
+        if (animateContentAsUnit) {
+            Box(Modifier.islandPopupRow(0), propagateMinConstraints = true) { content() }
+        } else {
+            content()
+        }
+    }
+    if (LocalIslandPopupContentOnly.current) {
+        val contentColor = when (colorMode) {
+            POPUP_COLOR_MODE_SOLID_BLACK -> Color.White
+            POPUP_COLOR_MODE_BLUR -> MaterialTheme.colorScheme.onSurface
+            else -> MaterialTheme.colorScheme.onSurface
+        }
+        CompositionLocalProvider(LocalContentColor provides contentColor) {
+            Box(modifier, propagateMinConstraints = true) { animatedContent() }
+        }
+        return
+    }
     when (colorMode) {
         POPUP_COLOR_MODE_BLUR -> {
             val density = LocalDensity.current
             Box(
                 modifier = modifier
-                    .clip(shape)
+                    .clip(surfaceShape)
                     .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen },
             ) {
                 AndroidView(
                     factory = { ctx ->
-                        val radiusPx = with(density) { 32.dp.toPx() }
+                        val radiusPx = with(density) {
+                            (if (islandMotion) DynamicIslandMotion.CardCornerRadius else 32.dp).toPx()
+                        }
                         PopupBlurHost(ctx, radiusPx).also {
                             it.layoutParams = ViewGroup.LayoutParams(
                                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -129,7 +154,7 @@ fun PopupSurface(
                 CompositionLocalProvider(
                     LocalContentColor provides MaterialTheme.colorScheme.onSurface
                 ) {
-                    content()
+                    animatedContent()
                 }
             }
         }
@@ -137,19 +162,19 @@ fun PopupSurface(
             Surface(
                 color = Color.Black,
                 contentColor = Color.White,
-                shape = shape,
+                shape = surfaceShape,
                 shadowElevation = shadowElevation,
                 modifier = modifier,
-            ) { content() }
+            ) { animatedContent() }
         }
         else -> {
             Surface(
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 contentColor = MaterialTheme.colorScheme.onSurface,
-                shape = shape,
+                shape = surfaceShape,
                 shadowElevation = shadowElevation,
                 modifier = modifier,
-            ) { content() }
+            ) { animatedContent() }
         }
     }
 }

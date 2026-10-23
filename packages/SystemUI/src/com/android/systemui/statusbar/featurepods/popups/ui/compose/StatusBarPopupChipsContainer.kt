@@ -32,7 +32,6 @@ import androidx.compose.ui.unit.dp
 import com.android.systemui.scene.shared.flag.SceneContainerFlag
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
-import kotlinx.coroutines.delay
 
 /** Container view that holds all right hand side chips in the status bar. */
 @Composable
@@ -52,8 +51,6 @@ fun StatusBarPopupChipsContainer(
             popupVisible = true
         } else if (popupAnchorChip != null) {
             popupVisible = false
-            delay(220)
-            popupAnchorChip = null
         }
     }
 
@@ -67,8 +64,6 @@ fun StatusBarPopupChipsContainer(
             onMediaControlPopupVisibilityChanged(isMediaControlPopupShown)
         }
     }
-
-    if (chips.isEmpty()) return
 
     Box {
         Row(
@@ -88,6 +83,9 @@ fun StatusBarPopupChipsContainer(
                     viewModel = shownChip ?: anchoredChip,
                     isVisible = popupVisible,
                     chipBoundsInScreen = anchorBoundsByChip[anchoredChip.chipId],
+                    onHidden = {
+                        if (shownChip == null) popupAnchorChip = null
+                    },
                 )
             }
         }

@@ -71,6 +71,7 @@ import com.android.systemui.media.controls.ui.drawable.SquigglyProgress
 import com.android.systemui.media.controls.ui.view.WaveformSeekBar
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.featurepods.media.shared.model.MediaControlChipModel
+import com.android.systemui.statusbar.featurepods.popups.ui.compose.islandPopupRow
 import com.android.systemui.statusbar.featurepods.popups.ui.compose.PopupSurface
 import com.android.systemui.statusbar.featurepods.popups.ui.compose.pressScale
 import com.android.systemui.statusbar.featurepods.popups.ui.compose.rememberAlbumArtAccent
@@ -93,6 +94,7 @@ fun MediaControlPopup(
     PopupSurface(
         shape = PopupShape,
         modifier = modifier.widthIn(min = 320.dp, max = 400.dp),
+        animateContentAsUnit = false,
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
@@ -100,7 +102,7 @@ fun MediaControlPopup(
         ) {
             Row(
                 modifier =
-                    Modifier.fillMaxWidth().clickable(
+                    Modifier.islandPopupRow(0).fillMaxWidth().clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
                         enabled = model.openApp != null,
@@ -147,6 +149,7 @@ fun MediaControlPopup(
 
             if (model.durationMs > 0L) {
                 MediaProgressSection(
+                    modifier = Modifier.islandPopupRow(1),
                     positionMs = model.positionMs,
                     durationMs = model.durationMs,
                     isPlaying = model.isPlaying,
@@ -158,7 +161,7 @@ fun MediaControlPopup(
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.islandPopupRow(2).fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -223,6 +226,7 @@ private fun MediaProgressSection(
     onSeekTo: ((Long) -> Unit)?,
     accent: Color,
     useWaveform: Boolean = false,
+    modifier: Modifier = Modifier,
 ) {
     var isScrubbing by remember { mutableStateOf(false) }
     var displayedPositionMs by remember { mutableStateOf(positionMs.coerceIn(0L, durationMs)) }
@@ -255,7 +259,7 @@ private fun MediaProgressSection(
     val trackAlphaArgb = accent.copy(alpha = 0.20f).toArgb()
 
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
