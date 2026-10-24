@@ -29,4 +29,6 @@ data class StopwatchPopupModel(
     val elapsedTimeText: String?,
     val onOpen: (() -> Unit)?,
     val actions: List<PopupActionModel> = emptyList(),
+    val sourcePackageName: String? = null,
+    val sourceUserId: Int? = null,
 )

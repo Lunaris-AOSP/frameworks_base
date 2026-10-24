@@ -22,20 +22,20 @@ import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.lifecycle.ExclusiveActivatable
 import com.android.systemui.lifecycle.Hydrator
 import com.android.systemui.media.controls.shared.MediaSeekBarStyle
+import com.android.systemui.media.dialog.MediaOutputDialogManager
 import com.android.systemui.statusbar.featurepods.media.domain.interactor.MediaControlChipInteractor
 import com.android.systemui.statusbar.featurepods.media.shared.model.MediaControlChipModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.ChipIcon
 import com.android.systemui.statusbar.featurepods.popups.ui.model.ColorsModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.HoverBehavior
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
-import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
+import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentModel
 import com.android.systemui.statusbar.featurepods.popups.ui.viewmodel.StatusBarPopupChipViewModel
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.combine
 import java.util.Locale
+import kotlinx.coroutines.flow.combine
 
 /**
  * [StatusBarPopupChipViewModel] for a media control chip in the status bar. This view model is
@@ -46,6 +46,7 @@ class MediaControlChipViewModel
 @AssistedInject
 constructor(
     mediaControlChipInteractor: MediaControlChipInteractor,
+    private val mediaOutputDialogManager: MediaOutputDialogManager,
 ) : StatusBarPopupChipViewModel, ExclusiveActivatable() {
     private val hydrator: Hydrator = Hydrator("MediaControlChipViewModel.hydrator")
     /**
@@ -93,7 +94,24 @@ constructor(
             chipText = normalizeSongTitle(model.songName.toString(), model.artistName?.toString()),
             colors = ColorsModel.DynamicIsland,
             hoverBehavior = createHoverBehavior(model),
-            popupContent = PopupContentModel.Media(model, seekBarStyle, useRedesignedMedia),
+            popupContent =
+                PopupContentModel.Media(
+                    model.copy(
+                        openOutput =
+                            model.packageName?.let { packageName ->
+                                {
+                                    mediaOutputDialogManager.createAndShow(
+                                        packageName = packageName,
+                                        aboveStatusBar = true,
+                                        userHandle =
+                                            model.sourceUserId?.let { android.os.UserHandle.of(it) },
+                                    )
+                                }
+                            }
+                    ),
+                    seekBarStyle,
+                    useRedesignedMedia,
+                ),
         )
     }
 

@@ -42,4 +42,6 @@ data class MediaControlChipModel(
     val customActions: List<MediaAction> = emptyList(),
     val playbackSpeed: Float = 1f,
     val transportActions: MediaButton? = null,
+    val sourceUserId: Int? = null,
+    val openOutput: (() -> Unit)? = null,
 )

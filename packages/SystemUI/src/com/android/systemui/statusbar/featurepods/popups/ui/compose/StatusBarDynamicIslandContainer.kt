@@ -27,7 +27,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -49,21 +49,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
-import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlinx.coroutines.launch
 
 /**
  * Number of concurrently active tasks at which the island starts showing an icon-only companion
- * "peek" chip beside the main one (ported from SmartIsland's secondary bubble). Matches SmartIsland,
- * which reveals its secondary bubble as soon as a second task exists (e.g. Media + Flashlight); the
- * companion then stands in for the two swipe-hint dots.
+ * "peek" chip beside the main one (ported from SmartIsland's secondary bubble). Matches
+ * SmartIsland, which reveals its secondary bubble as soon as a second task exists (e.g. Media +
+ * Flashlight); the companion then stands in for the two swipe-hint dots.
  */
 private const val COMPANION_MIN_TASKS = 2
 
@@ -75,10 +77,37 @@ fun StatusBarDynamicIslandContainer(
     onIslandBoundsChanged: (android.graphics.Rect) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    val currentOnIslandBoundsChanged by rememberUpdatedState(onIslandBoundsChanged)
-    DisposableEffect(Unit) {
-        onDispose { currentOnIslandBoundsChanged(android.graphics.Rect()) }
+    LunarisBarTheme {
+        LunarisBarContainer(
+            chips,
+            onMediaControlPopupVisibilityChanged,
+            onIslandBoundsChanged,
+            modifier,
+        )
     }
+}
+
+@Composable
+private fun LunarisBarContainer(
+    chips: List<PopupChipModel.Shown>,
+    onMediaControlPopupVisibilityChanged: (Boolean) -> Unit,
+    onIslandBoundsChanged: (android.graphics.Rect) -> Unit,
+    modifier: Modifier,
+) {
+    val state = LocalLunarisBarState.current
+    val settings = state.settings
+    val context = LocalContext.current
+    val screenWidth = LocalConfiguration.current.screenWidthDp.dp
+    var containerWidth by remember { mutableStateOf(0.dp) }
+    val density = LocalDensity.current
+    val alignmentOffset =
+        when (settings.alignment) {
+            1 -> -(screenWidth - containerWidth) / 2 + 12.dp
+            2 -> (screenWidth - containerWidth) / 2 - 12.dp
+            else -> 0.dp
+        }
+    val currentOnIslandBoundsChanged by rememberUpdatedState(onIslandBoundsChanged)
+    DisposableEffect(Unit) { onDispose { currentOnIslandBoundsChanged(android.graphics.Rect()) } }
     LaunchedEffect(chips.isEmpty()) {
         if (chips.isEmpty()) currentOnIslandBoundsChanged(android.graphics.Rect())
     }
@@ -92,6 +121,14 @@ fun StatusBarDynamicIslandContainer(
     var companionChipBounds by remember { mutableStateOf<Rect?>(null) }
     var popupOriginBounds by remember { mutableStateOf<Rect?>(null) }
     var lastDirection by remember { mutableIntStateOf(1) }
+
+    LaunchedEffect(state.userId) {
+        popupAnchorChip = null
+        popupVisible = false
+        popupOriginBounds = null
+        selectedChipId = null
+        knownChipIds = emptyList()
+    }
 
     LaunchedEffect(chips) {
         val currentChipIds = chips.map { it.chipId }
@@ -119,7 +156,8 @@ fun StatusBarDynamicIslandContainer(
             if (popupAnchorChip == null) {
                 val fromPeek = shownChip.chipId != selectedChipId
                 popupOriginBounds =
-                    if (fromPeek && companionChipBounds != null) companionChipBounds else mainChipBounds
+                    if (fromPeek && companionChipBounds != null) companionChipBounds
+                    else mainChipBounds
             }
             popupAnchorChip = shownChip
             popupVisible = true
@@ -141,6 +179,10 @@ fun StatusBarDynamicIslandContainer(
             switchInitialized = true
             return@LaunchedEffect
         }
+        if (settings.isReducedMotion) {
+            switchScaleAnim.snapTo(1f)
+            return@LaunchedEffect
+        }
         switchScaleAnim.animateTo(0.92f, tween(40, easing = FastOutSlowInEasing))
         switchScaleAnim.animateTo(
             1f,
@@ -159,7 +201,17 @@ fun StatusBarDynamicIslandContainer(
         }
     }
 
-    val showCompanion = chips.size >= COMPANION_MIN_TASKS
+    fun selectCard(id: String) {
+        chips
+            .firstOrNull { it.chipId == PopupChipId.Utility(id) }
+            ?.let {
+                selectedChipId = it.chipId
+                popupOriginBounds = mainChipBounds
+                it.showPopup()
+            }
+    }
+
+    val showCompanion = settings.isCompanionEnabled && chips.size >= COMPANION_MIN_TASKS
     val companionOnRight = lastDirection >= 0
     val companionChip =
         if (showCompanion) {
@@ -167,7 +219,7 @@ fun StatusBarDynamicIslandContainer(
         } else {
             null
         }
-    val companionDiameter = DynamicIslandCompanionDiameter * heightScale
+    val companionDiameter = DynamicIslandCompanionDiameter * heightScale * settings.miniScale
     val companionBalance = companionDiameter + DynamicIslandCompanionGap
     val effectivePageCount = if (showCompanion) 1 else chips.size
 
@@ -175,15 +227,24 @@ fun StatusBarDynamicIslandContainer(
         modifier =
             modifier
                 .padding(horizontal = 8.dp)
-                .offset(x = cutoutSpec.horizontalOffset)
+                .offset(
+                    x =
+                        (if (settings.alignment == 0) cutoutSpec.horizontalOffset
+                        else alignmentOffset) + settings.offsetX.dp,
+                    y = settings.offsetY.dp,
+                )
                 .onGloballyPositioned { coordinates ->
+                    containerWidth = with(density) { coordinates.size.width.toDp() }
                     val b = coordinates.boundsInWindow()
                     onIslandBoundsChanged(
                         if (chips.isEmpty()) {
                             android.graphics.Rect()
                         } else {
                             android.graphics.Rect(
-                                b.left.toInt(), b.top.toInt(), b.right.toInt(), b.bottom.toInt(),
+                                b.left.toInt(),
+                                b.top.toInt(),
+                                b.right.toInt(),
+                                b.bottom.toInt(),
                             )
                         }
                     )
@@ -221,12 +282,16 @@ fun StatusBarDynamicIslandContainer(
                 if (companionOnRight) {
                     Spacer(modifier = Modifier.width(companionBalance))
                 } else {
-                    CompanionChip(
+                    LunarisBarChip(
                         viewModel = companionChip,
                         popupAttached = popupAnchorChip?.chipId == companionChip.chipId,
-                        diameter = companionDiameter,
+                        pageCount = 1,
+                        cutoutSpec = cutoutSpec,
+                        companion = true,
+                        onPage = ::selectRelative,
+                        onCard = ::selectCard,
                         onTap = { companionChip.showPopup() },
-                        onBoundsChanged = { companionChipBounds = it },
+                        onChipBoundsChanged = { companionChipBounds = it },
                     )
                     Spacer(modifier = Modifier.width(DynamicIslandCompanionGap))
                 }
@@ -236,8 +301,20 @@ fun StatusBarDynamicIslandContainer(
                 targetState = selectedChip.chipId,
                 transitionSpec = {
                     if (targetState == initialState) {
-                        fadeIn(animationSpec = tween(150)) togetherWith
-                            fadeOut(animationSpec = tween(150))
+                        fadeIn(
+                            animationSpec =
+                                tween(
+                                    if (settings.isReducedMotion) 0
+                                    else (150 / settings.animationSpeed).toInt()
+                                )
+                        ) togetherWith
+                            fadeOut(
+                                animationSpec =
+                                    tween(
+                                        if (settings.isReducedMotion) 0
+                                        else (150 / settings.animationSpeed).toInt()
+                                    )
+                            )
                     } else {
                         val slideDirection =
                             if (
@@ -249,48 +326,115 @@ fun StatusBarDynamicIslandContainer(
                                 -1
                             }
                         (slideInHorizontally(
-                            animationSpec = tween(220),
+                            animationSpec =
+                                tween(
+                                    if (settings.isReducedMotion) 0
+                                    else (220 / settings.animationSpeed).toInt()
+                                ),
                             initialOffsetX = { fullWidth -> slideDirection * fullWidth / 2 },
-                        ) + fadeIn(animationSpec = tween(180))) togetherWith
+                        ) +
+                            fadeIn(
+                                animationSpec =
+                                    tween(
+                                        if (settings.isReducedMotion) 0
+                                        else (180 / settings.animationSpeed).toInt()
+                                    )
+                            )) togetherWith
                             (slideOutHorizontally(
-                                animationSpec = tween(200),
+                                animationSpec =
+                                    tween(
+                                        if (settings.isReducedMotion) 0
+                                        else (200 / settings.animationSpeed).toInt()
+                                    ),
                                 targetOffsetX = { fullWidth -> -slideDirection * fullWidth / 3 },
-                            ) + fadeOut(animationSpec = tween(140)))
+                            ) +
+                                fadeOut(
+                                    animationSpec =
+                                        tween(
+                                            if (settings.isReducedMotion) 0
+                                            else (140 / settings.animationSpeed).toInt()
+                                        )
+                                ))
                     }
                 },
                 label = "dynamic_island_chip",
             ) { chipId ->
                 val chip = chips.firstOrNull { it.chipId == chipId } ?: return@AnimatedContent
                 var dragAccumulator by remember(chipId, chips.size) { mutableFloatStateOf(0f) }
+                var verticalDragAccumulator by
+                    remember(chipId, chips.size) { mutableFloatStateOf(0f) }
                 val dragOffset = remember(chipId, chips.size) { Animatable(0f) }
                 val thresholdPx = with(LocalDensity.current) { 36.dp.toPx() }
                 val maxFollowPx = with(LocalDensity.current) { 40.dp.toPx() }
                 val dragScope = rememberCoroutineScope()
 
-                StatusBarDynamicIslandChip(
+                LunarisBarChip(
                     viewModel = chip,
                     popupAttached = popupAnchorChip?.chipId == chip.chipId,
                     pageCount = effectivePageCount,
                     cutoutSpec = cutoutSpec,
                     onChipBoundsChanged = { bounds -> mainChipBounds = bounds },
+                    onPage = ::selectRelative,
+                    onCard = ::selectCard,
                     modifier =
                         Modifier.graphicsLayer { translationX = dragOffset.value }
-                            .pointerInput(chips.size, chip.chipId) {
-                                detectHorizontalDragGestures(
+                            .pointerInput(chips.size, chip.chipId, settings) {
+                                detectDragGestures(
                                     onDragEnd = {
                                         val switched =
                                             when {
+                                                abs(verticalDragAccumulator) >= thresholdPx &&
+                                                    abs(verticalDragAccumulator) >
+                                                        abs(dragAccumulator) -> {
+                                                    lunarisBarAction(
+                                                        settings.text(
+                                                            if (verticalDragAccumulator < 0)
+                                                                "gesture_swipe_up"
+                                                            else "gesture_swipe_down",
+                                                            if (verticalDragAccumulator < 0)
+                                                                "expand"
+                                                            else "notifications",
+                                                        ),
+                                                        context,
+                                                        chip,
+                                                        chip.showPopup,
+                                                        ::selectRelative,
+                                                        ::selectCard,
+                                                    )
+                                                    true
+                                                }
                                                 dragAccumulator <= -thresholdPx -> {
-                                                    selectRelative(1)
+                                                    lunarisBarAction(
+                                                        settings.text(
+                                                            "gesture_swipe_left",
+                                                            "next_card",
+                                                        ),
+                                                        context,
+                                                        chip,
+                                                        chip.showPopup,
+                                                        ::selectRelative,
+                                                        ::selectCard,
+                                                    )
                                                     true
                                                 }
                                                 dragAccumulator >= thresholdPx -> {
-                                                    selectRelative(-1)
+                                                    lunarisBarAction(
+                                                        settings.text(
+                                                            "gesture_swipe_right",
+                                                            "previous_card",
+                                                        ),
+                                                        context,
+                                                        chip,
+                                                        chip.showPopup,
+                                                        ::selectRelative,
+                                                        ::selectCard,
+                                                    )
                                                     true
                                                 }
                                                 else -> false
                                             }
                                         dragAccumulator = 0f
+                                        verticalDragAccumulator = 0f
                                         dragScope.launch {
                                             if (switched) {
                                                 dragOffset.snapTo(0f)
@@ -309,6 +453,7 @@ fun StatusBarDynamicIslandContainer(
                                     },
                                     onDragCancel = {
                                         dragAccumulator = 0f
+                                        verticalDragAccumulator = 0f
                                         dragScope.launch {
                                             dragOffset.animateTo(
                                                 targetValue = 0f,
@@ -321,33 +466,41 @@ fun StatusBarDynamicIslandContainer(
                                             )
                                         }
                                     },
-                                    onHorizontalDrag = { change, dragAmount ->
-                                        dragAccumulator += dragAmount
+                                    onDrag = { change, dragAmount ->
+                                        dragAccumulator += dragAmount.x
+                                        verticalDragAccumulator += dragAmount.y
                                         val target =
-                                            (dragAccumulator * 0.5f)
-                                                .coerceIn(-maxFollowPx, maxFollowPx)
+                                            (dragAccumulator * 0.5f).coerceIn(
+                                                -maxFollowPx,
+                                                maxFollowPx,
+                                            )
                                         dragScope.launch { dragOffset.snapTo(target) }
-                                        if (chips.size > 1 && abs(dragAccumulator) > 8f) {
+                                        if (
+                                            abs(dragAccumulator) > 8f ||
+                                                abs(verticalDragAccumulator) > 8f
+                                        ) {
                                             change.consume()
                                         }
                                     },
                                 )
                             },
-                    onTap = {
-                        if (chip.isPopupShown) chip.hidePopup() else chip.showPopup()
-                    },
+                    onTap = { if (chip.isPopupShown) chip.hidePopup() else chip.showPopup() },
                 )
             }
 
             if (showCompanion && companionChip != null) {
                 if (companionOnRight) {
                     Spacer(modifier = Modifier.width(DynamicIslandCompanionGap))
-                    CompanionChip(
+                    LunarisBarChip(
                         viewModel = companionChip,
                         popupAttached = popupAnchorChip?.chipId == companionChip.chipId,
-                        diameter = companionDiameter,
+                        pageCount = 1,
+                        cutoutSpec = cutoutSpec,
+                        companion = true,
+                        onPage = ::selectRelative,
+                        onCard = ::selectCard,
                         onTap = { companionChip.showPopup() },
-                        onBoundsChanged = { companionChipBounds = it },
+                        onChipBoundsChanged = { companionChipBounds = it },
                     )
                 } else {
                     Spacer(modifier = Modifier.width(companionBalance))

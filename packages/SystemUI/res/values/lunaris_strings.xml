@@ -382,13 +382,11 @@
     <string name="dynamic_island_event_ring">Ring</string>
     <string name="dynamic_island_event_vibrate">Vibrate</string>
     <string name="dynamic_island_event_silent">Silent</string>
-    <string name="dynamic_island_event_clipboard">Clipboard</string>
     <string name="dynamic_island_event_call">Call</string>
     <string name="dynamic_island_incoming_call">Incoming call</string>
     <string name="dynamic_island_open_call">Open call</string>
     <string name="dynamic_island_event_timer">Timer</string>
     <string name="dynamic_island_event_recording">Audio recording</string>
-    <string name="dynamic_island_event_recent_apps">Recent apps</string>
     <string name="dynamic_island_event_paused">Paused</string>
     <string name="dynamic_island_event_saved">Saved</string>
     <string name="lunaris_qs_tile_folder">Tile folder</string>

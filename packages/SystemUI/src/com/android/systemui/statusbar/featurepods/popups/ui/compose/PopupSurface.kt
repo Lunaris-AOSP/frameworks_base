@@ -18,16 +18,15 @@ package com.android.systemui.statusbar.featurepods.popups.ui.compose
 
 import android.content.Context
 import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Path as AndroidPath
+import android.graphics.RectF
 import android.graphics.drawable.Drawable
-import android.graphics.drawable.GradientDrawable
 import android.view.View
 import android.view.ViewGroup
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
@@ -35,33 +34,64 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.android.axion.blur.AxBlurBackgroundRenderer
-import com.android.axion.blur.AxBlurColors
-import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.POPUP_COLOR_MODE_BLUR
-import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.POPUP_COLOR_MODE_SOLID_BLACK
 import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.observeDynamicIslandPopupColorMode
 import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.readDynamicIslandPopupColorMode
+import kotlin.math.roundToInt
 
-private class PopupBlurHost(
-    context: Context,
-    private val cornerRadiusPx: Float,
-    private val overlayColor: Int = AxBlurColors.surfaceLightTint(context),
-    private val fallbackColor: Int = overlayColor and 0x00FFFFFF or (0xCC shl 24),
-) : View(context) {
+internal class PopupBlurHost(context: Context) : View(context) {
     private val blur = AxBlurBackgroundRenderer(this)
+    private val bounds = RectF()
+    private val fallbackPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private var shape: Shape? = null
+    private var shapeDensity = Density(context.resources.displayMetrics.density)
+    private var shapeLayoutDirection = LayoutDirection.Ltr
+    private var clipPath: AndroidPath? = null
+    private var cornerRadiusPx = 0f
+    private var overlayColor = 0
+    private var surfaceAlpha = 255
 
-    private val bgDrawable: GradientDrawable = GradientDrawable().also { d ->
-        d.setColor(0x00000000)
-        d.cornerRadius = cornerRadiusPx
+    fun updateAppearance(
+        shape: Shape,
+        density: Density,
+        layoutDirection: LayoutDirection,
+        overlayColor: Int,
+        fallbackColor: Int,
+        alpha: Float,
+    ) {
+        if (
+            this.shape != shape ||
+                shapeDensity != density ||
+                shapeLayoutDirection != layoutDirection
+        ) {
+            this.shape = shape
+            shapeDensity = density
+            shapeLayoutDirection = layoutDirection
+            clipPath = null
+        }
+        this.overlayColor = overlayColor
+        fallbackPaint.color = fallbackColor
+        surfaceAlpha = (alpha.coerceIn(0f, 1f) * 255).roundToInt()
+        invalidate()
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        bounds.set(0f, 0f, w.toFloat(), h.toFloat())
+        clipPath = null
     }
 
     override fun onAttachedToWindow() {
@@ -84,31 +114,80 @@ private class PopupBlurHost(
         blur.verifyDrawable(who) || super.verifyDrawable(who)
 
     override fun draw(canvas: Canvas) {
-        if (width > 0 && height > 0) {
-            bgDrawable.setBounds(0, 0, width, height)
-            bgDrawable.cornerRadius = minOf(cornerRadiusPx, width / 2f, height / 2f)
-            if (!blur.drawBackgroundWithOverlayColor(canvas, bgDrawable, overlayColor)) {
-                bgDrawable.setColor(fallbackColor)
-                bgDrawable.draw(canvas)
-                bgDrawable.setColor(0x00000000)
-            }
+        if (width <= 0 || height <= 0) return
+        val currentShape = shape ?: return
+        val path =
+            clipPath
+                ?: run {
+                    val outline =
+                        currentShape.createOutline(
+                            Size(width.toFloat(), height.toFloat()),
+                            shapeLayoutDirection,
+                            shapeDensity,
+                        )
+                    cornerRadiusPx =
+                        when (outline) {
+                            is Outline.Rounded -> outline.roundRect.topLeftCornerRadius.x
+                            is Outline.Generic ->
+                                if (currentShape is LunarisBarSquircle)
+                                    minOf(
+                                        with(shapeDensity) { currentShape.radius.toPx() },
+                                        width / 2f,
+                                        height / 2f,
+                                    )
+                                else 0f
+                            is Outline.Rectangle -> 0f
+                        }
+                    Path()
+                        .apply {
+                            when (outline) {
+                                is Outline.Generic -> addPath(outline.path)
+                                is Outline.Rounded -> addRoundRect(outline.roundRect)
+                                is Outline.Rectangle -> addRect(outline.rect)
+                            }
+                        }
+                        .asAndroidPath()
+                        .also { clipPath = it }
+                }
+        if (!blur.draw(canvas, bounds, path, cornerRadiusPx, overlayColor, surfaceAlpha)) {
+            canvas.drawPath(path, fallbackPaint)
         }
     }
 }
 
 @Composable
-internal fun RedesignedMediaPopupBackground() {
-    val radius = with(LocalDensity.current) { DynamicIslandMotion.CardCornerRadius.toPx() }
+internal fun PopupBlurBackground(
+    shape: Shape,
+    overlayColor: Int,
+    fallbackColor: Int,
+    modifier: Modifier = Modifier,
+    alpha: Float = 1f,
+) {
+    val density = LocalDensity.current
+    val layoutDirection = LocalLayoutDirection.current
     AndroidView(
-        factory = { context ->
-            PopupBlurHost(
-                context = context,
-                cornerRadiusPx = radius,
-                overlayColor = 0x750E0E10,
-                fallbackColor = 0xE6141416.toInt(),
+        factory = { PopupBlurHost(it) },
+        update = { view ->
+            view.updateAppearance(
+                shape,
+                density,
+                layoutDirection,
+                overlayColor,
+                fallbackColor,
+                alpha,
             )
         },
-        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(DynamicIslandMotion.CardCornerRadius)),
+        modifier = modifier.clip(shape),
+    )
+}
+
+@Composable
+internal fun RedesignedMediaPopupBackground(shape: Shape) {
+    PopupBlurBackground(
+        shape = shape,
+        overlayColor = 0x750E0E10,
+        fallbackColor = 0xE6141416.toInt(),
+        modifier = Modifier.fillMaxSize(),
     )
 }
 
@@ -130,72 +209,16 @@ fun PopupSurface(
     animateContentAsUnit: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    val islandMotion = LocalIslandPopupRevealMillis.current != null
-    val surfaceShape = if (islandMotion) RoundedCornerShape(DynamicIslandMotion.CardCornerRadius) else shape
     val animatedContent: @Composable () -> Unit = {
-        if (animateContentAsUnit) {
+        if (animateContentAsUnit && LocalLunarisBarState.current.alternativeAnimation) {
             Box(Modifier.islandPopupRow(0), propagateMinConstraints = true) { content() }
-        } else {
-            content()
-        }
+        } else content()
     }
     if (LocalIslandPopupContentOnly.current) {
-        val contentColor = when (colorMode) {
-            POPUP_COLOR_MODE_SOLID_BLACK -> Color.White
-            POPUP_COLOR_MODE_BLUR -> MaterialTheme.colorScheme.onSurface
-            else -> MaterialTheme.colorScheme.onSurface
-        }
-        CompositionLocalProvider(LocalContentColor provides contentColor) {
+        CompositionLocalProvider(LocalContentColor provides LocalLunarisBarColors.current.content) {
             Box(modifier, propagateMinConstraints = true) { animatedContent() }
         }
-        return
-    }
-    when (colorMode) {
-        POPUP_COLOR_MODE_BLUR -> {
-            val density = LocalDensity.current
-            Box(
-                modifier = modifier
-                    .clip(surfaceShape)
-                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen },
-            ) {
-                AndroidView(
-                    factory = { ctx ->
-                        val radiusPx = with(density) {
-                            (if (islandMotion) DynamicIslandMotion.CardCornerRadius else 32.dp).toPx()
-                        }
-                        PopupBlurHost(ctx, radiusPx).also {
-                            it.layoutParams = ViewGroup.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                            )
-                        }
-                    },
-                    modifier = Modifier.matchParentSize(),
-                )
-                CompositionLocalProvider(
-                    LocalContentColor provides MaterialTheme.colorScheme.onSurface
-                ) {
-                    animatedContent()
-                }
-            }
-        }
-        POPUP_COLOR_MODE_SOLID_BLACK -> {
-            Surface(
-                color = Color.Black,
-                contentColor = Color.White,
-                shape = surfaceShape,
-                shadowElevation = shadowElevation,
-                modifier = modifier,
-            ) { animatedContent() }
-        }
-        else -> {
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-                shape = surfaceShape,
-                shadowElevation = shadowElevation,
-                modifier = modifier,
-            ) { animatedContent() }
-        }
+    } else {
+        LunarisBarSurface(modifier = modifier) { animatedContent() }
     }
 }

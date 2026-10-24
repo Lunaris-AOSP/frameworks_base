@@ -22,6 +22,8 @@ import com.android.systemui.common.shared.model.ContentDescription
 import com.android.systemui.common.shared.model.ContentDescription.Companion.loadContentDescription
 import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.dagger.qualifiers.Application
+import com.android.systemui.flashlight.domain.interactor.FlashlightInteractor
+import com.android.systemui.flashlight.shared.model.FlashlightModel
 import com.android.systemui.haptics.slider.compose.ui.SliderHapticsViewModel
 import com.android.systemui.lifecycle.ExclusiveActivatable
 import com.android.systemui.lifecycle.Hydrator
@@ -36,13 +38,11 @@ import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentModel
 import com.android.systemui.statusbar.featurepods.popups.ui.viewmodel.StatusBarPopupChipViewModel
 import com.android.systemui.statusbar.policy.FlashlightController
-import com.android.systemui.flashlight.domain.interactor.FlashlightInteractor
-import com.android.systemui.flashlight.shared.model.FlashlightModel
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.combine
 
 /** ViewModel backing the flashlight page inside the dynamic island. */
 class FlashlightPopupChipViewModel
@@ -87,9 +87,9 @@ constructor(
                     .combine(flashlightInteractor.state) { state, flashlightModel ->
                         toPopupChipModel(state, flashlightModel)
                     }
-                    .combine(
-                        observeDynamicIslandFeatureEnabled(context, FLASHLIGHT)
-                    ) { model, enabled ->
+                    .combine(observeDynamicIslandFeatureEnabled(context, FLASHLIGHT)) {
+                        model,
+                        enabled ->
                         if (enabled) model else PopupChipModel.Hidden(PopupChipId.Flashlight)
                     },
         )
@@ -128,10 +128,10 @@ constructor(
                             Icon.Resource(
                                 resId = R.drawable.ic_dynamic_island_flashlight,
                                 contentDescription = contentDescription,
-                            ),
+                            )
                     )
                 ),
-            chipText = context.getString(R.string.dynamic_island_flashlight_short),
+            chipText = model.strengthPercent?.let { "$it%" },
             colors = ColorsModel.DynamicIsland,
             contentDescription = contentDescription.loadContentDescription(context),
             popupContent =

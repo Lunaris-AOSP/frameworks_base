@@ -95,6 +95,14 @@ constructor(
         updateColors()
     }
 
+    fun setTrackColor(color: Int) {
+        val trackColor = (color and 0x00ffffff) or 0x66000000
+        if (trackPaint.color == trackColor) return
+        trackPaint.color = trackColor
+        ringPaint.color = color
+        invalidate()
+    }
+
     fun setPlaybackState(isPlaying: Boolean, animate: Boolean = true) {
         if (playing == isPlaying && animationsAllowed == animate) return
         playing = isPlaying

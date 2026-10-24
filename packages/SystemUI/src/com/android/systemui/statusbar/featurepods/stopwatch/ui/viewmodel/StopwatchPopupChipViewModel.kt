@@ -163,6 +163,8 @@ constructor(
 
         return PopupChipModel.Shown(
             chipId = PopupChipId.Stopwatch,
+            sourcePackageName = model.sourcePackageName,
+            sourceUserId = model.sourceUserId,
             icons = listOfNotNull(model.icon?.let { ChipIcon(icon = it, onClick = model.onOpen) }),
             chipText = model.elapsedTimeText,
             colors = ColorsModel.DynamicIsland,
@@ -202,6 +204,8 @@ private fun NotificationEntry.toStopwatchModel(
         )
 
     return StopwatchPopupModel(
+        sourcePackageName = sbn.packageName,
+        sourceUserId = sbn.userId,
         icon = fallbackIcon,
         title = context.getString(R.string.dynamic_island_stopwatch_title),
         subtitle = appLabel.takeUnless { it.isBlank() },

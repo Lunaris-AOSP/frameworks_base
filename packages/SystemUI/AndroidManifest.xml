@@ -464,6 +464,17 @@
         tools:replace="android:appComponentFactory"
         android:appComponentFactory=".PhoneSystemUIAppComponentFactory"
         android:enableOnBackInvokedCallback="true">
+        <activity
+            android:name=".statusbar.featurepods.popups.ui.LunarisBarWidgetPickerActivity"
+            android:label="@string/lunaris_bar_title"
+            android:exported="true"
+            android:permission="android.permission.WRITE_SECURE_SETTINGS"
+            android:theme="@android:style/Theme.Material.NoActionBar">
+            <intent-filter>
+                <action android:name="com.android.systemui.action.LUNARIS_BAR_WIDGET_PICKER" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
         <!-- Keep theme in sync with SystemUIApplication.onCreate().
              Setting the theme on the application does not affect views inflated by services.
              The application theme is set again from onCreate to take effect for those views. -->

@@ -35,7 +35,8 @@ import kotlin.math.cos
 internal class IslandMotionSpring(initialValue: Float) {
     private val animation = Animatable(initialValue)
     private var retainedVelocity = 0f
-    val value: Float get() = animation.value
+    val value: Float
+        get() = animation.value
 
     suspend fun animateTo(targetValue: Float, animationSpec: SpringSpec<Float>) {
         animation.animateTo(targetValue, animationSpec, initialVelocity = retainedVelocity) {
@@ -70,9 +71,6 @@ internal object DynamicIslandMotion {
     const val ContentEnterMillis = 150
     const val FastContentEnterMillis = 120
     const val ContentExitMillis = 80
-    const val PillContentDelayMillis = 330
-    const val PillRegrowDelayMillis = 420
-    val CardCornerRadius = 28.dp
 
     val ButtonDown = Easing { value ->
         val remaining = 1f - value

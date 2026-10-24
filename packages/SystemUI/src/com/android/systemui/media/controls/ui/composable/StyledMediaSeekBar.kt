@@ -16,6 +16,7 @@
 
 package com.android.systemui.media.controls.ui.composable
 
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.drawable.Drawable
 import android.view.View
@@ -49,6 +50,7 @@ fun StyledMediaSeekBar(
     onScrubStart: () -> Unit = {},
     onScrubStop: () -> Unit = {},
     onSeek: (Long) -> Unit = {},
+    contentColor: Int? = null,
 ) {
     val currentOnSeek by rememberUpdatedState(onSeek)
     val currentOnScrubStart by rememberUpdatedState(onScrubStart)
@@ -116,6 +118,18 @@ fun StyledMediaSeekBar(
                 }
             },
             update = { bar ->
+                contentColor?.let { color ->
+                    when (bar) {
+                        is GlowingSeekBar -> bar.setBarColor(color)
+                        is GradientWaveSeekBar -> bar.setTrackColor(color)
+                        is WaveformSeekBar -> { bar.setWaveformColor(color); bar.setThumbColor(color) }
+                        else -> {
+                            bar.progressTintList = ColorStateList.valueOf(color)
+                            bar.thumbTintList = ColorStateList.valueOf(color)
+                            bar.progressBackgroundTintList = ColorStateList.valueOf((color and 0x00ffffff) or 0x33000000)
+                        }
+                    }
+                }
                 bar.max = durationMs.coerceIn(1L, Int.MAX_VALUE.toLong()).toInt()
                 if (!isTrackingTouch) {
                     bar.progress = positionMs.coerceIn(0L, bar.max.toLong()).toInt()

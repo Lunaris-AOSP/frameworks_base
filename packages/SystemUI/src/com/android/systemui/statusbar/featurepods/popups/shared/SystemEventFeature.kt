@@ -13,11 +13,9 @@ enum class SystemEventFeature(val settingKey: String, val notificationType: Stri
     HOTSPOT(DynamicIslandFeatureSettings.HOTSPOT),
     VPN(DynamicIslandFeatureSettings.VPN),
     RINGER(DynamicIslandFeatureSettings.RINGER),
-    CLIPBOARD(DynamicIslandFeatureSettings.CLIPBOARD),
     TIMER(DynamicIslandFeatureSettings.TIMER, "timer"),
     AUDIO_RECORDING(DynamicIslandFeatureSettings.AUDIO_RECORDING, "audio_recording"),
-    NOW_PLAYING(DynamicIslandFeatureSettings.NOW_PLAYING, "now_playing"),
-    RECENT_APPS(DynamicIslandFeatureSettings.RECENT_APPS);
+    NOW_PLAYING(DynamicIslandFeatureSettings.NOW_PLAYING, "now_playing");
 
     companion object {
         fun forEvent(event: IslandEvent): SystemEventFeature? = when (event) {
@@ -30,11 +28,9 @@ enum class SystemEventFeature(val settingKey: String, val notificationType: Stri
             is IslandEvent.Hotspot -> HOTSPOT
             is IslandEvent.Vpn -> VPN
             is IslandEvent.RingerMode -> RINGER
-            is IslandEvent.Clipboard -> CLIPBOARD
             is IslandEvent.Timer -> TIMER
             is IslandEvent.AudioRecording -> AUDIO_RECORDING
             is IslandEvent.NowPlaying -> NOW_PLAYING
-            is IslandEvent.AppSwitch -> RECENT_APPS
             else -> null
         }
     }

@@ -20,7 +20,6 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -33,17 +32,14 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.changedToDownIgnoreConsumed
@@ -59,17 +55,16 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.acos
 import kotlin.math.atan2
 import kotlin.math.cos
-import kotlin.math.PI
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 private class IslandPopupGeometry(origin: Rect) {
     val width = IslandMotionSpring(origin.height * 1.8f)
@@ -83,8 +78,12 @@ private class IslandPopupGeometry(origin: Rect) {
         get() {
             val halfWidth = width.value.coerceAtLeast(1f) / 2f
             val halfHeight = height.value.coerceAtLeast(1f) / 2f
-            return Rect(centerX.value - halfWidth, centerY.value - halfHeight,
-                centerX.value + halfWidth, centerY.value + halfHeight)
+            return Rect(
+                centerX.value - halfWidth,
+                centerY.value - halfHeight,
+                centerX.value + halfWidth,
+                centerY.value + halfHeight,
+            )
         }
 }
 
@@ -98,16 +97,29 @@ private fun Path.islandNeck(
     reset()
     val delta = secondCenter - firstCenter
     val distance = delta.getDistance()
-    if (firstRadius <= 0f || secondRadius <= 0f || spread <= 0.01f ||
-        distance <= abs(firstRadius - secondRadius) + 0.5f) return false
+    if (
+        firstRadius <= 0f ||
+            secondRadius <= 0f ||
+            spread <= 0.01f ||
+            distance <= abs(firstRadius - secondRadius) + 0.5f
+    )
+        return false
     val total = firstRadius + secondRadius
     val firstIntersection: Float
     val secondIntersection: Float
     if (distance < total) {
-        firstIntersection = acos(((firstRadius * firstRadius + distance * distance -
-            secondRadius * secondRadius) / (2f * firstRadius * distance)).coerceIn(-1f, 1f))
-        secondIntersection = acos(((secondRadius * secondRadius + distance * distance -
-            firstRadius * firstRadius) / (2f * secondRadius * distance)).coerceIn(-1f, 1f))
+        firstIntersection =
+            acos(
+                ((firstRadius * firstRadius + distance * distance - secondRadius * secondRadius) /
+                        (2f * firstRadius * distance))
+                    .coerceIn(-1f, 1f)
+            )
+        secondIntersection =
+            acos(
+                ((secondRadius * secondRadius + distance * distance - firstRadius * firstRadius) /
+                        (2f * secondRadius * distance))
+                    .coerceIn(-1f, 1f)
+            )
     } else {
         firstIntersection = 0f
         secondIntersection = 0f
@@ -125,8 +137,8 @@ private fun Path.islandNeck(
     val p2 = polar(firstCenter, firstRadius, a2)
     val p3 = polar(secondCenter, secondRadius, a3)
     val p4 = polar(secondCenter, secondRadius, a4)
-    val handle = minOf(spread * 2.4f, (p3 - p1).getDistance() / total) *
-        minOf(1f, distance * 2f / total)
+    val handle =
+        minOf(spread * 2.4f, (p3 - p1).getDistance() / total) * minOf(1f, distance * 2f / total)
     val h1 = polar(p1, firstRadius * handle, a1 - pi / 2f)
     val h2 = polar(p2, firstRadius * handle, a2 + pi / 2f)
     val h3 = polar(p3, secondRadius * handle, a3 + pi / 2f)
@@ -151,16 +163,16 @@ internal fun IslandPopupMorph(
     secondaryContent: @Composable () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
+    val settings = LocalLunarisBarState.current.settings
+    val popupShape = lunarisBarExpandedShape(settings)
     val density = LocalDensity.current
     val view = LocalView.current
     val margin = with(density) { 12.dp.roundToPx() }
     val gap = with(density) { 8.dp.toPx() }
-    val cornerRadius = with(density) { DynamicIslandMotion.CardCornerRadius.toPx() }
     val returnDistance = with(density) { 4.dp.toPx() }
     val neckDistance = with(density) { 26.dp.toPx() }
     val neckRadius = with(density) { 24.dp.toPx() }
     val fallbackHeight = with(density) { 32.dp.toPx() }
-    val strokeWidth = with(density) { 0.7.dp.toPx() }.coerceAtLeast(1.5f)
     val restDiameter = islandRestDiameterPx()
     val neck = remember { Path() }
     val screenLocation = remember { IntArray(2) }
@@ -171,31 +183,33 @@ internal fun IslandPopupMorph(
     var motion by remember { mutableStateOf<IslandPopupGeometry?>(null) }
     val contentFade = remember { Animatable(0f) }
     val revealMillis = remember { Animatable(0f) }
-    val pillReturnDelay = remember { Animatable(0f) }
     val currentOnHidden by rememberUpdatedState(onHidden)
     val currentOnDismiss by rememberUpdatedState(onDismissRequest)
     val currentVisible by rememberUpdatedState(isVisible)
-    val origin = chipBoundsInScreen?.takeIf { it.width > 0f && it.height > 0f }
-        ?.translate(-(screenOffset ?: Offset.Zero))
-        ?: Rect(
-            rootSize.width / 2f - fallbackHeight,
-            (topInsetPx - gap - fallbackHeight).coerceAtLeast(0f),
-            rootSize.width / 2f + fallbackHeight,
-            topInsetPx - gap,
+    val origin =
+        chipBoundsInScreen
+            ?.takeIf { it.width > 0f && it.height > 0f }
+            ?.translate(-(screenOffset ?: Offset.Zero))
+            ?: Rect(
+                rootSize.width / 2f - fallbackHeight,
+                (topInsetPx - gap - fallbackHeight).coerceAtLeast(0f),
+                rootSize.width / 2f + fallbackHeight,
+                topInsetPx - gap,
+            )
+    val targetTop =
+        if (settings.expandedMode == 0) origin.top
+        else maxOf(origin.bottom + gap, topInsetPx.toFloat())
+    val targetLeft =
+        (origin.center.x - contentSize.width / 2f).coerceIn(
+            margin.toFloat(),
+            (rootSize.width - margin - contentSize.width).coerceAtLeast(margin).toFloat(),
         )
-    val targetTop = origin.bottom + gap
-    val targetLeft = (origin.center.x - contentSize.width / 2f).coerceIn(
-        margin.toFloat(),
-        (rootSize.width - margin - contentSize.width).coerceAtLeast(margin).toFloat(),
-    )
-    val destination = Rect(targetLeft, targetTop,
-        targetLeft + contentSize.width, targetTop + contentSize.height)
+    val destination =
+        Rect(targetLeft, targetTop, targetLeft + contentSize.width, targetTop + contentSize.height)
     val ready = screenOffset != null && contentSize.width > 0 && contentSize.height > 0
     val currentOrigin by rememberUpdatedState(origin)
 
-    LaunchedEffect(ready) {
-        if (ready && motion == null) motion = IslandPopupGeometry(origin)
-    }
+    LaunchedEffect(ready) { if (ready && motion == null) motion = IslandPopupGeometry(origin) }
 
     LaunchedEffect(motion, isVisible, origin, destination, fastEnter) {
         val geometry = motion ?: return@LaunchedEffect
@@ -245,28 +259,24 @@ internal fun IslandPopupMorph(
 
     LaunchedEffect(motion, isVisible, origin, restDiameter) {
         val geometry = motion ?: return@LaunchedEffect
-        val restingSize = (restDiameter ?: (origin.height * 0.45f))
-            .coerceAtMost(minOf(origin.width, origin.height))
+        val restingSize =
+            (restDiameter ?: (origin.height * 0.45f)).coerceAtMost(
+                minOf(origin.width, origin.height)
+            )
         coroutineScope {
-            val shrinking = launch {
-                coroutineScope {
-                    launch { geometry.pillWidth.animateTo(restingSize, DynamicIslandMotion.PillShrink) }
-                    launch { geometry.pillHeight.animateTo(restingSize, DynamicIslandMotion.PillShrink) }
-                }
+            launch {
+                geometry.pillWidth.animateTo(
+                    if (isVisible) restingSize else origin.width,
+                    if (isVisible) DynamicIslandMotion.PillShrink
+                    else DynamicIslandMotion.springFor(0.38f, 0.70f, 0.4f),
+                )
             }
-            if (!isVisible) {
-                pillReturnDelay.snapTo(0f)
-                pillReturnDelay.animateTo(1f, tween(DynamicIslandMotion.PillRegrowDelayMillis,
-                    easing = LinearEasing))
-                shrinking.cancelAndJoin()
-                launch {
-                    geometry.pillWidth.animateTo(origin.width,
-                        DynamicIslandMotion.springFor(0.38f, 0.70f, 0.4f))
-                }
-                launch {
-                    geometry.pillHeight.animateTo(origin.height,
-                        DynamicIslandMotion.springFor(0.34f, 0.75f, 0.4f))
-                }
+            launch {
+                geometry.pillHeight.animateTo(
+                    if (isVisible) restingSize else origin.height,
+                    if (isVisible) DynamicIslandMotion.PillShrink
+                    else DynamicIslandMotion.springFor(0.34f, 0.75f, 0.4f),
+                )
             }
         }
     }
@@ -308,153 +318,203 @@ internal fun IslandPopupMorph(
                 }
             }
         } else {
-            contentFade.animateTo(0f, tween(DynamicIslandMotion.ContentExitMillis,
-                easing = DynamicIslandMotion.EaseInOut))
+            contentFade.animateTo(
+                0f,
+                tween(DynamicIslandMotion.ContentExitMillis, easing = DynamicIslandMotion.EaseInOut),
+            )
             snapshotFlow {
-                val frame = geometry.bounds
-                (frame.center - currentOrigin.center).getDistance() < returnDistance &&
-                    frame.height < currentOrigin.height * 0.95f
-            }.first { it }
+                    val frame = geometry.bounds
+                    (frame.center - currentOrigin.center).getDistance() < returnDistance &&
+                        frame.height < currentOrigin.height * 0.95f
+                }
+                .first { it }
             if (!currentVisible) currentOnHidden()
         }
     }
 
     val geometry = motion
     val frame = geometry?.bounds ?: Rect.Zero
-    val expansion = ((frame.height - origin.height) /
-        (destination.height - origin.height).coerceAtLeast(1f)).coerceIn(0f, 1f)
+    val expansion =
+        ((frame.height - origin.height) / (destination.height - origin.height).coerceAtLeast(1f))
+            .coerceIn(0f, 1f)
     // Unlock feedback should appear during expansion, without waiting for the card to settle.
     val bodyAlpha =
         contentFade.value *
             if (isVisible && !fastEnter) DynamicIslandMotion.contentReveal(expansion) else 1f
     val currentBodyAlpha by rememberUpdatedState(bodyAlpha)
     val currentBounds by rememberUpdatedState(frame)
-    val secondaryBounds = Rect(
-        frame.center.x - secondarySize.width / 2f,
-        frame.bottom + gap,
-        frame.center.x + secondarySize.width / 2f,
-        frame.bottom + gap + secondarySize.height,
-    )
+    val secondaryBounds =
+        Rect(
+            frame.center.x - secondarySize.width / 2f,
+            frame.bottom + gap,
+            frame.center.x + secondarySize.width / 2f,
+            frame.bottom + gap + secondarySize.height,
+        )
     val currentSecondaryBounds by rememberUpdatedState(secondaryBounds)
     val surfaceReveal = ((expansion - 0.82f) / 0.18f).coerceIn(0f, 1f)
-    val contentClip = object : Shape {
-        override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
-            val left = (size.width - frame.width) / 2f
-            return Outline.Rounded(RoundRect(left, 0f, left + frame.width, frame.height,
-                CornerRadius(minOf(cornerRadius, frame.height / 2f, frame.width / 2f))))
+    val contentClip =
+        object : Shape {
+            override fun createOutline(
+                size: Size,
+                layoutDirection: LayoutDirection,
+                density: Density,
+            ): Outline {
+                val left = (size.width - frame.width) / 2f
+                val outline =
+                    popupShape.createOutline(
+                        Size(frame.width, frame.height),
+                        layoutDirection,
+                        density,
+                    )
+                return Outline.Generic(
+                    Path().apply {
+                        when (outline) {
+                            is Outline.Generic -> addPath(outline.path)
+                            is Outline.Rounded -> addRoundRect(outline.roundRect)
+                            is Outline.Rectangle -> addRect(outline.rect)
+                        }
+                        translate(Offset(left, 0f))
+                    }
+                )
+            }
         }
-    }
 
     Layout(
-        modifier = Modifier
-            .onGloballyPositioned {
-                view.getLocationOnScreen(screenLocation)
-                screenOffset = Offset(screenLocation[0].toFloat(), screenLocation[1].toFloat())
-            }
-            .drawBehind {
-                if (geometry != null) {
-                    val pillBottom = origin.center.y + geometry.pillHeight.value / 2f
-                    val spread = 0.6f * (1f - expansion) *
-                        (1f - ((frame.top - pillBottom) / neckDistance).coerceIn(0f, 1f))
-                    val radius = minOf(neckRadius, frame.width / 2f, frame.height / 2f)
-                    val pillRadius = minOf(origin.height / 2f,
-                        maxOf(geometry.pillWidth.value, geometry.pillHeight.value) / 2f)
-                    if (spread > 0.02f && neck.islandNeck(origin.center, pillRadius,
-                            Offset(frame.center.x, frame.top + radius), radius, spread)) {
-                        drawPath(neck, Color.Black)
-                    }
+        modifier =
+            Modifier.onGloballyPositioned {
+                    view.getLocationOnScreen(screenLocation)
+                    screenOffset = Offset(screenLocation[0].toFloat(), screenLocation[1].toFloat())
                 }
-            }
-            .pointerInput(Unit) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent(PointerEventPass.Initial)
-                        event.changes.forEach { change ->
-                            if (change.changedToDownIgnoreConsumed() &&
-                                !currentBounds.contains(change.position) &&
-                                !currentSecondaryBounds.contains(change.position)) {
-                                change.consume()
-                                currentOnDismiss()
-                            }
-                            if (!currentVisible || currentBodyAlpha < 0.5f) change.consume()
+                .drawBehind {
+                    if (geometry != null) {
+                        val pillBottom = origin.center.y + geometry.pillHeight.value / 2f
+                        val spread =
+                            0.6f *
+                                (1f - expansion) *
+                                (1f - ((frame.top - pillBottom) / neckDistance).coerceIn(0f, 1f))
+                        val radius = minOf(neckRadius, frame.width / 2f, frame.height / 2f)
+                        val pillRadius =
+                            minOf(
+                                origin.height / 2f,
+                                maxOf(geometry.pillWidth.value, geometry.pillHeight.value) / 2f,
+                            )
+                        if (
+                            spread > 0.02f &&
+                                neck.islandNeck(
+                                    origin.center,
+                                    pillRadius,
+                                    Offset(frame.center.x, frame.top + radius),
+                                    radius,
+                                    spread,
+                                )
+                        ) {
+                            drawPath(neck, Color.Black)
                         }
                     }
                 }
-            },
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            event.changes.forEach { change ->
+                                if (
+                                    change.changedToDownIgnoreConsumed() &&
+                                        !currentBounds.contains(change.position) &&
+                                        !currentSecondaryBounds.contains(change.position)
+                                ) {
+                                    change.consume()
+                                    currentOnDismiss()
+                                }
+                                if (!currentVisible || currentBodyAlpha < 0.5f) change.consume()
+                            }
+                        }
+                    }
+                },
         content = {
-            Box(Modifier.drawWithContent {
-                drawContent()
-                if (geometry != null) {
-                    val radius = minOf(cornerRadius, size.height / 2f, size.width / 2f)
-                    drawRoundRect(Color(0xFF0E0E10), cornerRadius = CornerRadius(radius),
-                        alpha = 1f - surfaceReveal)
-                    val rimAlpha = 0.4f + 0.6f * expansion
-                    drawRoundRect(
-                        brush = Brush.verticalGradient(listOf(
-                            Color.White.copy(alpha = 56f / 255f * rimAlpha),
-                            Color.White.copy(alpha = 15f / 255f * rimAlpha),
-                        )),
-                        topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f),
-                        size = Size((size.width - strokeWidth).coerceAtLeast(0f),
-                            (size.height - strokeWidth).coerceAtLeast(0f)),
-                        cornerRadius = CornerRadius(radius),
-                        style = Stroke(strokeWidth),
-                    )
-                }
-            }, propagateMinConstraints = true) {
+            Box(
+                Modifier.drawWithContent {
+                    drawContent()
+                    if (geometry != null) {
+                        drawOutline(
+                            popupShape.createOutline(size, layoutDirection, this),
+                            Color(0xFF0E0E10),
+                            alpha = 1f - surfaceReveal,
+                        )
+                    }
+                },
+                propagateMinConstraints = true,
+            ) {
                 if (geometry != null) {
                     CompositionLocalProvider(LocalIslandPopupRevealMillis provides 260f) {
-                        if (useRedesignedMediaBackground) {
-                            RedesignedMediaPopupBackground()
-                        } else {
-                            PopupSurface(
-                                shape = RoundedCornerShape(DynamicIslandMotion.CardCornerRadius),
-                                shadowElevation = 0.dp,
-                                animateContentAsUnit = false,
-                            ) {}
-                        }
+                        LunarisBarSurface(
+                            shape = popupShape,
+                            background =
+                                if (useRedesignedMediaBackground) {
+                                    { RedesignedMediaPopupBackground(popupShape) }
+                                } else null,
+                        ) {}
                     }
                 }
             }
             Box(
                 Modifier.graphicsLayer {
-                    alpha = if (geometry != null) bodyAlpha else 0f
-                    shape = contentClip
-                    clip = true
-                }.then(if (bodyAlpha < 0.5f) Modifier.clearAndSetSemantics {} else Modifier),
+                        alpha = if (geometry != null) bodyAlpha else 0f
+                        shape = contentClip
+                        clip = true
+                    }
+                    .then(if (bodyAlpha < 0.5f) Modifier.clearAndSetSemantics {} else Modifier)
             ) {
                 CompositionLocalProvider(
                     LocalIslandPopupRevealMillis provides
                         if (isVisible) revealMillis.value else Float.POSITIVE_INFINITY,
                     LocalIslandPopupContentOnly provides true,
-                ) { content() }
+                ) {
+                    content()
+                }
             }
             Box(
-                Modifier.graphicsLayer {
-                    alpha = if (geometry != null) bodyAlpha else 0f
-                }.then(if (bodyAlpha < 0.5f) Modifier.clearAndSetSemantics {} else Modifier),
+                Modifier.graphicsLayer { alpha = if (geometry != null) bodyAlpha else 0f }
+                    .then(if (bodyAlpha < 0.5f) Modifier.clearAndSetSemantics {} else Modifier)
             ) {
                 CompositionLocalProvider(
                     LocalIslandPopupRevealMillis provides
                         if (isVisible) revealMillis.value else Float.POSITIVE_INFINITY,
                     LocalIslandPopupContentOnly provides false,
-                ) { secondaryContent() }
+                ) {
+                    secondaryContent()
+                }
             }
         },
     ) { measurables, constraints ->
-        val maxWidth = (constraints.maxWidth - margin * 2).coerceAtLeast(0)
+        val availableWidth = (constraints.maxWidth - margin * 2).coerceAtLeast(1)
+        val maxWidth =
+            if (settings.isFullWidth) availableWidth
+            else minOf(availableWidth, with(density) { 360.dp.roundToPx() })
         val top = targetTop.roundToInt().coerceAtLeast(0)
         val maxHeight = (constraints.maxHeight - top - margin).coerceAtLeast(0)
-        val card = measurables[1].measure(Constraints(maxWidth = maxWidth, maxHeight = maxHeight))
-        val secondary = measurables[2].measure(Constraints(
-            maxWidth = maxWidth,
-            maxHeight = (maxHeight - card.height - gap.roundToInt()).coerceAtLeast(0),
-        ))
+        val card =
+            measurables[1].measure(
+                Constraints(
+                    minWidth = if (settings.isFullWidth) maxWidth else 0,
+                    maxWidth = maxWidth,
+                    maxHeight = maxHeight,
+                )
+            )
+        val secondary =
+            measurables[2].measure(
+                Constraints(
+                    maxWidth = maxWidth,
+                    maxHeight = (maxHeight - card.height - gap.roundToInt()).coerceAtLeast(0),
+                )
+            )
         secondarySize = IntSize(secondary.width, secondary.height)
-        val background = measurables[0].measure(Constraints.fixed(
-            frame.width.roundToInt().coerceAtLeast(1),
-            frame.height.roundToInt().coerceAtLeast(1),
-        ))
+        val background =
+            measurables[0].measure(
+                Constraints.fixed(
+                    frame.width.roundToInt().coerceAtLeast(1),
+                    frame.height.roundToInt().coerceAtLeast(1),
+                )
+            )
         contentSize = IntSize(card.width, card.height)
         val secondaryHeight = if (secondary.height > 0) secondary.height + gap.roundToInt() else 0
         val windowHeight = constraints.constrainHeight(top + card.height + secondaryHeight + margin)

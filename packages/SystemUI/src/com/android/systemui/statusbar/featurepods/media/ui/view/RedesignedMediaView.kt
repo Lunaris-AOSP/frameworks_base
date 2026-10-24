@@ -369,16 +369,6 @@ internal class RedesignedMediaView(context: Context) : ViewGroup(context) {
         seekBar?.let { apply(it, 1) }
     }
 
-    override fun draw(canvas: Canvas) {
-        val save = canvas.save()
-        rect.set(0f, 0f, width.toFloat(), height.toFloat())
-        path.reset()
-        path.addRoundRect(rect, 28f * density, 28f * density, Path.Direction.CW)
-        canvas.clipPath(path)
-        super.draw(canvas)
-        canvas.restoreToCount(save)
-    }
-
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val now = SystemClock.uptimeMillis()

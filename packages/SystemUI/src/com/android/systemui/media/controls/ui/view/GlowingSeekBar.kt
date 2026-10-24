@@ -82,6 +82,12 @@ constructor(
         setPadding(0, 0, 0, 0)
     }
 
+    fun setBarColor(color: Int) {
+        if ((paint.color and 0x00ffffff) == (color and 0x00ffffff)) return
+        paint.color = color
+        invalidate()
+    }
+
     fun setPlaybackState(isPlaying: Boolean, animate: Boolean = true) {
         if (playing == isPlaying && animationsAllowed == animate) return
         playing = isPlaying

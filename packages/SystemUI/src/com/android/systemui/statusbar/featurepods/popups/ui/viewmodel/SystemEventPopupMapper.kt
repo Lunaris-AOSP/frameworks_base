@@ -34,59 +34,81 @@ import com.android.systemui.statusbar.policy.KeyguardStateController
 import javax.inject.Inject
 
 /** Presentation adapter owned by featurepods; shares no AxDynamicBar rendering code. */
-class SystemEventPopupMapper @Inject constructor(
+class SystemEventPopupMapper
+@Inject
+constructor(
     @Application private val context: Context,
     private val activityStarter: ActivityStarter,
     private val activityIntentHelper: ActivityIntentHelper,
     private val lockscreenUserManager: NotificationLockscreenUserManager,
     private val keyguardStateController: KeyguardStateController,
 ) {
-    private fun loadAppIcon(sbn: StatusBarNotification): Drawable? = try {
-        val appContext = if (sbn.user == UserHandle.ALL) context
-            else context.createContextAsUser(sbn.user, 0)
-        appContext.packageManager.getApplicationIcon(sbn.packageName)
-    } catch (_: android.content.pm.PackageManager.NameNotFoundException) {
-        null
-    }
+    private fun loadAppIcon(sbn: StatusBarNotification): Drawable? =
+        try {
+            val appContext =
+                if (sbn.user == UserHandle.ALL) context
+                else context.createContextAsUser(sbn.user, 0)
+            appContext.packageManager.getApplicationIcon(sbn.packageName)
+        } catch (_: android.content.pm.PackageManager.NameNotFoundException) {
+            null
+        }
 
     fun toChargingDetails(intent: Intent): List<ChargingDetailModel> {
         val status = BatteryStatus(intent)
         if (!status.isPluggedIn) return emptyList()
 
-        val divider = context.resources.getInteger(R.integer.config_currentInfoDivider).coerceAtLeast(1)
+        val divider =
+            context.resources.getInteger(R.integer.config_currentInfoDivider).coerceAtLeast(1)
         val locale = context.resources.configuration.locales[0]
         val voltage = intent.getIntExtra(BatteryManager.EXTRA_MAX_CHARGING_VOLTAGE, -1)
         return buildList {
             val currentMa = status.maxChargingCurrent / divider
             if (currentMa > 0f) {
                 val useAmps = currentMa >= 1000f
-                add(ChargingDetailModel(
-                    label = context.getString(R.string.dynamic_island_charging_current),
-                    value = String.format(locale, if (useAmps) "%.1f" else "%.0f",
-                        if (useAmps) currentMa / 1000f else currentMa),
-                    unit = if (useAmps) "A" else "mA",
-                ))
+                add(
+                    ChargingDetailModel(
+                        label = context.getString(R.string.dynamic_island_charging_current),
+                        value =
+                            String.format(
+                                locale,
+                                if (useAmps) "%.1f" else "%.0f",
+                                if (useAmps) currentMa / 1000f else currentMa,
+                            ),
+                        unit = if (useAmps) "A" else "mA",
+                    )
+                )
             }
             if (status.maxChargingWattage > 0f && voltage > 0) {
-                add(ChargingDetailModel(
-                    label = context.getString(R.string.dynamic_island_charging_power),
-                    value = String.format(locale, "%.1f", status.maxChargingWattage / divider / 1000f),
-                    unit = "W",
-                ))
+                add(
+                    ChargingDetailModel(
+                        label = context.getString(R.string.dynamic_island_charging_power),
+                        value =
+                            String.format(
+                                locale,
+                                "%.1f",
+                                status.maxChargingWattage / divider / 1000f,
+                            ),
+                        unit = "W",
+                    )
+                )
             }
             if (voltage > 0) {
-                add(ChargingDetailModel(
-                    label = context.getString(R.string.dynamic_island_charging_voltage),
-                    value = String.format(locale, "%.1f", status.maxChargingVoltage / 1000000f),
-                    unit = "V",
-                ))
+                add(
+                    ChargingDetailModel(
+                        label = context.getString(R.string.dynamic_island_charging_voltage),
+                        value = String.format(locale, "%.1f", status.maxChargingVoltage / 1000000f),
+                        unit = "V",
+                    )
+                )
             }
             if (status.temperature > 0f) {
-                add(ChargingDetailModel(
-                    label = context.getString(R.string.dynamic_island_charging_temperature),
-                    value = String.format(locale, "%.1f", status.temperature / 10f),
-                    unit = "°C",
-                ))
+                add(
+                    ChargingDetailModel(
+                        label = context.getString(R.string.dynamic_island_charging_temperature),
+                        value = String.format(locale, "%.1f", status.temperature / 10f),
+                        unit = "°C",
+                    )
+                )
             }
         }
     }
@@ -94,28 +116,26 @@ class SystemEventPopupMapper @Inject constructor(
     fun toChip(
         event: IslandEvent,
         disconnect: (String) -> Unit,
-        switchApp: (Int) -> Unit,
         setRinger: (Int) -> Unit,
         notificationCount: Int = 1,
         chargingDetails: List<ChargingDetailModel> = emptyList(),
     ): PopupChipModel.Shown? {
-        val kind = when (event) {
-            is IslandEvent.Charging -> SystemEventKind.Charging
-            is IslandEvent.BiometricUnlock -> SystemEventKind.Unlock
-            is IslandEvent.Bluetooth -> SystemEventKind.Bluetooth
-            is IslandEvent.Hotspot -> SystemEventKind.Hotspot
-            is IslandEvent.Vpn -> SystemEventKind.Vpn
-            is IslandEvent.RingerMode -> SystemEventKind.Ringer
-            is IslandEvent.Clipboard -> SystemEventKind.Clipboard
-            is IslandEvent.Call -> SystemEventKind.Call
-            is IslandEvent.Notification -> SystemEventKind.Notification
-            is IslandEvent.PromotedOngoing -> SystemEventKind.Ongoing
-            is IslandEvent.Timer -> SystemEventKind.Timer
-            is IslandEvent.AudioRecording -> SystemEventKind.Recording
-            is IslandEvent.NowPlaying -> SystemEventKind.NowPlaying
-            is IslandEvent.AppSwitch -> SystemEventKind.RecentApps
-            else -> return null
-        }
+        val kind =
+            when (event) {
+                is IslandEvent.Charging -> SystemEventKind.Charging
+                is IslandEvent.BiometricUnlock -> SystemEventKind.Unlock
+                is IslandEvent.Bluetooth -> SystemEventKind.Bluetooth
+                is IslandEvent.Hotspot -> SystemEventKind.Hotspot
+                is IslandEvent.Vpn -> SystemEventKind.Vpn
+                is IslandEvent.RingerMode -> SystemEventKind.Ringer
+                is IslandEvent.Call -> SystemEventKind.Call
+                is IslandEvent.Notification -> SystemEventKind.Notification
+                is IslandEvent.PromotedOngoing -> SystemEventKind.Ongoing
+                is IslandEvent.Timer -> SystemEventKind.Timer
+                is IslandEvent.AudioRecording -> SystemEventKind.Recording
+                is IslandEvent.NowPlaying -> SystemEventKind.NowPlaying
+                else -> return null
+            }
         var prominentText: String? = null
         var bluetoothBatteries = emptyList<BluetoothBatteryModel>()
         var appName: String? = null
@@ -137,247 +157,413 @@ class SystemEventPopupMapper @Inject constructor(
             }
         }
         fun open(intent: PendingIntent?) {
-            intent.toActivityLaunchAction(activityStarter, activityIntentHelper,
-                lockscreenUserManager, keyguardStateController)?.let {
-                actions += PopupActionModel(
-                    context.getString(R.string.dynamic_island_event_open),
-                    it,
+            intent
+                .toActivityLaunchAction(
+                    activityStarter,
+                    activityIntentHelper,
+                    lockscreenUserManager,
+                    keyguardStateController,
+                )
+                ?.let {
+                    actions +=
+                        PopupActionModel(
+                            context.getString(R.string.dynamic_island_event_open),
+                            it,
+                            role = PopupActionRole.OpenApp,
+                        )
+                }
+        }
+        fun settings(action: String) {
+            actions +=
+                PopupActionModel(
+                    context.getString(R.string.lunaris_bar_settings),
+                    {
+                        activityStarter.postStartActivityDismissingKeyguard(
+                            Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                            0,
+                        )
+                    },
                     role = PopupActionRole.OpenApp,
                 )
-            }
         }
-        val (title, text) = when (event) {
-            is IslandEvent.Charging -> {
-                iconRes = R.drawable.dynamic_island_charging
-                prominentText = "${event.level}%"
-                pulse = event.isCharging
-                progress = event.level / 100f
-                context.getString(if (event.isWireless) R.string.dynamic_island_event_wireless_charging
-                    else R.string.dynamic_island_event_charging) to
-                    listOfNotNull(event.timeRemaining,
-                        context.getString(R.string.dynamic_island_event_battery_saver).takeIf { event.isPowerSave })
-                        .joinToString(" · ")
-            }
-            is IslandEvent.BiometricUnlock -> {
-                iconRes = R.drawable.dynamic_island_unlock
-                context.getString(R.string.dynamic_island_event_unlocked) to event.sourceName
-            }
-            is IslandEvent.Bluetooth -> {
-                prominentText = "${event.batteryLevel}%".takeIf { event.batteryLevel >= 0 }
-                progress = event.batteryLevel.takeIf { it >= 0 }?.div(100f)
-                icon = event.deviceIcon
-                image = event.deviceImage?.let { Icon.Loaded(it, null) }
-                bluetoothBatteries = listOfNotNull(
-                    event.leftBatteryLevel?.takeIf { it in 0..100 }?.let {
-                        BluetoothBatteryModel(
-                            label = context.getString(R.string.dynamic_island_bluetooth_left_earbud),
-                            level = it,
-                            component = BluetoothBatteryComponent.LeftEarbud,
-                        )
-                    },
-                    event.rightBatteryLevel?.takeIf { it in 0..100 }?.let {
-                        BluetoothBatteryModel(
-                            label = context.getString(R.string.dynamic_island_bluetooth_right_earbud),
-                            level = it,
-                            component = BluetoothBatteryComponent.RightEarbud,
-                        )
-                    },
-                    event.caseBatteryLevel?.takeIf { it in 0..100 }?.let {
-                        BluetoothBatteryModel(
-                            label = context.getString(R.string.dynamic_island_bluetooth_case),
-                            level = it,
-                            component = BluetoothBatteryComponent.Case,
-                        )
-                    },
-                )
-                iconRes = R.drawable.dynamic_island_headphones
-                if (event.address.isNotEmpty()) actions += PopupActionModel(
-                    context.getString(R.string.dynamic_island_event_disconnect), { disconnect(event.address) })
-                event.deviceName to event.deviceTypeLabel.ifBlank { context.getString(R.string.dynamic_island_event_connected) }
-            }
-            is IslandEvent.Hotspot -> {
-                iconRes = R.drawable.dynamic_island_hotspot
-                context.getString(R.string.dynamic_island_event_hotspot) to
-                    context.getString(R.string.dynamic_island_event_connected_devices, event.numDevices)
-            }
-            is IslandEvent.Vpn -> context.getString(R.string.dynamic_island_event_vpn) to
-                context.getString(if (event.isValidated) R.string.dynamic_island_event_connected
-                    else R.string.dynamic_island_event_connecting)
-            is IslandEvent.RingerMode -> {
-                listOf(R.string.dynamic_island_event_ring to AudioManager.RINGER_MODE_NORMAL,
-                    R.string.dynamic_island_event_vibrate to AudioManager.RINGER_MODE_VIBRATE,
-                    R.string.dynamic_island_event_silent to AudioManager.RINGER_MODE_SILENT).forEach { (label, mode) ->
-                    actions += PopupActionModel(context.getString(label), { setRinger(mode) }, emphasized = mode == event.mode)
+        val (title, text) =
+            when (event) {
+                is IslandEvent.Charging -> {
+                    iconRes = R.drawable.dynamic_island_charging
+                    prominentText = "${event.level}%"
+                    settings(android.provider.Settings.ACTION_BATTERY_SAVER_SETTINGS)
+                    pulse = event.isCharging
+                    progress = event.level / 100f
+                    context.getString(
+                        if (event.isWireless) R.string.dynamic_island_event_wireless_charging
+                        else R.string.dynamic_island_event_charging
+                    ) to
+                        listOfNotNull(
+                                event.timeRemaining,
+                                context
+                                    .getString(R.string.dynamic_island_event_battery_saver)
+                                    .takeIf { event.isPowerSave },
+                            )
+                            .joinToString(" · ")
                 }
-                iconRes = when (event.mode) {
-                    AudioManager.RINGER_MODE_VIBRATE -> R.drawable.dynamic_island_vibrate
-                    AudioManager.RINGER_MODE_SILENT -> R.drawable.dynamic_island_silent
-                    else -> R.drawable.dynamic_island_ringer
+                is IslandEvent.BiometricUnlock -> {
+                    iconRes = R.drawable.dynamic_island_unlock
+                    context.getString(R.string.dynamic_island_event_unlocked) to event.sourceName
                 }
-                context.getString(when (event.mode) {
-                    AudioManager.RINGER_MODE_VIBRATE -> R.string.dynamic_island_event_vibrate
-                    AudioManager.RINGER_MODE_SILENT -> R.string.dynamic_island_event_silent
-                    else -> R.string.dynamic_island_event_ring
-                }) to ""
-            }
-            is IslandEvent.Clipboard -> {
-                iconRes = R.drawable.dynamic_island_clipboard
-                context.getString(R.string.dynamic_island_event_clipboard) to event.preview
-            }
-            is IslandEvent.Call -> {
-                icon = event.callerPhoto ?: event.appIcon
-                iconRes = android.R.drawable.sym_action_call
-                val extras = event.sbn.notification.extras
-                val answerIntent = extras.getParcelable(Notification.EXTRA_ANSWER_INTENT, PendingIntent::class.java)
-                val declineIntent = extras.getParcelable(Notification.EXTRA_DECLINE_INTENT, PendingIntent::class.java)
-                val hangUpIntent = extras.getParcelable(Notification.EXTRA_HANG_UP_INTENT, PendingIntent::class.java)
-                event.actions.forEach { item ->
-                    val intent = item.action.actionIntent
-                    intent.toSendAction()?.let { onClick ->
-                        val role = when (intent) {
-                            answerIntent -> PopupActionRole.AnswerCall
-                            declineIntent, hangUpIntent -> PopupActionRole.EndCall
-                            else -> PopupActionRole.Default
+                is IslandEvent.Bluetooth -> {
+                    prominentText = "${event.batteryLevel}%".takeIf { event.batteryLevel >= 0 }
+                    progress = event.batteryLevel.takeIf { it >= 0 }?.div(100f)
+                    settings(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS)
+                    icon = event.deviceIcon
+                    image = event.deviceImage?.let { Icon.Loaded(it, null) }
+                    bluetoothBatteries =
+                        listOfNotNull(
+                            event.leftBatteryLevel
+                                ?.takeIf { it in 0..100 }
+                                ?.let {
+                                    BluetoothBatteryModel(
+                                        label =
+                                            context.getString(
+                                                R.string.dynamic_island_bluetooth_left_earbud
+                                            ),
+                                        level = it,
+                                        component = BluetoothBatteryComponent.LeftEarbud,
+                                        isCharging = event.leftCharging,
+                                    )
+                                },
+                            event.rightBatteryLevel
+                                ?.takeIf { it in 0..100 }
+                                ?.let {
+                                    BluetoothBatteryModel(
+                                        label =
+                                            context.getString(
+                                                R.string.dynamic_island_bluetooth_right_earbud
+                                            ),
+                                        level = it,
+                                        component = BluetoothBatteryComponent.RightEarbud,
+                                        isCharging = event.rightCharging,
+                                    )
+                                },
+                            event.caseBatteryLevel
+                                ?.takeIf { it in 0..100 }
+                                ?.let {
+                                    BluetoothBatteryModel(
+                                        label =
+                                            context.getString(
+                                                R.string.dynamic_island_bluetooth_case
+                                            ),
+                                        level = it,
+                                        component = BluetoothBatteryComponent.Case,
+                                        isCharging = event.caseCharging,
+                                    )
+                                },
+                        )
+                    iconRes = R.drawable.dynamic_island_headphones
+                    if (event.address.isNotEmpty())
+                        actions +=
+                            PopupActionModel(
+                                context.getString(R.string.dynamic_island_event_disconnect),
+                                { disconnect(event.address) },
+                            )
+                    event.deviceName to
+                        event.deviceTypeLabel.ifBlank {
+                            context.getString(R.string.dynamic_island_event_connected)
                         }
-                        actions += PopupActionModel(item.label.toString(), onClick, role = role)
+                }
+                is IslandEvent.Hotspot -> {
+                    settings(android.provider.Settings.ACTION_TETHER_SETTINGS)
+                    iconRes = R.drawable.dynamic_island_hotspot
+                    context.getString(R.string.dynamic_island_event_hotspot) to
+                        context.getString(
+                            R.string.dynamic_island_event_connected_devices,
+                            event.numDevices,
+                        )
+                }
+                is IslandEvent.Vpn -> {
+                    settings(android.provider.Settings.ACTION_VPN_SETTINGS)
+                    context.getString(R.string.dynamic_island_event_vpn) to
+                        context.getString(
+                            if (event.isValidated) R.string.dynamic_island_event_connected
+                            else R.string.dynamic_island_event_connecting
+                        )
+                }
+                is IslandEvent.RingerMode -> {
+                    listOf(
+                            R.string.dynamic_island_event_ring to AudioManager.RINGER_MODE_NORMAL,
+                            R.string.dynamic_island_event_vibrate to
+                                AudioManager.RINGER_MODE_VIBRATE,
+                            R.string.dynamic_island_event_silent to AudioManager.RINGER_MODE_SILENT,
+                        )
+                        .forEach { (label, mode) ->
+                            actions +=
+                                PopupActionModel(
+                                    context.getString(label),
+                                    { setRinger(mode) },
+                                    emphasized = mode == event.mode,
+                                )
+                        }
+                    iconRes =
+                        when (event.mode) {
+                            AudioManager.RINGER_MODE_VIBRATE -> R.drawable.dynamic_island_vibrate
+                            AudioManager.RINGER_MODE_SILENT -> R.drawable.dynamic_island_silent
+                            else -> R.drawable.dynamic_island_ringer
+                        }
+                    context.getString(
+                        when (event.mode) {
+                            AudioManager.RINGER_MODE_VIBRATE ->
+                                R.string.dynamic_island_event_vibrate
+                            AudioManager.RINGER_MODE_SILENT -> R.string.dynamic_island_event_silent
+                            else -> R.string.dynamic_island_event_ring
+                        }
+                    ) to ""
+                }
+                is IslandEvent.Call -> {
+                    icon = event.callerPhoto ?: event.appIcon
+                    iconRes = android.R.drawable.sym_action_call
+                    val extras = event.sbn.notification.extras
+                    val answerIntent =
+                        extras.getParcelable(
+                            Notification.EXTRA_ANSWER_INTENT,
+                            PendingIntent::class.java,
+                        )
+                    val declineIntent =
+                        extras.getParcelable(
+                            Notification.EXTRA_DECLINE_INTENT,
+                            PendingIntent::class.java,
+                        )
+                    val hangUpIntent =
+                        extras.getParcelable(
+                            Notification.EXTRA_HANG_UP_INTENT,
+                            PendingIntent::class.java,
+                        )
+                    event.actions.forEach { item ->
+                        val intent = item.action.actionIntent
+                        intent.toSendAction()?.let { onClick ->
+                            val role =
+                                when (intent) {
+                                    answerIntent -> PopupActionRole.AnswerCall
+                                    declineIntent,
+                                    hangUpIntent -> PopupActionRole.EndCall
+                                    else -> PopupActionRole.Default
+                                }
+                            actions += PopupActionModel(item.label.toString(), onClick, role = role)
+                        }
                     }
+                    listOf(
+                            Triple(
+                                answerIntent,
+                                PopupActionRole.AnswerCall,
+                                R.string.lunaris_bar_answer,
+                            ),
+                            Triple(
+                                declineIntent ?: hangUpIntent,
+                                PopupActionRole.EndCall,
+                                R.string.lunaris_bar_end_call,
+                            ),
+                        )
+                        .forEach { (intent, role, label) ->
+                            if (
+                                intent != null &&
+                                    event.actions.none { it.action.actionIntent == intent }
+                            ) {
+                                intent.toSendAction()?.let {
+                                    actions +=
+                                        PopupActionModel(context.getString(label), it, role = role)
+                                }
+                            }
+                        }
+                    open(event.sbn.notification.contentIntent)
+                    (event.callerName
+                        ?: event.number
+                        ?: context.getString(R.string.dynamic_island_event_call)) to
+                        (event.sbn.notification.extras
+                            .getCharSequence(android.app.Notification.EXTRA_TEXT)
+                            ?.toString()
+                            .orEmpty())
                 }
-                open(event.sbn.notification.contentIntent)
-                (event.callerName ?: event.number ?: context.getString(R.string.dynamic_island_event_call)) to
-                    (event.sbn.notification.extras.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString().orEmpty())
-            }
-            is IslandEvent.Notification -> {
-                appName = event.appName
-                chipDrawable = loadAppIcon(event.sbn)
-                iconRes = R.drawable.dynamic_island_notification
-                image = event.notificationImage?.let { Icon.Loaded(it, null) }
-                indeterminate = event.isProgressIndeterminate
-                icon = event.senderIcon ?: event.appIcon
-                notificationActions(event.actions)
-                open(event.sbn.notification.contentIntent)
-                if (event.progress >= 0 && event.progressMax > 0) progress = event.progress.toFloat() / event.progressMax
-                (event.title ?: event.appName) to event.text.orEmpty()
-            }
-            is IslandEvent.PromotedOngoing -> {
-                iconRes = R.drawable.dynamic_island_notification
-                appName = event.appName
-                chipDrawable = loadAppIcon(event.sbn)
-                indeterminate = event.isIndeterminate
-                icon = event.appIcon
-                notificationActions(event.actions)
-                open(event.sbn.notification.contentIntent)
-                progress = event.progress.takeIf { it >= 0f }
-                event.title.ifBlank { event.appName } to event.text
-            }
-            is IslandEvent.Timer -> {
-                icon = event.appIcon
-                notificationActions(event.actions)
-                timerEndTimeMs = event.endTimeMs.takeIf { it > 0L }
-                timerPaused = event.isPaused
-                context.getString(R.string.dynamic_island_event_timer) to event.label
-            }
-            is IslandEvent.AudioRecording -> {
-                pulse = event.state == com.android.systemui.islandevents.model.RecordingState.RECORDING
-                prominentText = context.getString(when (event.state) {
-                    com.android.systemui.islandevents.model.RecordingState.RECORDING -> R.string.dynamic_island_event_recording
-                    com.android.systemui.islandevents.model.RecordingState.PAUSED -> R.string.dynamic_island_event_paused
-                    com.android.systemui.islandevents.model.RecordingState.SAVED -> R.string.dynamic_island_event_saved
-                })
-                icon = event.appIcon
-                notificationActions(event.actions)
-                context.getString(R.string.dynamic_island_event_recording) to event.appName
-            }
-            is IslandEvent.NowPlaying -> {
-                icon = event.appIcon
-                notificationActions(event.actions)
-                open(event.sbn?.notification?.contentIntent)
-                event.songTitle to event.artist
-            }
-            is IslandEvent.AppSwitch -> {
-                val previous = event.previousApp ?: event.recentApps.firstOrNull() ?: return null
-                icon = previous.appIcon
-                iconRes = R.drawable.dynamic_island_recent_apps
-                event.recentApps.take(3).forEach { app ->
-                    actions += PopupActionModel(app.appName, { switchApp(app.taskId) })
+                is IslandEvent.Notification -> {
+                    appName = event.appName
+                    chipDrawable = loadAppIcon(event.sbn)
+                    iconRes = R.drawable.dynamic_island_notification
+                    image = event.notificationImage?.let { Icon.Loaded(it, null) }
+                    indeterminate = event.isProgressIndeterminate
+                    icon = event.senderIcon ?: event.appIcon
+                    notificationActions(event.actions)
+                    open(event.sbn.notification.contentIntent)
+                    if (event.progress >= 0 && event.progressMax > 0)
+                        progress = event.progress.toFloat() / event.progressMax
+                    (event.title ?: event.appName) to event.text.orEmpty()
                 }
-                context.getString(R.string.dynamic_island_event_recent_apps) to previous.appName
+                is IslandEvent.PromotedOngoing -> {
+                    iconRes = R.drawable.dynamic_island_notification
+                    appName = event.appName
+                    chipDrawable = loadAppIcon(event.sbn)
+                    indeterminate = event.isIndeterminate
+                    icon = event.appIcon
+                    notificationActions(event.actions)
+                    open(event.sbn.notification.contentIntent)
+                    progress = event.progress.takeIf { it >= 0f }
+                    event.title.ifBlank { event.appName } to event.text
+                }
+                is IslandEvent.Timer -> {
+                    icon = event.appIcon
+                    notificationActions(event.actions)
+                    timerEndTimeMs = event.endTimeMs.takeIf { it > 0L }
+                    timerPaused = event.isPaused
+                    context.getString(R.string.dynamic_island_event_timer) to event.label
+                }
+                is IslandEvent.AudioRecording -> {
+                    pulse =
+                        event.state ==
+                            com.android.systemui.islandevents.model.RecordingState.RECORDING
+                    prominentText =
+                        context.getString(
+                            when (event.state) {
+                                com.android.systemui.islandevents.model.RecordingState.RECORDING ->
+                                    R.string.dynamic_island_event_recording
+                                com.android.systemui.islandevents.model.RecordingState.PAUSED ->
+                                    R.string.dynamic_island_event_paused
+                                com.android.systemui.islandevents.model.RecordingState.SAVED ->
+                                    R.string.dynamic_island_event_saved
+                            }
+                        )
+                    icon = event.appIcon
+                    notificationActions(event.actions)
+                    context.getString(R.string.dynamic_island_event_recording) to event.appName
+                }
+                is IslandEvent.NowPlaying -> {
+                    icon = event.appIcon
+                    notificationActions(event.actions)
+                    open(event.sbn?.notification?.contentIntent)
+                    event.songTitle to event.artist
+                }
+                else -> return null
             }
-            else -> return null
-        }
-        val compactIcon = when (event) {
-            is IslandEvent.Bluetooth -> Icon.Resource(R.drawable.dynamic_island_bluetooth, null)
-            is IslandEvent.BiometricUnlock, is IslandEvent.Call,
-            is IslandEvent.Hotspot, is IslandEvent.RingerMode, is IslandEvent.AppSwitch ->
-                Icon.Resource(iconRes, null)
-            is IslandEvent.Notification -> if (progress == null && !indeterminate)
-                Icon.Resource(R.drawable.dynamic_island_notification, null)
-                else (chipDrawable ?: icon)?.let { Icon.Loaded(it, null) } ?: Icon.Resource(iconRes, null)
-            else -> (chipDrawable ?: icon)?.let { Icon.Loaded(it, null) } ?: Icon.Resource(iconRes, null)
-        }
-        val description = listOfNotNull(title, text, prominentText).distinct().filter { it.isNotBlank() }.joinToString(": ")
+        val compactIcon =
+            when (event) {
+                is IslandEvent.Bluetooth -> Icon.Resource(R.drawable.dynamic_island_bluetooth, null)
+                is IslandEvent.BiometricUnlock,
+                is IslandEvent.Call,
+                is IslandEvent.Hotspot,
+                is IslandEvent.RingerMode -> Icon.Resource(iconRes, null)
+                is IslandEvent.Notification ->
+                    if (progress == null && !indeterminate)
+                        Icon.Resource(R.drawable.dynamic_island_notification, null)
+                    else
+                        (chipDrawable ?: icon)?.let { Icon.Loaded(it, null) }
+                            ?: Icon.Resource(iconRes, null)
+                else ->
+                    (chipDrawable ?: icon)?.let { Icon.Loaded(it, null) }
+                        ?: Icon.Resource(iconRes, null)
+            }
+        val description =
+            listOfNotNull(title, text, prominentText)
+                .distinct()
+                .filter { it.isNotBlank() }
+                .joinToString(": ")
         return PopupChipModel.Shown(
             chipId = PopupChipId.SystemEvent(event.id),
-            icons = listOf(ChipIcon(
-                icon = compactIcon,
-                tint = compactIcon is Icon.Resource,
-            )),
-            chipText = when (event) {
-                is IslandEvent.Charging -> "${event.level}%"
-                is IslandEvent.Call, is IslandEvent.BiometricUnlock,
-                is IslandEvent.Clipboard -> null
-                is IslandEvent.Notification -> when {
-                    indeterminate -> null
-                    progress != null -> "${(progress.coerceIn(0f, 1f) * 100).toInt()}%"
-                    else -> notificationCount.toString()
-                }
-                is IslandEvent.PromotedOngoing -> if (indeterminate) null
-                    else progress?.let { "${(it.coerceIn(0f, 1f) * 100).toInt()}%" }
-                is IslandEvent.Bluetooth -> null
-                is IslandEvent.Hotspot -> event.numDevices.toString()
-                is IslandEvent.AppSwitch -> event.recentApps.size.toString()
-                else -> title
-            },
-
-            callStartTimeMs = (event as? IslandEvent.Call)?.takeIf {
-                it.callType == "Phone:active"
-            }?.callStartTimeMs,
-            autoPopupRequest = when (event) {
-                is IslandEvent.Call -> event.callStartTimeMs.takeIf { event.callType == "Phone:incoming" }
-                is IslandEvent.BiometricUnlock -> event.createdAt
-                is IslandEvent.Notification -> event.createdAt
-                else -> null
-            },
-            autoPopupDurationMs = when (event) {
-                is IslandEvent.BiometricUnlock -> 2_000L
-                is IslandEvent.Notification -> 4_500L
-                else -> 0L
-            },
+            sourcePackageName =
+                when (event) {
+                    is IslandEvent.Call -> event.sbn.packageName
+                    is IslandEvent.Notification -> event.sbn.packageName
+                    is IslandEvent.PromotedOngoing -> event.sbn.packageName
+                    is IslandEvent.NowPlaying -> event.sbn?.packageName
+                    is IslandEvent.Timer ->
+                        event.actions.firstOrNull()?.action?.actionIntent?.creatorPackage
+                    is IslandEvent.AudioRecording ->
+                        event.actions.firstOrNull()?.action?.actionIntent?.creatorPackage
+                    else -> null
+                },
+            sourceUserId =
+                when (event) {
+                    is IslandEvent.Call -> event.sbn.userId
+                    is IslandEvent.Notification -> event.sbn.userId
+                    is IslandEvent.PromotedOngoing -> event.sbn.userId
+                    is IslandEvent.NowPlaying -> event.sbn?.userId
+                    is IslandEvent.Timer ->
+                        event.actions
+                            .firstOrNull()
+                            ?.action
+                            ?.actionIntent
+                            ?.creatorUserHandle
+                            ?.identifier
+                    is IslandEvent.AudioRecording ->
+                        event.actions
+                            .firstOrNull()
+                            ?.action
+                            ?.actionIntent
+                            ?.creatorUserHandle
+                            ?.identifier
+                    else -> null
+                },
+            icons = listOf(ChipIcon(icon = compactIcon, tint = compactIcon is Icon.Resource)),
+            chipText =
+                when (event) {
+                    is IslandEvent.Charging -> "${event.level}%"
+                    is IslandEvent.Call,
+                    is IslandEvent.BiometricUnlock -> null
+                    is IslandEvent.Notification ->
+                        when {
+                            indeterminate -> null
+                            progress != null -> "${(progress.coerceIn(0f, 1f) * 100).toInt()}%"
+                            else -> notificationCount.toString()
+                        }
+                    is IslandEvent.PromotedOngoing ->
+                        if (indeterminate) null
+                        else progress?.let { "${(it.coerceIn(0f, 1f) * 100).toInt()}%" }
+                    is IslandEvent.Bluetooth -> null
+                    is IslandEvent.Hotspot -> event.numDevices.toString()
+                    else -> title
+                },
+            callStartTimeMs =
+                (event as? IslandEvent.Call)
+                    ?.takeIf { it.callType == "Phone:active" }
+                    ?.callStartTimeMs,
+            autoPopupRequest =
+                when (event) {
+                    is IslandEvent.Call ->
+                        event.callStartTimeMs.takeIf { event.callType == "Phone:incoming" }
+                    is IslandEvent.BiometricUnlock -> event.createdAt
+                    is IslandEvent.Notification -> event.createdAt
+                    else -> null
+                },
+            autoPopupDurationMs =
+                when (event) {
+                    is IslandEvent.BiometricUnlock -> 2_000L
+                    is IslandEvent.Notification -> 4_500L
+                    else -> 0L
+                },
             colors = ColorsModel.DynamicIsland,
             contentDescription = description,
-            popupContent = PopupContentModel.SystemEvent(
-                kind = kind,
-                title = title,
-                text = text,
-                actions = actions,
-                progress = progress?.coerceIn(0f, 1f)?.takeIf { bluetoothBatteries.isEmpty() },
-                callStartTimeMs = (event as? IslandEvent.Call)?.takeIf {
-                    it.callType == "Phone:active"
-                }?.callStartTimeMs,
-                timerEndTimeMs = timerEndTimeMs,
-                timerEndElapsedRealtimeMs = (event as? IslandEvent.Timer)?.endElapsedRealtimeMs,
-                timerRemainingMs = (event as? IslandEvent.Timer)?.remainingMs,
-                timerOriginalDurationMs = (event as? IslandEvent.Timer)?.originalDurationMs,
-                timerPaused = timerPaused,
-                indeterminate = indeterminate,
-                icon = if (event is IslandEvent.RingerMode) Icon.Resource(iconRes, null)
-                    else icon?.let { Icon.Loaded(it, null) },
-                appName = appName,
-                prominentText = prominentText.takeIf { bluetoothBatteries.isEmpty() },
-                pulse = pulse,
-                image = image,
-                bluetoothBatteries = bluetoothBatteries,
-                chargingDetails = chargingDetails.takeIf { event is IslandEvent.Charging }.orEmpty(),
-            ),
+            popupContent =
+                PopupContentModel.SystemEvent(
+                    kind = kind,
+                    title = title,
+                    text = text,
+                    actions = actions,
+                    progress = progress?.coerceIn(0f, 1f)?.takeIf { bluetoothBatteries.isEmpty() },
+                    callStartTimeMs =
+                        (event as? IslandEvent.Call)
+                            ?.takeIf { it.callType == "Phone:active" }
+                            ?.callStartTimeMs,
+                    timerEndTimeMs = timerEndTimeMs,
+                    timerEndElapsedRealtimeMs = (event as? IslandEvent.Timer)?.endElapsedRealtimeMs,
+                    timerRemainingMs = (event as? IslandEvent.Timer)?.remainingMs,
+                    timerOriginalDurationMs = (event as? IslandEvent.Timer)?.originalDurationMs,
+                    timerPaused = timerPaused,
+                    indeterminate = indeterminate,
+                    icon =
+                        if (event is IslandEvent.RingerMode) Icon.Resource(iconRes, null)
+                        else icon?.let { Icon.Loaded(it, null) },
+                    appName = appName,
+                    prominentText = prominentText.takeIf { bluetoothBatteries.isEmpty() },
+                    pulse = pulse,
+                    image = image,
+                    bluetoothBatteries = bluetoothBatteries,
+                    chargingDetails =
+                        chargingDetails.takeIf { event is IslandEvent.Charging }.orEmpty(),
+                ),
         )
     }
 }

@@ -16,15 +16,15 @@
 
 package com.android.systemui.statusbar.featurepods.media.ui.viewmodel
 
-import android.content.applicationContext
 import com.android.systemui.kosmos.Kosmos
+import com.android.systemui.media.mediaOutputDialogManager
 import com.android.systemui.statusbar.featurepods.media.domain.interactor.mediaControlChipInteractor
 
 private val Kosmos.mediaControlChipViewModel: MediaControlChipViewModel by
     Kosmos.Fixture {
         MediaControlChipViewModel(
-            applicationContext = applicationContext,
             mediaControlChipInteractor = mediaControlChipInteractor,
+            mediaOutputDialogManager = mediaOutputDialogManager,
         )
     }
 

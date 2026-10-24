@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (C) 2024-2026 Lunaris AOSP -->
+<resources>
+    <string name="lunaris_bar_auto_brightness">Adaptive brightness</string>
+    <string name="lunaris_bar_barcode_error">This content cannot be encoded in the selected format.</string>
+    <string name="lunaris_bar_charging">Charging</string>
+    <string name="lunaris_bar_minutes_value">%1$d min</string>
+    <string name="lunaris_bar_no_shortcuts">Add apps, contacts, or actions in LunarisBar settings.</string>
+    <string name="lunaris_bar_off">Off</string>
+    <string name="lunaris_bar_on">On</string>
+    <string name="lunaris_bar_on_battery">On battery</string>
+    <string name="lunaris_bar_open">Open</string>
+    <string name="lunaris_bar_start_timer">Start timer</string>
+    <string name="lunaris_bar_title">LunarisBar</string>
+    <string name="lunaris_bar_widget_unavailable">This widget is unavailable. Add it again in LunarisBar settings.</string>
+    <string name="lunaris_bar_screen_sharing">Screen sharing</string>
+    <string name="lunaris_bar_privacy">Camera and microphone</string>
+    <string name="lunaris_bar_privacy_settings">Privacy settings</string>
+    <string name="lunaris_bar_battery_settings">Battery settings</string>
+    <string name="lunaris_bar_settings">Settings</string>
+    <string name="lunaris_bar_answer">Answer</string>
+    <string name="lunaris_bar_end_call">End call</string>
+    <string name="lunaris_bar_swipe_dismiss">Swipe to dismiss</string>
+    <string name="lunaris_bar_night_colors">Edit dark theme colors</string>
+    <string name="lunaris_bar_palette_day">Light theme palette</string>
+    <string name="lunaris_bar_palette_night">Dark theme palette</string>
+    <string name="lunaris_bar_media_favorite">Favorite</string>
+    <string name="lunaris_bar_media_output">Audio output</string>
+</resources>

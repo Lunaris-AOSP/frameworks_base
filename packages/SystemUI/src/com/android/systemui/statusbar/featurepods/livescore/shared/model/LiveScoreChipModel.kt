@@ -27,4 +27,6 @@ data class LiveScoreChipModel(
     val score: String,
     val subtitle: String?,
     val onOpen: (() -> Unit)?,
+    val sourcePackageName: String? = null,
+    val sourceUserId: Int? = null,
 )

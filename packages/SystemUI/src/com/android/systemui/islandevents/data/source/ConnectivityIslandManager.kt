@@ -9,9 +9,9 @@ import android.graphics.ImageDecoder
 import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.util.Log
-import com.android.systemui.islandevents.model.IslandEvent
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Background
+import com.android.systemui.islandevents.model.IslandEvent
 import com.android.systemui.statusbar.policy.BluetoothController
 import com.android.systemui.statusbar.policy.HotspotController
 import com.android.systemui.statusbar.policy.vpn.domain.interactor.VpnInteractor
@@ -59,16 +59,21 @@ constructor(
     private var imageUri: Uri? = null
     private var imageJob: Job? = null
     private var metadataListenerRegistered = false
-    private val metadataListener = BluetoothAdapter.OnMetadataChangedListener { device, key, _ ->
-        if (btListening && device == imageDevice) {
-            when (key) {
-                BluetoothDevice.METADATA_MAIN_ICON -> loadDeviceImage(device, force = true)
-                BluetoothDevice.METADATA_UNTETHERED_LEFT_BATTERY,
-                BluetoothDevice.METADATA_UNTETHERED_RIGHT_BATTERY,
-                BluetoothDevice.METADATA_UNTETHERED_CASE_BATTERY -> refreshDeviceBatteries(device)
+    private val metadataListener =
+        BluetoothAdapter.OnMetadataChangedListener { device, key, _ ->
+            if (btListening && device == imageDevice) {
+                when (key) {
+                    BluetoothDevice.METADATA_MAIN_ICON -> loadDeviceImage(device, force = true)
+                    BluetoothDevice.METADATA_UNTETHERED_LEFT_BATTERY,
+                    BluetoothDevice.METADATA_UNTETHERED_RIGHT_BATTERY,
+                    BluetoothDevice.METADATA_UNTETHERED_CASE_BATTERY,
+                    BluetoothDevice.METADATA_UNTETHERED_LEFT_CHARGING,
+                    BluetoothDevice.METADATA_UNTETHERED_RIGHT_CHARGING,
+                    BluetoothDevice.METADATA_UNTETHERED_CASE_CHARGING ->
+                        refreshDeviceBatteries(device)
+                }
             }
         }
-    }
 
     private val bluetoothCallback =
         object : BluetoothController.Callback {
@@ -112,14 +117,17 @@ constructor(
                     if (current != null && current.address !in currentAddresses) {
                         clearBluetooth()
                     } else if (current != null) {
-                        devices.firstOrNull { it.getAddress() == current.address }?.let { device ->
-                            _bluetoothEvent.value = current.copy(
-                                deviceName = device.getName() ?: current.deviceName,
-                                batteryLevel = device.getBatteryLevel(),
-                            )
-                            refreshDeviceBatteries(device.device)
-                            loadDeviceImage(device.device)
-                        }
+                        devices
+                            .firstOrNull { it.getAddress() == current.address }
+                            ?.let { device ->
+                                _bluetoothEvent.value =
+                                    current.copy(
+                                        deviceName = device.getName() ?: current.deviceName,
+                                        batteryLevel = device.getBatteryLevel(),
+                                    )
+                                refreshDeviceBatteries(device.device)
+                                loadDeviceImage(device.device)
+                            }
                     }
                 }
             }
@@ -129,9 +137,12 @@ constructor(
         stopDeviceImage()
         imageDevice = device
         try {
-            metadataListenerRegistered = bluetoothAdapter?.addOnMetadataChangedListener(
-                device, context.mainExecutor, metadataListener,
-            ) == true
+            metadataListenerRegistered =
+                bluetoothAdapter?.addOnMetadataChangedListener(
+                    device,
+                    context.mainExecutor,
+                    metadataListener,
+                ) == true
         } catch (e: RuntimeException) {
             Log.w(TAG, "Unable to observe Bluetooth device metadata", e)
         }
@@ -143,70 +154,112 @@ constructor(
         if (!btListening || device != imageDevice) return
         val current = _bluetoothEvent.value ?: return
         if (current.address != device.address) return
-        _bluetoothEvent.value = current.copy(
-            leftBatteryLevel = readBatteryMetadata(device, BluetoothDevice.METADATA_UNTETHERED_LEFT_BATTERY),
-            rightBatteryLevel = readBatteryMetadata(device, BluetoothDevice.METADATA_UNTETHERED_RIGHT_BATTERY),
-            caseBatteryLevel = readBatteryMetadata(device, BluetoothDevice.METADATA_UNTETHERED_CASE_BATTERY),
-        )
+        _bluetoothEvent.value =
+            current.copy(
+                leftBatteryLevel =
+                    readBatteryMetadata(device, BluetoothDevice.METADATA_UNTETHERED_LEFT_BATTERY),
+                rightBatteryLevel =
+                    readBatteryMetadata(device, BluetoothDevice.METADATA_UNTETHERED_RIGHT_BATTERY),
+                caseBatteryLevel =
+                    readBatteryMetadata(device, BluetoothDevice.METADATA_UNTETHERED_CASE_BATTERY),
+                leftCharging =
+                    readChargingMetadata(device, BluetoothDevice.METADATA_UNTETHERED_LEFT_CHARGING),
+                rightCharging =
+                    readChargingMetadata(
+                        device,
+                        BluetoothDevice.METADATA_UNTETHERED_RIGHT_CHARGING,
+                    ),
+                caseCharging =
+                    readChargingMetadata(device, BluetoothDevice.METADATA_UNTETHERED_CASE_CHARGING),
+            )
     }
 
-    private fun readBatteryMetadata(device: BluetoothDevice, key: Int): Int? = try {
-        device.getMetadata(key)?.toString(Charsets.UTF_8)?.trim()?.toIntOrNull()
-            ?.takeIf { it in 0..100 }
-    } catch (_: RuntimeException) {
-        null
-    }
+    private fun readChargingMetadata(device: BluetoothDevice, key: Int): Boolean =
+        try {
+            device
+                .getMetadata(key)
+                ?.toString(Charsets.UTF_8)
+                ?.trim()
+                .equals("true", ignoreCase = true)
+        } catch (_: RuntimeException) {
+            false
+        }
 
-    private fun loadDeviceImage(device: BluetoothDevice, force: Boolean = false) {
-        if (!btListening || device != imageDevice) return
-        val uri = try {
-            device.getMetadata(BluetoothDevice.METADATA_MAIN_ICON)
-                ?.toString(Charsets.UTF_8)?.takeIf { it.isNotBlank() }?.let(Uri::parse)
-                ?.takeIf { it.scheme == "content" || it.scheme == "android.resource" }
+    private fun readBatteryMetadata(device: BluetoothDevice, key: Int): Int? =
+        try {
+            device.getMetadata(key)?.toString(Charsets.UTF_8)?.trim()?.toIntOrNull()?.takeIf {
+                it in 0..100
+            }
         } catch (_: RuntimeException) {
             null
         }
-        if (!force && uri == imageUri && (imageJob?.isActive == true ||
-                _bluetoothEvent.value?.deviceImage != null)) return
+
+    private fun loadDeviceImage(device: BluetoothDevice, force: Boolean = false) {
+        if (!btListening || device != imageDevice) return
+        val uri =
+            try {
+                device
+                    .getMetadata(BluetoothDevice.METADATA_MAIN_ICON)
+                    ?.toString(Charsets.UTF_8)
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let(Uri::parse)
+                    ?.takeIf { it.scheme == "content" || it.scheme == "android.resource" }
+            } catch (_: RuntimeException) {
+                null
+            }
+        if (
+            !force &&
+                uri == imageUri &&
+                (imageJob?.isActive == true || _bluetoothEvent.value?.deviceImage != null)
+        )
+            return
         imageJob?.cancel()
         imageUri = uri
         _bluetoothEvent.value = _bluetoothEvent.value?.copy(deviceImage = null)
         if (uri == null) return
-        imageJob = applicationScope.launch(Dispatchers.Main.immediate) {
-            val artwork = withContext(backgroundDispatcher) {
-                try {
-                    if (uri.scheme == "content") {
+        imageJob =
+            applicationScope.launch(Dispatchers.Main.immediate) {
+                val artwork =
+                    withContext(backgroundDispatcher) {
                         try {
-                            context.contentResolver.takePersistableUriPermission(
-                                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION,
-                            )
-                        } catch (_: SecurityException) {
+                            if (uri.scheme == "content") {
+                                try {
+                                    context.contentResolver.takePersistableUriPermission(
+                                        uri,
+                                        Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                                    )
+                                } catch (_: SecurityException) {}
+                            }
+                            val source = ImageDecoder.createSource(context.contentResolver, uri)
+                            val bitmap =
+                                ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                                    val largest = maxOf(info.size.width, info.size.height)
+                                    if (largest > DEVICE_IMAGE_SIZE_PX) {
+                                        val scale = DEVICE_IMAGE_SIZE_PX.toFloat() / largest
+                                        decoder.setTargetSize(
+                                            (info.size.width * scale).toInt().coerceAtLeast(1),
+                                            (info.size.height * scale).toInt().coerceAtLeast(1),
+                                        )
+                                    }
+                                    decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                                }
+                            BitmapDrawable(context.resources, bitmap)
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Unable to load Bluetooth device artwork", e)
+                            null
                         }
                     }
-                    val source = ImageDecoder.createSource(context.contentResolver, uri)
-                    val bitmap = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
-                        val largest = maxOf(info.size.width, info.size.height)
-                        if (largest > DEVICE_IMAGE_SIZE_PX) {
-                            val scale = DEVICE_IMAGE_SIZE_PX.toFloat() / largest
-                            decoder.setTargetSize(
-                                (info.size.width * scale).toInt().coerceAtLeast(1),
-                                (info.size.height * scale).toInt().coerceAtLeast(1),
-                            )
-                        }
-                        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-                    }
-                    BitmapDrawable(context.resources, bitmap)
-                } catch (e: Exception) {
-                    Log.w(TAG, "Unable to load Bluetooth device artwork", e)
-                    null
+                val current = _bluetoothEvent.value
+                if (
+                    btListening &&
+                        imageDevice == device &&
+                        imageUri == uri &&
+                        current != null &&
+                        current.address == device.address
+                ) {
+                    _bluetoothEvent.value = current.copy(deviceImage = artwork)
                 }
             }
-            val current = _bluetoothEvent.value
-            if (btListening && imageDevice == device && imageUri == uri &&
-                current != null && current.address == device.address) {
-                _bluetoothEvent.value = current.copy(deviceImage = artwork)
-            }
-        }
     }
 
     private fun stopDeviceImage() {

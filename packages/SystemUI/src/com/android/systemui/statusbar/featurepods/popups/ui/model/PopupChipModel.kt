@@ -16,11 +16,12 @@
 
 package com.android.systemui.statusbar.featurepods.popups.ui.model
 
+import com.android.internal.util.lunaris.LunarisBarSettings
+import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.haptics.slider.compose.ui.SliderHapticsViewModel
 import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 import com.android.systemui.statusbar.featurepods.alarm.shared.model.AlarmPopupModel
 import com.android.systemui.statusbar.featurepods.flashlight.shared.model.FlashlightPopupModel
-import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.statusbar.featurepods.livescore.shared.model.LiveScoreChipModel
 import com.android.systemui.statusbar.featurepods.media.shared.model.MediaControlChipModel
 import com.android.systemui.statusbar.featurepods.screenrecord.shared.model.ScreenRecordPopupModel
@@ -31,6 +32,8 @@ import com.android.systemui.statusbar.featurepods.stopwatch.shared.model.Stopwat
  * displaying its popup at a time.
  */
 sealed class PopupChipId(val value: String) {
+    data class Utility(val cardId: String) : PopupChipId("Utility:$cardId")
+
     data class SystemEvent(val eventId: String) : PopupChipId("SystemEvent:$eventId")
 
     data object MediaControl : PopupChipId("MediaControl")
@@ -51,11 +54,7 @@ sealed class PopupChipId(val value: String) {
 }
 
 /** Model for an optionally clickable icon that is displayed on the chip. */
-data class ChipIcon(
-    val icon: Icon,
-    val onClick: (() -> Unit)? = null,
-    val tint: Boolean = true,
-)
+data class ChipIcon(val icon: Icon, val onClick: (() -> Unit)? = null, val tint: Boolean = true)
 
 /** Defines the behavior of the chip when hovered over. */
 sealed interface HoverBehavior {
@@ -76,17 +75,21 @@ data class BluetoothBatteryModel(
     val label: String,
     val level: Int,
     val component: BluetoothBatteryComponent,
+    val isCharging: Boolean = false,
 )
 
 data class ChargingDetailModel(val label: String, val value: String, val unit: String)
 
 /** Rich popup contents associated with a status bar chip. */
 sealed interface PopupContentModel {
+    data class Utility(val card: LunarisBarSettings.Card) : PopupContentModel
+
     data class SystemEvent(
         val kind: SystemEventKind,
         val title: String,
         val text: String,
-        val actions: List<com.android.systemui.statusbar.featurepods.popups.shared.model.PopupActionModel>,
+        val actions:
+            List<com.android.systemui.statusbar.featurepods.popups.shared.model.PopupActionModel>,
         val progress: Float? = null,
         val callStartTimeMs: Long? = null,
         val timerEndTimeMs: Long? = null,
@@ -157,6 +160,9 @@ sealed class PopupChipModel {
         val onAutoPopupShown: () -> Unit = {},
         val onPopupShown: () -> Unit = {},
         val onPopupHidden: () -> Unit = {},
+        val sourcePackageName: String? = null,
+        val sourceUserId: Int? = null,
+        val dismissNotification: (() -> Unit)? = null,
     ) : PopupChipModel() {
         override val logName = "Shown(id=$chipId, toggled=$isPopupShown)"
     }

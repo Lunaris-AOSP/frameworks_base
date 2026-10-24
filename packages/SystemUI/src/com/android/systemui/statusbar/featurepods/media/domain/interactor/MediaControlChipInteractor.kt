@@ -316,6 +316,7 @@ private fun MediaDataModel.toMediaControlState(
         model =
             MediaControlChipModel(
                 packageName = packageName,
+                sourceUserId = clickIntent?.creatorUserHandle?.identifier,
                 appIcon = appIcon,
                 artworkIcon = background ?: appIcon,
                 appName = appName,
@@ -353,6 +354,7 @@ private fun MediaData.toMediaControlState(
         model =
             MediaControlChipModel(
                 packageName = packageName,
+                sourceUserId = userId.takeIf { it >= 0 },
                 appIcon = appIcon.loadUiIcon(context, contentDescription),
                 artworkIcon = artwork.loadUiIcon(context, contentDescription),
                 appName = app,

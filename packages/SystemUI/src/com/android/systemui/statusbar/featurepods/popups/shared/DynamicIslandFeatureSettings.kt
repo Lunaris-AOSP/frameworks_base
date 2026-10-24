@@ -41,11 +41,9 @@ object DynamicIslandFeatureSettings {
     const val HOTSPOT = "status_bar_dynamic_island_hotspot"
     const val VPN = "status_bar_dynamic_island_vpn"
     const val RINGER = "status_bar_dynamic_island_ringer"
-    const val CLIPBOARD = "status_bar_dynamic_island_clipboard"
     const val TIMER = "status_bar_dynamic_island_timer"
     const val AUDIO_RECORDING = "status_bar_dynamic_island_audio_recording"
     const val NOW_PLAYING = "status_bar_dynamic_island_now_playing"
-    const val RECENT_APPS = "status_bar_dynamic_island_recent_apps"
 
     const val MEDIA_CONTROLS = "status_bar_dynamic_island_media_controls"
     const val REDESIGNED_MEDIA = "status_bar_dynamic_island_redesigned_media"

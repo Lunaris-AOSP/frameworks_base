@@ -194,6 +194,8 @@ constructor(
 
         return PopupChipModel.Shown(
             chipId = PopupChipId.Alarm,
+            sourcePackageName = activeNotification?.sbn?.packageName ?: alarm?.showIntent?.creatorPackage,
+            sourceUserId = activeNotification?.sbn?.userId ?: alarm?.showIntent?.creatorUserHandle?.identifier,
             icons =
                 listOf(
                     ChipIcon(

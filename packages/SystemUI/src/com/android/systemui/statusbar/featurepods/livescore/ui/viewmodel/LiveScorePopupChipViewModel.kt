@@ -96,6 +96,8 @@ constructor(
 
         return PopupChipModel.Shown(
             chipId = PopupChipId.LiveScore,
+            sourcePackageName = model.sourcePackageName,
+            sourceUserId = model.sourceUserId,
             icons =
                 listOfNotNull(
                     model.icon?.let {
@@ -145,6 +147,8 @@ private fun ActiveNotificationModel.toLiveScoreModel(
     val content = checkNotNull(promotedContent).privateVersion
     val contentDescription = ContentDescription.Loaded(appName)
     return LiveScoreChipModel(
+        sourcePackageName = packageName,
+        sourceUserId = android.os.UserHandle.getUserId(uid),
         key = key,
         icon = statusBarIcon?.loadDrawable(context)?.let { Icon.Loaded(it, contentDescription) },
         appName = appName,

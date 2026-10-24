@@ -23,4 +23,11 @@ data class FlashlightPopupModel(
     val turnOff: () -> Unit,
     val setLevelTemporary: (Int) -> Unit = {},
     val setLevel: (Int) -> Unit = {},
-)
+) {
+    val strengthPercent: Int?
+        get() {
+            val maximum = maxLevel?.takeIf { it > 1 } ?: return null
+            val current = level ?: return null
+            return kotlin.math.round(current.coerceIn(0, maximum) * 100f / maximum).toInt()
+        }
+}
