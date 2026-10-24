@@ -25,6 +25,11 @@ import android.content.theming.ThemeSettingsField;
 import android.provider.Settings;
 import android.telecom.Log;
 
+import org.json.JSONObject;
+
+import java.util.Iterator;
+import java.util.Set;
+
 /**
  * Manages the loading and saving of theme settings. This class handles the persistence of theme
  * settings to and from the system settings. It utilizes a collection of {@link ThemeSettingsField}
@@ -64,11 +69,28 @@ class ThemeSettingsManager {
     boolean writeSettings(@UserIdInt int userId, ContentResolver contentResolver,
             ThemeSettings newSettings) {
         try {
-            Settings.Secure.putStringForUser(contentResolver,
-                    Settings.Secure.THEME_CUSTOMIZATION_OVERLAY_PACKAGES, newSettings.toString(),
+            JSONObject outgoing = new JSONObject(newSettings.toString());
+            String stored = Settings.Secure.getStringForUser(contentResolver,
+                    Settings.Secure.THEME_CUSTOMIZATION_OVERLAY_PACKAGES, userId);
+            JSONObject current;
+            try {
+                current = new JSONObject(stored == null ? "{}" : stored);
+            } catch (Exception e) {
+                current = new JSONObject();
+            }
+            Set<String> replaced = Set.of(ThemeSettings.TIMESTAMP,
+                    ThemeSettings.OVERLAY_CATEGORY_ACCENT_COLOR,
+                    ThemeSettings.OVERLAY_CATEGORY_SYSTEM_PALETTE,
+                    ThemeSettings.OVERLAY_CATEGORY_THEME_STYLE,
+                    ThemeSettings.OVERLAY_COLOR_SOURCE, ThemeSettings.OVERLAY_COLOR_INDEX,
+                    ThemeSettings.OVERLAY_COLOR_BOTH, "_monet_palette_index", "_monet_seed_index");
+            for (Iterator<String> keys = current.keys(); keys.hasNext();) {
+                String key = keys.next();
+                if (!replaced.contains(key)) outgoing.put(key, current.get(key));
+            }
+            return Settings.Secure.putStringForUser(contentResolver,
+                    Settings.Secure.THEME_CUSTOMIZATION_OVERLAY_PACKAGES, outgoing.toString(),
                     userId);
-
-            return true;
         } catch (Exception e) {
             Log.w(TAG, "Error writings theme settings:" + e.getMessage());
 

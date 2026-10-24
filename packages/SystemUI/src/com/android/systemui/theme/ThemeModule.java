@@ -16,12 +16,9 @@
 
 package com.android.systemui.theme;
 
-import static android.server.Flags.enableThemeService;
-
 import android.content.res.Resources;
 
 import com.android.systemui.CoreStartable;
-import com.android.systemui.NoOpCoreStartable;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.res.R;
 import com.android.systemui.util.concurrency.SysUIConcurrencyModule;
@@ -54,19 +51,11 @@ public class ThemeModule {
         return resources.getString(R.string.themepicker_overlayable_package);
     }
 
-    /**
-     * Injects a {@link CoreStartable} that is responsible for applying theme and color overlays.
-     * <p>This will be a {@link ThemeOverlayController} unless the {@code enableThemeService} flag
-     * is enabled, in which case it will be a {@link NoOpCoreStartable}.
-     */
     @Provides
     @IntoMap
     @ClassKey(ThemeOverlayController.class)
     public CoreStartable provideThemeOverlayController(
             Provider<ThemeOverlayController> themeOverlayControllerProvider) {
-        if (enableThemeService()) {
-            return new NoOpCoreStartable();
-        }
         return themeOverlayControllerProvider.get();
     }
 }

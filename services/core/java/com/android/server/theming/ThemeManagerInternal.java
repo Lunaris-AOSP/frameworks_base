@@ -156,8 +156,10 @@ public class ThemeManagerInternal {
         try {
             Context userContext = mContext.createContextAsUser(UserHandle.of(userId),
                     Context.CONTEXT_IGNORE_SECURITY);
-            mThemeSettingsManager.writeSettings(userId, userContext.getContentResolver(),
-                    newSettings);
+            if (!mThemeSettingsManager.writeSettings(userId, userContext.getContentResolver(),
+                    newSettings)) {
+                return false;
+            }
             synchronized (mLock) {
                 mCurrentSettings.put(userId, newSettings);
             }
