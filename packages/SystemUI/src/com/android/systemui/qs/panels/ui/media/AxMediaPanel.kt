@@ -416,6 +416,7 @@ private fun AxMediaCard(
                                         span = span,
                                         colors = colors,
                                         interactive = interactive,
+                                        inlineTimestamps = surface == AxMediaSurface.SEPARATE_QQS,
                                         hasMultipleSessions = hasMultipleSessions,
                                     )
                             }
@@ -631,6 +632,7 @@ private fun ExpandedMediaContent(
     span: AxQsSpan,
     colors: AxMediaColors,
     interactive: Boolean,
+    inlineTimestamps: Boolean = false,
     hasMultipleSessions: Boolean = false,
 ) {
     val title = session?.title?.takeIf { it.isNotBlank() } ?: "No media playing"
@@ -643,7 +645,13 @@ private fun ExpandedMediaContent(
             remember(maxWidth, maxHeight, span) {
                 AxMediaSizing.from(maxWidth, maxHeight, span)
             }
-        val bottomPadding = if (hasMultipleSessions) 16.dp else sizing.verticalPadding
+        val verticalPadding = if (inlineTimestamps) 4.dp else sizing.verticalPadding
+        val bottomPadding =
+            if (hasMultipleSessions) {
+                if (inlineTimestamps) 12.dp else 16.dp
+            } else {
+                verticalPadding
+            }
 
         Column(
             modifier =
@@ -651,7 +659,7 @@ private fun ExpandedMediaContent(
                     .padding(
                         start = sizing.horizontalPadding,
                         end = sizing.horizontalPadding,
-                        top = sizing.verticalPadding,
+                        top = verticalPadding,
                         bottom = bottomPadding,
                     ),
             verticalArrangement = Arrangement.SpaceBetween,
@@ -680,7 +688,7 @@ private fun ExpandedMediaContent(
                 )
             }
 
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(if (inlineTimestamps) 2.dp else 6.dp))
 
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -703,7 +711,7 @@ private fun ExpandedMediaContent(
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
+            if (!inlineTimestamps) Spacer(Modifier.height(8.dp))
 
             Column(modifier = Modifier.fillMaxWidth()) {
                 MediaSeekBar(
@@ -712,9 +720,10 @@ private fun ExpandedMediaContent(
                     colors = colors,
                     dense = true,
                     interactive = interactive,
+                    showTimestamps = inlineTimestamps && sizing.showTimestamps,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                if (sizing.showTimestamps) {
+                if (sizing.showTimestamps && !inlineTimestamps) {
                     MediaTimestamps(
                         session = session,
                         viewModel = viewModel,
@@ -723,7 +732,7 @@ private fun ExpandedMediaContent(
                 }
             }
 
-            Spacer(Modifier.height(6.dp))
+            if (!inlineTimestamps) Spacer(Modifier.height(6.dp))
 
             val maxActions = mediaActionLimit(span.columns)
             val additionalActions =
