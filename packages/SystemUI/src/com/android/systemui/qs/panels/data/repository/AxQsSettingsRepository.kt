@@ -30,6 +30,7 @@ import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.AxQsTileStacks
 import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsGradientSettings
+import com.android.systemui.qs.panels.shared.model.LunarisQsMediaStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsPhotoFrame
 import com.android.systemui.qs.panels.shared.model.LunarisQsWidget
 import com.android.systemui.qs.panels.shared.model.LunarisQsWidgetKey
@@ -255,6 +256,12 @@ constructor(
     val sliderStyles: StateFlow<Map<LunarisQsSliderKey, LunarisQsSliderStyle>> =
         sliderStyleSettings()
 
+    val mediaStyle: StateFlow<LunarisQsMediaStyle> =
+        intSetting(MEDIA_STYLE, LunarisQsMediaStyle.ARTWORK.settingValue)
+            .map(LunarisQsMediaStyle::fromSetting)
+            .distinctUntilChanged()
+            .stateIn(applicationScope, SharingStarted.Eagerly, LunarisQsMediaStyle.ARTWORK)
+
     val gridColumns: StateFlow<Map<AxQsGridLayout, Int>> =
         gridSettings(AxQsGridLayout.entries, ::gridColumnsKey)
 
@@ -476,6 +483,8 @@ constructor(
     fun setGradientEndColor(color: Int) = putInt(GRADIENT_END_COLOR, color)
 
     fun setTileStyle(style: AxQsTileStyle) = putInt(TILE_STYLE, style.settingValue)
+
+    fun setMediaStyle(style: LunarisQsMediaStyle) = putInt(MEDIA_STYLE, style.settingValue)
 
     fun setTileGap(gap: Int) = putInt(TILE_GAP, gap.coerceIn(LunarisQsSpacing.TILE_GAP_RANGE))
 
@@ -866,6 +875,7 @@ constructor(
         private const val GRADIENT_START_COLOR = "ax_qs_gradient_start_color"
         private const val GRADIENT_END_COLOR = "ax_qs_gradient_end_color"
         const val TILE_STYLE = "ax_qs_tile_style"
+        private const val MEDIA_STYLE = "ax_qs_media_style"
         const val TILE_GAP = "ax_qs_tile_gap"
         const val SIDE_PADDING = "ax_qs_side_padding"
         const val TOP_PADDING = "ax_qs_top_padding"

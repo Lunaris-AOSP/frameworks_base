@@ -80,6 +80,7 @@ import com.android.systemui.media.remedia.ui.viewmodel.MediaViewModel
 import com.android.systemui.qs.panels.shared.model.AxMediaSurface
 import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
+import com.android.systemui.qs.panels.shared.model.LunarisQsMediaStyle
 import com.android.systemui.qs.panels.ui.compose.axQsControlShape
 import com.android.systemui.qs.panels.ui.compose.AxTileDefaults
 import com.android.systemui.qs.panels.ui.compose.MaterialMediaExpandedPopup
@@ -91,6 +92,7 @@ import com.android.systemui.res.R
 private enum class AxMediaLayout {
     OneRow,
     Box,
+    AlbumCover,
     Compact,
     Expanded,
 }
@@ -240,9 +242,12 @@ private fun AxMediaCard(
     modifier: Modifier = Modifier,
 ) {
     val shape = axQsControlShape(AxQsControl.MEDIA, span, mediaSurface = surface)
+    val mediaStyle by viewModel.mediaStyle.collectAsStateWithLifecycle()
     val layout =
         when {
-            surface == AxMediaSurface.CONTROL && span == AxQsSpan.MediaDefault -> AxMediaLayout.Box
+            surface == AxMediaSurface.CONTROL && span == AxQsSpan.MediaDefault ->
+                if (mediaStyle == LunarisQsMediaStyle.ALBUM_COVER) AxMediaLayout.AlbumCover
+                else AxMediaLayout.Box
             span.rows == 1 -> AxMediaLayout.OneRow
             span.columns >= 3 -> AxMediaLayout.Expanded
             else -> AxMediaLayout.Compact
@@ -259,7 +264,8 @@ private fun AxMediaCard(
         animateColorAsState(
             targetValue =
                 when {
-                    layout == AxMediaLayout.Box && !gutsVisible -> tileBackground
+                    (layout == AxMediaLayout.Box || layout == AxMediaLayout.AlbumCover) &&
+                        !gutsVisible -> tileBackground
                     artwork != null && !gutsVisible -> Color.Transparent
                     session != null -> mediaBackground
                     else -> tileBackground
@@ -362,7 +368,11 @@ private fun AxMediaCard(
                     )
                 } else {
                     Box(Modifier.fillMaxSize()) {
-                        if (session != null && layout != AxMediaLayout.Box) {
+                        if (
+                            session != null &&
+                                layout != AxMediaLayout.Box &&
+                                layout != AxMediaLayout.AlbumCover
+                        ) {
                             val songKey = "${session.appName}:${session.title}:${session.subtitle}"
                             MediaArtwork(
                                 artwork = artwork,
@@ -387,6 +397,13 @@ private fun AxMediaCard(
                             when (mediaLayout) {
                                 AxMediaLayout.Box ->
                                     LunarisBoxMediaPlayer(
+                                        session = session,
+                                        viewModel = viewModel,
+                                        interactive = interactive,
+                                        hasMultipleSessions = hasMultipleSessions,
+                                    )
+                                AxMediaLayout.AlbumCover ->
+                                    LunarisAlbumCoverMediaPlayer(
                                         session = session,
                                         viewModel = viewModel,
                                         interactive = interactive,

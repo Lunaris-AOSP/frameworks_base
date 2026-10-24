@@ -54,6 +54,7 @@ import com.android.systemui.qs.panels.shared.model.LunarisQsWidget
 import com.android.systemui.qs.panels.shared.model.LunarisQsWidgetKey
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderKey
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
+import com.android.systemui.qs.panels.shared.model.LunarisQsMediaStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolder
 import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolderController
 import com.android.systemui.qs.panels.ui.edit.LunarisQsPhotoActivity
@@ -454,6 +455,12 @@ constructor(
             initialValue = repository.tileStyle.value,
             source = repository.tileStyle,
         )
+    val mediaStyle by
+        hydrator.hydratedStateOf(
+            traceName = "mediaStyle",
+            initialValue = repository.mediaStyle.value,
+            source = repository.mediaStyle,
+        )
     private val sliderStyles by
         hydrator.hydratedStateOf(
             traceName = "sliderStyles",
@@ -738,6 +745,8 @@ constructor(
     fun resetColumns(layout: AxQsGridLayout) = repository.setColumns(layout, 0)
 
     fun resetRows(layout: AxQsGridLayout) = repository.setRows(layout, 0)
+
+    fun setMediaStyle(style: LunarisQsMediaStyle) = repository.setMediaStyle(style)
 
     fun sliderStyle(
         layout: AxQsLayout,

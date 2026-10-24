@@ -21,7 +21,6 @@ package com.android.compose
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -145,15 +144,6 @@ fun PlatformSlider(
             },
             thumb = { Spacer(Modifier.size(thumbSize)) },
         )
-
-        if (enabled) {
-            Spacer(
-                Modifier.padding(8.dp)
-                    .size(4.dp)
-                    .align(Alignment.CenterEnd)
-                    .background(color = colors.indicatorColor, shape = CircleShape)
-            )
-        }
     }
 }
 

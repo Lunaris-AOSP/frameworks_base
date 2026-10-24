@@ -42,6 +42,7 @@ import com.android.systemui.media.remedia.ui.viewmodel.MediaFalsingSystem
 import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.qs.panels.data.repository.AxMediaHistoryRepository
+import com.android.systemui.qs.panels.data.repository.AxQsSettingsRepository
 import com.android.systemui.qs.panels.shared.model.AxMediaSurface
 import com.android.systemui.shade.domain.interactor.ShadeInteractor
 import com.android.systemui.shared.settings.data.repository.SystemSettingsRepository
@@ -66,6 +67,7 @@ constructor(
     private val shadeInteractor: ShadeInteractor,
     private val keyguardTransitionInteractor: KeyguardTransitionInteractor,
     systemSettingsRepository: SystemSettingsRepository,
+    qsSettingsRepository: AxQsSettingsRepository,
 ) {
     private var scrubbingSessionKey: Any? by mutableStateOf(null)
     private var gutsSessionKey: Any? by mutableStateOf(null)
@@ -86,6 +88,7 @@ constructor(
     val currentKeyguardState: StateFlow<KeyguardState> =
         keyguardTransitionInteractor.currentKeyguardState
     val lastMediaPackage = mediaHistoryRepository.lastMediaPackage
+    val mediaStyle = qsSettingsRepository.mediaStyle
     val seekBarStyle =
         systemSettingsRepository
             .intSetting(

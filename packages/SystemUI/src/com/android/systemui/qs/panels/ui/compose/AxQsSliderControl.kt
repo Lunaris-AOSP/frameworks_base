@@ -74,9 +74,11 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -239,7 +241,8 @@ internal fun axQsControlShape(
         control.isSlider ->
             when (sliderStyle) {
                 LunarisQsSliderStyle.M3_EXPRESSIVE -> ExpressiveSliderShape
-                LunarisQsSliderStyle.PLATFORM -> CircleShape
+                LunarisQsSliderStyle.PLATFORM,
+                LunarisQsSliderStyle.ROUNDED_SQUARE_FLAT -> CircleShape
                 LunarisQsSliderStyle.ROUNDED_SQUARE -> RoundedCornerShape(AxQsControlCornerRadius)
             }
         span == AxQsSpan.TileDefault && control != AxQsControl.MEDIA -> CircleShape
@@ -331,6 +334,7 @@ internal fun AxQsSlider(
     val iconSize = AxSliderIconSize * sliderScale
     if (sliderStyle.usesPlatformSlider) {
         val strokeStyle = LocalLunarisQsStrokeStyle.current
+        val flatFill = sliderStyle == LunarisQsSliderStyle.ROUNDED_SQUARE_FLAT
         val roundedSquare = sliderStyle == LunarisQsSliderStyle.ROUNDED_SQUARE
         val trackHeight = AxTileDefaults.TileHeight * sliderScale
         val indicatorColor by animateColorAsState(
@@ -377,15 +381,15 @@ internal fun AxQsSlider(
                 sliderHeight = trackHeight,
                 trackCornerRadius = if (roundedSquare) AxQsControlCornerRadius else null,
                 indicatorBackground =
-                    if (activeTrackBrush != null || strokeStyle) {
+                    if (activeTrackBrush != null || strokeStyle || flatFill) {
                         { indicatorModifier, cornerRadius ->
                             val startCorner =
                                 if (roundedSquare) AxQsControlCornerRadius else trackHeight / 2
                             val indicatorShape = RoundedCornerShape(
                                 topStart = startCorner,
                                 bottomStart = startCorner,
-                                topEnd = cornerRadius,
-                                bottomEnd = cornerRadius,
+                                topEnd = if (flatFill) 0.dp else cornerRadius,
+                                bottomEnd = if (flatFill) 0.dp else cornerRadius,
                             )
                             val gradientAlpha = if (!enabled) 0.38f else if (active) 1f else 0.7f
                             Box(
@@ -397,13 +401,21 @@ internal fun AxQsSlider(
                                         alpha = { if (activeTrackBrush != null) gradientAlpha else 1f },
                                     )
                                 } else {
-                                    indicatorModifier.alpha(gradientAlpha)
-                                        .background(activeTrackBrush!!, indicatorShape)
+                                    indicatorModifier
+                                        .alpha(if (activeTrackBrush != null) gradientAlpha else 1f)
+                                        .background(
+                                            activeTrackBrush ?: SolidColor(indicatorColor),
+                                            if (flatFill) RectangleShape else indicatorShape,
+                                        )
                                 }
                             )
                         }
                     } else null,
-                modifier = Modifier.fillMaxWidth(),
+                modifier =
+                    Modifier.fillMaxWidth().then(
+                        if (flatFill) Modifier.clip(CircleShape)
+                        else Modifier
+                    ),
             )
             if (percentageLabel != null) {
                 AxQsSliderReadout(

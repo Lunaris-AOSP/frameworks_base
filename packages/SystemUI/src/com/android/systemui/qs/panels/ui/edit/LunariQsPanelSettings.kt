@@ -111,6 +111,7 @@ import com.android.systemui.qs.panels.shared.model.AxQsLayout
 import com.android.systemui.qs.panels.shared.model.AxQsPanelMode
 import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
+import com.android.systemui.qs.panels.shared.model.LunarisQsMediaStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsSpacing
 import com.android.systemui.qs.panels.ui.compose.AxTileDefaults
 import com.android.systemui.qs.panels.ui.compose.rememberLunarisQsGradient
@@ -240,6 +241,27 @@ fun LunariQsPanelSettings(
                                     stringResource(R.string.ax_qs_settings_shape_dynamic_inverted),
                             ),
                         onSelect = { viewModel.setTileStyle(AxQsTileStyle.fromSetting(it)) },
+                    )
+                }
+                item("media_style") {
+                    SettingsChoice(
+                        title = stringResource(R.string.ax_qs_settings_media_style),
+                        selected = viewModel.mediaStyle.settingValue,
+                        options =
+                            LunarisQsMediaStyle.entries.map { style ->
+                                style.settingValue to
+                                    stringResource(
+                                        when (style) {
+                                            LunarisQsMediaStyle.ARTWORK ->
+                                                R.string.ax_qs_settings_style_artwork
+                                            LunarisQsMediaStyle.ALBUM_COVER ->
+                                                R.string.ax_qs_settings_style_album_cover
+                                        }
+                                    )
+                            },
+                        onSelect = {
+                            viewModel.setMediaStyle(LunarisQsMediaStyle.fromSetting(it))
+                        },
                     )
                 }
                 item("dual_target_tile_style") {
@@ -637,6 +659,8 @@ private fun SliderStyleSetting(
                             LunarisQsSliderStyle.PLATFORM -> R.string.ax_qs_settings_style_classic
                             LunarisQsSliderStyle.ROUNDED_SQUARE ->
                                 R.string.ax_qs_settings_shape_rounded
+                            LunarisQsSliderStyle.ROUNDED_SQUARE_FLAT ->
+                                R.string.ax_qs_settings_style_rounded_flat
                         }
                     )
             },

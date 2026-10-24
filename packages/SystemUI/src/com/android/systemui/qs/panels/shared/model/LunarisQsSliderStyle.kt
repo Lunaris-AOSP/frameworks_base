@@ -19,7 +19,8 @@ package com.android.systemui.qs.panels.shared.model
 enum class LunarisQsSliderStyle(val settingValue: Int) {
     M3_EXPRESSIVE(0),
     PLATFORM(1),
-    ROUNDED_SQUARE(2);
+    ROUNDED_SQUARE(2),
+    ROUNDED_SQUARE_FLAT(3);
 
     val usesPlatformSlider: Boolean
         get() = this != M3_EXPRESSIVE

@@ -54,6 +54,10 @@
     <string name="ax_qs_settings_flashlight_style">Flashlight slider style</string>
     <string name="ax_qs_settings_style_expressive">Expressive</string>
     <string name="ax_qs_settings_style_classic">Classic</string>
+    <string name="ax_qs_settings_media_style">2×2 media player style</string>
+    <string name="ax_qs_settings_style_artwork">Artwork</string>
+    <string name="ax_qs_settings_style_album_cover">Album cover</string>
+    <string name="ax_qs_settings_style_rounded_flat">Rounded square (flat fill)</string>
     <string name="ax_qs_settings_tile_labels">Show tile labels</string>
     <string name="ax_qs_settings_gradient">Active color gradient</string>
     <string name="ax_qs_settings_gradient_enabled">Enable gradient</string>
