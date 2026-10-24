@@ -142,6 +142,7 @@ fun StyledMediaSeekBar(
                         bar.setPlaybackState(isPlaying)
                     }
                     is GlowingSeekBar -> {
+                        bar.setArtwork(artwork)
                         bar.isScrubbing = isScrubbing || isTrackingTouch
                         bar.setPlaybackState(isPlaying)
                     }

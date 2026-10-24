@@ -188,6 +188,8 @@ internal fun AndroidMediaSeekBar(
                     setPlaybackState(isPlaying, animate = animationsAllowed)
                 }
                 (seekBar as? GlowingSeekBar)?.apply {
+                    setBarColor(tint.defaultColor)
+                    setArtwork(artwork)
                     this.isScrubbing = scrubbing
                     setPlaybackState(isPlaying, animate = animationsAllowed)
                 }
