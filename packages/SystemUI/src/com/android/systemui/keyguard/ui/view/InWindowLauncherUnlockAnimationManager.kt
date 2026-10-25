@@ -67,6 +67,8 @@ constructor(
 
     private var launcherActivityClass: String? = null
 
+    private var launcherAnimationBound = false
+
     /**
      * Whether we've called [ILauncherUnlockAnimationController.prepareForUnlock], and have *not*
      * subsequently called [ILauncherUnlockAnimationController.playUnlockAnimation] or
@@ -96,7 +98,10 @@ constructor(
         launcherAnimationController = launcherController
 
         // Bind once we have a launcher controller.
-        InWindowLauncherAnimationViewBinder.bind(viewModel, this, scope)
+        if (!launcherAnimationBound) {
+            launcherAnimationBound = true
+            InWindowLauncherAnimationViewBinder.bind(viewModel, this, scope)
+        }
     }
 
     /**
