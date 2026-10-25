@@ -1201,7 +1201,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces,
         attachCustomOverlays();
     }
 
-     private ViewGroup getScrimOverlayContainer() {
+    private ViewGroup getScrimOverlayContainer() {
         ViewGroup root = (ViewGroup) getNotificationShadeWindowView();
 
         FrameLayout container = root.findViewById(R.id.custom_overlay_container);
@@ -1215,9 +1215,12 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces,
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
 
-        View scrimInFront = root.findViewById(R.id.scrim_in_front);
-        int scrimIndex = Math.max(root.indexOfChild(scrimInFront) - 3, 0);
-        root.addView(container, scrimIndex);
+        View notifications = root.findViewById(R.id.shared_notification_container);
+        int overlayIndex = root.indexOfChild(notifications);
+        if (overlayIndex < 0) {
+            overlayIndex = root.indexOfChild(root.findViewById(R.id.scrim_in_front));
+        }
+        root.addView(container, overlayIndex >= 0 ? overlayIndex : root.getChildCount());
 
         return container;
     }
