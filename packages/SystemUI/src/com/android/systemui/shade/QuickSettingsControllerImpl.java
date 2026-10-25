@@ -321,6 +321,8 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
     /** Overscroll applied through the QS plug-in API, e.g. lockscreen split shade. */
     private float mQsOverScrollAmount;
     private boolean mSwipeInProgress = false;
+    private final LunarisQsPanelSwipeController mPanelSwipeController;
+    private boolean mPanelSwipeInProgress;
     private boolean mBounceEnabled = true;
     /** Coalesces QS translation while a spring frame updates height and overscroll together. */
     private boolean mBatchingQsExpansionUpdates;
@@ -449,6 +451,134 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         dumpManager.registerDumpable(this);
 
         mWindowManagerProvider = windowManagerProvider;
+        mPanelSwipeController = new LunarisQsPanelSwipeController(
+                ViewConfiguration.get(mPanelView.getContext()),
+                new LunarisQsPanelSwipeController.Callback() {
+                    @Override
+                    public boolean canStart(MotionEvent event) {
+                        return canStartPanelSwipe(event);
+                    }
+
+                    @Override
+                    public boolean isShowingQs() {
+                        return getExpanded() || isExpandImmediate();
+                    }
+
+                    @Override
+                    public int width() {
+                        return mQsFrame.getWidth();
+                    }
+
+                    @Override
+                    public void onStarted(float progress) {
+                        mPanelSwipeInProgress = true;
+                        mNotificationStackScrollLayoutController.getView()
+                                .setPanelSwipeInProgress(true);
+                        mPanelViewControllerLazy.get().onPanelSwipeStarted();
+                        if (mQsVelocityTracker != null) {
+                            mQsVelocityTracker.recycle();
+                            mQsVelocityTracker = null;
+                        }
+                        mNotificationStackScrollLayoutController.getView().setTranslationX(
+                                -mQsFrame.getWidth() * progress);
+                        mQs.setPanelSwipeProgress(progress);
+                        mQs.setForceQsEvent(false);
+                        setTracking(false);
+                        mConflictingExpansionGesture = false;
+                        mAnimateNextNotificationBounds = false;
+                        if (mClippingAnimator != null) {
+                            mClippingAnimator.removeAllListeners();
+                            mClippingAnimator.removeAllUpdateListeners();
+                            mClippingAnimator.cancel();
+                            mClippingAnimator = null;
+                            mIsTranslationResettingAnimator = false;
+                            mIsPulseExpansionResettingAnimator = false;
+                        }
+                        setExpandImmediate(false);
+                        mNotificationStackScrollLayoutController.setShouldShowShelfOnly(false);
+                        setExpansionHeight(getMinExpansionHeight());
+                        updateQsState();
+                        updateExpansion();
+                        mNotificationStackScrollLayoutController.updateTopPadding(
+                                calculateNotificationsTopPadding(false, 0, mShadeExpandedFraction),
+                                false);
+                    }
+
+                    @Override
+                    public void onProgress(float progress) {
+                        if (!isPanelSwipeEnabled()) {
+                            cancelPanelSwipe();
+                            return;
+                        }
+                        mQs.setPanelSwipeProgress(progress);
+                        mNotificationStackScrollLayoutController.getView().setTranslationX(
+                                -mQsFrame.getWidth() * progress);
+                    }
+
+                    @Override
+                    public void onFinished(boolean showQs) {
+                        if (mQs != null) {
+                            mQs.setForceQsEvent(showQs);
+                            setExpandImmediate(showQs);
+                            setExpansionHeight(showQs
+                                    ? getMaxExpansionHeight() : getMinExpansionHeight());
+                            mNotificationStackScrollLayoutController.setShouldShowShelfOnly(showQs);
+                            updateQsState();
+                            updateExpansion();
+                            mQs.setPanelSwipeProgress(-1f);
+                        }
+                        mNotificationStackScrollLayoutController.getView().setTranslationX(0f);
+                        mNotificationStackScrollLayoutController.getView()
+                                .setPanelSwipeInProgress(false);
+                        mPanelSwipeInProgress = false;
+                    }
+                });
+    }
+
+    boolean isPanelSwipeEnabled() {
+        return mQs != null && mBarState == StatusBarState.SHADE && !mDozing
+                && !mSplitShadeEnabled && isMistQsEnabled()
+                && mAxQsShadePolicy.get().isPanelSwipeEnabled();
+    }
+
+    private boolean canStartPanelSwipe(MotionEvent event) {
+        if (!isPanelSwipeEnabled() || mShadeExpandedFraction < 1f
+                || !mExpansionEnabledPolicy || isLockscreenQsDisabled()
+                || mRemoteInputManager.isRemoteInputActive() || isCustomizing()
+                || disallowTouches() || isTracking() || isExpansionAnimating()
+                || mNotificationStackScrollLayoutController.isLongPressInProgress()
+                || mPanelViewControllerLazy.get().isClosing()
+                || mPanelViewControllerLazy.get().isTracking()) {
+            return false;
+        }
+        updateGestureInsetsCache();
+        if (shouldBackBypassQuickSettings(event.getX())
+                || mPanelViewControllerLazy.get().isInGestureNavHomeHandleArea(event.getY())) {
+            return false;
+        }
+        return getExpanded() || isExpandImmediate() || mPanelSwipeInProgress
+                || mNotificationStackScrollLayoutController.getChildAtRawPosition(
+                        event.getRawX(), event.getRawY()) == null;
+    }
+
+    boolean onInterceptPanelSwipe(MotionEvent event) {
+        if (!isPanelSwipeEnabled()) {
+            cancelPanelSwipe();
+            return false;
+        }
+        return mPanelSwipeController.onInterceptTouchEvent(event);
+    }
+
+    boolean handlePanelSwipe(MotionEvent event) {
+        if (!isPanelSwipeEnabled()) {
+            cancelPanelSwipe();
+            return false;
+        }
+        return mPanelSwipeController.onTouchEvent(event);
+    }
+
+    void cancelPanelSwipe() {
+        mPanelSwipeController.cancel();
     }
 
     @VisibleForTesting
@@ -489,6 +619,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
     }
 
     void updateResources() {
+        cancelPanelSwipe();
         mSplitShadeEnabled = mSplitShadeStateController.shouldUseSplitNotificationShade(mResources);
         updateQsSplitShadeState();
         mSplitShadeNotificationsScrimMarginBottom =
@@ -514,6 +645,11 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
     // TODO (b/265054088): move this and others to a CoreStartable
     void init() {
         initNotificationStackScrollLayoutController();
+        if (isMistQsEnabled()) {
+            mJavaAdapter.alwaysCollectFlow(mAxQsShadePolicy.get().getPanelSwipeEnabled(), enabled -> {
+                if (!enabled) cancelPanelSwipe();
+            });
+        }
         mJavaAdapter.alwaysCollectFlow(
                 mShadeInteractor.isExpandToQsEnabled(), this::setExpansionEnabledPolicy);
         mJavaAdapter.alwaysCollectFlow(
@@ -918,6 +1054,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
 
     @Override
     public void closeQs() {
+        cancelPanelSwipe();
         if (mSplitShadeEnabled) {
             mShadeLog.d("Closing QS while in split shade");
         }
@@ -1087,6 +1224,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
 
     /** */
     private void setExpansionEnabledPolicy(boolean expansionEnabledPolicy) {
+        if (!expansionEnabledPolicy) cancelPanelSwipe();
         mExpansionEnabledPolicy = expansionEnabledPolicy;
         if (mQs != null) {
             mQs.setHeaderClickable(isExpansionEnabled());
@@ -1123,6 +1261,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
     }
 
     void cancelShadeOverscroll() {
+        cancelPanelSwipe();
         cancelExpansionAnimation();
         setQsOverscroll(0f);
         setShadeOverScrollAmount(0f);
@@ -1161,6 +1300,9 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
     }
 
     void setShadeExpansion(float expandedHeight, float expandedFraction) {
+        if (expandedFraction < 1f) {
+            cancelPanelSwipe();
+        }
         mShadeExpandedHeight = expandedHeight;
         mShadeExpandedFraction = expandedFraction;
         mMediaHierarchyManager.setShadeExpandedFraction(expandedFraction);
@@ -1260,7 +1402,9 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
             if (mQs.getHeader() != null && mQs.getHeader().getVisibility() != qsVisibility) {
                 mQs.getHeader().setVisibility(qsVisibility);
             }
-            if (mNotificationStackScrollLayoutController.getView() != null
+            if (isMistSeparateShade()) {
+                mNotificationStackScrollLayoutController.updateVisibility(true);
+            } else if (mNotificationStackScrollLayoutController.getView() != null
                     && mNotificationStackScrollLayoutController.getView().getVisibility() != View.VISIBLE) {
                 mNotificationStackScrollLayoutController.getView().setVisibility(View.VISIBLE);
             }
@@ -1467,6 +1611,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
 
     /** Set animate next notification bounds. */
     private void setAnimateNextNotificationBounds(long duration, long delay) {
+        if (mPanelSwipeInProgress) return;
         mAnimateNextNotificationBounds = true;
         mNotificationBoundsAnimationDuration = duration;
         mNotificationBoundsAnimationDelay = delay;
@@ -2658,7 +2803,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
                     shouldSkipAnimation = true;
                     mLastDisplayIdWithMediaVisibilityChange = getDisplayId();
                 }
-                if (mQs.isHeaderShown() && !shouldSkipAnimation) {
+                if (mQs.isHeaderShown() && !shouldSkipAnimation && !mPanelSwipeInProgress) {
                     setAnimateNextNotificationBounds(
                             StackStateAnimator.ANIMATION_DURATION_STANDARD, 0);
                     mNotificationStackScrollLayoutController.animateNextTopPaddingChange();

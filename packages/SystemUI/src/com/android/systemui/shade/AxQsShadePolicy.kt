@@ -27,8 +27,12 @@ import com.android.systemui.statusbar.notification.stack.NotificationStackScroll
 import dagger.Lazy
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
 
 @SysUISingleton
 class AxQsShadePolicy
@@ -44,6 +48,12 @@ constructor(
 ) {
     private val panelMode = repository.panelMode
     private val quickPanelOnLeft = repository.quickPanelOnLeft
+    val panelSwipeEnabled =
+        combine(repository.panelSwipeEnabled, panelMode) { enabled, mode ->
+            enabled && mode == AxQsPanelMode.SEPARATE
+        }
+            .distinctUntilChanged()
+            .stateIn(applicationScope, SharingStarted.Eagerly, false)
 
     init {
         shadeAnimationInteractor.isAnyCloseAnimationRunning
@@ -63,6 +73,8 @@ constructor(
         val midpoint = width / 2f
         return if (quickPanelOnLeft.value) x < midpoint else x >= midpoint
     }
+
+    fun isPanelSwipeEnabled(): Boolean = isSeparateShade() && panelSwipeEnabled.value
 
     fun collapseSeparateShade(): Boolean {
         if (!isSeparateShade()) return false

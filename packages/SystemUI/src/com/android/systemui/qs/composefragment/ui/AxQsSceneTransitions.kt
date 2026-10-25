@@ -21,15 +21,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import com.android.compose.animation.scene.ContentKey
+import com.android.compose.animation.scene.Edge
 import com.android.compose.animation.scene.ElementKey
 import com.android.compose.animation.scene.SceneTransitionLayoutState
 import com.android.compose.animation.scene.TransitionBuilder
+import com.android.compose.animation.scene.TransitionKey
 import com.android.compose.animation.scene.content.state.TransitionState
 import com.android.systemui.qs.composefragment.SceneKeys
 import com.android.systemui.qs.shared.ui.QuickSettings.Elements
 import com.android.systemui.shade.ui.composable.ShadeHeader
 
 internal val AxQsGridContent = ElementKey("AxQsGridContent")
+internal val AxQsPanelSwipeTransition = TransitionKey("AxQsPanelSwipe")
+
+fun TransitionBuilder.axQsPanelSwipe() {
+    translate(SceneKeys.QuickQuickSettings.rootElementKey, Edge.Left)
+    translate(SceneKeys.QuickSettings.rootElementKey, Edge.Right)
+    disableAxQsSharedElements()
+    sharedElement(ShadeHeader.Elements.Clock, enabled = false)
+}
 
 fun TransitionBuilder.axFromQuickQuickSettingsToQuickSettings() {
     fractionRange(start = 0.15f, end = 0.85f, easing = FastOutSlowInEasing) {

@@ -425,6 +425,15 @@ fun LunariQsPanelSettings(
                         },
                     )
                 }
+                item("panel_swipe") {
+                    SettingsSwitch(
+                        title = stringResource(R.string.lunaris_qs_panel_swipe),
+                        summary = stringResource(R.string.lunaris_qs_panel_swipe_summary),
+                        checked = viewModel.panelSwipeEnabled,
+                        onCheckedChange = viewModel::setPanelSwipeEnabled,
+                        enabled = separate,
+                    )
+                }
                 item("notification_media") {
                     SettingsSwitch(
                         title = stringResource(R.string.ax_qs_settings_notification_media),

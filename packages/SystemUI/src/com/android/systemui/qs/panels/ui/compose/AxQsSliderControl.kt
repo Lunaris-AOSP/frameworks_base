@@ -26,6 +26,7 @@ import android.view.MotionEvent
 import android.view.View
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -42,6 +43,7 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.requiredWidth
@@ -107,8 +109,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.compose.PlatformSlider
@@ -139,7 +143,6 @@ import com.android.systemui.volume.dialog.sliders.ui.compose.SliderTrack
 import com.android.systemui.volume.haptics.ui.VolumeHapticsConfigsProvider
 import com.android.systemui.volume.panel.component.volume.slider.ui.viewmodel.AudioStreamSliderViewModel
 import com.android.systemui.volume.panel.component.volume.slider.ui.viewmodel.SliderState
-import com.android.systemui.volume.ui.compose.slider.SliderIcon
 import java.text.NumberFormat
 import kotlin.math.round
 import kotlin.math.roundToInt
@@ -257,6 +260,8 @@ private val AxSliderTrackInsideCornerRadius = 2.dp
 private val AxSliderThumbWidth = 4.dp
 private val AxSliderThumbTrackGap = 6.dp
 private val AxSliderIconSize = 20.dp
+private val AxSliderPercentageSize = DpSize(48.dp, 24.dp)
+private val AxSliderReadoutGap = 8.dp
 private const val SLIDER_CORNER_DIVISOR = 3.333f
 
 internal fun axQsSliderTrackHeight(availableHeight: Dp): Dp =
@@ -331,7 +336,6 @@ internal fun AxQsSlider(
             onLongPress = onLongPress.takeIf { enabled },
         )
     val sliderScale = sliderHeight / AxSliderTrackHeight
-    val iconSize = AxSliderIconSize * sliderScale
     if (sliderStyle.usesPlatformSlider) {
         val strokeStyle = LocalLunarisQsStrokeStyle.current
         val flatFill = sliderStyle == LunarisQsSliderStyle.ROUNDED_SQUARE_FLAT
@@ -373,11 +377,6 @@ internal fun AxQsSlider(
                     else
                         PlatformSliderDefaults.DefaultPlatformSliderDraggingCornerRadius *
                             sliderScale,
-                icon = {
-                    if (percentageLabel == null) {
-                        icon(Modifier.size(iconSize).rotate(if (vertical) 90f else 0f))
-                    }
-                },
                 sliderHeight = trackHeight,
                 trackCornerRadius = if (roundedSquare) AxQsControlCornerRadius else null,
                 indicatorBackground =
@@ -417,18 +416,16 @@ internal fun AxQsSlider(
                         else Modifier
                     ),
             )
-            if (percentageLabel != null) {
-                AxQsSliderReadout(
-                    percentage = percentageLabel,
-                    vertical = vertical,
-                    platform = true,
-                    fraction = axQsSliderPercentage(value, valueRange) / 100f,
-                    sliderScale = sliderScale,
-                    enabled = enabled,
-                    activeColor = activeContentColor,
-                    icon = icon,
-                )
-            }
+            AxQsSliderReadout(
+                percentage = percentageLabel,
+                vertical = vertical,
+                platform = true,
+                fraction = axQsSliderPercentage(value, valueRange) / 100f,
+                sliderScale = sliderScale,
+                enabled = enabled,
+                activeColor = activeContentColor,
+                icon = icon,
+            )
         }
         return
     }
@@ -481,71 +478,47 @@ internal fun AxQsSlider(
                     activeTrackBrush = activeTrackBrush,
                     activeTrackAlpha = if (active) 1f else 0.7f,
                     modifier = Modifier.background(trackBackgroundColor, ExpressiveSliderShape),
-                    activeTrackEndIcon = { iconsState ->
-                        if (percentageLabel == null) {
-                            AxQsSliderIcon(
-                                visible =
-                                    if (vertical) {
-                                        iconsState.isActiveTrackEndIconVisible
-                                    } else {
-                                        !iconsState.isInactiveTrackEndIconVisible
-                                    },
-                                vertical = vertical,
-                                size = iconSize,
-                                icon = icon,
-                            )
-                        }
-                    },
-                    inactiveTrackEndIcon = { iconsState ->
-                        if (percentageLabel == null) {
-                            AxQsSliderIcon(
-                                visible =
-                                    if (vertical) {
-                                        !iconsState.isActiveTrackEndIconVisible
-                                    } else {
-                                        iconsState.isInactiveTrackEndIconVisible
-                                    },
-                                vertical = vertical,
-                                size = iconSize,
-                                icon = icon,
-                            )
-                        }
-                    },
                 )
             },
         )
-        if (percentageLabel != null) {
-            AxQsSliderReadout(
-                percentage = percentageLabel,
-                vertical = vertical,
-                platform = false,
-                fraction = axQsSliderPercentage(value, valueRange) / 100f,
-                sliderScale = sliderScale,
-                enabled = enabled,
-                activeColor = activeContentColor,
-                icon = icon,
-            )
-        }
+        AxQsSliderReadout(
+            percentage = percentageLabel,
+            vertical = vertical,
+            platform = false,
+            fraction = axQsSliderPercentage(value, valueRange) / 100f,
+            sliderScale = sliderScale,
+            enabled = enabled,
+            activeColor = activeContentColor,
+            icon = icon,
+        )
     }
 }
 
-@Composable
-private fun AxQsSliderIcon(
-    visible: Boolean,
-    vertical: Boolean,
-    size: Dp,
-    icon: @Composable (Modifier) -> Unit,
-) {
-    SliderIcon(
-        isVisible = visible,
-        icon = { icon(Modifier.size(size).rotate(if (vertical) 90f else 0f)) },
-    )
+private fun axQsSliderReadoutTarget(
+    atStart: Boolean,
+    trackLength: Dp,
+    slotSize: Dp,
+    contentSize: Dp,
+    activeEnd: Dp,
+    inactiveStart: Dp,
+    gap: Dp,
+): Dp {
+    val restingCenter = if (atStart) slotSize / 2 else trackLength - slotSize / 2
+    val targetCenter =
+        if (atStart) {
+            if (activeEnd >= slotSize) restingCenter
+            else maxOf(restingCenter, inactiveStart + contentSize / 2 + gap)
+        } else {
+            if (trackLength - inactiveStart >= slotSize) restingCenter
+            else minOf(restingCenter, activeEnd - contentSize / 2 - gap)
+        }
+    return targetCenter.coerceIn(contentSize / 2, trackLength - contentSize / 2)
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BoxScope.AxQsSliderReadout(
-    percentage: String,
+    percentage: String?,
     vertical: Boolean,
     platform: Boolean,
     fraction: Float,
@@ -560,55 +533,140 @@ private fun BoxScope.AxQsSliderReadout(
     BoxWithConstraints(Modifier.matchParentSize().clearAndSetSemantics {}) {
         val slotSize = minOf(maxHeight, maxWidth / 2)
         val scale = sliderScale.coerceAtLeast(0.1f)
-        val content: @Composable BoxScope.() -> Unit = {
-            Box(
-                modifier =
-                    Modifier.align(if (vertical) Alignment.CenterEnd else Alignment.CenterStart)
-                        .size(slotSize)
-                        .rotate(if (vertical) 90f else 0f)
-                        .padding(horizontal = 4.dp * scale),
-                contentAlignment = Alignment.Center,
-            ) {
-                BasicText(
-                    text = percentage,
-                    style =
-                        MaterialTheme.typography.labelLarge.copy(
-                            color = LocalContentColor.current,
-                            fontSize = 14.sp * scale,
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign = TextAlign.Center,
+        val iconSize = minOf(AxSliderIconSize * sliderScale, slotSize)
+        val iconHalfSize = iconSize / 2
+        val percentageSize =
+            DpSize(
+                minOf(AxSliderPercentageSize.width * scale, slotSize),
+                minOf(AxSliderPercentageSize.height * scale, slotSize),
+            )
+        val percentageExtent = if (vertical) percentageSize.height else percentageSize.width
+        val percentageHalfSize = percentageExtent / 2
+        val readoutGap = AxSliderReadoutGap * scale
+        val thumbHalfWidth = if (platform) 0.dp else AxSliderThumbWidth * sliderScale / 2
+        val trackGap = if (platform) 0.dp else thumbHalfWidth + AxSliderThumbTrackGap
+        val thumbPosition = thumbHalfWidth + (maxWidth - thumbHalfWidth * 2) * fraction
+        val activeEnd = (thumbPosition - trackGap).coerceIn(0.dp, maxWidth)
+        val inactiveStart = (thumbPosition + trackGap).coerceIn(0.dp, maxWidth)
+        val iconAtStart = vertical || percentage == null
+        val animationSpec =
+            spring<Dp>(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessMediumLow,
+            )
+        val iconCenter =
+            animateDpAsState(
+                targetValue =
+                    axQsSliderReadoutTarget(
+                        atStart = iconAtStart,
+                        trackLength = maxWidth,
+                        slotSize = slotSize,
+                        contentSize = iconSize,
+                        activeEnd = activeEnd,
+                        inactiveStart = inactiveStart,
+                        gap = readoutGap,
+                    ),
+                animationSpec = animationSpec,
+                label = "AxQsSliderIconPosition",
+            )
+        val percentageCenter =
+            if (percentage != null) {
+                animateDpAsState(
+                    targetValue =
+                        axQsSliderReadoutTarget(
+                            atStart = !iconAtStart,
+                            trackLength = maxWidth,
+                            slotSize = slotSize,
+                            contentSize = percentageExtent,
+                            activeEnd = activeEnd,
+                            inactiveStart = inactiveStart,
+                            gap = readoutGap,
                         ),
-                    maxLines = 1,
-                    softWrap = false,
-                    autoSize =
-                        TextAutoSize.StepBased(
-                            minFontSize = 8.sp * scale,
-                            maxFontSize = 14.sp * scale,
-                        ),
-                    modifier = Modifier.fillMaxWidth(),
+                    animationSpec = animationSpec,
+                    label = "AxQsSliderPercentagePosition",
                 )
+            } else null
+
+        val readoutCenter: (Boolean) -> Dp = { isIcon ->
+            if (percentageCenter == null) {
+                iconCenter.value.coerceIn(iconHalfSize, maxWidth - iconHalfSize)
+            } else {
+                val startHalfSize = if (iconAtStart) iconHalfSize else percentageHalfSize
+                val endHalfSize = if (iconAtStart) percentageHalfSize else iconHalfSize
+                val gap =
+                    minOf(readoutGap, (maxWidth - iconSize - percentageExtent).coerceAtLeast(0.dp))
+                val separation = startHalfSize + gap + endHalfSize
+                val startCenter =
+                    (if (iconAtStart) iconCenter.value else percentageCenter.value)
+                        .coerceIn(startHalfSize, maxWidth - endHalfSize - separation)
+                val endCenter =
+                    (if (iconAtStart) percentageCenter.value else iconCenter.value)
+                        .coerceIn(startHalfSize + separation, maxWidth - endHalfSize)
+                val overlap = (startCenter + separation - endCenter).coerceAtLeast(0.dp)
+                if (isIcon == iconAtStart) startCenter - overlap / 2
+                else endCenter + overlap / 2
+            }
+        }
+        val content: @Composable BoxScope.() -> Unit = {
+            if (percentage != null) {
+                Box(
+                    modifier =
+                        Modifier.align(Alignment.CenterStart)
+                            .offset {
+                                IntOffset(
+                                    (readoutCenter(false) - slotSize / 2).roundToPx(),
+                                    0,
+                                )
+                            }
+                            .size(slotSize)
+                            .rotate(if (vertical) 90f else 0f),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        modifier =
+                            Modifier.size(percentageSize).padding(horizontal = 4.dp * scale),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        BasicText(
+                            text = percentage,
+                            style =
+                                MaterialTheme.typography.labelLarge.copy(
+                                    color = LocalContentColor.current,
+                                    fontSize = 14.sp * scale,
+                                    lineHeight = 1.4.em,
+                                    fontWeight = FontWeight.SemiBold,
+                                    textAlign = TextAlign.Center,
+                                ),
+                            maxLines = 1,
+                            softWrap = false,
+                            autoSize =
+                                TextAutoSize.StepBased(
+                                    minFontSize = 8.sp * scale,
+                                    maxFontSize = 14.sp * scale,
+                                ),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
             }
             Box(
                 modifier =
-                    Modifier.align(if (vertical) Alignment.CenterStart else Alignment.CenterEnd)
-                        .size(slotSize),
+                    Modifier.align(Alignment.CenterStart)
+                        .offset {
+                            IntOffset(
+                                (readoutCenter(true) - iconHalfSize).roundToPx(),
+                                0,
+                            )
+                        }
+                        .size(iconSize),
                 contentAlignment = Alignment.Center,
             ) {
-                icon(
-                    Modifier.size(AxSliderIconSize * sliderScale).rotate(if (vertical) 90f else 0f)
-                )
+                icon(Modifier.fillMaxSize().rotate(if (vertical) 90f else 0f))
             }
         }
         val contentModifier: (Boolean) -> Modifier = { activeTrack ->
             Modifier.fillMaxSize().drawWithContent {
-                val fill =
-                    if (platform) {
-                            size.width * fraction
-                        } else {
-                            (size.width - AxSliderThumbWidth.toPx() * sliderScale) * fraction -
-                                AxSliderThumbTrackGap.toPx()
-                        }
-                        .coerceIn(0f, size.width)
+                val fill = activeEnd.toPx().coerceIn(0f, size.width)
                 val boundary = if (rtl) size.width - fill else fill
                 val drawLeft = activeTrack != rtl
                 clipRect(

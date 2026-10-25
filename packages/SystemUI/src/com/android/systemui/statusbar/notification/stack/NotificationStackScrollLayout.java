@@ -309,6 +309,7 @@ public class NotificationStackScrollLayout
     private boolean mChildrenUpdateRequested;
     private boolean mIsExpansionChanging;
     private boolean mPanelTracking;
+    private boolean mPanelSwipeInProgress;
     private boolean mExpandingNotification;
     private boolean mExpandedInThisMotion;
     private boolean mShouldShowShelfOnly;
@@ -1825,7 +1826,8 @@ public class NotificationStackScrollLayout
     }
 
     private void onTopPaddingChanged(boolean animate) {
-        boolean shouldAnimate = animate || mAnimateNextTopPaddingChange;
+        boolean shouldAnimate = !mPanelSwipeInProgress
+                && (animate || mAnimateNextTopPaddingChange);
         updateAlgorithmHeightAndPadding();
         updateContentHeight();
         if (mAmbientState.isOnKeyguard()
@@ -6014,6 +6016,14 @@ public class NotificationStackScrollLayout
      */
     public void setKeyguardBottomPadding(float keyguardBottomPadding) {
         mKeyguardBottomPadding = keyguardBottomPadding;
+    }
+
+    public void setPanelSwipeInProgress(boolean inProgress) {
+        mPanelSwipeInProgress = inProgress;
+        if (inProgress) {
+            mAnimateNextTopPaddingChange = false;
+            mTopPaddingNeedsAnimation = false;
+        }
     }
 
     public void setShouldShowShelfOnly(boolean shouldShowShelfOnly) {

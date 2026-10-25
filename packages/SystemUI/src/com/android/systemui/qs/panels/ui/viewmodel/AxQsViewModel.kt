@@ -407,6 +407,12 @@ constructor(
             initialValue = false,
             source = repository.quickPanelOnLeft,
         )
+    val panelSwipeEnabled by
+        hydrator.hydratedStateOf(
+            traceName = "panelSwipeEnabled",
+            initialValue = false,
+            source = repository.panelSwipeEnabled,
+        )
     val showWeather by
         hydrator.hydratedStateOf(
             traceName = "showWeather",
@@ -700,6 +706,8 @@ constructor(
     }
 
     fun setQuickPanelOnLeft(onLeft: Boolean) = repository.setQuickPanelOnLeft(onLeft)
+
+    fun setPanelSwipeEnabled(enabled: Boolean) = repository.setPanelSwipeEnabled(enabled)
 
     fun setShowWeather(show: Boolean) = repository.setShowWeather(show)
 

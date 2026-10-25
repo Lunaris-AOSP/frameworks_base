@@ -1826,7 +1826,14 @@ public final class NotificationPanelViewController implements
             mExpectingSynthesizedDown = false;
             return false;
         }
-        return isFullyCollapsed() || mBarState != StatusBarState.SHADE;
+        return isFullyCollapsed() || mBarState != StatusBarState.SHADE
+                || (isFullyExpanded() && mQsController.isPanelSwipeEnabled());
+    }
+
+    void onPanelSwipeStarted() {
+        mVelocityTracker.clear();
+        mTrackingPointer = -1;
+        mTouchSlopExceeded = false;
     }
 
     int getFalsingThreshold() {
@@ -2572,6 +2579,7 @@ public final class NotificationPanelViewController implements
     public void setTouchAndAnimationDisabled(boolean disabled) {
         mTouchDisabled = disabled;
         if (mTouchDisabled) {
+            mQsController.cancelPanelSwipe();
             cancelHeightAnimator();
             if (isTracking()) {
                 onTrackingStopped(true /* expanded */);
@@ -3394,6 +3402,7 @@ public final class NotificationPanelViewController implements
     }
 
     private void abortAnimations() {
+        mQsController.cancelPanelSwipe();
         cancelHeightAnimator();
         mView.removeCallbacks(mFlingCollapseRunnable);
     }
@@ -4124,6 +4133,7 @@ public final class NotificationPanelViewController implements
                 mShadeLog.logMotionEvent(event, "NPVC onInterceptTouchEvent");
             }
             if (mQsController.disallowTouches()) {
+                mQsController.cancelPanelSwipe();
                 mShadeLog.logMotionEvent(event,
                         "NPVC not intercepting touch, panel touches disallowed");
                 return false;
@@ -4132,6 +4142,7 @@ public final class NotificationPanelViewController implements
             // Do not let touches go to shade or QS if the bouncer is visible,
             // but still let user swipe down to expand the panel, dismissing the bouncer.
             if (mCentralSurfaces.isBouncerShowing()) {
+                mQsController.cancelPanelSwipe();
                 mShadeLog.v("NotificationPanelViewController MotionEvent intercepted: "
                         + "bouncer is showing");
                 return true;
@@ -4149,6 +4160,12 @@ public final class NotificationPanelViewController implements
                     && mPulseExpansionHandler.onInterceptTouchEvent(event)) {
                 mShadeLog.v("NotificationPanelViewController MotionEvent intercepted: "
                         + "PulseExpansionHandler");
+                return true;
+            }
+
+            if (!canHandlePanelSwipe()) {
+                mQsController.cancelPanelSwipe();
+            } else if (mQsController.onInterceptPanelSwipe(event)) {
                 return true;
             }
 
@@ -4305,6 +4322,7 @@ public final class NotificationPanelViewController implements
             }
 
             if (mAlternateBouncerInteractor.isVisibleState()) {
+                mQsController.cancelPanelSwipe();
                 mShadeLog.d("onTouch: alternate bouncer visible; ignoring touch");
                 // never send touches to shade if the alternate bouncer is showing
                 return false;
@@ -4324,6 +4342,7 @@ public final class NotificationPanelViewController implements
             }
 
             if (mQsController.isFullyExpandedAndTouchesDisallowed()) {
+                mQsController.cancelPanelSwipe();
                 mShadeLog.logMotionEvent(event,
                         "onTouch: ignore touch, panel touches disallowed and qs fully expanded");
                 return false;
@@ -4332,9 +4351,16 @@ public final class NotificationPanelViewController implements
             // Do not allow panel expansion if bouncer is scrimmed,
             // otherwise user would be able to pull down QS or expand the shade.
             if (mCentralSurfaces.isBouncerShowingScrimmed()) {
+                mQsController.cancelPanelSwipe();
                 mShadeLog.logMotionEvent(event,
                         "onTouch: ignore touch, bouncer scrimmed or showing over dream");
                 return false;
+            }
+
+            if (!canHandlePanelSwipe()) {
+                mQsController.cancelPanelSwipe();
+            } else if (mQsController.handlePanelSwipe(event)) {
+                return true;
             }
 
             if ((mIsLockscreenDoubleTapEnabled && !mPulsing && !mDozing
@@ -4429,6 +4455,11 @@ public final class NotificationPanelViewController implements
             return !mDozing || handled;
         }
 
+        private boolean canHandlePanelSwipe() {
+            return !mTouchDisabled && !mInstantExpanding && mNotificationsDragEnabled
+                    && mCommandQueue.panelsEnabled() && !isShadeOrQsHeightAnimationRunning();
+        }
+
         private boolean isLockedShadeHomeGestureEvent(MotionEvent event) {
             return mBarState == SHADE_LOCKED && event.getActionMasked() == MotionEvent.ACTION_DOWN
                     && isInGestureNavHomeHandleArea(event.getY());
@@ -4478,7 +4509,7 @@ public final class NotificationPanelViewController implements
             if (isDown
                     || event.getActionMasked() == MotionEvent.ACTION_MOVE) {
                 mGestureWaitForTouchSlop = shouldGestureWaitForTouchSlop();
-                mIgnoreXTouchSlop = true;
+                mIgnoreXTouchSlop = !isFullyExpanded() || !mQsController.isPanelSwipeEnabled();
             }
 
             final boolean isTrackpadThreeFingerSwipe = isTrackpadThreeFingerSwipe(event);

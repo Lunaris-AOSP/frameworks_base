@@ -115,6 +115,7 @@ import com.android.compose.animation.scene.MutableSceneTransitionLayoutState
 import com.android.compose.animation.scene.SceneKey
 import com.android.compose.animation.scene.SceneTransitionLayout
 import com.android.compose.animation.scene.SceneTransitionLayoutState
+import com.android.compose.animation.scene.TransitionKey
 import com.android.compose.animation.scene.content.state.TransitionState
 import com.android.compose.animation.scene.rememberMutableSceneTransitionLayoutState
 import com.android.compose.animation.scene.transitions
@@ -145,6 +146,7 @@ import com.android.systemui.qs.composefragment.SceneKeys.QuickQuickSettings
 import com.android.systemui.qs.composefragment.SceneKeys.QuickSettings
 import com.android.systemui.qs.composefragment.SceneKeys.debugName
 import com.android.systemui.qs.composefragment.SceneKeys.toIdleSceneKey
+import com.android.systemui.qs.composefragment.ui.AxQsPanelSwipeTransition
 import com.android.systemui.qs.composefragment.ui.NotificationScrimClipParams
 import com.android.systemui.qs.composefragment.viewmodel.QSFragmentComposeViewModel
 import com.android.systemui.qs.flags.QSComposeFragment
@@ -185,6 +187,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import com.android.systemui.qs.composefragment.ui.axFromQuickQuickSettingsToQuickSettings
 import com.android.systemui.qs.composefragment.ui.axQsEntrance
+import com.android.systemui.qs.composefragment.ui.axQsPanelSwipe
 import com.android.systemui.qs.composefragment.ui.editModeTransitionProgress
 import com.android.systemui.qs.composefragment.ui.shouldComposeLiveAxQs
 import com.android.systemui.qs.composefragment.ui.toAxEditMode
@@ -261,6 +264,8 @@ constructor(
     private var bottomContentPadding by mutableIntStateOf(0)
     private var overlayHeaderContentHeightPx by mutableIntStateOf(0)
     private var sharedLayoutActive by mutableStateOf(false)
+    private var currentPanelSwipeProgress by mutableFloatStateOf(-1f)
+    private var lastQsExpansion = 0f
     private val containerView: FrameLayoutTouchPassthrough?
         get() = view as? FrameLayoutTouchPassthrough
 
@@ -324,6 +329,12 @@ constructor(
                 isInBottomReservedArea = { x, y ->
                     viewModel.isEditing &&
                         bottomBarPositionInRoot.contains(IntOffset(x.toInt(), y.toInt()))
+                },
+                allowPanelSwipe = {
+                    axQsViewModel.panelSwipeEnabled &&
+                        axQsViewModel.panelMode == AxQsPanelMode.SEPARATE &&
+                        !viewModel.isInSplitShade &&
+                        viewModel.statusBarState == StatusBarState.SHADE && !viewModel.isEditing
                 },
             )
         frame.addView(
@@ -419,6 +430,9 @@ constructor(
                         from(QuickQuickSettings, QuickSettings) {
                             axFromQuickQuickSettingsToQuickSettings()
                         }
+                        from(QuickQuickSettings, QuickSettings, key = AxQsPanelSwipeTransition) {
+                            axQsPanelSwipe()
+                        }
                         to(SceneKeys.EditMode) {
                             spec = tween(durationMillis = EDIT_MODE_TIME_MILLIS)
                             toAxEditMode()
@@ -473,7 +487,9 @@ constructor(
                 synchronizeQsState(
                     sceneState,
                     viewModel.containerViewModel.editModeViewModel.isEditing,
-                    snapshotFlow { viewModel.expansionState.progress },
+                    snapshotFlow {
+                        viewModel.expansionState.progress to (currentPanelSwipeProgress >= 0f)
+                    },
                     snapshotFlow { currentSharedLayout },
                 )
             }
@@ -668,6 +684,15 @@ constructor(
         axQsViewModel.setForceQsEvent(forceQsEvent)
     }
 
+    override fun setPanelSwipeProgress(progress: Float) {
+        currentPanelSwipeProgress = progress
+        containerView?.let {
+            it.panelSwipeInProgress = progress >= 0f
+            it.invalidate()
+        }
+        viewModel.setQsExpansionValue(if (progress >= 0f) progress else lastQsExpansion)
+    }
+
     override fun setListening(listening: Boolean) {
         // Not needed, views start listening and collection when composed
     }
@@ -695,7 +720,10 @@ constructor(
         headerTranslation: Float,
         squishinessFraction: Float,
     ) {
-        viewModel.setQsExpansionValue(qsExpansionFraction)
+        lastQsExpansion = qsExpansionFraction
+        viewModel.setQsExpansionValue(
+            if (currentPanelSwipeProgress >= 0f) currentPanelSwipeProgress else qsExpansionFraction
+        )
         viewModel.panelExpansionFraction = panelExpansionFraction
         viewModel.squishinessFraction = squishinessFraction
         viewModel.proposedTranslation = headerTranslation
@@ -1020,7 +1048,9 @@ constructor(
                 ) {
                     // scrollState never changes
                     LaunchedEffect(Unit) {
-                        snapshotFlow { viewModel.isQsFullyCollapsed }
+                        snapshotFlow {
+                                viewModel.isQsFullyCollapsed && currentPanelSwipeProgress < 0f
+                            }
                             .collect { collapsed ->
                                 if (collapsed) {
                                     scrollState.scrollTo(0)
@@ -1286,7 +1316,7 @@ private val instanceProvider =
 private suspend fun synchronizeQsState(
     state: MutableSceneTransitionLayoutState,
     editMode: Flow<Boolean>,
-    expansion: Flow<Float>,
+    expansion: Flow<Pair<Float, Boolean>>,
     sharedLayout: Flow<Boolean>,
 ) {
     coroutineScope {
@@ -1299,7 +1329,9 @@ private suspend fun synchronizeQsState(
             currentTransition = null
         }
 
-        combine(editMode, expansion, sharedLayout, ::Triple).collectLatest { (editMode, progress, shared) ->
+        combine(editMode, expansion, sharedLayout, ::Triple).collectLatest {
+            (editMode, expansion, shared) ->
+            val (progress, horizontal) = expansion
             if (editMode && state.currentScene != SceneKeys.EditMode) {
                 state.setTargetScene(SceneKeys.EditMode, animationScope)?.second?.join()
             } else if (!editMode && state.currentScene == SceneKeys.EditMode) {
@@ -1317,16 +1349,20 @@ private suspend fun synchronizeQsState(
                     1f -> snapTo(QuickSettings)
                     else -> {
                         val transition = currentTransition
-                        if (transition != null) {
+                        val transitionKey = if (horizontal) AxQsPanelSwipeTransition else null
+                        if (transition != null && transition.key == transitionKey) {
                             transition.progress = progress
                             return@collectLatest
                         }
 
                         val newTransition =
-                            ExpansionTransition(progress).also { currentTransition = it }
+                            ExpansionTransition(progress, transitionKey).also {
+                                currentTransition = it
+                            }
                         state.startTransitionImmediately(
                             animationScope = animationScope,
                             transition = newTransition,
+                            chain = !horizontal,
                         )
                     }
                 }
@@ -1335,7 +1371,10 @@ private suspend fun synchronizeQsState(
     }
 }
 
-private class ExpansionTransition(currentProgress: Float) :
+private class ExpansionTransition(
+    currentProgress: Float,
+    override val key: TransitionKey? = null,
+) :
     TransitionState.Transition.ChangeScene(
         fromScene = QuickQuickSettings,
         toScene = QuickSettings,
@@ -1391,9 +1430,11 @@ private class FrameLayoutTouchPassthrough(
     private val logBuffer: TableLogBuffer,
     private val backgroundDispatcher: CoroutineDispatcher,
     private val isInBottomReservedArea: (Float, Float) -> Boolean,
+    private val allowPanelSwipe: () -> Boolean,
 ) : FrameLayout(context) {
 
     private val lastConfig = Configuration(context.resources.configuration)
+    var panelSwipeInProgress = false
 
     init {
         repeatWhenAttached {
@@ -1477,7 +1518,7 @@ private class FrameLayoutTouchPassthrough(
             updateClippingPath()
         }
 
-        if (!currentClippingPath.isEmpty) {
+        if (!panelSwipeInProgress && !currentClippingPath.isEmpty) {
             canvas.translate(0f, -translationY)
             canvas.clipOutPath(currentClippingPath)
             canvas.translate(0f, translationY)
@@ -1498,7 +1539,7 @@ private class FrameLayoutTouchPassthrough(
         child: View?,
         outLocalPoint: PointF?,
     ): Boolean {
-        return if (clipEnabled && y + translationY > clipParams.top) {
+        return if (!panelSwipeInProgress && clipEnabled && y + translationY > clipParams.top) {
             false
         } else if (isInBottomReservedArea(x, y)) { // no translation as it's relative to root
             false
@@ -1517,7 +1558,7 @@ private class FrameLayoutTouchPassthrough(
         when (action) {
             MotionEvent.ACTION_DOWN -> {
                 preventingIntercept = false
-                if (canScrollQs.forward()) {
+                if (canScrollQs.forward() && !allowPanelSwipe()) {
                     // If we can scroll down, make sure we're not intercepted by the parent
                     preventingIntercept = true
                     parent?.requestDisallowInterceptTouchEvent(true)
@@ -1551,7 +1592,7 @@ private class FrameLayoutTouchPassthrough(
             MotionEvent.ACTION_DOWN -> {
                 preventingIntercept = false
                 // If we can scroll down, make sure none of our parents intercepts us.
-                if (canScrollQs.forward()) {
+                if (canScrollQs.forward() && !allowPanelSwipe()) {
                     preventingIntercept = true
                     parent?.requestDisallowInterceptTouchEvent(true)
                 }
@@ -1566,6 +1607,13 @@ private class FrameLayoutTouchPassthrough(
                 val xDiff = x - downX
                 val collapsing = yDiff < -touchSlop && !canScrollQs.forward()
                 val vertical = Math.abs(xDiff) < Math.abs(yDiff)
+                if (
+                    allowPanelSwipe() && vertical && Math.abs(yDiff) > touchSlop &&
+                        canScrollQs.forward()
+                ) {
+                    preventingIntercept = true
+                    parent?.requestDisallowInterceptTouchEvent(true)
+                }
                 if (collapsing && vertical) {
                     return true
                 }
