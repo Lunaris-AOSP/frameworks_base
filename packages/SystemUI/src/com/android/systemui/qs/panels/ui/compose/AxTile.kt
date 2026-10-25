@@ -31,6 +31,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -54,7 +55,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -193,7 +193,8 @@ fun ContentScope.AxTile(
                 )
             } else {
                 Modifier.thenIf(colors.backgroundGradient != null) {
-                    Modifier.drawBehind { drawRect(brush = colors.backgroundGradient!!) }
+                    // The outer clip is not captured in Expandable's dialog animation layer.
+                    Modifier.background(brush = colors.backgroundGradient!!, shape = tileShape)
                 }
             }
         val isDualTarget = uiState.handlesSecondaryClick
