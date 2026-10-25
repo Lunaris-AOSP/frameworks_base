@@ -59,9 +59,11 @@ import com.android.compose.animation.rememberExpandableController
 import com.android.systemui.common.shared.model.Icon as IconModel
 import com.android.systemui.common.shared.model.asImageBitmap
 import com.android.systemui.media.remedia.domain.model.MediaSessionModel
+import com.android.systemui.media.remedia.motionart.FadingLunarisMotionArtVideo
 import com.android.systemui.media.remedia.shared.model.MediaCardActionButtonLayout
 import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.res.R
+import java.io.File
 
 @Composable
 internal fun LunarisAlbumCoverMediaPlayer(
@@ -69,6 +71,8 @@ internal fun LunarisAlbumCoverMediaPlayer(
     viewModel: AxMediaViewModel,
     interactive: Boolean,
     hasMultipleSessions: Boolean,
+    motionArt: File? = null,
+    motionArtPlaying: Boolean = false,
 ) {
     val foreground = MaterialTheme.colorScheme.onSurface
     val title =
@@ -88,6 +92,8 @@ internal fun LunarisAlbumCoverMediaPlayer(
             val artworkSize = minOf(48.dp, maxHeight, maxWidth * 0.42f)
             AlbumCoverArtwork(
                 artwork = session?.background,
+                motionArt = motionArt,
+                motionArtPlaying = motionArtPlaying,
                 modifier = Modifier.align(Alignment.TopStart).size(artworkSize),
             )
             AlbumCoverMediaOutput(
@@ -180,43 +186,56 @@ internal fun LunarisAlbumCoverMediaPlayer(
 }
 
 @Composable
-private fun AlbumCoverArtwork(artwork: IconModel?, modifier: Modifier) {
-    Crossfade(
-        targetState = rememberAxMediaArtwork(artwork).artwork,
-        animationSpec = tween(250),
-        label = "LunarisAlbumCoverArtwork",
-        modifier = modifier.clip(RoundedCornerShape(8.dp)),
-    ) { currentArtwork ->
-        when (currentArtwork) {
-            is IconModel.Loaded ->
-                Image(
-                    bitmap = currentArtwork.asImageBitmap(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            is IconModel.Resource ->
-                Image(
-                    painter = painterResource(currentArtwork.resId),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            null ->
-                Box(
-                    modifier =
-                        Modifier.fillMaxSize()
-                            .background(MaterialTheme.colorScheme.surfaceContainerHighest),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    MaterialIcon(
-                        painter = painterResource(R.drawable.ic_music_note),
+private fun AlbumCoverArtwork(
+    artwork: IconModel?,
+    modifier: Modifier,
+    motionArt: File?,
+    motionArtPlaying: Boolean,
+) {
+    Box(modifier.clip(RoundedCornerShape(8.dp))) {
+        Crossfade(
+            targetState = rememberAxMediaArtwork(artwork).artwork,
+            animationSpec = tween(250),
+            label = "LunarisAlbumCoverArtwork",
+            modifier = Modifier.fillMaxSize(),
+        ) { currentArtwork ->
+            when (currentArtwork) {
+                is IconModel.Loaded ->
+                    Image(
+                        bitmap = currentArtwork.asImageBitmap(),
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.fillMaxSize(0.5f),
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
                     )
-                }
+                is IconModel.Resource ->
+                    Image(
+                        painter = painterResource(currentArtwork.resId),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                null ->
+                    Box(
+                        modifier =
+                            Modifier.fillMaxSize()
+                                .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        MaterialIcon(
+                            painter = painterResource(R.drawable.ic_music_note),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxSize(0.5f),
+                        )
+                    }
+            }
         }
+        FadingLunarisMotionArtVideo(
+            file = motionArt,
+            crop = true,
+            isPlaying = motionArtPlaying,
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }
 

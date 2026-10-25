@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2025-2026 AxionOS
- * Copyright (C) 2026 Lunaris AOSP
+ * Copyright (C) 2024-2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -497,6 +497,8 @@ internal fun ContentScope.AxQsMixedGrid(
                                     mediaViewModelFactory = viewModel.mediaViewModelFactory,
                                     modifier = Modifier.fillMaxSize(),
                                     surface = AxMediaSurface.SEPARATE_QQS,
+                                    motionArtVisible = contentVisible,
+                                    motionArtPlaying = contentPlaying,
                                 )
                             }
                         }
@@ -712,6 +714,8 @@ private fun AxLiveControl(
                     mediaViewModelFactory = mediaViewModelFactory,
                     modifier = Modifier.fillMaxSize(),
                     showPlaceholder = true,
+                    motionArtVisible = contentVisible,
+                    motionArtPlaying = contentPlaying,
                 )
         }
     }

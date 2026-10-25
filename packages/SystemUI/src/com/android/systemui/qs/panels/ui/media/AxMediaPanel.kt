@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2025-2026 AxionOS
- * Copyright (C) 2026 Lunaris AOSP
+ * Copyright (C) 2024-2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -73,7 +73,6 @@ import com.android.systemui.lifecycle.rememberViewModel
 import com.android.systemui.media.remedia.domain.model.MediaSessionModel
 import com.android.systemui.media.remedia.shared.model.MediaCardActionButtonLayout
 import com.android.systemui.media.remedia.shared.model.MediaSessionState
-import com.android.systemui.media.remedia.ui.compose.MediaPresentationStyle
 import com.android.systemui.media.remedia.ui.compose.MediaUiBehavior
 import com.android.systemui.media.remedia.ui.viewmodel.MediaCarouselVisibility
 import com.android.systemui.media.remedia.ui.viewmodel.MediaViewModel
@@ -81,10 +80,10 @@ import com.android.systemui.qs.panels.shared.model.AxMediaSurface
 import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.LunarisQsMediaStyle
-import com.android.systemui.qs.panels.ui.compose.axQsControlShape
 import com.android.systemui.qs.panels.ui.compose.AxTileDefaults
 import com.android.systemui.qs.panels.ui.compose.MaterialMediaExpandedPopup
 import com.android.systemui.qs.panels.ui.compose.SharedMediaState
+import com.android.systemui.qs.panels.ui.compose.axQsControlShape
 import com.android.systemui.qs.panels.ui.compose.rememberMediaState
 import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.res.R
@@ -107,6 +106,8 @@ fun AxMediaPanel(
     interactive: Boolean = true,
     allowGuts: Boolean = true,
     surface: AxMediaSurface = AxMediaSurface.CONTROL,
+    motionArtVisible: Boolean = true,
+    motionArtPlaying: Boolean = true,
 ) {
     val showOnLockscreen by viewModel.showOnLockscreen.collectAsStateWithLifecycle()
     if (surface == AxMediaSurface.LOCKSCREEN && !showOnLockscreen) return
@@ -115,10 +116,11 @@ fun AxMediaPanel(
     val keyguardState by viewModel.currentKeyguardState.collectAsStateWithLifecycle()
     val isOnLockscreen = keyguardState != KeyguardState.GONE && showOnLockscreen
 
-    val isPanelVisible = when (surface) {
-        AxMediaSurface.LOCKSCREEN -> isOnLockscreen
-        else -> isShadeExpanded
-    }
+    val isPanelVisible =
+        when (surface) {
+            AxMediaSurface.LOCKSCREEN -> isOnLockscreen
+            else -> isShadeExpanded
+        }
     if (!isPanelVisible) {
         Box(modifier = modifier)
         return
@@ -147,6 +149,8 @@ fun AxMediaPanel(
             interactive = interactive,
             allowGuts = false,
             surface = surface,
+            motionArtVisible = motionArtVisible,
+            motionArtAllowedToPlay = motionArtPlaying,
             modifier = modifier,
         )
         return
@@ -167,9 +171,7 @@ fun AxMediaPanel(
                     if (surface == AxMediaSurface.LOCKSCREEN) {
                         null
                     } else {
-                        {
-                            viewModel.isSwipeFalseTouch().also { isFalseTouchDetected = it }
-                        }
+                        { viewModel.isSwipeFalseTouch().also { isFalseTouchDetected = it } }
                     },
             )
         }
@@ -199,7 +201,7 @@ fun AxMediaPanel(
         modifier = mediaModifier,
         cardFilter = { viewModel.isSessionVisible(it.key, surface) },
         carouselShape = shape,
-        cardContent = { card, cardModifier ->
+        cardContent = { card, cardModifier, isCurrentCard ->
             viewModel.sessionForKey(card.key)?.let { session ->
                 AxMediaCard(
                     viewModel = viewModel,
@@ -211,6 +213,8 @@ fun AxMediaPanel(
                     allowGuts = allowGuts,
                     surface = surface,
                     hasMultipleSessions = sessions.size > 1,
+                    motionArtVisible = motionArtVisible && isCurrentCard,
+                    motionArtAllowedToPlay = motionArtPlaying,
                     modifier = cardModifier.fillMaxSize(),
                 )
             }
@@ -239,10 +243,15 @@ private fun AxMediaCard(
     allowGuts: Boolean,
     surface: AxMediaSurface,
     hasMultipleSessions: Boolean = false,
+    motionArtVisible: Boolean = true,
+    motionArtAllowedToPlay: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val shape = axQsControlShape(AxQsControl.MEDIA, span, mediaSurface = surface)
     val mediaStyle by viewModel.mediaStyle.collectAsStateWithLifecycle()
+    val motionArtEnabled by viewModel.mediaMotionArt.collectAsStateWithLifecycle()
+    val isShadeInteracting by viewModel.isShadeInteracting.collectAsStateWithLifecycle()
+    val keyguardState by viewModel.currentKeyguardState.collectAsStateWithLifecycle()
     val layout =
         when {
             surface == AxMediaSurface.CONTROL && span == AxQsSpan.MediaDefault ->
@@ -255,6 +264,22 @@ private fun AxMediaCard(
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     var showExpandedPopup by remember(session?.key, isLandscape) { mutableStateOf(false) }
     val gutsVisible = allowGuts && session?.let(viewModel::isGutsVisible) == true
+    val motionArtActive =
+        interactive &&
+            motionArtVisible &&
+            !gutsVisible &&
+            session?.state == MediaSessionState.Playing &&
+            keyguardState != KeyguardState.OFF &&
+            keyguardState != KeyguardState.DOZING &&
+            keyguardState != KeyguardState.AOD
+    val motionArtPlaying =
+        motionArtActive && motionArtAllowedToPlay && !isShadeInteracting && !showExpandedPopup
+    val motionArt =
+        rememberLunarisMotionArtFile(
+            artist = session?.subtitle,
+            title = session?.title,
+            enabled = motionArtEnabled && motionArtActive && span.columns > 1,
+        )
     val artwork = session?.background?.takeIf { span.columns > 1 }
     val tileBackground = AxTileDefaults.backgroundColor()
     val tileForeground = MaterialTheme.colorScheme.onSurface
@@ -329,28 +354,29 @@ private fun AxMediaCard(
     ) { expandable ->
         Box(Modifier.fillMaxSize()) {
             Box(
-                Modifier.fillMaxSize().combinedClickable(
-                    enabled = interactive && (session != null || lastMediaPackage != null),
-                    onClick = {
-                        if (gutsVisible) {
-                            viewModel.closeGuts()
-                        } else if (session != null && isLandscape) {
-                            viewModel.openSession(session, expandable)
-                        } else if (session != null && expandedMediaState.controller != null) {
-                            showExpandedPopup = true
-                        } else if (session == null) {
-                            viewModel.openLastMediaApp(expandable)
-                        }
-                    },
-                    onClickLabel = clickLabel,
-                    onLongClick = {
-                        if (session != null) {
-                            viewModel.openSession(session, expandable)
-                        } else {
-                            viewModel.openLastMediaApp(expandable)
-                        }
-                    },
-                )
+                Modifier.fillMaxSize()
+                    .combinedClickable(
+                        enabled = interactive && (session != null || lastMediaPackage != null),
+                        onClick = {
+                            if (gutsVisible) {
+                                viewModel.closeGuts()
+                            } else if (session != null && isLandscape) {
+                                viewModel.openSession(session, expandable)
+                            } else if (session != null && expandedMediaState.controller != null) {
+                                showExpandedPopup = true
+                            } else if (session == null) {
+                                viewModel.openLastMediaApp(expandable)
+                            }
+                        },
+                        onClickLabel = clickLabel,
+                        onLongClick = {
+                            if (session != null) {
+                                viewModel.openSession(session, expandable)
+                            } else {
+                                viewModel.openLastMediaApp(expandable)
+                            }
+                        },
+                    )
             )
             AnimatedContent(
                 targetState = gutsVisible,
@@ -378,6 +404,8 @@ private fun AxMediaCard(
                                 artwork = artwork,
                                 songKey = songKey,
                                 overlayColor = colors.background,
+                                motionArt = motionArt,
+                                motionArtPlaying = motionArtPlaying,
                             )
                         }
                         AnimatedContent(
@@ -401,6 +429,8 @@ private fun AxMediaCard(
                                         viewModel = viewModel,
                                         interactive = interactive,
                                         hasMultipleSessions = hasMultipleSessions,
+                                        motionArt = motionArt,
+                                        motionArtPlaying = motionArtPlaying,
                                     )
                                 AxMediaLayout.AlbumCover ->
                                     LunarisAlbumCoverMediaPlayer(
@@ -408,6 +438,8 @@ private fun AxMediaCard(
                                         viewModel = viewModel,
                                         interactive = interactive,
                                         hasMultipleSessions = hasMultipleSessions,
+                                        motionArt = motionArt,
+                                        motionArtPlaying = motionArtPlaying,
                                     )
                                 AxMediaLayout.OneRow ->
                                     OneRowMediaContent(
@@ -443,10 +475,17 @@ private fun AxMediaCard(
             }
         }
     }
-    if (!isLandscape && showExpandedPopup && session != null && expandedMediaState.controller != null) {
+    if (
+        !isLandscape &&
+            showExpandedPopup &&
+            session != null &&
+            expandedMediaState.controller != null
+    ) {
         MaterialMediaExpandedPopup(
             mediaState = expandedMediaState,
             onDismiss = { showExpandedPopup = false },
+            motionArtEnabled = motionArtEnabled && motionArtVisible,
+            motionArtPlaying = motionArtAllowedToPlay && !isShadeInteracting,
         )
     }
 }

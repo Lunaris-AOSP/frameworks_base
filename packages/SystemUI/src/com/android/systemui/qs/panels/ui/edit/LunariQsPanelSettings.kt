@@ -264,6 +264,14 @@ fun LunariQsPanelSettings(
                         },
                     )
                 }
+                item("media_motion_art") {
+                    SettingsSwitch(
+                        title = stringResource(R.string.ax_qs_settings_media_motion_art),
+                        summary = stringResource(R.string.ax_qs_settings_media_motion_art_summary),
+                        checked = viewModel.mediaMotionArt,
+                        onCheckedChange = viewModel::setMediaMotionArt,
+                    )
+                }
                 item("dual_target_tile_style") {
                     SettingsSwitch(
                         title = stringResource(R.string.ax_qs_settings_dual_target_tile_style),

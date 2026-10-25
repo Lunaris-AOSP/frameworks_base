@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2026 ASCP Project
+ * Copyright (C) 2024-2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -99,23 +100,37 @@ import com.android.settingslib.media.MediaOutputConstants
 import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 import com.android.systemui.media.controls.ui.compose.AndroidMediaSeekBar
 import com.android.systemui.media.dialog.MediaOutputDialogReceiver
+import com.android.systemui.media.remedia.motionart.FadingLunarisMotionArtVideo
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CustomColorScheme
+import com.android.systemui.qs.panels.ui.media.rememberLunarisMotionArtFile
 import com.android.systemui.res.R
 import kotlin.math.abs
 import kotlinx.coroutines.delay
 
 @Composable
-internal fun MaterialMediaExpandedPopup(mediaState: SharedMediaState, onDismiss: () -> Unit) {
+internal fun MaterialMediaExpandedPopup(
+    mediaState: SharedMediaState,
+    onDismiss: () -> Unit,
+    motionArtEnabled: Boolean = false,
+    motionArtPlaying: Boolean = true,
+) {
     val context = LocalContext.current
     val view = LocalView.current
     val controller = mediaState.controller
     val seekBarStyle = rememberMediaSeekBarStyle()
-    val artwork = remember(mediaState.albumArt, context.resources) {
-        mediaState.albumArt?.let { BitmapDrawable(context.resources, it) }
-    }
+    val artwork =
+        remember(mediaState.albumArt, context.resources) {
+            mediaState.albumArt?.let { BitmapDrawable(context.resources, it) }
+        }
 
     var localIsPlaying by
         remember(controller, mediaState.isPlaying) { mutableStateOf(mediaState.isPlaying) }
+    val motionArt =
+        rememberLunarisMotionArtFile(
+            artist = mediaState.artist,
+            title = mediaState.title,
+            enabled = motionArtEnabled && localIsPlaying,
+        )
 
     val durationMs =
         remember(controller, mediaState.title) {
@@ -271,32 +286,38 @@ internal fun MaterialMediaExpandedPopup(mediaState: SharedMediaState, onDismiss:
 
                 Spacer(Modifier.height(20.dp))
 
-                if (mediaState.albumArt != null) {
-                    Image(
-                        painter = BitmapPainter(mediaState.albumArt.asImageBitmap()),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier =
-                            Modifier.fillMaxWidth(0.82f)
-                                .aspectRatio(1f)
-                                .clip(RoundedCornerShape(20.dp)),
-                    )
-                } else {
-                    Box(
-                        modifier =
-                            Modifier.fillMaxWidth(0.82f)
-                                .aspectRatio(1f)
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(Color.White.copy(alpha = 0.15f)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            Icons.Filled.MusicNote,
+                Box(
+                    modifier =
+                        Modifier.fillMaxWidth(0.82f).aspectRatio(1f).clip(RoundedCornerShape(20.dp))
+                ) {
+                    if (mediaState.albumArt != null) {
+                        Image(
+                            painter = BitmapPainter(mediaState.albumArt.asImageBitmap()),
                             contentDescription = null,
-                            tint = Color.White.copy(alpha = 0.6f),
-                            modifier = Modifier.size(64.dp),
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize(),
                         )
+                    } else {
+                        Box(
+                            modifier =
+                                Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Filled.MusicNote,
+                                contentDescription = null,
+                                tint = Color.White.copy(alpha = 0.6f),
+                                modifier = Modifier.size(64.dp),
+                            )
+                        }
                     }
+
+                    FadingLunarisMotionArtVideo(
+                        file = motionArt,
+                        crop = true,
+                        isPlaying = localIsPlaying && motionArtPlaying,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 }
 
                 Spacer(Modifier.height(20.dp))

@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2024 The Android Open Source Project
  * Copyright (C) 2025-2026 AxionOS
- * Copyright (C) 2026 Lunaris AOSP
+ * Copyright (C) 2024-2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -57,7 +57,7 @@ fun AxMediaCarousel(
     modifier: Modifier = Modifier,
     cardFilter: ((MediaCardViewModel) -> Boolean)? = null,
     carouselShape: Shape = RoundedCornerShape(32.dp),
-    cardContent: @Composable (MediaCardViewModel, Modifier) -> Unit,
+    cardContent: @Composable (MediaCardViewModel, Modifier, Boolean) -> Unit,
     pagerIndicator: @Composable BoxScope.(PagerState) -> Unit = {},
 ) {
     val rawCards = cardFilter?.let { viewModel.cards.filter(it) } ?: viewModel.cards
@@ -123,7 +123,7 @@ fun AxMediaCarousel(
             ) { pageIndex: Int ->
                 val cardModifier =
                     Modifier.clip(carouselShape).sysuiResTag("media_control")
-                cardContent(cards[pageIndex], cardModifier)
+                cardContent(cards[pageIndex], cardModifier, pageIndex == pagerState.currentPage)
             }
 
             if (pagerState.pageCount > 1) {

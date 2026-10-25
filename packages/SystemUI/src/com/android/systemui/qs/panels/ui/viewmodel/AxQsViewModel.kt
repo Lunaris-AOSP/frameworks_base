@@ -1,5 +1,6 @@
 /*
  * Copyright 2025-2026 AxionOS
+ * Copyright (C) 2024-2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -467,6 +468,12 @@ constructor(
             initialValue = repository.mediaStyle.value,
             source = repository.mediaStyle,
         )
+    val mediaMotionArt by
+        hydrator.hydratedStateOf(
+            traceName = "mediaMotionArt",
+            initialValue = repository.mediaMotionArt.value,
+            source = repository.mediaMotionArt,
+        )
     private val sliderStyles by
         hydrator.hydratedStateOf(
             traceName = "sliderStyles",
@@ -755,6 +762,8 @@ constructor(
     fun resetRows(layout: AxQsGridLayout) = repository.setRows(layout, 0)
 
     fun setMediaStyle(style: LunarisQsMediaStyle) = repository.setMediaStyle(style)
+
+    fun setMediaMotionArt(enabled: Boolean) = repository.setMediaMotionArt(enabled)
 
     fun sliderStyle(
         layout: AxQsLayout,

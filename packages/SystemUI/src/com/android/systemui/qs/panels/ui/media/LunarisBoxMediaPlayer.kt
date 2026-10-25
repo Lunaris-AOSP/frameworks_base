@@ -93,10 +93,12 @@ import com.android.systemui.common.shared.model.asImageBitmap
 import com.android.systemui.common.ui.compose.Icon
 import com.android.systemui.media.remedia.domain.model.MediaActionModel
 import com.android.systemui.media.remedia.domain.model.MediaSessionModel
+import com.android.systemui.media.remedia.motionart.FadingLunarisMotionArtVideo
 import com.android.systemui.media.remedia.shared.model.MediaCardActionButtonLayout
 import com.android.systemui.media.remedia.shared.model.MediaSessionState
 import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.res.R
+import java.io.File
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -105,9 +107,11 @@ internal fun LunarisBoxMediaPlayer(
     viewModel: AxMediaViewModel,
     interactive: Boolean,
     hasMultipleSessions: Boolean,
+    motionArt: File? = null,
+    motionArtPlaying: Boolean = false,
 ) {
     val artwork = session?.background
-    val hasArtwork = artwork != null
+    val hasArtwork = artwork != null || motionArt != null
     val foreground = if (hasArtwork) Color.White else MaterialTheme.colorScheme.onSurface
     val secondary =
         if (hasArtwork) Color.White.copy(alpha = 0.7f)
@@ -122,6 +126,20 @@ internal fun LunarisBoxMediaPlayer(
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         BoxMediaArtwork(artwork, session?.colorScheme?.background ?: Color.Black)
+        FadingLunarisMotionArtVideo(
+            file = motionArt,
+            crop = true,
+            isPlaying = motionArtPlaying,
+            modifier =
+                Modifier.fillMaxSize().drawWithCache {
+                    val tint = session?.colorScheme?.background ?: Color.Black
+                    onDrawWithContent {
+                        drawContent()
+                        drawRect(Color.Black.copy(alpha = 0.35f))
+                        drawRect(tint.copy(alpha = 0.1f))
+                    }
+                },
+        )
         val horizontalPadding = (maxWidth * 0.085f).coerceIn(10.dp, 16.dp)
         val verticalPadding = (maxHeight * 0.08f).coerceIn(8.dp, 14.dp)
         val bottomPadding = if (hasMultipleSessions) 18.dp else verticalPadding

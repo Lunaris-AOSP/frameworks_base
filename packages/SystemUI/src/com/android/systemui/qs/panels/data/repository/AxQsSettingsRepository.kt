@@ -1,5 +1,6 @@
 /*
  * Copyright 2025-2026 AxionOS
+ * Copyright (C) 2024-2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -263,6 +264,8 @@ constructor(
             .distinctUntilChanged()
             .stateIn(applicationScope, SharingStarted.Eagerly, LunarisQsMediaStyle.ARTWORK)
 
+    val mediaMotionArt: StateFlow<Boolean> = boolSetting(MEDIA_MOTION_ART, false)
+
     val gridColumns: StateFlow<Map<AxQsGridLayout, Int>> =
         gridSettings(AxQsGridLayout.entries, ::gridColumnsKey)
 
@@ -488,6 +491,8 @@ constructor(
     fun setTileStyle(style: AxQsTileStyle) = putInt(TILE_STYLE, style.settingValue)
 
     fun setMediaStyle(style: LunarisQsMediaStyle) = putInt(MEDIA_STYLE, style.settingValue)
+
+    fun setMediaMotionArt(enabled: Boolean) = putInt(MEDIA_MOTION_ART, enabled.toSetting())
 
     fun setTileGap(gap: Int) = putInt(TILE_GAP, gap.coerceIn(LunarisQsSpacing.TILE_GAP_RANGE))
 
@@ -880,6 +885,7 @@ constructor(
         private const val GRADIENT_END_COLOR = "ax_qs_gradient_end_color"
         const val TILE_STYLE = "ax_qs_tile_style"
         private const val MEDIA_STYLE = "ax_qs_media_style"
+        private const val MEDIA_MOTION_ART = "ax_qs_media_motion_art"
         const val TILE_GAP = "ax_qs_tile_gap"
         const val SIDE_PADDING = "ax_qs_side_padding"
         const val TOP_PADDING = "ax_qs_top_padding"

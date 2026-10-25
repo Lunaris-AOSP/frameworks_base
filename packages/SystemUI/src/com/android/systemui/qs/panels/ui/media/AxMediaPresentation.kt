@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2025-2026 AxionOS
- * Copyright (C) 2026 Lunaris AOSP
+ * Copyright (C) 2024-2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -79,9 +79,11 @@ import com.android.systemui.common.shared.model.Icon as IconModel
 import com.android.systemui.common.shared.model.asImageBitmap
 import com.android.systemui.common.ui.compose.Icon
 import com.android.systemui.media.remedia.domain.model.MediaSessionModel
+import com.android.systemui.media.remedia.motionart.FadingLunarisMotionArtVideo
 import com.android.systemui.qs.panels.shared.model.AxMediaSurface
 import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.res.R
+import java.io.File
 import kotlin.math.max
 
 @Immutable
@@ -98,55 +100,90 @@ internal fun MediaArtwork(
     songKey: String,
     overlayColor: Color,
     modifier: Modifier = Modifier,
+    motionArt: File? = null,
+    motionArtPlaying: Boolean = false,
 ) {
-    AnimatedContent(
-        targetState = rememberAxMediaArtwork(artwork, songKey),
-        transitionSpec = {
-            (fadeIn(animationSpec = tween(durationMillis = 400, easing = Easings.EmphasizedDecelerate)) +
-                scaleIn(
-                    initialScale = 1.15f,
-                    animationSpec = tween(durationMillis = 500, easing = Easings.EmphasizedDecelerate),
-                )) togetherWith
-                (fadeOut(animationSpec = tween(durationMillis = 350, easing = Easings.EmphasizedAccelerate)) +
-                    scaleOut(
-                        targetScale = 0.95f,
-                        animationSpec = tween(durationMillis = 350, easing = Easings.EmphasizedAccelerate),
-                    ))
-        },
-        label = "AxMediaSongArtwork",
-        modifier = modifier.fillMaxSize(),
-    ) { targetState ->
-        val currentArtwork = targetState.artwork
-        val overlayModifier =
-            Modifier.fillMaxSize().drawWithCache {
-                val radius = max(size.width, size.height) / 2f
-                val brushCenter = Offset(size.width / 2f, size.height / 2f)
-                val brush =
-                    Brush.radialGradient(
-                        0f to overlayColor.copy(alpha = 0.65f),
-                        1f to overlayColor.copy(alpha = 0.75f),
-                        center = brushCenter,
-                        radius = radius,
-                    )
-                onDrawWithContent {
-                    drawContent()
-                    drawRect(brush)
+    Box(modifier.fillMaxSize()) {
+        AnimatedContent(
+            targetState = rememberAxMediaArtwork(artwork, songKey),
+            transitionSpec = {
+                (fadeIn(
+                    animationSpec =
+                        tween(durationMillis = 400, easing = Easings.EmphasizedDecelerate)
+                ) +
+                    scaleIn(
+                        initialScale = 1.15f,
+                        animationSpec =
+                            tween(durationMillis = 500, easing = Easings.EmphasizedDecelerate),
+                    )) togetherWith
+                    (fadeOut(
+                        animationSpec =
+                            tween(durationMillis = 350, easing = Easings.EmphasizedAccelerate)
+                    ) +
+                        scaleOut(
+                            targetScale = 0.95f,
+                            animationSpec =
+                                tween(durationMillis = 350, easing = Easings.EmphasizedAccelerate),
+                        ))
+            },
+            label = "AxMediaSongArtwork",
+            modifier = Modifier.fillMaxSize(),
+        ) { targetState ->
+            val currentArtwork = targetState.artwork
+            val overlayModifier =
+                Modifier.fillMaxSize().drawWithCache {
+                    val radius = max(size.width, size.height) / 2f
+                    val brushCenter = Offset(size.width / 2f, size.height / 2f)
+                    val brush =
+                        Brush.radialGradient(
+                            0f to overlayColor.copy(alpha = 0.65f),
+                            1f to overlayColor.copy(alpha = 0.75f),
+                            center = brushCenter,
+                            radius = radius,
+                        )
+                    onDrawWithContent {
+                        drawContent()
+                        drawRect(brush)
+                    }
                 }
+            when (currentArtwork) {
+                null -> Unit
+                is IconModel.Loaded -> {
+                    val bitmap = remember(currentArtwork) { currentArtwork.asImageBitmap() }
+                    Image(
+                        bitmap = bitmap,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = overlayModifier,
+                    )
+                }
+                is IconModel.Resource ->
+                    Icon(
+                        icon = currentArtwork,
+                        tint = Color.Unspecified,
+                        modifier = overlayModifier,
+                    )
             }
-        when (currentArtwork) {
-            null -> Unit
-            is IconModel.Loaded -> {
-                val bitmap = remember(currentArtwork) { currentArtwork.asImageBitmap() }
-                Image(
-                    bitmap = bitmap,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = overlayModifier,
-                )
-            }
-            is IconModel.Resource ->
-                Icon(icon = currentArtwork, tint = Color.Unspecified, modifier = overlayModifier)
         }
+        FadingLunarisMotionArtVideo(
+            file = motionArt,
+            crop = true,
+            isPlaying = motionArtPlaying,
+            modifier =
+                Modifier.fillMaxSize().drawWithCache {
+                    val brush =
+                        Brush.radialGradient(
+                            0f to overlayColor.copy(alpha = 0.65f),
+                            1f to overlayColor.copy(alpha = 0.75f),
+                            center = Offset(size.width / 2f, size.height / 2f),
+                            radius = max(size.width, size.height).coerceAtLeast(1f) / 2f,
+                        )
+                    onDrawWithContent {
+                        drawContent()
+                        drawRect(brush)
+                    }
+                },
+        )
     }
 }
 

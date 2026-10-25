@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2025-2026 AxionOS
- * Copyright (C) 2026 Lunaris AOSP
+ * Copyright (C) 2024-2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -89,6 +89,7 @@ constructor(
         keyguardTransitionInteractor.currentKeyguardState
     val lastMediaPackage = mediaHistoryRepository.lastMediaPackage
     val mediaStyle = qsSettingsRepository.mediaStyle
+    val mediaMotionArt = qsSettingsRepository.mediaMotionArt
     val seekBarStyle =
         systemSettingsRepository
             .intSetting(

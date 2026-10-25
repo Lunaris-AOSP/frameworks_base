@@ -59,6 +59,8 @@
     <string name="ax_qs_settings_media_style">2×2 media player style</string>
     <string name="ax_qs_settings_style_artwork">Artwork</string>
     <string name="ax_qs_settings_style_album_cover">Album cover</string>
+    <string name="ax_qs_settings_media_motion_art">Motion art</string>
+    <string name="ax_qs_settings_media_motion_art_summary">Animate supported album covers in the Quick Settings tile and notification media player</string>
     <string name="ax_qs_settings_style_rounded_flat">Rounded square (flat fill)</string>
     <string name="ax_qs_settings_tile_labels">Show tile labels</string>
     <string name="ax_qs_settings_gradient">Active color gradient</string>
