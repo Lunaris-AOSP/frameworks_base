@@ -104,9 +104,11 @@ internal fun LunarisBarPopupMotion(
             else maxOf(origin.bottom + gap, topInsetPx.toFloat()))
             .coerceIn(0f, (rootSize.height - margin).coerceAtLeast(0).toFloat())
     val targetLeft =
-        (origin.center.x - contentSize.width / 2f).coerceIn(
+        lunarisBarPopupLeft(
+            origin.center.x,
+            contentSize.width.toFloat(),
+            rootSize.width.toFloat(),
             margin.toFloat(),
-            (rootSize.width - margin - contentSize.width).coerceAtLeast(margin).toFloat(),
         )
     val ready = screenOffset != null && contentSize.width > 0 && contentSize.height > 0
     LaunchedEffect(
@@ -204,8 +206,12 @@ internal fun LunarisBarPopupMotion(
         origin.center.x +
             (targetLeft + contentSize.width / 2f - origin.center.x) *
                 widthProgress.value.coerceIn(0f, 1f)
-    val x = (centerX - w / 2f).coerceIn(0f, (rootSize.width - w).coerceAtLeast(0f))
-    val y = origin.top + (targetTop - origin.top) * heightProgress.value.coerceIn(0f, 1f)
+    val x = lunarisBarPopupLeft(centerX, w, rootSize.width.toFloat(), 0f)
+    val y =
+        (origin.top + (targetTop - origin.top) * heightProgress.value.coerceIn(0f, 1f)).coerceIn(
+            0f,
+            (rootSize.height - h).coerceAtLeast(0f),
+        )
     val frame = Rect(x, y, x + w, y + h)
     val currentFrame by rememberUpdatedState(frame)
     var secondaryBounds by remember { mutableStateOf(Rect.Zero) }
@@ -301,11 +307,18 @@ internal fun LunarisBarPopupMotion(
             measurables[0].measure(
                 Constraints.fixed(w.roundToInt().coerceAtLeast(1), h.roundToInt().coerceAtLeast(1))
             )
+        val secondaryLeft =
+            lunarisBarPopupLeft(
+                targetLeft + card.width / 2f,
+                secondary.width.toFloat(),
+                constraints.maxWidth.toFloat(),
+                margin.toFloat(),
+            )
         secondaryBounds =
             Rect(
-                targetLeft,
+                secondaryLeft,
                 targetTop + card.height + gap,
-                targetLeft + secondary.width,
+                secondaryLeft + secondary.width,
                 targetTop + card.height + gap + secondary.height,
             )
         layout(constraints.maxWidth, constraints.maxHeight) {
@@ -321,7 +334,7 @@ internal fun LunarisBarPopupMotion(
                 clip = true
             }
             secondary.placeWithLayer(
-                targetLeft.roundToInt(),
+                secondaryLeft.roundToInt(),
                 (targetTop + card.height + gap).roundToInt(),
             ) {
                 this.alpha = alpha.value

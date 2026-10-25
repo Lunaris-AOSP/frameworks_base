@@ -197,12 +197,15 @@ internal fun IslandPopupMorph(
                 topInsetPx - gap,
             )
     val targetTop =
-        if (settings.expandedMode == 0) origin.top
-        else maxOf(origin.bottom + gap, topInsetPx.toFloat())
+        (if (settings.expandedMode == 0) origin.top
+            else maxOf(origin.bottom + gap, topInsetPx.toFloat()))
+            .coerceAtLeast(0f)
     val targetLeft =
-        (origin.center.x - contentSize.width / 2f).coerceIn(
+        lunarisBarPopupLeft(
+            origin.center.x,
+            contentSize.width.toFloat(),
+            rootSize.width.toFloat(),
             margin.toFloat(),
-            (rootSize.width - margin - contentSize.width).coerceAtLeast(margin).toFloat(),
         )
     val destination =
         Rect(targetLeft, targetTop, targetLeft + contentSize.width, targetTop + contentSize.height)
@@ -333,7 +336,12 @@ internal fun IslandPopupMorph(
     }
 
     val geometry = motion
-    val frame = geometry?.bounds ?: Rect.Zero
+    val rawFrame = geometry?.bounds ?: Rect.Zero
+    val frameWidth = rawFrame.width.coerceIn(0f, rootSize.width.toFloat())
+    val frameHeight = rawFrame.height.coerceIn(0f, rootSize.height.toFloat())
+    val frameLeft = lunarisBarPopupLeft(rawFrame.center.x, frameWidth, rootSize.width.toFloat(), 0f)
+    val frameTop = rawFrame.top.coerceIn(0f, (rootSize.height - frameHeight).coerceAtLeast(0f))
+    val frame = Rect(frameLeft, frameTop, frameLeft + frameWidth, frameTop + frameHeight)
     val expansion =
         ((frame.height - origin.height) / (destination.height - origin.height).coerceAtLeast(1f))
             .coerceIn(0f, 1f)
@@ -343,11 +351,18 @@ internal fun IslandPopupMorph(
             if (isVisible && !fastEnter) DynamicIslandMotion.contentReveal(expansion) else 1f
     val currentBodyAlpha by rememberUpdatedState(bodyAlpha)
     val currentBounds by rememberUpdatedState(frame)
+    val secondaryLeft =
+        lunarisBarPopupLeft(
+            frame.center.x,
+            secondarySize.width.toFloat(),
+            rootSize.width.toFloat(),
+            margin.toFloat(),
+        )
     val secondaryBounds =
         Rect(
-            frame.center.x - secondarySize.width / 2f,
+            secondaryLeft,
             frame.bottom + gap,
-            frame.center.x + secondarySize.width / 2f,
+            secondaryLeft + secondarySize.width,
             frame.bottom + gap + secondarySize.height,
         )
     val currentSecondaryBounds by rememberUpdatedState(secondaryBounds)
@@ -522,10 +537,7 @@ internal fun IslandPopupMorph(
         layout(rootSize.width, windowHeight) {
             background.place(frame.left.roundToInt(), frame.top.roundToInt())
             card.place((frame.center.x - card.width / 2f).roundToInt(), frame.top.roundToInt())
-            secondary.place(
-                (frame.center.x - secondary.width / 2f).roundToInt(),
-                (frame.bottom + gap).roundToInt(),
-            )
+            secondary.place(secondaryLeft.roundToInt(), (frame.bottom + gap).roundToInt())
         }
     }
 }

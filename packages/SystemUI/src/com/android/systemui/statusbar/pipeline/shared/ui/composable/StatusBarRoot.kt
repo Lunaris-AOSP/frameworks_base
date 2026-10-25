@@ -94,6 +94,7 @@ import com.android.systemui.statusbar.featurepods.popups.ui.compose.StatusBarDyn
 import com.android.systemui.statusbar.featurepods.popups.ui.compose.LocalDynamicIslandIconBounds
 import com.android.systemui.statusbar.featurepods.popups.ui.compose.dynamicIslandIconFade
 import com.android.systemui.statusbar.featurepods.popups.ui.view.DynamicIslandIconFader
+import com.android.systemui.statusbar.featurepods.popups.ui.view.DynamicIslandIconState
 import com.android.systemui.statusbar.layout.ui.viewmodel.AppHandlesViewModel
 import com.android.systemui.statusbar.notification.icon.ui.viewbinder.ConnectedDisplaysStatusBarNotificationIconViewStore
 import com.android.systemui.statusbar.notification.icon.ui.viewbinder.NotificationIconContainerStatusBarViewBinder
@@ -269,7 +270,7 @@ fun StatusBarRoot(
                 val phoneStatusBarView =
                     inflater.inflate(R.layout.status_bar, parent, false) as PhoneStatusBarView
 
-                val islandBoundsState = mutableStateOf(android.graphics.Rect())
+                val islandBoundsState = mutableStateOf(DynamicIslandIconState())
                 val iconFader = DynamicIslandIconFader(phoneStatusBarView) { bounds ->
                     islandBoundsState.value = bounds
                 }
@@ -349,6 +350,10 @@ fun StatusBarRoot(
                                         popupShowing
                                 },
                                 onIslandBoundsChanged = iconFader::update,
+                                onIslandActiveChanged = { active ->
+                                    visibility = if (active) View.VISIBLE else View.GONE
+                                },
+                                onIslandMotionChanged = iconFader::setMotionSettings,
                             )
                         }
                     }
@@ -427,7 +432,7 @@ private fun addStartSideComposable(
     appHandlesViewModel: AppHandlesViewModel,
     axDynamicBarChipViewModel: AxDynamicBarChipViewModel,
     context: Context,
-    islandBoundsState: androidx.compose.runtime.MutableState<android.graphics.Rect>,
+    islandBoundsState: androidx.compose.runtime.MutableState<DynamicIslandIconState>,
 ) {
     val startSideExceptHeadsUp =
         phoneStatusBarView.requireViewById<LinearLayout>(R.id.status_bar_start_side_except_heads_up)
@@ -634,7 +639,7 @@ private fun addBatteryComposable(
 private fun addEndSideComposable(
     phoneStatusBarView: PhoneStatusBarView,
     statusBarViewModel: HomeStatusBarViewModel,
-    islandBoundsState: State<Rect>,
+    islandBoundsState: State<DynamicIslandIconState>,
 ) {
     val endSideContainerView =
         phoneStatusBarView.requireViewById<View>(R.id.status_bar_end_side_container)

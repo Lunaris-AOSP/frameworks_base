@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -51,12 +52,12 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
-import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.android.internal.util.lunaris.LunarisBarSettings
@@ -81,6 +82,8 @@ fun StatusBarDynamicIslandContainer(
     onMediaControlPopupVisibilityChanged: (Boolean) -> Unit,
     onIslandBoundsChanged: (android.graphics.Rect) -> Unit = {},
     modifier: Modifier = Modifier,
+    onIslandActiveChanged: (Boolean) -> Unit = {},
+    onIslandMotionChanged: (Boolean, Float) -> Unit = { _, _ -> },
 ) {
     LunarisBarTheme {
         LunarisBarContainer(
@@ -88,6 +91,8 @@ fun StatusBarDynamicIslandContainer(
             onMediaControlPopupVisibilityChanged,
             onIslandBoundsChanged,
             modifier,
+            onIslandActiveChanged,
+            onIslandMotionChanged,
         )
     }
 }
@@ -98,17 +103,25 @@ private fun LunarisBarContainer(
     onMediaControlPopupVisibilityChanged: (Boolean) -> Unit,
     onIslandBoundsChanged: (android.graphics.Rect) -> Unit,
     modifier: Modifier,
+    onIslandActiveChanged: (Boolean) -> Unit,
+    onIslandMotionChanged: (Boolean, Float) -> Unit,
 ) {
     val state = LocalLunarisBarState.current
     val settings = state.settings
     val context = LocalContext.current
+    val view = LocalView.current
     val layoutDirection = LocalLayoutDirection.current
     val alignment = LunarisBarAlignment.fromSetting(settings.alignment)
     var hostLeft by remember { mutableFloatStateOf(0f) }
     val currentOnIslandBoundsChanged by rememberUpdatedState(onIslandBoundsChanged)
-    DisposableEffect(Unit) { onDispose { currentOnIslandBoundsChanged(android.graphics.Rect()) } }
-    LaunchedEffect(chips.isEmpty()) {
-        if (chips.isEmpty()) currentOnIslandBoundsChanged(android.graphics.Rect())
+    val currentOnIslandActiveChanged by rememberUpdatedState(onIslandActiveChanged)
+    val currentMediaVisibilityChanged by rememberUpdatedState(onMediaControlPopupVisibilityChanged)
+    DisposableEffect(Unit) {
+        onDispose {
+            currentOnIslandBoundsChanged(android.graphics.Rect())
+            currentOnIslandActiveChanged(false)
+            currentMediaVisibilityChanged(false)
+        }
     }
     val displayCutout = rememberDynamicIslandCutoutSpec()
     val (widthScale, heightScale) = rememberDynamicIslandSizeScale()
@@ -240,6 +253,32 @@ private fun LunarisBarContainer(
     val companionDiameter = DynamicIslandCompanionDiameter * heightScale * settings.miniScale
     val companionBalance = companionDiameter + DynamicIslandCompanionGap
     val effectivePageCount = if (showCompanion) 1 else chips.size
+    val screenLocation = remember { IntArray(2) }
+    val windowLocation = remember { IntArray(2) }
+    fun publishIslandBounds() {
+        view.getLocationOnScreen(screenLocation)
+        view.getLocationInWindow(windowLocation)
+        val dx = screenLocation[0] - windowLocation[0]
+        val dy = screenLocation[1] - windowLocation[1]
+        val coverage = android.graphics.Rect()
+        fun include(bounds: Rect?) {
+            if (bounds == null || bounds.isEmpty) return
+            coverage.union(
+                (bounds.left - dx).toInt(),
+                (bounds.top - dy).toInt(),
+                (bounds.right - dx).toInt(),
+                (bounds.bottom - dy).toInt(),
+            )
+        }
+        if (selectedChip != null && !selectedChip.isPopupShown) include(mainChipBounds)
+        if (companionChip != null && !companionChip.isPopupShown) include(companionChipBounds)
+        currentOnIslandBoundsChanged(coverage)
+    }
+    SideEffect {
+        onIslandMotionChanged(settings.isReducedMotion, settings.animationSpeed)
+        currentOnIslandActiveChanged(selectedChip != null || popupAnchorChip != null)
+        publishIslandBounds()
+    }
 
     Box(
         modifier =
@@ -271,20 +310,9 @@ private fun LunarisBarContainer(
             Row(
                 modifier =
                     Modifier.graphicsLayer {
-                            scaleX = switchScaleAnim.value
-                            scaleY = switchScaleAnim.value
-                        }
-                        .onGloballyPositioned { coordinates ->
-                            val b = coordinates.boundsInWindow()
-                            currentOnIslandBoundsChanged(
-                                android.graphics.Rect(
-                                    b.left.toInt(),
-                                    b.top.toInt(),
-                                    b.right.toInt(),
-                                    b.bottom.toInt(),
-                                )
-                            )
-                        },
+                        scaleX = switchScaleAnim.value
+                        scaleY = switchScaleAnim.value
+                    },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (showCompanion && companionChip != null) {
@@ -300,7 +328,10 @@ private fun LunarisBarContainer(
                             onPage = ::selectRelative,
                             onCard = ::selectCard,
                             onTap = { companionChip.showPopup() },
-                            onChipBoundsChanged = { companionChipBounds = it },
+                            onChipBoundsChanged = {
+                                companionChipBounds = it
+                                publishIslandBounds()
+                            },
                         )
                         Spacer(modifier = Modifier.width(DynamicIslandCompanionGap))
                     }
@@ -389,7 +420,12 @@ private fun LunarisBarContainer(
                         popupAttached = popupAnchorChip?.chipId == chip.chipId,
                         pageCount = effectivePageCount,
                         cutoutSpec = cutoutSpec,
-                        onChipBoundsChanged = { bounds -> mainChipBounds = bounds },
+                        onChipBoundsChanged = { bounds ->
+                            if (chipId == selectedChip.chipId) {
+                                mainChipBounds = bounds
+                                publishIslandBounds()
+                            }
+                        },
                         onPage = ::selectRelative,
                         onCard = ::selectCard,
                         modifier =
@@ -516,7 +552,10 @@ private fun LunarisBarContainer(
                             onPage = ::selectRelative,
                             onCard = ::selectCard,
                             onTap = { companionChip.showPopup() },
-                            onChipBoundsChanged = { companionChipBounds = it },
+                            onChipBoundsChanged = {
+                                companionChipBounds = it
+                                publishIslandBounds()
+                            },
                         )
                     } else if (balanceCompanion) {
                         Spacer(modifier = Modifier.width(companionBalance))

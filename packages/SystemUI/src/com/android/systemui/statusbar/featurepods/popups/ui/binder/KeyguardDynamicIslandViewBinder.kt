@@ -79,6 +79,10 @@ constructor(
                         StatusBarDynamicIslandContainer(
                             chips = viewModel.lockscreenPopupChips,
                             onIslandBoundsChanged = iconFader::update,
+                            onIslandActiveChanged = { active ->
+                                visibility = if (active) View.VISIBLE else View.GONE
+                            },
+                            onIslandMotionChanged = iconFader::setMotionSettings,
                             onMediaControlPopupVisibilityChanged = {
                                 mediaHierarchyManager.isMediaControlPopupShowing = it
                             },

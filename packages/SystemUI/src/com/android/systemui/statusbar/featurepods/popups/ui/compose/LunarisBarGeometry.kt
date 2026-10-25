@@ -53,3 +53,14 @@ internal fun lunarisBarChipLeft(
         (windowWidth - margin - chipWidth).coerceAtLeast(margin),
     )
 }
+
+internal fun lunarisBarPopupLeft(
+    centerX: Float,
+    contentWidth: Float,
+    windowWidth: Float,
+    margin: Float,
+): Float {
+    val remaining = (windowWidth - contentWidth).coerceAtLeast(0f)
+    val inset = margin.coerceIn(0f, remaining / 2f)
+    return (centerX - contentWidth / 2f).coerceIn(inset, remaining - inset)
+}

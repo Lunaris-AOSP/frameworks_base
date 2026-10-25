@@ -16,7 +16,6 @@
 
 package com.android.systemui.statusbar.featurepods.popups.ui.compose
 
-import android.graphics.Rect
 import android.graphics.RectF
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -30,21 +29,26 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.BlurEffect
+import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import com.android.systemui.statusbar.featurepods.popups.ui.view.DynamicIslandIconFader
+import com.android.systemui.statusbar.featurepods.popups.ui.view.DynamicIslandIconState
 
-internal val LocalDynamicIslandIconBounds = compositionLocalOf<State<Rect>?> { null }
+internal val LocalDynamicIslandIconBounds =
+    compositionLocalOf<State<DynamicIslandIconState>?> { null }
 private val HideEasing = CubicBezierEasing(.4f, 0f, 1f, 1f)
 private val ShowEasing = CubicBezierEasing(0f, 0f, .2f, 1f)
 
 @Composable
 internal fun Modifier.dynamicIslandIconFade(
-    islandBounds: Rect? = LocalDynamicIslandIconBounds.current?.value
+    islandState: DynamicIslandIconState? = LocalDynamicIslandIconBounds.current?.value
 ): Modifier {
-    if (islandBounds == null) return this
+    if (islandState == null) return this
+    val islandBounds = islandState.bounds
     val density = LocalDensity.current.density
     var bounds by remember { mutableStateOf(RectF()) }
     var hidden by remember { mutableStateOf(false) }
@@ -57,14 +61,28 @@ internal fun Modifier.dynamicIslandIconFade(
             animationSpec =
                 tween(
                     durationMillis =
-                        if (hidden) DynamicIslandIconFader.HIDE_DURATION
-                        else DynamicIslandIconFader.SHOW_DURATION,
-                    delayMillis = if (hidden) 0 else DynamicIslandIconFader.SHOW_DELAY,
+                        if (islandState.reducedMotion) 0
+                        else
+                            ((if (hidden) DynamicIslandIconFader.HIDE_DURATION
+                                else DynamicIslandIconFader.SHOW_DURATION) /
+                                    islandState.animationSpeed)
+                                .toInt(),
+                    delayMillis =
+                        if (hidden || islandState.reducedMotion) 0
+                        else
+                            (DynamicIslandIconFader.SHOW_DELAY / islandState.animationSpeed)
+                                .toInt(),
                     easing = if (hidden) HideEasing else ShowEasing,
                 ),
             label = "dynamic_island_icon_fade",
         )
-    return graphicsLayer { alpha = opacity }
+    return graphicsLayer {
+            alpha = opacity
+            val radius = DynamicIslandIconFader.MAX_BLUR_RADIUS_DP * density * (1f - opacity)
+            renderEffect =
+                if (islandState.reducedMotion || opacity <= 0f || radius < 0.5f) null
+                else BlurEffect(radius, radius, TileMode.Clamp)
+        }
         .onGloballyPositioned {
             val rect = it.boundsInWindow()
             bounds = RectF(rect.left, rect.top, rect.right, rect.bottom)

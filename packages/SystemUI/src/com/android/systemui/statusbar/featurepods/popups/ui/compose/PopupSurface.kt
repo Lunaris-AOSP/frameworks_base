@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.android.axion.blur.AxBlurBackgroundRenderer
+import com.android.axion.blur.LocalAxBlurEnabled
 import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.observeDynamicIslandPopupColorMode
 import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.readDynamicIslandPopupColorMode
 import kotlin.math.roundToInt
@@ -71,6 +72,7 @@ internal class PopupBlurHost(context: Context) : View(context) {
         overlayColor: Int,
         fallbackColor: Int,
         alpha: Float,
+        enabled: Boolean,
     ) {
         if (
             this.shape != shape ||
@@ -85,6 +87,8 @@ internal class PopupBlurHost(context: Context) : View(context) {
         this.overlayColor = overlayColor
         fallbackPaint.color = fallbackColor
         surfaceAlpha = (alpha.coerceIn(0f, 1f) * 255).roundToInt()
+        blur.setSurfaceAlpha(surfaceAlpha)
+        blur.setEnabled(enabled && surfaceAlpha > 0)
         invalidate()
     }
 
@@ -92,6 +96,7 @@ internal class PopupBlurHost(context: Context) : View(context) {
         super.onSizeChanged(w, h, oldw, oldh)
         bounds.set(0f, 0f, w.toFloat(), h.toFloat())
         clipPath = null
+        if (w <= 0 || h <= 0) blur.clear()
     }
 
     override fun onAttachedToWindow() {
@@ -114,7 +119,7 @@ internal class PopupBlurHost(context: Context) : View(context) {
         blur.verifyDrawable(who) || super.verifyDrawable(who)
 
     override fun draw(canvas: Canvas) {
-        if (width <= 0 || height <= 0) return
+        if (width <= 0 || height <= 0 || surfaceAlpha == 0) return
         val currentShape = shape ?: return
         val path =
             clipPath
@@ -165,6 +170,7 @@ internal fun PopupBlurBackground(
 ) {
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
+    val enabled = LocalAxBlurEnabled.current
     AndroidView(
         factory = { PopupBlurHost(it) },
         update = { view ->
@@ -175,6 +181,7 @@ internal fun PopupBlurBackground(
                 overlayColor,
                 fallbackColor,
                 alpha,
+                enabled,
             )
         },
         modifier = modifier.clip(shape),

@@ -28,6 +28,8 @@ import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
+import android.graphics.RenderEffect
+import android.graphics.Shader
 import android.graphics.drawable.Drawable
 import android.text.Annotation
 import android.text.Spanned
@@ -39,12 +41,20 @@ import android.widget.Space
 import android.widget.TextView
 import kotlin.math.roundToInt
 
+data class DynamicIslandIconState(
+    val bounds: Rect = Rect(),
+    val reducedMotion: Boolean = false,
+    val animationSpeed: Float = 1f,
+)
+
 class DynamicIslandIconFader(
     private val root: ViewGroup,
-    private val onCoverageChanged: (Rect) -> Unit = {},
+    private val onCoverageChanged: (DynamicIslandIconState) -> Unit = {},
 ) {
     private val coverage = Rect()
-    private val publishedCoverage = Rect()
+    private var publishedState = DynamicIslandIconState()
+    private var reducedMotion = false
+    private var animationSpeed = 1f
     private val location = IntArray(2)
     private val iconBounds = RectF()
     private val dateBounds = RectF()
@@ -92,6 +102,16 @@ class DynamicIslandIconFader(
         apply()
     }
 
+    fun setMotionSettings(reducedMotion: Boolean, animationSpeed: Float) {
+        val speed = animationSpeed.coerceIn(0.5f, 2f)
+        if (this.reducedMotion == reducedMotion && this.animationSpeed == speed) return
+        this.reducedMotion = reducedMotion
+        this.animationSpeed = speed
+        fades.values.forEach { it.animateTo(it.target, force = true) }
+        dateFades.values.forEach { it.fade.animateTo(it.fade.target, force = true) }
+        apply()
+    }
+
     private fun start() {
         if (observer != null) return
         observer =
@@ -120,14 +140,22 @@ class DynamicIslandIconFader(
     }
 
     private fun publish(active: Boolean) {
-        if (active) {
-            if (publishedCoverage == coverage) return
-            publishedCoverage.set(coverage)
-        } else {
-            if (publishedCoverage.isEmpty) return
-            publishedCoverage.setEmpty()
-        }
-        onCoverageChanged(Rect(publishedCoverage))
+        val sameBounds =
+            if (active) publishedState.bounds == coverage else publishedState.bounds.isEmpty
+        if (
+            sameBounds &&
+                publishedState.reducedMotion == reducedMotion &&
+                publishedState.animationSpeed == animationSpeed
+        )
+            return
+        val state =
+            DynamicIslandIconState(
+                if (active) Rect(coverage) else Rect(),
+                reducedMotion,
+                animationSpeed,
+            )
+        publishedState = state
+        onCoverageChanged(state)
     }
 
     private fun apply() {
@@ -182,7 +210,23 @@ class DynamicIslandIconFader(
             } else if (covered) {
                 val initialAlpha = view.transitionAlpha
                 fades[view] =
-                    Fade { view.transitionAlpha = initialAlpha * it }.also { it.animateTo(target) }
+                    Fade {
+                            view.transitionAlpha = initialAlpha * it
+                            val radius =
+                                MAX_BLUR_RADIUS_DP *
+                                    view.resources.displayMetrics.density *
+                                    (1f - it)
+                            view.setRenderEffect(
+                                if (reducedMotion || it <= 0f || radius < 0.5f) null
+                                else
+                                    RenderEffect.createBlurEffect(
+                                        radius,
+                                        radius,
+                                        Shader.TileMode.CLAMP,
+                                    )
+                            )
+                        }
+                        .also { it.animateTo(target) }
             }
         }
     }
@@ -274,26 +318,29 @@ class DynamicIslandIconFader(
     private fun find(view: View, name: String): View? =
         id(name).takeIf { it != 0 }?.let { view.findViewById(it) }
 
-    private class Fade(private val apply: (Float) -> Unit) {
+    private inner class Fade(private val apply: (Float) -> Unit) {
         var target = 1f
             private set
 
         private var value = 1f
         private var animator: ValueAnimator? = null
 
-        fun animateTo(next: Float) {
-            if (target == next && (animator != null || value == next)) return
+        fun animateTo(next: Float, force: Boolean = false) {
+            if (!force && target == next && (animator != null || value == next)) return
             target = next
             animator?.cancel()
-            if (!ValueAnimator.areAnimatorsEnabled() || value == next) {
+            if (reducedMotion || !ValueAnimator.areAnimatorsEnabled() || value == next) {
+                animator = null
                 value = next
                 apply(next)
                 return
             }
             animator =
                 ValueAnimator.ofFloat(value, next).apply {
-                    duration = (if (next == 0f) HIDE_DURATION else SHOW_DURATION).toLong()
-                    startDelay = (if (next == 0f) 0 else SHOW_DELAY).toLong()
+                    duration =
+                        ((if (next == 0f) HIDE_DURATION else SHOW_DURATION) / animationSpeed)
+                            .toLong()
+                    startDelay = ((if (next == 0f) 0 else SHOW_DELAY) / animationSpeed).toLong()
                     interpolator = if (next == 0f) HIDE_EASING else SHOW_EASING
                     addUpdateListener {
                         value = it.animatedValue as Float
@@ -319,7 +366,7 @@ class DynamicIslandIconFader(
         }
     }
 
-    private class DateFade(private val view: TextView) : Drawable() {
+    private inner class DateFade(private val view: TextView) : Drawable() {
         val region = RectF()
         private val paint = Paint().apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_OUT) }
         private var fraction = 1f
@@ -369,9 +416,10 @@ class DynamicIslandIconFader(
 
     companion object {
         const val CLOCK_DATE_ANNOTATION = "status_bar_clock_date"
-        const val HIDE_DURATION = 130
-        const val SHOW_DURATION = 200
-        const val SHOW_DELAY = 40
+        const val HIDE_DURATION = 240
+        const val SHOW_DURATION = 240
+        const val SHOW_DELAY = 0
+        const val MAX_BLUR_RADIUS_DP = 6f
         private val HIDE_EASING = PathInterpolator(.4f, 0f, 1f, 1f)
         private val SHOW_EASING = PathInterpolator(0f, 0f, .2f, 1f)
         private val LEAVES =
