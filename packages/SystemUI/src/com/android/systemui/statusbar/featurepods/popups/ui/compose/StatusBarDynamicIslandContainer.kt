@@ -31,8 +31,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -45,20 +44,26 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import com.android.internal.util.lunaris.LunarisBarSettings
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 /**
@@ -97,22 +102,28 @@ private fun LunarisBarContainer(
     val state = LocalLunarisBarState.current
     val settings = state.settings
     val context = LocalContext.current
-    val screenWidth = LocalConfiguration.current.screenWidthDp.dp
-    var containerWidth by remember { mutableStateOf(0.dp) }
-    val density = LocalDensity.current
-    val alignmentOffset =
-        when (settings.alignment) {
-            1 -> -(screenWidth - containerWidth) / 2 + 12.dp
-            2 -> (screenWidth - containerWidth) / 2 - 12.dp
-            else -> 0.dp
-        }
+    val layoutDirection = LocalLayoutDirection.current
+    val alignment = LunarisBarAlignment.fromSetting(settings.alignment)
+    var hostLeft by remember { mutableFloatStateOf(0f) }
     val currentOnIslandBoundsChanged by rememberUpdatedState(onIslandBoundsChanged)
     DisposableEffect(Unit) { onDispose { currentOnIslandBoundsChanged(android.graphics.Rect()) } }
     LaunchedEffect(chips.isEmpty()) {
         if (chips.isEmpty()) currentOnIslandBoundsChanged(android.graphics.Rect())
     }
-    val cutoutSpec = rememberDynamicIslandCutoutSpec()
-    val (_, heightScale) = rememberDynamicIslandSizeScale()
+    val displayCutout = rememberDynamicIslandCutoutSpec()
+    val (widthScale, heightScale) = rememberDynamicIslandSizeScale()
+    val camera =
+        displayCutout.cutoutBounds?.takeIf {
+            lunarisBarCutoutMatches(alignment, it.center.x, displayCutout.windowWidthPx.toFloat())
+        }
+    val configuredGap = settings.integer("camera_width", 25, 0, 120).dp * widthScale
+    val cutoutSpec =
+        displayCutout.copy(
+            cutoutBounds = camera,
+            embeddedGapWidth =
+                if (camera != null) maxOf(configuredGap, displayCutout.embeddedGapWidth)
+                else if (alignment == LunarisBarAlignment.CENTER) configuredGap else 0.dp,
+        )
     var selectedChipId by remember { mutableStateOf<PopupChipId?>(null) }
     var popupAnchorChip by remember { mutableStateOf<PopupChipModel.Shown?>(null) }
     var popupVisible by remember { mutableStateOf(false) }
@@ -212,7 +223,14 @@ private fun LunarisBarContainer(
     }
 
     val showCompanion = settings.isCompanionEnabled && chips.size >= COMPANION_MIN_TASKS
-    val companionOnRight = lastDirection >= 0
+    val companionOnRight =
+        when (alignment) {
+            LunarisBarAlignment.LEFT -> true
+            LunarisBarAlignment.RIGHT -> false
+            LunarisBarAlignment.CENTER -> lastDirection >= 0
+        }
+    val companionAtEnd = companionOnRight == (layoutDirection == LayoutDirection.Ltr)
+    val balanceCompanion = alignment == LunarisBarAlignment.CENTER
     val companionChip =
         if (showCompanion) {
             chips.getOrNull((selectedIndex + lastDirection).mod(chips.size))
@@ -225,30 +243,9 @@ private fun LunarisBarContainer(
 
     Box(
         modifier =
-            modifier
-                .padding(horizontal = 8.dp)
-                .offset(
-                    x =
-                        (if (settings.alignment == 0) cutoutSpec.horizontalOffset
-                        else alignmentOffset) + settings.offsetX.dp,
-                    y = settings.offsetY.dp,
-                )
-                .onGloballyPositioned { coordinates ->
-                    containerWidth = with(density) { coordinates.size.width.toDp() }
-                    val b = coordinates.boundsInWindow()
-                    onIslandBoundsChanged(
-                        if (chips.isEmpty()) {
-                            android.graphics.Rect()
-                        } else {
-                            android.graphics.Rect(
-                                b.left.toInt(),
-                                b.top.toInt(),
-                                b.right.toInt(),
-                                b.bottom.toInt(),
-                            )
-                        }
-                    )
-                },
+            modifier.fillMaxWidth().onGloballyPositioned { coordinates ->
+                hostLeft = coordinates.positionInWindow().x
+            },
         contentAlignment = Alignment.Center,
     ) {
         popupAnchorChip?.let { anchoredChip ->
@@ -270,175 +267,210 @@ private fun LunarisBarContainer(
 
         if (selectedChip == null) return@Box
 
-        Row(
-            modifier =
-                Modifier.graphicsLayer {
-                    scaleX = switchScaleAnim.value
-                    scaleY = switchScaleAnim.value
-                },
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (showCompanion && companionChip != null) {
-                if (companionOnRight) {
-                    Spacer(modifier = Modifier.width(companionBalance))
-                } else {
-                    LunarisBarChip(
-                        viewModel = companionChip,
-                        popupAttached = popupAnchorChip?.chipId == companionChip.chipId,
-                        pageCount = 1,
-                        cutoutSpec = cutoutSpec,
-                        companion = true,
-                        onPage = ::selectRelative,
-                        onCard = ::selectCard,
-                        onTap = { companionChip.showPopup() },
-                        onChipBoundsChanged = { companionChipBounds = it },
-                    )
-                    Spacer(modifier = Modifier.width(DynamicIslandCompanionGap))
-                }
-            }
-
-            AnimatedContent(
-                targetState = selectedChip.chipId,
-                transitionSpec = {
-                    if (targetState == initialState) {
-                        fadeIn(
-                            animationSpec =
-                                tween(
-                                    if (settings.isReducedMotion) 0
-                                    else (150 / settings.animationSpeed).toInt()
+        LunarisBarPositionedContent(cutoutSpec, alignment, settings, hostLeft) {
+            Row(
+                modifier =
+                    Modifier.graphicsLayer {
+                            scaleX = switchScaleAnim.value
+                            scaleY = switchScaleAnim.value
+                        }
+                        .onGloballyPositioned { coordinates ->
+                            val b = coordinates.boundsInWindow()
+                            currentOnIslandBoundsChanged(
+                                android.graphics.Rect(
+                                    b.left.toInt(),
+                                    b.top.toInt(),
+                                    b.right.toInt(),
+                                    b.bottom.toInt(),
                                 )
-                        ) togetherWith
-                            fadeOut(
+                            )
+                        },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (showCompanion && companionChip != null) {
+                    if (companionAtEnd) {
+                        if (balanceCompanion) Spacer(modifier = Modifier.width(companionBalance))
+                    } else {
+                        LunarisBarChip(
+                            viewModel = companionChip,
+                            popupAttached = popupAnchorChip?.chipId == companionChip.chipId,
+                            pageCount = 1,
+                            cutoutSpec = cutoutSpec,
+                            companion = true,
+                            onPage = ::selectRelative,
+                            onCard = ::selectCard,
+                            onTap = { companionChip.showPopup() },
+                            onChipBoundsChanged = { companionChipBounds = it },
+                        )
+                        Spacer(modifier = Modifier.width(DynamicIslandCompanionGap))
+                    }
+                }
+
+                AnimatedContent(
+                    targetState = selectedChip.chipId,
+                    modifier = Modifier.weight(1f, fill = false),
+                    contentAlignment =
+                        when (alignment) {
+                            LunarisBarAlignment.LEFT -> AbsoluteAlignment.CenterLeft
+                            LunarisBarAlignment.RIGHT -> AbsoluteAlignment.CenterRight
+                            LunarisBarAlignment.CENTER -> Alignment.Center
+                        },
+                    transitionSpec = {
+                        if (targetState == initialState) {
+                            fadeIn(
                                 animationSpec =
                                     tween(
                                         if (settings.isReducedMotion) 0
                                         else (150 / settings.animationSpeed).toInt()
                                     )
-                            )
-                    } else {
-                        val slideDirection =
-                            if (
-                                chips.indexOfFirst { it.chipId == targetState } >
-                                    chips.indexOfFirst { it.chipId == initialState }
-                            ) {
-                                1
-                            } else {
-                                -1
-                            }
-                        (slideInHorizontally(
-                            animationSpec =
-                                tween(
-                                    if (settings.isReducedMotion) 0
-                                    else (220 / settings.animationSpeed).toInt()
-                                ),
-                            initialOffsetX = { fullWidth -> slideDirection * fullWidth / 2 },
-                        ) +
-                            fadeIn(
-                                animationSpec =
-                                    tween(
-                                        if (settings.isReducedMotion) 0
-                                        else (180 / settings.animationSpeed).toInt()
-                                    )
-                            )) togetherWith
-                            (slideOutHorizontally(
-                                animationSpec =
-                                    tween(
-                                        if (settings.isReducedMotion) 0
-                                        else (200 / settings.animationSpeed).toInt()
-                                    ),
-                                targetOffsetX = { fullWidth -> -slideDirection * fullWidth / 3 },
-                            ) +
+                            ) togetherWith
                                 fadeOut(
                                     animationSpec =
                                         tween(
                                             if (settings.isReducedMotion) 0
-                                            else (140 / settings.animationSpeed).toInt()
+                                            else (150 / settings.animationSpeed).toInt()
                                         )
-                                ))
-                    }
-                },
-                label = "dynamic_island_chip",
-            ) { chipId ->
-                val chip = chips.firstOrNull { it.chipId == chipId } ?: return@AnimatedContent
-                var dragAccumulator by remember(chipId, chips.size) { mutableFloatStateOf(0f) }
-                var verticalDragAccumulator by
-                    remember(chipId, chips.size) { mutableFloatStateOf(0f) }
-                val dragOffset = remember(chipId, chips.size) { Animatable(0f) }
-                val thresholdPx = with(LocalDensity.current) { 36.dp.toPx() }
-                val maxFollowPx = with(LocalDensity.current) { 40.dp.toPx() }
-                val dragScope = rememberCoroutineScope()
+                                )
+                        } else {
+                            val slideDirection =
+                                if (
+                                    chips.indexOfFirst { it.chipId == targetState } >
+                                        chips.indexOfFirst { it.chipId == initialState }
+                                ) {
+                                    1
+                                } else {
+                                    -1
+                                }
+                            (slideInHorizontally(
+                                animationSpec =
+                                    tween(
+                                        if (settings.isReducedMotion) 0
+                                        else (220 / settings.animationSpeed).toInt()
+                                    ),
+                                initialOffsetX = { fullWidth -> slideDirection * fullWidth / 2 },
+                            ) +
+                                fadeIn(
+                                    animationSpec =
+                                        tween(
+                                            if (settings.isReducedMotion) 0
+                                            else (180 / settings.animationSpeed).toInt()
+                                        )
+                                )) togetherWith
+                                (slideOutHorizontally(
+                                    animationSpec =
+                                        tween(
+                                            if (settings.isReducedMotion) 0
+                                            else (200 / settings.animationSpeed).toInt()
+                                        ),
+                                    targetOffsetX = { fullWidth -> -slideDirection * fullWidth / 3 },
+                                ) +
+                                    fadeOut(
+                                        animationSpec =
+                                            tween(
+                                                if (settings.isReducedMotion) 0
+                                                else (140 / settings.animationSpeed).toInt()
+                                            )
+                                    ))
+                        }
+                    },
+                    label = "dynamic_island_chip",
+                ) { chipId ->
+                    val chip = chips.firstOrNull { it.chipId == chipId } ?: return@AnimatedContent
+                    var dragAccumulator by remember(chipId, chips.size) { mutableFloatStateOf(0f) }
+                    var verticalDragAccumulator by
+                        remember(chipId, chips.size) { mutableFloatStateOf(0f) }
+                    val dragOffset = remember(chipId, chips.size) { Animatable(0f) }
+                    val thresholdPx = with(LocalDensity.current) { 36.dp.toPx() }
+                    val maxFollowPx = with(LocalDensity.current) { 40.dp.toPx() }
+                    val dragScope = rememberCoroutineScope()
 
-                LunarisBarChip(
-                    viewModel = chip,
-                    popupAttached = popupAnchorChip?.chipId == chip.chipId,
-                    pageCount = effectivePageCount,
-                    cutoutSpec = cutoutSpec,
-                    onChipBoundsChanged = { bounds -> mainChipBounds = bounds },
-                    onPage = ::selectRelative,
-                    onCard = ::selectCard,
-                    modifier =
-                        Modifier.graphicsLayer { translationX = dragOffset.value }
-                            .pointerInput(chips.size, chip.chipId, settings) {
-                                detectDragGestures(
-                                    onDragEnd = {
-                                        val switched =
-                                            when {
-                                                abs(verticalDragAccumulator) >= thresholdPx &&
-                                                    abs(verticalDragAccumulator) >
-                                                        abs(dragAccumulator) -> {
-                                                    lunarisBarAction(
-                                                        settings.text(
-                                                            if (verticalDragAccumulator < 0)
-                                                                "gesture_swipe_up"
-                                                            else "gesture_swipe_down",
-                                                            if (verticalDragAccumulator < 0)
-                                                                "expand"
-                                                            else "notifications",
-                                                        ),
-                                                        context,
-                                                        chip,
-                                                        chip.showPopup,
-                                                        ::selectRelative,
-                                                        ::selectCard,
-                                                    )
-                                                    true
+                    LunarisBarChip(
+                        viewModel = chip,
+                        popupAttached = popupAnchorChip?.chipId == chip.chipId,
+                        pageCount = effectivePageCount,
+                        cutoutSpec = cutoutSpec,
+                        onChipBoundsChanged = { bounds -> mainChipBounds = bounds },
+                        onPage = ::selectRelative,
+                        onCard = ::selectCard,
+                        modifier =
+                            Modifier.graphicsLayer { translationX = dragOffset.value }
+                                .pointerInput(chips.size, chip.chipId, settings) {
+                                    detectDragGestures(
+                                        onDragEnd = {
+                                            val switched =
+                                                when {
+                                                    abs(verticalDragAccumulator) >= thresholdPx &&
+                                                        abs(verticalDragAccumulator) >
+                                                            abs(dragAccumulator) -> {
+                                                        lunarisBarAction(
+                                                            settings.text(
+                                                                if (verticalDragAccumulator < 0)
+                                                                    "gesture_swipe_up"
+                                                                else "gesture_swipe_down",
+                                                                if (verticalDragAccumulator < 0)
+                                                                    "expand"
+                                                                else "notifications",
+                                                            ),
+                                                            context,
+                                                            chip,
+                                                            chip.showPopup,
+                                                            ::selectRelative,
+                                                            ::selectCard,
+                                                        )
+                                                        true
+                                                    }
+                                                    dragAccumulator <= -thresholdPx -> {
+                                                        lunarisBarAction(
+                                                            settings.text(
+                                                                "gesture_swipe_left",
+                                                                "next_card",
+                                                            ),
+                                                            context,
+                                                            chip,
+                                                            chip.showPopup,
+                                                            ::selectRelative,
+                                                            ::selectCard,
+                                                        )
+                                                        true
+                                                    }
+                                                    dragAccumulator >= thresholdPx -> {
+                                                        lunarisBarAction(
+                                                            settings.text(
+                                                                "gesture_swipe_right",
+                                                                "previous_card",
+                                                            ),
+                                                            context,
+                                                            chip,
+                                                            chip.showPopup,
+                                                            ::selectRelative,
+                                                            ::selectCard,
+                                                        )
+                                                        true
+                                                    }
+                                                    else -> false
                                                 }
-                                                dragAccumulator <= -thresholdPx -> {
-                                                    lunarisBarAction(
-                                                        settings.text(
-                                                            "gesture_swipe_left",
-                                                            "next_card",
-                                                        ),
-                                                        context,
-                                                        chip,
-                                                        chip.showPopup,
-                                                        ::selectRelative,
-                                                        ::selectCard,
+                                            dragAccumulator = 0f
+                                            verticalDragAccumulator = 0f
+                                            dragScope.launch {
+                                                if (switched) {
+                                                    dragOffset.snapTo(0f)
+                                                } else {
+                                                    dragOffset.animateTo(
+                                                        targetValue = 0f,
+                                                        animationSpec =
+                                                            spring(
+                                                                dampingRatio =
+                                                                    Spring.DampingRatioMediumBouncy,
+                                                                stiffness = Spring.StiffnessMedium,
+                                                            ),
                                                     )
-                                                    true
                                                 }
-                                                dragAccumulator >= thresholdPx -> {
-                                                    lunarisBarAction(
-                                                        settings.text(
-                                                            "gesture_swipe_right",
-                                                            "previous_card",
-                                                        ),
-                                                        context,
-                                                        chip,
-                                                        chip.showPopup,
-                                                        ::selectRelative,
-                                                        ::selectCard,
-                                                    )
-                                                    true
-                                                }
-                                                else -> false
                                             }
-                                        dragAccumulator = 0f
-                                        verticalDragAccumulator = 0f
-                                        dragScope.launch {
-                                            if (switched) {
-                                                dragOffset.snapTo(0f)
-                                            } else {
+                                        },
+                                        onDragCancel = {
+                                            dragAccumulator = 0f
+                                            verticalDragAccumulator = 0f
+                                            dragScope.launch {
                                                 dragOffset.animateTo(
                                                     targetValue = 0f,
                                                     animationSpec =
@@ -449,63 +481,102 @@ private fun LunarisBarContainer(
                                                         ),
                                                 )
                                             }
-                                        }
-                                    },
-                                    onDragCancel = {
-                                        dragAccumulator = 0f
-                                        verticalDragAccumulator = 0f
-                                        dragScope.launch {
-                                            dragOffset.animateTo(
-                                                targetValue = 0f,
-                                                animationSpec =
-                                                    spring(
-                                                        dampingRatio =
-                                                            Spring.DampingRatioMediumBouncy,
-                                                        stiffness = Spring.StiffnessMedium,
-                                                    ),
-                                            )
-                                        }
-                                    },
-                                    onDrag = { change, dragAmount ->
-                                        dragAccumulator += dragAmount.x
-                                        verticalDragAccumulator += dragAmount.y
-                                        val target =
-                                            (dragAccumulator * 0.5f).coerceIn(
-                                                -maxFollowPx,
-                                                maxFollowPx,
-                                            )
-                                        dragScope.launch { dragOffset.snapTo(target) }
-                                        if (
-                                            abs(dragAccumulator) > 8f ||
-                                                abs(verticalDragAccumulator) > 8f
-                                        ) {
-                                            change.consume()
-                                        }
-                                    },
-                                )
-                            },
-                    onTap = { if (chip.isPopupShown) chip.hidePopup() else chip.showPopup() },
-                )
-            }
-
-            if (showCompanion && companionChip != null) {
-                if (companionOnRight) {
-                    Spacer(modifier = Modifier.width(DynamicIslandCompanionGap))
-                    LunarisBarChip(
-                        viewModel = companionChip,
-                        popupAttached = popupAnchorChip?.chipId == companionChip.chipId,
-                        pageCount = 1,
-                        cutoutSpec = cutoutSpec,
-                        companion = true,
-                        onPage = ::selectRelative,
-                        onCard = ::selectCard,
-                        onTap = { companionChip.showPopup() },
-                        onChipBoundsChanged = { companionChipBounds = it },
+                                        },
+                                        onDrag = { change, dragAmount ->
+                                            dragAccumulator += dragAmount.x
+                                            verticalDragAccumulator += dragAmount.y
+                                            val target =
+                                                (dragAccumulator * 0.5f).coerceIn(
+                                                    -maxFollowPx,
+                                                    maxFollowPx,
+                                                )
+                                            dragScope.launch { dragOffset.snapTo(target) }
+                                            if (
+                                                abs(dragAccumulator) > 8f ||
+                                                    abs(verticalDragAccumulator) > 8f
+                                            ) {
+                                                change.consume()
+                                            }
+                                        },
+                                    )
+                                },
+                        onTap = { if (chip.isPopupShown) chip.hidePopup() else chip.showPopup() },
                     )
-                } else {
-                    Spacer(modifier = Modifier.width(companionBalance))
+                }
+
+                if (showCompanion && companionChip != null) {
+                    if (companionAtEnd) {
+                        Spacer(modifier = Modifier.width(DynamicIslandCompanionGap))
+                        LunarisBarChip(
+                            viewModel = companionChip,
+                            popupAttached = popupAnchorChip?.chipId == companionChip.chipId,
+                            pageCount = 1,
+                            cutoutSpec = cutoutSpec,
+                            companion = true,
+                            onPage = ::selectRelative,
+                            onCard = ::selectCard,
+                            onTap = { companionChip.showPopup() },
+                            onChipBoundsChanged = { companionChipBounds = it },
+                        )
+                    } else if (balanceCompanion) {
+                        Spacer(modifier = Modifier.width(companionBalance))
+                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun LunarisBarPositionedContent(
+    cutoutSpec: DynamicIslandCutoutSpec,
+    alignment: LunarisBarAlignment,
+    settings: LunarisBarSettings,
+    hostLeft: Float,
+    content: @Composable () -> Unit,
+) {
+    Layout(content = content) { measurables, constraints ->
+        val windowWidth =
+            cutoutSpec.windowWidthPx.takeIf { it > 0 }?.toFloat() ?: constraints.maxWidth.toFloat()
+        val camera = cutoutSpec.cutoutBounds
+        val margin = (if (camera != null) 4.dp else 12.dp).toPx()
+        val padding = (5.dp * settings.miniScale).toPx()
+        val gap = cutoutSpec.embeddedGapWidth.toPx()
+        val offset = settings.offsetX.dp.toPx()
+        val edge =
+            lunarisBarChipLeft(
+                alignment,
+                windowWidth,
+                0f,
+                camera?.center?.x,
+                gap,
+                padding,
+                offset,
+                margin,
+            )
+        val availableWidth =
+            when (alignment) {
+                    LunarisBarAlignment.LEFT -> windowWidth - margin - edge
+                    LunarisBarAlignment.RIGHT -> edge - margin
+                    LunarisBarAlignment.CENTER -> windowWidth - 2f * margin
+                }
+                .roundToInt()
+                .coerceIn(1, constraints.maxWidth.coerceAtLeast(1))
+        val placeable =
+            measurables.single().measure(constraints.copy(minWidth = 0, maxWidth = availableWidth))
+        val left =
+            lunarisBarChipLeft(
+                alignment,
+                windowWidth,
+                placeable.width.toFloat(),
+                camera?.center?.x,
+                gap,
+                padding,
+                offset,
+                margin,
+            )
+        layout(constraints.maxWidth, placeable.height) {
+            placeable.place((left - hostLeft).roundToInt(), settings.offsetY.dp.roundToPx())
         }
     }
 }

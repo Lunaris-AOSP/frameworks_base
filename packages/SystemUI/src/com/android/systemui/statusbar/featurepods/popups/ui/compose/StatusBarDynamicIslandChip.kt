@@ -16,7 +16,6 @@
 
 package com.android.systemui.statusbar.featurepods.popups.ui.compose
 
-import android.view.DisplayCutout
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -573,43 +572,9 @@ private val CompactUtilityIslandWidth = 74.dp
 private val CompactUtilityConnectedIslandChromeWidth = 42.dp
 private val CompactUtilityConnectedIslandMinWidth = 132.dp
 private val CompactUtilityConnectedIslandMaxWidth = 188.dp
-private val DynamicIslandEmbeddedGapWidth = 25.dp
 
 internal val DynamicIslandCompanionDiameter = 34.dp
 internal val DynamicIslandCompanionGap = 8.dp
-
-data class DynamicIslandCutoutSpec(val embeddedGapWidth: Dp, val horizontalOffset: Dp)
-
-@Composable
-fun rememberDynamicIslandCutoutSpec(): DynamicIslandCutoutSpec {
-    val density = LocalDensity.current
-    val view = LocalView.current
-    val displayCutout = view.rootWindowInsets?.displayCutout ?: view.display?.cutout
-    val topCutout = displayCutout?.topBoundingRectOrNull()
-    val rootWidthPx =
-        when {
-            view.rootView.width > 0 -> view.rootView.width
-            view.width > 0 -> view.width
-            else -> view.resources.configuration.windowConfiguration.maxBounds.width()
-        }
-
-    return with(density) {
-        if (topCutout == null || rootWidthPx <= 0) {
-            DynamicIslandCutoutSpec(
-                embeddedGapWidth = DynamicIslandEmbeddedGapWidth,
-                horizontalOffset = 0.dp,
-            )
-        } else {
-            val horizontalOffsetDp = (topCutout.exactCenterX() - (rootWidthPx / 2f)).toDp()
-            DynamicIslandCutoutSpec(
-                embeddedGapWidth = DynamicIslandEmbeddedGapWidth,
-                horizontalOffset = horizontalOffsetDp,
-            )
-        }
-    }
-}
-
-private fun DisplayCutout.topBoundingRectOrNull() = getBoundingRectTop().takeUnless { it.isEmpty }
 
 private fun PopupContentModel.isUtilityStatusContent(): Boolean {
     return this is PopupContentModel.ScreenRecord ||

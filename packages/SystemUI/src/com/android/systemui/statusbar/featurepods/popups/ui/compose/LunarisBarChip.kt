@@ -57,10 +57,12 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.android.systemui.common.shared.model.Icon as IconModel
@@ -112,6 +114,8 @@ private fun LunarisBarChipContent(
 ) {
     val state = LocalLunarisBarState.current
     val settings = state.settings
+    val alignment = LunarisBarAlignment.fromSetting(settings.alignment)
+    val layoutDirection = LocalLayoutDirection.current
     val colors = LocalLunarisBarColors.current
     val context = LocalContext.current
     val view = LocalView.current
@@ -155,6 +159,11 @@ private fun LunarisBarChipContent(
     }
     val (widthScale, heightScale) = rememberDynamicIslandSizeScale()
     val scale = settings.miniScale
+    val sideCamera =
+        !companion && alignment != LunarisBarAlignment.CENTER && cutoutSpec.cutoutBounds != null
+    val gapAtStart =
+        (alignment == LunarisBarAlignment.LEFT) == (layoutDirection == LayoutDirection.Ltr)
+    val cameraGap = if (companion) 0.dp else cutoutSpec.embeddedGapWidth
     val appear =
         remember(companion) { Animatable(if (companion && !settings.isReducedMotion) 0.3f else 1f) }
     LaunchedEffect(companion, settings.isReducedMotion) {
@@ -309,7 +318,7 @@ private fun LunarisBarChipContent(
                         if (companion) Modifier.fillMaxSize()
                         else Modifier.defaultMinSize(minHeight = dimensions)
                     )
-                    .widthIn(max = 240.dp * widthScale)
+                    .widthIn(max = 240.dp * widthScale + if (sideCamera) cameraGap else 0.dp)
                     .combinedClickable(
                         onClick = {
                             perform(
@@ -326,15 +335,30 @@ private fun LunarisBarChipContent(
                             else ({ perform(settings.text("gesture_long_press", "open_app")) }),
                     )
                     .padding(
-                        horizontal = if (companion) 0.dp else 5.dp * scale,
-                        vertical = if (companion) 0.dp else 3.dp * scale,
+                        start =
+                            if (companion) 0.dp
+                            else
+                                5.dp * scale +
+                                    if (sideCamera && !resting && gapAtStart) cameraGap else 0.dp,
+                        end =
+                            if (companion) 0.dp
+                            else
+                                5.dp * scale +
+                                    if (sideCamera && !resting && !gapAtStart) cameraGap else 0.dp,
+                        top = if (companion) 0.dp else 3.dp * scale,
+                        bottom = if (companion) 0.dp else 3.dp * scale,
                     ),
             horizontalArrangement =
                 if (companion) Arrangement.Center else Arrangement.spacedBy(5.dp * scale),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (resting) {
-                Spacer(Modifier.width(settings.integer("camera_width", 25, 0, 120).dp))
+                Spacer(
+                    Modifier.width(
+                        if (cutoutSpec.cutoutBounds != null) cameraGap
+                        else settings.integer("camera_width", 25, 0, 120).dp
+                    )
+                )
             } else {
                 if (utility != null && (companion || utility.type != "battery")) {
                     androidx.compose.material3.Icon(
@@ -390,19 +414,8 @@ private fun LunarisBarChipContent(
                             else if (ownLeft) leftPalette.second else colors.miniContent,
                     )
                 }
-                if (!companion && settings.alignment == 0) {
-                    Spacer(
-                        Modifier.width(
-                            settings
-                                .integer(
-                                    "camera_width",
-                                    cutoutSpec.embeddedGapWidth.value.toInt(),
-                                    0,
-                                    120,
-                                )
-                                .dp * widthScale
-                        )
-                    )
+                if (!companion && alignment == LunarisBarAlignment.CENTER) {
+                    Spacer(Modifier.width(cameraGap))
                 }
                 if (!companion && media != null && settings.enabled("media_mini", true)) {
                     val appIcon = media.appIcon

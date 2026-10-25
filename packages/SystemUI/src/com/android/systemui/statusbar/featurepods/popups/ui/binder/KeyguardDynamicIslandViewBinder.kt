@@ -16,6 +16,8 @@
 
 package com.android.systemui.statusbar.featurepods.popups.ui.binder
 
+import android.view.View
+import android.view.ViewTreeObserver
 import android.widget.RelativeLayout
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -51,7 +53,7 @@ constructor(
         val composeView = ComposeView(view.context).apply {
             layoutParams =
                 RelativeLayout.LayoutParams(
-                    RelativeLayout.LayoutParams.WRAP_CONTENT,
+                    RelativeLayout.LayoutParams.MATCH_PARENT,
                     RelativeLayout.LayoutParams.MATCH_PARENT,
                 ).apply { addRule(RelativeLayout.CENTER_IN_PARENT) }
             setPadding(0, resources.getDimensionPixelSize(R.dimen.status_bar_padding_top), 0, 0)
@@ -85,6 +87,31 @@ constructor(
                 }
             }
         }
+        val layoutListener =
+            ViewTreeObserver.OnGlobalLayoutListener {
+                val params = composeView.layoutParams as RelativeLayout.LayoutParams
+                if (
+                    params.leftMargin != -view.paddingLeft ||
+                        params.rightMargin != -view.paddingRight
+                ) {
+                    params.leftMargin = -view.paddingLeft
+                    params.rightMargin = -view.paddingRight
+                    composeView.layoutParams = params
+                }
+            }
+        composeView.addOnAttachStateChangeListener(
+            object : View.OnAttachStateChangeListener {
+                override fun onViewAttachedToWindow(attachedView: View) {
+                    view.viewTreeObserver.addOnGlobalLayoutListener(layoutListener)
+                }
+
+                override fun onViewDetachedFromWindow(detachedView: View) {
+                    if (view.viewTreeObserver.isAlive) {
+                        view.viewTreeObserver.removeOnGlobalLayoutListener(layoutListener)
+                    }
+                }
+            }
+        )
         view.addView(composeView)
         iconFader.attach(composeView)
         view.repeatWhenAttached {

@@ -22,6 +22,7 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import androidx.annotation.VisibleForTesting
 import androidx.compose.foundation.layout.Arrangement
@@ -60,7 +61,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.android.compose.theme.PlatformTheme
 import com.android.compose.theme.colorAttr
-import com.android.keyguard.AlphaOptimizedLinearLayout
 import com.android.systemui.Flags
 import com.android.systemui.clock.ui.viewmodel.AmPmStyle
 import com.android.systemui.clock.ui.viewmodel.ClockViewModel
@@ -321,16 +321,16 @@ fun StatusBarRoot(
 
                 // Add a composable container for `StatusBarPopupChip`s.
                 val centeredArea =
-                    phoneStatusBarView.requireViewById<AlphaOptimizedLinearLayout>(
+                    phoneStatusBarView.requireViewById<FrameLayout>(
                         R.id.centered_area
                     )
 
                 val composeView =
                     ComposeView(context).apply {
                         layoutParams =
-                            LinearLayout.LayoutParams(
-                                LinearLayout.LayoutParams.WRAP_CONTENT,
-                                LinearLayout.LayoutParams.WRAP_CONTENT,
+                            FrameLayout.LayoutParams(
+                                FrameLayout.LayoutParams.MATCH_PARENT,
+                                FrameLayout.LayoutParams.WRAP_CONTENT,
                             ).apply { gravity = Gravity.CENTER }
 
                         setViewCompositionStrategy(
