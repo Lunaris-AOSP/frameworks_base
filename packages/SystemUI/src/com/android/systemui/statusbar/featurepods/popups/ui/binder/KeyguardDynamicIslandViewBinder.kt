@@ -51,6 +51,8 @@ constructor(
     fun bind(view: KeyguardStatusBarView) {
         val iconFader = DynamicIslandIconFader(view)
         val composeView = ComposeView(view.context).apply {
+            clipChildren = false
+            clipToPadding = false
             layoutParams =
                 RelativeLayout.LayoutParams(
                     RelativeLayout.LayoutParams.MATCH_PARENT,

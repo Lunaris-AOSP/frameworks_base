@@ -324,10 +324,15 @@ fun StatusBarRoot(
                 val centeredArea =
                     phoneStatusBarView.requireViewById<FrameLayout>(
                         R.id.centered_area
-                    )
+                    ).apply {
+                        clipChildren = false
+                        clipToPadding = false
+                    }
 
                 val composeView =
                     ComposeView(context).apply {
+                        clipChildren = false
+                        clipToPadding = false
                         layoutParams =
                             FrameLayout.LayoutParams(
                                 FrameLayout.LayoutParams.MATCH_PARENT,
