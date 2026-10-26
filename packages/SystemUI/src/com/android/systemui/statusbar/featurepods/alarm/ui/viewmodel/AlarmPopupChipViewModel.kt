@@ -18,7 +18,6 @@ package com.android.systemui.statusbar.featurepods.alarm.ui.viewmodel
 
 import android.app.AlarmManager
 import android.app.Notification
-import com.android.systemui.statusbar.featurepods.stopwatch.ui.viewmodel.isStopwatchCandidate
 import android.content.Context
 import android.text.format.DateFormat
 import androidx.compose.runtime.getValue
@@ -31,12 +30,12 @@ import com.android.systemui.lifecycle.Hydrator
 import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.NotificationLockscreenUserManager
-import com.android.systemui.statusbar.featurepods.popups.shared.model.PopupActionModel
-import com.android.systemui.statusbar.featurepods.popups.shared.toSendAction
+import com.android.systemui.statusbar.featurepods.alarm.shared.model.AlarmPopupModel
 import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.ALARMS
 import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.observeDynamicIslandFeatureEnabled
-import com.android.systemui.statusbar.featurepods.alarm.shared.model.AlarmPopupModel
+import com.android.systemui.statusbar.featurepods.popups.shared.model.PopupActionModel
 import com.android.systemui.statusbar.featurepods.popups.shared.toActivityLaunchAction
+import com.android.systemui.statusbar.featurepods.popups.shared.toSendAction
 import com.android.systemui.statusbar.featurepods.popups.ui.model.ChipIcon
 import com.android.systemui.statusbar.featurepods.popups.ui.model.ColorsModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
@@ -52,8 +51,8 @@ import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import java.util.Locale
 import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 
 /** ViewModel backing the next-alarm page inside the dynamic island. */
@@ -83,8 +82,8 @@ constructor(
                                     nextAlarm = nextAlarm,
                                     activeNotification =
                                         notifCollection.allNotifs.firstOrNull {
-                                            it.isAlarmCandidate() && !it.isStopwatchCandidate()
-                                        } ?: notifCollection.allNotifs.firstOrNull { it.isAlarmCandidate() },
+                                            it.isAlarmCandidate()
+                                        },
                                 )
                             )
                         }
@@ -239,15 +238,31 @@ private data class AlarmPopupState(
 
 private fun NotificationEntry.isAlarmCandidate(): Boolean {
     val notification = sbn.notification
-    return notification.contentIntent != null &&
-        (
-            isStopwatchCandidate() ||
-                notification.category == Notification.CATEGORY_ALARM ||
-                sbn.packageName.contains("clock", ignoreCase = true) ||
-                notification.actions.orEmpty().any { action ->
-                    action.title?.toString()?.contains("snooze", ignoreCase = true) == true
-                }
-        )
+    if (notification.contentIntent == null) {
+        return false
+    }
+
+    // Ringing timers can also use CATEGORY_ALARM. Exclude timer and stopwatch metadata first.
+    val channelId = notification.channelId.orEmpty()
+    if (
+        notification.category == Notification.CATEGORY_STOPWATCH ||
+            notification.extras.getBoolean(Notification.EXTRA_CHRONOMETER_COUNT_DOWN) ||
+            channelId.contains("timer", ignoreCase = true) ||
+            channelId.contains("stopwatch", ignoreCase = true) ||
+            notification.actions.orEmpty().any { action ->
+                val actionName =
+                    runCatching { action.actionIntent?.intent?.action }.getOrNull().orEmpty()
+                actionName.contains("timer", ignoreCase = true) ||
+                    actionName.contains("stopwatch", ignoreCase = true)
+            }
+    ) {
+        return false
+    }
+
+    return notification.category == Notification.CATEGORY_ALARM ||
+        notification.actions.orEmpty().any { action ->
+            action.title?.toString()?.contains("snooze", ignoreCase = true) == true
+        }
 }
 
 private fun NotificationEntry.notificationTitle(): String? {
