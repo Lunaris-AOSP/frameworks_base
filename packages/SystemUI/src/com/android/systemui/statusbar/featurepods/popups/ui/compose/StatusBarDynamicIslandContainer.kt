@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -250,6 +251,7 @@ private fun LunarisBarContainer(
         } else {
             null
         }
+    val showCompanionChip = shownChip == null && popupAnchorChip == null
     val companionDiameter = DynamicIslandCompanionDiameter * heightScale * settings.miniScale
     val companionBalance = companionDiameter + DynamicIslandCompanionGap
     val effectivePageCount = if (showCompanion) 1 else chips.size
@@ -271,7 +273,7 @@ private fun LunarisBarContainer(
             )
         }
         if (selectedChip != null && !selectedChip.isPopupShown) include(mainChipBounds)
-        if (companionChip != null && !companionChip.isPopupShown) include(companionChipBounds)
+        if (companionChip != null && showCompanionChip) include(companionChipBounds)
         currentOnIslandBoundsChanged(coverage)
     }
     SideEffect {
@@ -318,6 +320,9 @@ private fun LunarisBarContainer(
                 if (showCompanion && companionChip != null) {
                     if (companionAtEnd) {
                         if (balanceCompanion) Spacer(modifier = Modifier.width(companionBalance))
+                    } else if (!showCompanionChip) {
+                        Spacer(modifier = Modifier.size(companionDiameter))
+                        Spacer(modifier = Modifier.width(DynamicIslandCompanionGap))
                     } else {
                         LunarisBarChip(
                             viewModel = companionChip,
@@ -543,20 +548,24 @@ private fun LunarisBarContainer(
                 if (showCompanion && companionChip != null) {
                     if (companionAtEnd) {
                         Spacer(modifier = Modifier.width(DynamicIslandCompanionGap))
-                        LunarisBarChip(
-                            viewModel = companionChip,
-                            popupAttached = popupAnchorChip?.chipId == companionChip.chipId,
-                            pageCount = 1,
-                            cutoutSpec = cutoutSpec,
-                            companion = true,
-                            onPage = ::selectRelative,
-                            onCard = ::selectCard,
-                            onTap = { companionChip.showPopup() },
-                            onChipBoundsChanged = {
-                                companionChipBounds = it
-                                publishIslandBounds()
-                            },
-                        )
+                        if (showCompanionChip) {
+                            LunarisBarChip(
+                                viewModel = companionChip,
+                                popupAttached = popupAnchorChip?.chipId == companionChip.chipId,
+                                pageCount = 1,
+                                cutoutSpec = cutoutSpec,
+                                companion = true,
+                                onPage = ::selectRelative,
+                                onCard = ::selectCard,
+                                onTap = { companionChip.showPopup() },
+                                onChipBoundsChanged = {
+                                    companionChipBounds = it
+                                    publishIslandBounds()
+                                },
+                            )
+                        } else {
+                            Spacer(modifier = Modifier.size(companionDiameter))
+                        }
                     } else if (balanceCompanion) {
                         Spacer(modifier = Modifier.width(companionBalance))
                     }
