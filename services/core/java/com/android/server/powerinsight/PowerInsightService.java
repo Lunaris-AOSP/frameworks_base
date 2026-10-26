@@ -93,6 +93,7 @@ public class PowerInsightService extends IPowerInsightService.Stub {
     private final Handler mHandler;
     private final PowerManager mPowerManager;
     private final AtomicFile mAtomicFile;
+    private final BatteryCurrentReader mBatteryCurrentReader;
     private boolean mNotifChannelCreated;
 
     private final List<PowerInsightFlowSample> mFlowSamples = Collections.synchronizedList(new ArrayList<>());
@@ -148,6 +149,9 @@ public class PowerInsightService extends IPowerInsightService.Stub {
         mContext = context;
         mPowerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
         mAtomicFile = new AtomicFile(new File(STATS_FILE));
+        mBatteryCurrentReader = new BatteryCurrentReader(this::readFrameworkCurrentMicroamps,
+                context.getResources().getInteger(
+                        com.android.internal.R.integer.config_powerInsightCurrentDivisor));
         Slog.i(TAG, "Initializing PowerInsight service");
 
         HandlerThread thread = new HandlerThread(TAG);
@@ -391,8 +395,7 @@ public class PowerInsightService extends IPowerInsightService.Stub {
         stats.idleDrainRate = hoursOff > 0.01f ? mBatteryDrainOff / hoursOff : 0;
 
         // HW metrics
-        stats.currentNow = readBatteryInt("current_now");
-        stats.currentNow /= 1000;
+        stats.currentNow = mBatteryCurrentReader.readCurrentMa();
 
         stats.voltage = readBatteryInt("voltage_now");
         if (stats.voltage == 0) stats.voltage = readBatteryInt("voltage_avg");
@@ -656,6 +659,17 @@ public class PowerInsightService extends IPowerInsightService.Stub {
         long m = s / 60;
         long h = m / 60;
         return h > 0 ? String.format("%dh %dm", h, m % 60) : String.format("%dm %ds", m, s % 60);
+    }
+
+    private Integer readFrameworkCurrentMicroamps() {
+        try {
+            BatteryManager batteryManager = mContext.getSystemService(BatteryManager.class);
+            if (batteryManager == null) return null;
+            long current = batteryManager.getLongProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW);
+            return current <= Integer.MIN_VALUE || current > Integer.MAX_VALUE ? null : (int) current;
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     private int readIntFromFile(String path) {

@@ -1465,6 +1465,8 @@
          Also, the battery stats are flushed to disk when we hit this level.  -->
     <integer name="config_criticalBatteryWarningLevel">10</integer>
 
+    <integer name="config_powerInsightCurrentDivisor">1000</integer>
+
     <!-- Shutdown if the battery temperature exceeds (this value * 0.1) Celsius. -->
     <integer name="config_shutdownBatteryTemperature">680</integer>
 

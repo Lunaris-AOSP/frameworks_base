@@ -2186,6 +2186,7 @@
   <java-symbol type="integer" name="config_keyboardBacklightTimeoutMs" />
   <java-symbol type="integer" name="config_carDockKeepsScreenOn" />
   <java-symbol type="integer" name="config_criticalBatteryWarningLevel" />
+  <java-symbol type="integer" name="config_powerInsightCurrentDivisor" />
   <java-symbol type="integer" name="config_datause_notification_type" />
   <java-symbol type="integer" name="config_datause_polling_period_sec" />
   <java-symbol type="integer" name="config_datause_threshold_bytes" />
