@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.android.systemui.common.shared.model.Icon as IconModel
 import com.android.systemui.common.ui.compose.Icon
+import com.android.systemui.qs.composefragment.cosStatusGlow
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentModel
 
@@ -299,6 +300,16 @@ private fun LunarisBarChipContent(
                     if (legacy != null)
                         Modifier.islandCompactMorph(legacy, colors.outline, drawBackground = false)
                     else Modifier
+                )
+                .cosStatusGlow(
+                    trigger = viewModel.statusGlowKey(),
+                    cornerRadius = if (companion) 100.dp else settings.cornerRadius.dp,
+                    enabled =
+                        settings.enabled("status_glow", false) &&
+                            !settings.isReducedMotion &&
+                            !resting &&
+                            !viewModel.isPopupShown &&
+                            !popupAttached,
                 )
                 .semantics {
                     contentDescription =
@@ -559,3 +570,11 @@ private fun LunarisBarChipContent(
         }
     }
 }
+
+private fun PopupChipModel.Shown.statusGlowKey(): Any =
+    when (val content = popupContent) {
+        is PopupContentModel.Media ->
+            Triple(chipId, content.model.songName?.toString(), content.model.artistName?.toString())
+        is PopupContentModel.SystemEvent -> Triple(chipId, content.kind, content.title)
+        else -> chipId
+    }

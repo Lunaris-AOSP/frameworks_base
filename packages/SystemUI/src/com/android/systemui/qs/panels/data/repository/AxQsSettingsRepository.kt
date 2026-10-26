@@ -169,6 +169,9 @@ constructor(
             .stateIn(applicationScope, SharingStarted.Eagerly, 2)
     val showWeather: StateFlow<Boolean> = boolSetting(SHOW_WEATHER, true)
     val showNotificationMedia: StateFlow<Boolean> = boolSetting(SHOW_NOTIFICATION_MEDIA, true)
+    val notificationMediaStatusGlow: StateFlow<Boolean> =
+        boolSetting(NOTIFICATION_MEDIA_STATUS_GLOW, false)
+    val mediaTileStatusGlow: StateFlow<Boolean> = boolSetting(MEDIA_TILE_STATUS_GLOW, false)
     val showSliderPercentage: StateFlow<Boolean> = boolSetting(SHOW_SLIDER_PERCENTAGE, false)
     val strokeStyle: StateFlow<Boolean> = boolSetting(STROKE_STYLE, false)
 
@@ -457,6 +460,11 @@ constructor(
     fun setShowWeather(show: Boolean) = putInt(SHOW_WEATHER, show.toSetting())
 
     fun setShowNotificationMedia(show: Boolean) = putInt(SHOW_NOTIFICATION_MEDIA, show.toSetting())
+
+    fun setNotificationMediaStatusGlow(enabled: Boolean) =
+        putInt(NOTIFICATION_MEDIA_STATUS_GLOW, enabled.toSetting())
+
+    fun setMediaTileStatusGlow(enabled: Boolean) = putInt(MEDIA_TILE_STATUS_GLOW, enabled.toSetting())
 
     fun setShowSliderPercentage(show: Boolean) = putInt(SHOW_SLIDER_PERCENTAGE, show.toSetting())
 
@@ -874,6 +882,8 @@ constructor(
         const val SPLIT_SHADE_TILE_LABELS = "ax_qs_split_shade_show_tile_labels"
         const val SHOW_WEATHER = "ax_qs_show_weather"
         const val SHOW_NOTIFICATION_MEDIA = "ax_qs_show_notification_media"
+        private const val NOTIFICATION_MEDIA_STATUS_GLOW = "ax_qs_notification_media_status_glow"
+        private const val MEDIA_TILE_STATUS_GLOW = "ax_qs_media_tile_status_glow"
         const val SHOW_SLIDER_PERCENTAGE = "ax_qs_show_slider_percentage"
         private const val STROKE_STYLE = "ax_qs_stroke_style"
         private const val GRADIENT_ENABLED = "ax_qs_gradient_enabled"

@@ -71,6 +71,7 @@ import com.android.systemui.common.ui.compose.Icon
 import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 import com.android.systemui.media.controls.shared.model.MediaAction
 import com.android.systemui.media.controls.ui.composable.StyledMediaSeekBar
+import com.android.systemui.qs.composefragment.cosStatusGlow
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.featurepods.media.shared.model.MediaControlChipModel
 import kotlin.math.sin
@@ -119,7 +120,21 @@ internal fun LunarisBarMediaPopup(model: MediaControlChipModel, seekBarStyle: Me
             previous = now
         }
     }
-    Box(Modifier.widthIn(max = 420.dp).fillMaxWidth()) {
+    Box(
+        Modifier.widthIn(max = 420.dp)
+            .fillMaxWidth()
+            .cosStatusGlow(
+                trigger =
+                    Triple(
+                        model.packageName,
+                        model.songName?.toString(),
+                        model.artistName?.toString(),
+                    ),
+                cornerRadius =
+                    if (settings.expandedShape == 0) 48.dp else settings.cornerRadius.dp,
+                enabled = settings.enabled("status_glow", false) && !settings.isReducedMotion,
+            )
+    ) {
         when (settings.mediaBackground) {
             1,
             2 ->

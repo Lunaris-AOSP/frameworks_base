@@ -272,6 +272,27 @@ fun LunariQsPanelSettings(
                         onCheckedChange = viewModel::setMediaMotionArt,
                     )
                 }
+                item("media_tile_status_glow") {
+                    SettingsSwitch(
+                        title = stringResource(R.string.ax_qs_settings_media_tile_status_glow),
+                        summary =
+                            stringResource(R.string.ax_qs_settings_media_tile_status_glow_summary),
+                        checked = viewModel.mediaTileStatusGlow,
+                        onCheckedChange = viewModel::setMediaTileStatusGlow,
+                    )
+                }
+                item("notification_media_status_glow") {
+                    SettingsSwitch(
+                        title = stringResource(R.string.ax_qs_settings_notification_media_status_glow),
+                        summary =
+                            stringResource(
+                                R.string.ax_qs_settings_notification_media_status_glow_summary
+                            ),
+                        checked = viewModel.notificationMediaStatusGlow,
+                        onCheckedChange = viewModel::setNotificationMediaStatusGlow,
+                        enabled = separate && viewModel.showNotificationMedia,
+                    )
+                }
                 item("dual_target_tile_style") {
                     SettingsSwitch(
                         title = stringResource(R.string.ax_qs_settings_dual_target_tile_style),

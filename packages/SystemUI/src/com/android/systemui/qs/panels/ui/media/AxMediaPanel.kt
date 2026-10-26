@@ -76,10 +76,12 @@ import com.android.systemui.media.remedia.shared.model.MediaSessionState
 import com.android.systemui.media.remedia.ui.compose.MediaUiBehavior
 import com.android.systemui.media.remedia.ui.viewmodel.MediaCarouselVisibility
 import com.android.systemui.media.remedia.ui.viewmodel.MediaViewModel
+import com.android.systemui.qs.composefragment.cosStatusGlow
 import com.android.systemui.qs.panels.shared.model.AxMediaSurface
 import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.LunarisQsMediaStyle
+import com.android.systemui.qs.panels.ui.compose.AxQsControlCornerRadius
 import com.android.systemui.qs.panels.ui.compose.AxTileDefaults
 import com.android.systemui.qs.panels.ui.compose.MaterialMediaExpandedPopup
 import com.android.systemui.qs.panels.ui.compose.SharedMediaState
@@ -264,6 +266,26 @@ private fun AxMediaCard(
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     var showExpandedPopup by remember(session?.key, isLandscape) { mutableStateOf(false) }
     val gutsVisible = allowGuts && session?.let(viewModel::isGutsVisible) == true
+    val statusGlowEnabled =
+        when (surface) {
+            AxMediaSurface.CONTROL ->
+                viewModel.mediaTileStatusGlow.collectAsStateWithLifecycle().value
+            AxMediaSurface.SEPARATE_QQS ->
+                viewModel.notificationMediaStatusGlow.collectAsStateWithLifecycle().value
+            AxMediaSurface.LOCKSCREEN -> false
+        }
+    val statusGlowVisible =
+        statusGlowEnabled &&
+            interactive &&
+            motionArtVisible &&
+            !gutsVisible &&
+            !showExpandedPopup &&
+            keyguardState != KeyguardState.OFF &&
+            keyguardState != KeyguardState.DOZING &&
+            keyguardState != KeyguardState.AOD
+    val glowCornerRadius =
+        if (surface == AxMediaSurface.CONTROL && span == AxQsSpan.MediaDefault) 28.dp
+        else AxQsControlCornerRadius
     val motionArtActive =
         interactive &&
             motionArtVisible &&
@@ -346,7 +368,15 @@ private fun AxMediaCard(
         }
     ExpandableContainer(
         controller = rememberExpandableController(color = { background }, shape = shape),
-        modifier = modifier.fillMaxSize().clip(shape),
+        modifier =
+            modifier
+                .fillMaxSize()
+                .clip(shape)
+                .cosStatusGlow(
+                    trigger = session?.let { Triple(it.key, it.title, it.subtitle) },
+                    cornerRadius = glowCornerRadius,
+                    enabled = statusGlowVisible,
+                ),
         onClick = null,
         onClickLabel = null,
         defaultMinSize = false,

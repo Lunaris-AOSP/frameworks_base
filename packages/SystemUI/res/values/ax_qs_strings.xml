@@ -61,6 +61,10 @@
     <string name="ax_qs_settings_style_album_cover">Album cover</string>
     <string name="ax_qs_settings_media_motion_art">Motion art</string>
     <string name="ax_qs_settings_media_motion_art_summary">Animate supported album covers in the Quick Settings tile and notification media player</string>
+    <string name="ax_qs_settings_media_tile_status_glow">Media tile glow</string>
+    <string name="ax_qs_settings_media_tile_status_glow_summary">Sweep a glow around the media tile when opening Quick Settings or changing tracks</string>
+    <string name="ax_qs_settings_notification_media_status_glow">Notification media glow</string>
+    <string name="ax_qs_settings_notification_media_status_glow_summary">Sweep a glow around the media player when opening the notification panel or changing tracks</string>
     <string name="ax_qs_settings_style_rounded_flat">Rounded square (flat fill)</string>
     <string name="ax_qs_settings_tile_labels">Show tile labels</string>
     <string name="ax_qs_settings_gradient">Active color gradient</string>
