@@ -96,6 +96,7 @@ final class CoreSettingsObserver extends ContentObserver {
         // add other system settings here...
 
         sGlobalSettingToTypeMap.put(Settings.Global.DEBUG_VIEW_ATTRIBUTES, int.class);
+        sGlobalSettingToTypeMap.put(Settings.Global.LUNARIS_LUMINOUS_ANIMATIONS, int.class);
         sGlobalSettingToTypeMap.put(
                 Settings.Global.DEBUG_VIEW_ATTRIBUTES_APPLICATION_PACKAGE, String.class);
         sGlobalSettingToTypeMap.put(

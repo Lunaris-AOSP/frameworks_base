@@ -51,6 +51,7 @@ public class GlobalSettingsValidators {
     public static final Map<String, Validator> VALIDATORS = new ArrayMap<>();
 
     static {
+        VALIDATORS.put(Global.LUNARIS_LUMINOUS_ANIMATIONS, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Global.CONNECTED_APPS_ALLOWED_PACKAGES, new PackageNameListValidator((",")));
         VALIDATORS.put(Global.CONNECTED_APPS_DISALLOWED_PACKAGES,
                 new PackageNameListValidator((",")));

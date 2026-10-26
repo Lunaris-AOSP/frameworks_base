@@ -117,6 +117,18 @@ private:
     std::vector<float> mY;
 };
 
+class SpringInterpolator : public Interpolator {
+public:
+    SpringInterpolator(float stiffness, float dampingRatio, float velocity, float durationSec);
+    virtual float interpolate(float input) override;
+
+private:
+    const double mOmega;
+    const double mDampingRatio;
+    const double mVelocity;
+    const double mDuration;
+};
+
 class LUTInterpolator : public Interpolator {
 public:
     LUTInterpolator(float* values, size_t size);

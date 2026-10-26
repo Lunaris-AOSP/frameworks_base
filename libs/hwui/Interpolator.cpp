@@ -17,6 +17,7 @@
 #include "Interpolator.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include <log/log.h>
 
@@ -93,6 +94,40 @@ float DecelerateInterpolator::interpolate(float input) {
 float OvershootInterpolator::interpolate(float t) {
     t -= 1.0f;
     return t * t * ((mTension + 1) * t + mTension) + 1.0f;
+}
+
+SpringInterpolator::SpringInterpolator(float stiffness, float dampingRatio, float velocity,
+                                       float durationSec)
+        : mOmega(std::sqrt(static_cast<double>(std::max(stiffness, 0.0001f))))
+        , mDampingRatio(std::max(dampingRatio, 0.0f))
+        , mVelocity(velocity)
+        , mDuration(std::max(durationSec, 0.0f)) {}
+
+float SpringInterpolator::interpolate(float input) {
+    if (input >= 1.0f || mDuration <= 0) {
+        return 1.0f;
+    }
+    const double t = std::max(input, 0.0f) * mDuration;
+    const double w = mOmega;
+    const double z = mDampingRatio;
+    const double d0 = -1.0;
+    const double v0 = mVelocity;
+    double d;
+    if (z < 1.0) {
+        const double wd = w * std::sqrt(1.0 - z * z);
+        d = std::exp(-z * w * t) *
+            (d0 * std::cos(wd * t) + (v0 + z * w * d0) / wd * std::sin(wd * t));
+    } else if (z == 1.0) {
+        d = std::exp(-w * t) * (d0 + (v0 + w * d0) * t);
+    } else {
+        const double root = std::sqrt(z * z - 1.0);
+        const double r1 = -w / (z + root);
+        const double r2 = -w * (z + root);
+        const double c2 = (v0 - r1 * d0) / (r2 - r1);
+        const double c1 = d0 - c2;
+        d = c1 * std::exp(r1 * t) + c2 * std::exp(r2 * t);
+    }
+    return static_cast<float>(1.0 + d);
 }
 
 float PathInterpolator::interpolate(float t) {

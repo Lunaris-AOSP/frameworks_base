@@ -19763,6 +19763,11 @@ public final class Settings {
         public static final String ANIMATOR_DURATION_SCALE = "animator_duration_scale";
 
         /**
+         * @hide
+         */
+	public static final String LUNARIS_LUMINOUS_ANIMATIONS = "lunaris_luminous_animations";
+
+        /**
          * Scaling factor for normal window animations. Setting to 0 will
          * disable window animations.
          *

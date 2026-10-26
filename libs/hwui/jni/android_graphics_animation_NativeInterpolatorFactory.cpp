@@ -72,6 +72,12 @@ static jlong createPathInterpolator(JNIEnv* env, jobject clazz, jfloatArray jX, 
     return reinterpret_cast<jlong>(new PathInterpolator(std::move(x), std::move(y)));
 }
 
+static jlong createSpringInterpolator(JNIEnv* env, jobject clazz, jfloat stiffness,
+                                      jfloat dampingRatio, jfloat velocity, jfloat durationSec) {
+    return reinterpret_cast<jlong>(
+            new SpringInterpolator(stiffness, dampingRatio, velocity, durationSec));
+}
+
 static jlong createLutInterpolator(JNIEnv* env, jobject clazz, jfloatArray jlut) {
     jsize len = env->GetArrayLength(jlut);
     if (len <= 0) {
@@ -99,6 +105,7 @@ static const JNINativeMethod gMethods[] = {
     { "createLinearInterpolator", "()J", (void*) createLinearInterpolator },
     { "createOvershootInterpolator", "(F)J", (void*) createOvershootInterpolator },
     { "createPathInterpolator", "([F[F)J", (void*) createPathInterpolator },
+    { "createSpringInterpolator", "(FFFF)J", (void*) createSpringInterpolator },
     { "createLutInterpolator", "([F)J", (void*) createLutInterpolator },
 };
 

@@ -62,6 +62,8 @@ public final class NativeInterpolatorFactory {
     public static native long createOvershootInterpolator(float tension);
     /** Creates a specialized native interpolator for along traveling along a Path */
     public static native long createPathInterpolator(float[] x, float[] y);
+    public static native long createSpringInterpolator(float stiffness, float dampingRatio,
+            float velocity, float durationSec);
     /** Creates a specialized native interpolator for LUT */
     public static native long createLutInterpolator(float[] values);
 }

@@ -17,12 +17,18 @@
 package android.view;
 
 import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.animation.TimeInterpolator;
 import android.animation.ValueAnimator;
 import android.annotation.FloatRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.graphics.RenderNode;
+import android.view.animation.AccelerateDecelerateInterpolator;
+import android.view.animation.AnimationUtils;
+import android.view.animation.LinearInterpolator;
+
+import com.android.internal.util.lunaris.Luminous;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -857,7 +863,6 @@ public class ViewPropertyAnimator {
      */
     private void startAnimation() {
         mView.setHasTransientState(true);
-        ValueAnimator animator = ValueAnimator.ofFloat(1.0f);
         ArrayList<NameValuesHolder> nameValueList =
                 (ArrayList<NameValuesHolder>) mPendingAnimations.clone();
         mPendingAnimations.clear();
@@ -867,6 +872,10 @@ public class ViewPropertyAnimator {
             NameValuesHolder nameValuesHolder = nameValueList.get(i);
             propertyMask |= nameValuesHolder.mNameConstant;
         }
+        if (startOnRenderThread(nameValueList, propertyMask)) {
+            return;
+        }
+        ValueAnimator animator = ValueAnimator.ofFloat(1.0f);
         mAnimatorMap.put(animator, new PropertyBundle(propertyMask, nameValueList));
         if (mPendingSetupAction != null) {
             mAnimatorSetupMap.put(animator, mPendingSetupAction);
@@ -898,6 +907,234 @@ public class ViewPropertyAnimator {
         animator.start();
     }
 
+    private static final int RENDER_THREAD_MASK = TRANSLATION_X | TRANSLATION_Y | TRANSLATION_Z
+            | SCALE_X | SCALE_Y | ROTATION | ROTATION_X | ROTATION_Y | ALPHA;
+
+    private boolean startOnRenderThread(ArrayList<NameValuesHolder> values, int propertyMask) {
+        if (values.isEmpty() || values.size() != Integer.bitCount(propertyMask)
+                || mUpdateListener != null || mListener != null || mPendingSetupAction != null
+                || mPendingCleanupAction != null || mPendingOnStartAction != null
+                || getStartDelay() != 0 || getDuration() == 0
+                || ValueAnimator.getDurationScale() <= 0
+                || (propertyMask & ~RENDER_THREAD_MASK) != 0
+                || !mView.isAttachedToWindow() || !mView.isHardwareAccelerated()
+                || !Luminous.offloadsViewAnimations(mView)) {
+            return false;
+        }
+        if ((propertyMask & ALPHA) != 0 && ((mView.mPrivateFlags & View.PFLAG_ALPHA_SET) != 0
+                || mView.getTransitionAlpha() != 1f)) {
+            return false;
+        }
+        for (NameValuesHolder value : values) {
+            if (!Float.isFinite(value.mFromValue)
+                    || !Float.isFinite(value.mFromValue + value.mDeltaValue)) {
+                return false;
+            }
+        }
+        RenderThreadAnimator animator = new RenderThreadAnimator(values);
+        mAnimatorMap.put(animator, new PropertyBundle(propertyMask, values));
+        if (mPendingOnEndAction != null) {
+            mAnimatorOnEndMap.put(animator, mPendingOnEndAction);
+            mPendingOnEndAction = null;
+        }
+        animator.addListener(mAnimatorEventListener);
+        animator.setDuration(getDuration());
+        if (mInterpolatorSet) {
+            animator.setInterpolator(mInterpolator);
+        }
+        animator.start();
+        return true;
+    }
+
+    private void cancelRenderThreadProperty(int constant) {
+        if (mAnimatorMap.isEmpty()) return;
+        for (Animator animator : new ArrayList<>(mAnimatorMap.keySet())) {
+            if (animator instanceof RenderThreadAnimator) {
+                ((RenderThreadAnimator) animator).cancelProperty(constant);
+            }
+        }
+    }
+
+    private final class RenderThreadAnimator extends Animator
+            implements View.OnAttachStateChangeListener {
+        private final ArrayList<NameValuesHolder> mValues;
+        private final ArrayList<RenderNodeAnimator> mAnimators = new ArrayList<>();
+        private long mRtDuration = 300;
+        private TimeInterpolator mRtInterpolator = new AccelerateDecelerateInterpolator();
+        private long mStartMillis;
+        private long mScaledDuration;
+        private boolean mRunning;
+        private boolean mCancelling;
+
+        RenderThreadAnimator(ArrayList<NameValuesHolder> values) {
+            mValues = new ArrayList<>(values);
+        }
+
+        @Override
+        public void start() {
+            mStartMillis = AnimationUtils.currentAnimationTimeMillis();
+            mScaledDuration = Math.max(1, (long) (mRtDuration * ValueAnimator.getDurationScale()));
+            mRunning = true;
+            mView.addOnAttachStateChangeListener(this);
+            for (NameValuesHolder value : mValues) {
+                RenderNodeAnimator animator = new RenderNodeAnimator(
+                        renderProperty(value.mNameConstant), value.mFromValue + value.mDeltaValue);
+                animator.setTarget(mView);
+                animator.setStartValue(value.mFromValue);
+                animator.setDuration(mRtDuration);
+                animator.setInterpolator(mRtInterpolator);
+                animator.addListener(new AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationEnd(Animator animation) {
+                        propertyDone(animation);
+                    }
+                });
+                mAnimators.add(animator);
+            }
+            for (AnimatorListener listener : listenersCopy()) {
+                listener.onAnimationStart(this, false);
+            }
+            for (RenderNodeAnimator animator : new ArrayList<>(mAnimators)) {
+                if (mRunning && mAnimators.contains(animator)) animator.start();
+            }
+        }
+
+        void cancelProperty(int constant) {
+            for (int i = mValues.size() - 1; i >= 0; i--) {
+                NameValuesHolder value = mValues.get(i);
+                if (renderProperty(value.mNameConstant) == renderProperty(constant)) {
+                    PropertyBundle bundle = mAnimatorMap.get(this);
+                    if (bundle != null) bundle.cancel(value.mNameConstant);
+                    stopAt(i);
+                }
+            }
+            if (mValues.isEmpty()) cancel();
+        }
+
+        @Override
+        public void cancel() {
+            if (!mRunning || mCancelling) return;
+            mCancelling = true;
+            for (int i = mValues.size() - 1; i >= 0; i--) {
+                stopAt(i);
+            }
+            for (AnimatorListener listener : listenersCopy()) {
+                listener.onAnimationCancel(this);
+            }
+            finish();
+        }
+
+        @Override
+        public void end() {
+            for (RenderNodeAnimator animator : new ArrayList<>(mAnimators)) {
+                animator.end();
+            }
+        }
+
+        private void stopAt(int i) {
+            NameValuesHolder value = mValues.remove(i);
+            RenderNodeAnimator animator = mAnimators.remove(i);
+            float fraction = mRtInterpolator.getInterpolation(currentFraction());
+            animator.cancel();
+            float current = value.mFromValue + value.mDeltaValue * fraction;
+            if (value.mNameConstant == ALPHA) {
+                mView.setAlpha(current);
+            } else {
+                setValue(value.mNameConstant, current);
+                mView.invalidateViewProperty(true, false);
+            }
+        }
+
+        private void propertyDone(Animator animator) {
+            if (!mRunning) return;
+            int index = mAnimators.indexOf(animator);
+            if (index < 0) return;
+            NameValuesHolder value = mValues.remove(index);
+            mAnimators.remove(index);
+            PropertyBundle bundle = mAnimatorMap.get(this);
+            if (bundle != null) bundle.cancel(value.mNameConstant);
+            if (mAnimators.isEmpty()) finish();
+        }
+
+        private void finish() {
+            if (!mRunning) return;
+            mRunning = false;
+            mView.removeOnAttachStateChangeListener(this);
+            for (AnimatorListener listener : listenersCopy()) {
+                listener.onAnimationEnd(this, false);
+            }
+        }
+
+        private float currentFraction() {
+            long elapsed = AnimationUtils.currentAnimationTimeMillis() - mStartMillis;
+            return Math.max(0f, Math.min(1f, (float) elapsed / mScaledDuration));
+        }
+
+        private ArrayList<AnimatorListener> listenersCopy() {
+            ArrayList<AnimatorListener> listeners = getListeners();
+            return listeners == null ? new ArrayList<>() : new ArrayList<>(listeners);
+        }
+
+        private int renderProperty(int constant) {
+            switch (constant) {
+                case TRANSLATION_X: case X: return RenderNodeAnimator.TRANSLATION_X;
+                case TRANSLATION_Y: case Y: return RenderNodeAnimator.TRANSLATION_Y;
+                case TRANSLATION_Z: case Z: return RenderNodeAnimator.TRANSLATION_Z;
+                case SCALE_X: return RenderNodeAnimator.SCALE_X;
+                case SCALE_Y: return RenderNodeAnimator.SCALE_Y;
+                case ROTATION: return RenderNodeAnimator.ROTATION;
+                case ROTATION_X: return RenderNodeAnimator.ROTATION_X;
+                case ROTATION_Y: return RenderNodeAnimator.ROTATION_Y;
+                default: return RenderNodeAnimator.ALPHA;
+            }
+        }
+
+        @Override
+        public void onViewAttachedToWindow(View view) {}
+
+        @Override
+        public void onViewDetachedFromWindow(View view) {
+            cancel();
+        }
+
+        @Override
+        public long getStartDelay() {
+            return 0;
+        }
+
+        @Override
+        public void setStartDelay(long startDelay) {
+            if (startDelay != 0) throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Animator setDuration(long duration) {
+            if (duration < 0) throw new IllegalArgumentException("Negative duration");
+            mRtDuration = duration;
+            return this;
+        }
+
+        @Override
+        public long getDuration() {
+            return mRtDuration;
+        }
+
+        @Override
+        public void setInterpolator(TimeInterpolator value) {
+            mRtInterpolator = value != null ? value : new LinearInterpolator();
+        }
+
+        @Override
+        public TimeInterpolator getInterpolator() {
+            return mRtInterpolator;
+        }
+
+        @Override
+        public boolean isRunning() {
+            return mRunning;
+        }
+    }
+
     /**
      * Utility function, called by the various x(), y(), etc. methods. This stores the
      * constant name for the property along with the from/delta values that will be used to
@@ -911,6 +1148,7 @@ public class ViewPropertyAnimator {
      * @param toValue The value to which the property will animate
      */
     private void animateProperty(int constantName, float toValue) {
+        cancelRenderThreadProperty(constantName);
         float fromValue = getValue(constantName);
         float deltaValue = toValue - fromValue;
         animatePropertyBy(constantName, fromValue, deltaValue);
@@ -925,6 +1163,7 @@ public class ViewPropertyAnimator {
      * @param byValue The amount by which the property will change
      */
     private void animatePropertyBy(int constantName, float byValue) {
+        cancelRenderThreadProperty(constantName);
         float fromValue = getValue(constantName);
         animatePropertyBy(constantName, fromValue, byValue);
     }
