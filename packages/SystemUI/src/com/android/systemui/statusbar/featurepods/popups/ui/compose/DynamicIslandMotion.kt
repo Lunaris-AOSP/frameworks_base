@@ -71,6 +71,7 @@ internal object DynamicIslandMotion {
     const val ContentEnterMillis = 150
     const val FastContentEnterMillis = 120
     const val ContentExitMillis = 80
+    const val SurfaceFadeMillis = 200
 
     val ButtonDown = Easing { value ->
         val remaining = 1f - value

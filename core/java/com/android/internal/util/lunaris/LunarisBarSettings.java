@@ -205,7 +205,7 @@ public final class LunarisBarSettings {
     public int getOffsetY() { return integer("offset_y", 0, -24, 100); }
     public int getExpandedMode() { return integer("expanded_mode", 1, 0, 1); }
     public boolean isFullWidth() { return integer("expanded_width", 1, 0, 1) == 0; }
-    public int getCornerRadius() { return enabled("custom_radius", true) ? integer("corner_radius", 32, 0, 64) : 32; }
+    public int getCornerRadius() { return enabled("custom_radius", true) ? integer("corner_radius", 42, 0, 64) : 32; }
     public int getExpandedShape() { return integer("expanded_shape", 1, 0, 2); }
     public int getAnimationStyle() { return integer("animation_style", 0, 0, 1); }
     public float getAnimationSpeed() { return integer("animation_speed", 100, 50, 200) / 100f; }

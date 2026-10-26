@@ -182,6 +182,7 @@ internal fun IslandPopupMorph(
     var screenOffset by remember { mutableStateOf<Offset?>(null) }
     var motion by remember { mutableStateOf<IslandPopupGeometry?>(null) }
     val contentFade = remember { Animatable(0f) }
+    val surfaceFade = remember { Animatable(1f) }
     val revealMillis = remember { Animatable(0f) }
     val currentOnHidden by rememberUpdatedState(onHidden)
     val currentOnDismiss by rememberUpdatedState(onDismissRequest)
@@ -293,6 +294,15 @@ internal fun IslandPopupMorph(
         if (isVisible) {
             coroutineScope {
                 launch {
+                    surfaceFade.animateTo(
+                        1f,
+                        tween(
+                            DynamicIslandMotion.SurfaceFadeMillis,
+                            easing = DynamicIslandMotion.EaseInOut,
+                        ),
+                    )
+                }
+                launch {
                     contentFade.animateTo(
                         1f,
                         tween(
@@ -321,10 +331,27 @@ internal fun IslandPopupMorph(
                 }
             }
         } else {
-            contentFade.animateTo(
-                0f,
-                tween(DynamicIslandMotion.ContentExitMillis, easing = DynamicIslandMotion.EaseInOut),
-            )
+            coroutineScope {
+                launch {
+                    contentFade.animateTo(
+                        0f,
+                        tween(
+                            DynamicIslandMotion.ContentExitMillis,
+                            easing = DynamicIslandMotion.EaseInOut,
+                        ),
+                    )
+                }
+                launch {
+                    // Fade the returning surface before it overlaps the restored compact chip.
+                    surfaceFade.animateTo(
+                        0f,
+                        tween(
+                            DynamicIslandMotion.SurfaceFadeMillis,
+                            easing = DynamicIslandMotion.EaseInOut,
+                        ),
+                    )
+                }
+            }
             snapshotFlow {
                     val frame = geometry.bounds
                     (frame.center - currentOrigin.center).getDistance() < returnDistance &&
@@ -423,7 +450,7 @@ internal fun IslandPopupMorph(
                                     spread,
                                 )
                         ) {
-                            drawPath(neck, Color.Black)
+                            drawPath(neck, Color.Black, alpha = surfaceFade.value)
                         }
                     }
                 }
@@ -535,7 +562,9 @@ internal fun IslandPopupMorph(
         val windowHeight = constraints.constrainHeight(top + card.height + secondaryHeight + margin)
         rootSize = IntSize(constraints.maxWidth, windowHeight)
         layout(rootSize.width, windowHeight) {
-            background.place(frame.left.roundToInt(), frame.top.roundToInt())
+            background.placeWithLayer(frame.left.roundToInt(), frame.top.roundToInt()) {
+                alpha = surfaceFade.value
+            }
             card.place((frame.center.x - card.width / 2f).roundToInt(), frame.top.roundToInt())
             secondary.place(secondaryLeft.roundToInt(), (frame.bottom + gap).roundToInt())
         }

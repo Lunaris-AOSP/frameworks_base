@@ -19,7 +19,12 @@ package com.android.systemui.statusbar.featurepods.popups.ui.compose
 import android.os.BatteryManager
 import android.widget.TextClock
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -70,6 +75,8 @@ import com.android.systemui.common.ui.compose.Icon
 import com.android.systemui.qs.composefragment.cosStatusGlow
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentModel
+import com.android.systemui.statusbar.featurepods.popups.ui.model.SystemEventKind
+import com.android.systemui.statusbar.featurepods.screenrecord.shared.model.ScreenRecordPopupModel
 
 @Composable
 internal fun LunarisBarChip(
@@ -206,6 +213,19 @@ private fun LunarisBarChipContent(
     }
     val ownMedia = media != null && settings.enabled("media_mini_custom", false)
     val event = viewModel.popupContent as? PopupContentModel.SystemEvent
+    val recording = (viewModel.popupContent as? PopupContentModel.ScreenRecord)?.model
+    val statusIconTint =
+        when {
+            recording != null -> IslandAccents.Recording
+            event?.kind == SystemEventKind.Charging -> IslandAccents.Battery
+            else -> null
+        }
+    val pulseIcon =
+        !settings.isReducedMotion &&
+            !viewModel.isPopupShown &&
+            !popupAttached &&
+            (recording is ScreenRecordPopupModel.Recording ||
+                (event?.kind == SystemEventKind.Charging && event.pulse))
     val styledFeature = viewModel.popupContent.lunarisBarFeature(viewModel.chipId) != null
     val ownLeft = ownMedia || (styledFeature && settings.integer("left_palette", -1, -1, 20) >= 0)
     val ownRight = ownMedia || (styledFeature && settings.integer("right_palette", -1, -1, 20) >= 0)
@@ -252,6 +272,7 @@ private fun LunarisBarChipContent(
         (if (resting) settings.integer("camera_height", 24, 8, 64).dp else 32.dp) *
             heightScale *
             scale
+    val iconSize = (if (companion) 18.dp else 20.dp) * heightScale * scale
     LunarisBarSurface(
         mini = true,
         resting = resting,
@@ -375,20 +396,17 @@ private fun LunarisBarChipContent(
                     androidx.compose.material3.Icon(
                         lunarisBarUtilityGlyph(utility.type),
                         null,
-                        modifier =
-                            Modifier.size(
-                                    if (companion) 22.dp * heightScale * scale
-                                    else dimensions - 6.dp * scale
-                                )
-                                .clip(shape),
+                        modifier = Modifier.size(iconSize).clip(shape),
                         tint = colors.miniContent,
                     )
                 } else if (companion && artwork != null) {
                     Icon(
                         artwork,
-                        modifier = Modifier.size(22.dp * heightScale * scale).clip(shape),
+                        modifier =
+                            Modifier.size(iconSize).lunarisBarStatusPulse(pulseIcon).clip(shape),
                         tint =
-                            if (media != null || viewModel.icons.firstOrNull()?.tint == false)
+                            if (statusIconTint != null) statusIconTint
+                            else if (media != null || viewModel.icons.firstOrNull()?.tint == false)
                                 Color.Unspecified
                             else colors.miniContent,
                     )
@@ -401,7 +419,8 @@ private fun LunarisBarChipContent(
                     Icon(
                         artwork,
                         modifier =
-                            Modifier.size(dimensions - 6.dp * scale)
+                            Modifier.size(iconSize)
+                                .lunarisBarStatusPulse(pulseIcon)
                                 .graphicsLayer { rotationZ = if (media != null) rotation else 0f }
                                 .clip(shape)
                                 .then(
@@ -420,7 +439,8 @@ private fun LunarisBarChipContent(
                                     else Modifier
                                 ),
                         tint =
-                            if (media != null || viewModel.icons.firstOrNull()?.tint == false)
+                            if (statusIconTint != null) statusIconTint
+                            else if (media != null || viewModel.icons.firstOrNull()?.tint == false)
                                 androidx.compose.ui.graphics.Color.Unspecified
                             else if (ownLeft) leftPalette.second else colors.miniContent,
                     )
@@ -444,7 +464,7 @@ private fun LunarisBarChipContent(
                         Icon(
                             appIcon,
                             modifier =
-                                Modifier.size(20.dp * scale)
+                                Modifier.size(iconSize)
                                     .clip(rightShape)
                                     .then(
                                         if (ownMedia) Modifier.background(rightPalette.first)
@@ -476,14 +496,16 @@ private fun LunarisBarChipContent(
                         Icon(
                             it,
                             modifier =
-                                Modifier.size(24.dp)
+                                Modifier.size(iconSize)
+                                    .lunarisBarStatusPulse(pulseIcon)
                                     .clip(rightShape)
                                     .then(
                                         if (ownRight) Modifier.background(rightPalette.first)
                                         else Modifier
                                     ),
                             tint =
-                                if (it is IconModel.Loaded) Color.Unspecified
+                                if (statusIconTint != null) statusIconTint
+                                else if (it is IconModel.Loaded) Color.Unspecified
                                 else if (ownRight) rightPalette.second else colors.miniContent,
                         )
                     }
@@ -569,6 +591,24 @@ private fun LunarisBarChipContent(
             }
         }
     }
+}
+
+@Composable
+private fun Modifier.lunarisBarStatusPulse(enabled: Boolean): Modifier {
+    if (!enabled) return this
+    val transition = rememberInfiniteTransition(label = "lunarisbar_status_icon")
+    val pulseAlpha by
+        transition.animateFloat(
+            initialValue = 1f,
+            targetValue = 0.45f,
+            animationSpec =
+                infiniteRepeatable(
+                    tween(800, easing = FastOutSlowInEasing),
+                    RepeatMode.Reverse,
+                ),
+            label = "lunarisbar_status_icon_alpha",
+        )
+    return graphicsLayer { alpha = pulseAlpha }
 }
 
 private fun PopupChipModel.Shown.statusGlowKey(): Any =
