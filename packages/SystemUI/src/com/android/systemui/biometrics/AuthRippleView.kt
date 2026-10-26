@@ -24,7 +24,9 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Point
+import android.os.SystemClock
 import android.util.AttributeSet
+import android.util.Log
 import android.view.View
 import android.view.animation.PathInterpolator
 import android.widget.FrameLayout
@@ -32,6 +34,7 @@ import com.android.lunaris.waterripple.WaterRippleView
 import com.android.internal.graphics.ColorUtils
 import com.android.app.animation.Interpolators
 import com.android.settingslib.Utils
+import com.android.systemui.surfaceeffects.ripple.GlowRippleShader
 import com.android.systemui.surfaceeffects.ripple.RippleShader
 
 private const val RIPPLE_SPARKLE_STRENGTH: Float = 0.7f
@@ -54,6 +57,7 @@ class AuthRippleView(context: Context, attrs: AttributeSet?) : FrameLayout(conte
 
     private var drawDwell: Boolean = false
     private var drawRipple: Boolean = false
+    private var drawGlow: Boolean = false
 
     private var lockScreenColorVal = Color.WHITE
     private val fadeDuration = 83L
@@ -62,6 +66,8 @@ class AuthRippleView(context: Context, attrs: AttributeSet?) : FrameLayout(conte
     private val dwellPaint = Paint()
     private val rippleShader = RippleShader()
     private val ripplePaint = Paint()
+    private var glowShader: GlowRippleShader? = null
+    private val glowPaint = Paint()
     private var unlockedRippleAnimator: Animator? = null
     private var waterRipple: WaterRippleView? = null
     private var unlockCompletion: Runnable? = null
@@ -212,7 +218,8 @@ class AuthRippleView(context: Context, attrs: AttributeSet?) : FrameLayout(conte
      * Plays a ripple animation that grows to the dwellRadius with distortion.
      */
     fun startDwellRipple(isDozing: Boolean) {
-        if (unlockedRippleAnimator?.isRunning == true || dwellPulseOutAnimator?.isRunning == true) {
+        if (waterRipple != null || drawGlow || unlockedRippleAnimator?.isRunning == true ||
+                dwellPulseOutAnimator?.isRunning == true) {
             return
         }
 
@@ -306,6 +313,63 @@ class AuthRippleView(context: Context, attrs: AttributeSet?) : FrameLayout(conte
         )
     }
 
+    fun startGlowUnlockedRipple(
+        onAnimationEnd: Runnable?,
+        rainbow: Boolean = false,
+        highFrameRate: Boolean = false,
+    ) {
+        cancelUnlockedRipple()
+        unlockCompletion = onAnimationEnd
+        if (!ValueAnimator.areAnimatorsEnabled()) {
+            finishUnlockedRipple()
+            return
+        }
+        if (!isHardwareAccelerated) {
+            startPlatformUnlockedRipple()
+            return
+        }
+        val shader = runCatching {
+            (glowShader ?: GlowRippleShader().also { glowShader = it }).apply {
+                setRainbow(rainbow)
+                setProgress(0f)
+            }
+        }.onFailure {
+            Log.w(AuthRippleController.TAG, "Unable to create unlock glow; using default ripple", it)
+        }.getOrNull()
+        if (shader == null) {
+            startPlatformUnlockedRipple()
+            return
+        }
+        glowPaint.shader = shader
+        setRequestedFrameRate(if (highFrameRate) View.REQUESTED_FRAME_RATE_CATEGORY_HIGH else 60f)
+        var lastFrame = -1L
+        unlockedRippleAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = GlowRippleShader.DURATION_MS
+            interpolator = Interpolators.LINEAR
+            addUpdateListener { animator ->
+                val frame = SystemClock.uptimeMillis() * 60L / 1000L
+                if (highFrameRate || frame != lastFrame ||
+                        animator.animatedFraction == 1f) {
+                    lastFrame = frame
+                    shader.setProgress(animator.animatedValue as Float)
+                    invalidate()
+                }
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationStart(animation: Animator) {
+                    drawGlow = true
+                    visibility = VISIBLE
+                }
+
+                override fun onAnimationEnd(animation: Animator) {
+                    unlockedRippleAnimator = null
+                    finishUnlockedRipple()
+                }
+            })
+        }
+        unlockedRippleAnimator?.start()
+    }
+
     private fun removeWaterRipple() {
         val effect = waterRipple ?: return
         waterRipple = null
@@ -315,6 +379,9 @@ class AuthRippleView(context: Context, attrs: AttributeSet?) : FrameLayout(conte
 
     private fun finishUnlockedRipple() {
         removeWaterRipple()
+        if (drawGlow) setRequestedFrameRate(View.REQUESTED_FRAME_RATE_CATEGORY_DEFAULT)
+        drawGlow = false
+        glowPaint.shader = null
         drawRipple = false
         visibility = GONE
         val completion = unlockCompletion
@@ -413,6 +480,12 @@ class AuthRippleView(context: Context, attrs: AttributeSet?) : FrameLayout(conte
         if (drawRipple) {
             canvas?.drawCircle(origin.x.toFloat(), origin.y.toFloat(),
                     rippleShader.rippleSize.currentWidth, ripplePaint)
+        }
+
+        if (drawGlow && canvas.isHardwareAccelerated) {
+            glowShader?.setGeometry(width, height, origin.x.toFloat(), origin.y.toFloat(),
+                resources.displayMetrics.density)
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), glowPaint)
         }
     }
 }

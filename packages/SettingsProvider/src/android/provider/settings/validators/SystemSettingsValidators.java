@@ -211,7 +211,7 @@ public class SystemSettingsValidators {
         VALIDATORS.put(System.LOCKSCREEN_SOUNDS_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(System.LOCKSCREEN_WATER_RIPPLE_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(System.LOCKSCREEN_UNLOCK_ANIMATION,
-                new DiscreteValueValidator(new String[] {"0", "1", "2"}));
+                new DiscreteValueValidator(new String[] {"0", "1", "2", "3", "4"}));
         VALIDATORS.put(System.LOCKSCREEN_UNLOCK_EFFECT_HFR, BOOLEAN_VALIDATOR);
         VALIDATORS.put(System.LOCKSCREEN_WATER_RIPPLE_FULLSCREEN, BOOLEAN_VALIDATOR);
         VALIDATORS.put(System.WIRELESS_CHARGING_RIPPLE_SHAPE,

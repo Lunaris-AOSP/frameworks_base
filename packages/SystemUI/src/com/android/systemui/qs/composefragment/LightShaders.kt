@@ -5,6 +5,8 @@
 
 package com.android.systemui.qs.composefragment
 
+import com.android.systemui.surfaceeffects.shaderutil.GlowShaderLibrary
+
 internal object LightShaders {
     const val ROUNDED_BOX =
         """
@@ -45,6 +47,8 @@ internal object LightShaders {
 
     const val PERIMETER_LIGHT =
         """
+        ${GlowShaderLibrary.SHADER_LIB}
+
         float2 perimeterLight(float2 pos, float2 extent, float d, float turn, float4 bands,
                 float4 spread, float curve, float curveMix) {
             float perimeter = (extent.x + extent.y) * 2.0;
@@ -65,8 +69,8 @@ internal object LightShaders {
             float nearBand = smoothstep(-bands.y, -bands.x, d);
             float farBand = smoothstep(-bands.w, -bands.z, d);
             if (curveMix > 0.001) {
-                nearBand = mix(nearBand, pow(nearBand, curve), curveMix);
-                farBand = mix(farBand, pow(farBand, curve), curveMix);
+                nearBand = curvedGlowBand(nearBand, curve, curveMix);
+                farBand = curvedGlowBand(farBand, curve, curveMix);
             }
             return float2(near * nearBand, far * farBand);
         }

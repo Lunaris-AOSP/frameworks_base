@@ -7389,7 +7389,8 @@ public final class Settings {
                 "lockscreen_water_ripple_enabled";
 
         /**
-         * Fingerprint unlock animation: 0 = platform (default), 1 = water, 2 = watercolor.
+         * Fingerprint unlock animation: 0 = platform (default), 1 = water, 2 = watercolor,
+         * 3 = glow ripple wave, 4 = rainbow glow with micro particles.
          * If unset, SystemUI honors the legacy LOCKSCREEN_WATER_RIPPLE_ENABLED preference.
          * ENABLE_RIPPLE_EFFECT remains the master switch.
          * @hide
@@ -7397,7 +7398,7 @@ public final class Settings {
         public static final String LOCKSCREEN_UNLOCK_ANIMATION = "lockscreen_unlock_animation";
 
         /**
-         * Animate water and watercolor at the display cadence. Default is 0 (60 Hz physics).
+         * Animate custom unlock effects at the display cadence. Default is 0 (60 Hz).
          * @hide
          */
         public static final String LOCKSCREEN_UNLOCK_EFFECT_HFR = "lockscreen_unlock_effect_hfr";

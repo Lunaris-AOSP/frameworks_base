@@ -33,6 +33,7 @@ import com.android.lunaris.waterripple.WaterRippleView
 import com.android.keyguard.KeyguardUpdateMonitor
 import com.android.keyguard.KeyguardUpdateMonitorCallback
 import com.android.keyguard.logging.KeyguardLogger
+import com.android.systemui.surfaceeffects.ripple.GlowRippleShader
 import com.android.settingslib.Utils
 import com.android.systemui.CoreStartable
 import com.android.systemui.biometrics.data.repository.FacePropertyRepository
@@ -116,7 +117,7 @@ constructor(
             val selected = Settings.System.getIntForUser(context.contentResolver,
                 Settings.System.LOCKSCREEN_UNLOCK_ANIMATION, if (legacy == 1) 1 else 0,
                 UserHandle.USER_CURRENT)
-            return if (selected in 0..2) selected else 0
+            return if (selected in 0..GlowRippleShader.EFFECT_RAINBOW_GLOW) selected else 0
         }
 
     private val isUnlockEffectHfr: Boolean
@@ -217,7 +218,7 @@ constructor(
         }
     }
 
-    private fun showUnlockedRipple(animation: Int = 0) {
+    private fun showUnlockedRipple(animation: Int = 0, preview: Boolean = false) {
         if (!isRippleEnabled) return
 
         // Complete the previous owner before acquiring the shade for this animation.
@@ -226,7 +227,7 @@ constructor(
 
         // This code path is not used if the KeyguardTransitionRepository is managing the light
         // reveal scrim.
-        if (!ambientAod()) {
+        if (!preview && !ambientAod()) {
             if (statusBarStateController.isDozing || biometricUnlockController.isWakeAndUnlock) {
                 circleReveal?.let {
                     lightRevealScrim.revealAmount = 0f
@@ -243,6 +244,11 @@ constructor(
                 animation == WaterRippleView.EFFECT_WATERCOLOR) {
             mView.startWaterUnlockedRipple(onEnd, animation,
                 isUnlockEffectHfr, isWaterRippleFullscreen)
+        } else if (animation == GlowRippleShader.EFFECT_GLOW ||
+                animation == GlowRippleShader.EFFECT_RAINBOW_GLOW) {
+            mView.startGlowUnlockedRipple(onEnd,
+                rainbow = animation == GlowRippleShader.EFFECT_RAINBOW_GLOW,
+                highFrameRate = isUnlockEffectHfr)
         } else {
             mView.startUnlockedRipple(onEnd)
         }
@@ -467,6 +473,25 @@ constructor(
                         mView.setSensorLocation(Point(args[1].toInt(), args[2].toInt()))
                         showUnlockedRipple()
                     }
+                    "preview" -> {
+                        val style = args.getOrNull(1)?.toIntOrNull()
+                        val x = args.getOrNull(2)?.toIntOrNull()
+                        val y = args.getOrNull(3)?.toIntOrNull()
+                        if ((args.size != 2 && args.size != 4) || style == null ||
+                                style !in 0..GlowRippleShader.EFFECT_RAINBOW_GLOW ||
+                                (args.size == 4 && (x == null || y == null))) {
+                            invalidCommand(pw)
+                            return
+                        }
+                        updateSensorLocation()
+                        val location = if (x != null && y != null) Point(x, y)
+                            else fingerprintSensorLocation
+                                ?: Point(displayMetrics.widthPixels / 2,
+                                    displayMetrics.heightPixels * 4 / 5)
+                        mView.setSensorLocation(location)
+                        pw.println("preview style=$style sensorLocation=$location")
+                        showUnlockedRipple(style, preview = true)
+                    }
                     else -> invalidCommand(pw)
                 }
             }
@@ -479,6 +504,8 @@ constructor(
             pw.println("  fingerprint")
             pw.println("  face")
             pw.println("  custom <x-location: int> <y-location: int>")
+            pw.println("  preview <style: 0..4> [x-location: int y-location: int]")
+            pw.println("    0=default, 1=water, 2=watercolor, 3=glow wave, 4=rainbow glow")
         }
 
         private fun invalidCommand(pw: PrintWriter) {
