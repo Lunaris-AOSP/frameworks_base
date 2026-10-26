@@ -750,7 +750,8 @@ private fun NowPlayingSeekBar(
 
         if (
             state.seekBarStyle == MediaSeekBarStyle.GLOWING ||
-                state.seekBarStyle == MediaSeekBarStyle.GRADIENT_WAVE
+                state.seekBarStyle == MediaSeekBarStyle.GRADIENT_WAVE ||
+                state.seekBarStyle == MediaSeekBarStyle.COS
         ) {
             StyledMediaSeekBar(
                 style = state.seekBarStyle,

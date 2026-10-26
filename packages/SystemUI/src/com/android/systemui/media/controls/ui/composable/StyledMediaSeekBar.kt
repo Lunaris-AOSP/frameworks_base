@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 import com.android.systemui.media.controls.ui.drawable.SquigglyProgress
+import com.android.systemui.media.controls.ui.view.CosSeekBar
 import com.android.systemui.media.controls.ui.view.GlowingSeekBar
 import com.android.systemui.media.controls.ui.view.GradientWaveSeekBar
 import com.android.systemui.media.controls.ui.view.WaveformSeekBar
@@ -63,6 +64,7 @@ fun StyledMediaSeekBar(
                     when (style) {
                         MediaSeekBarStyle.GRADIENT_WAVE -> GradientWaveSeekBar(context)
                         MediaSeekBarStyle.GLOWING -> GlowingSeekBar(context)
+                        MediaSeekBarStyle.COS -> CosSeekBar(context)
                         MediaSeekBarStyle.WAVEFORM ->
                             WaveformSeekBar(context).apply {
                                 followsMediaColors = false
@@ -121,6 +123,7 @@ fun StyledMediaSeekBar(
                 contentColor?.let { color ->
                     when (bar) {
                         is GlowingSeekBar -> bar.setBarColor(color)
+                        is CosSeekBar -> bar.setBarColor(color)
                         is GradientWaveSeekBar -> bar.setTrackColor(color)
                         is WaveformSeekBar -> { bar.setWaveformColor(color); bar.setThumbColor(color) }
                         else -> {
@@ -146,6 +149,11 @@ fun StyledMediaSeekBar(
                         bar.isScrubbing = isScrubbing || isTrackingTouch
                         bar.setPlaybackState(isPlaying)
                     }
+                    is CosSeekBar -> {
+                        bar.setArtwork(artwork)
+                        bar.isScrubbing = isScrubbing || isTrackingTouch
+                        bar.setPlaybackState(isPlaying)
+                    }
                     is WaveformSeekBar -> {
                         if (isPlaying && !isScrubbing && !isTrackingTouch) {
                             bar.startWaveAnimation()
@@ -161,6 +169,7 @@ fun StyledMediaSeekBar(
                 bar.setOnSeekBarChangeListener(null)
                 (bar as? GradientWaveSeekBar)?.setPlaybackState(false, animate = false)
                 (bar as? GlowingSeekBar)?.setPlaybackState(false, animate = false)
+                (bar as? CosSeekBar)?.setPlaybackState(false, animate = false)
                 (bar as? WaveformSeekBar)?.stopWaveAnimation()
                 (bar.progressDrawable as? SquigglyProgress)?.animate = false
                 if (isTrackingTouch) {

@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.viewinterop.AndroidView
 import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 import com.android.systemui.media.controls.ui.drawable.SquigglyProgress
+import com.android.systemui.media.controls.ui.view.CosSeekBar
 import com.android.systemui.media.controls.ui.view.GlowingSeekBar
 import com.android.systemui.media.controls.ui.view.GradientWaveSeekBar
 import com.android.systemui.media.controls.ui.view.WaveformSeekBar
@@ -77,6 +78,7 @@ internal fun AndroidMediaSeekBar(
                     when (style) {
                         MediaSeekBarStyle.GRADIENT_WAVE -> GradientWaveSeekBar(context)
                         MediaSeekBarStyle.GLOWING -> GlowingSeekBar(context)
+                        MediaSeekBarStyle.COS -> CosSeekBar(context)
                         MediaSeekBarStyle.WAVEFORM ->
                             WaveformSeekBar(context).apply {
                                 followsMediaColors = false
@@ -193,6 +195,12 @@ internal fun AndroidMediaSeekBar(
                     this.isScrubbing = scrubbing
                     setPlaybackState(isPlaying, animate = animationsAllowed)
                 }
+                (seekBar as? CosSeekBar)?.apply {
+                    setBarColor(tint.defaultColor)
+                    setArtwork(artwork)
+                    this.isScrubbing = scrubbing
+                    setPlaybackState(isPlaying, animate = animationsAllowed)
+                }
                 (seekBar.progressDrawable as? SquigglyProgress)?.apply { this.animate = animate }
                 (seekBar as? WaveformSeekBar)?.apply {
                     if (animate) startWaveAnimation() else stopWaveAnimation()
@@ -205,6 +213,7 @@ internal fun AndroidMediaSeekBar(
                 (seekBar as? WaveformSeekBar)?.stopWaveAnimation()
                 (seekBar as? GradientWaveSeekBar)?.setPlaybackState(false, animate = false)
                 (seekBar as? GlowingSeekBar)?.setPlaybackState(false, animate = false)
+                (seekBar as? CosSeekBar)?.setPlaybackState(false, animate = false)
                 if (isTrackingTouch) {
                     seekBar.parent?.requestDisallowInterceptTouchEvent(false)
                     currentOnScrubFinished(CANCELLED_DRAG)

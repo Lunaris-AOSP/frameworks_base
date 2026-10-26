@@ -25,6 +25,7 @@ import com.android.app.animation.Interpolators
 import com.android.app.tracing.TraceStateLogger
 import com.android.internal.annotations.VisibleForTesting
 import com.android.systemui.media.controls.ui.drawable.SquigglyProgress
+import com.android.systemui.media.controls.ui.view.CosSeekBar
 import com.android.systemui.media.controls.ui.view.GlowingSeekBar
 import com.android.systemui.media.controls.ui.view.GradientWaveSeekBar
 import com.android.systemui.media.controls.ui.view.MediaViewHolder
@@ -117,6 +118,7 @@ open class SeekBarObserver(private val holder: MediaViewHolder) :
             waveformSeekBar?.stopWaveAnimation()
             (holder.seekBar as? GradientWaveSeekBar)?.setPlaybackState(false, animate = false)
             (holder.seekBar as? GlowingSeekBar)?.setPlaybackState(false, animate = false)
+            (holder.seekBar as? CosSeekBar)?.setPlaybackState(false, animate = false)
             
             return
         }
@@ -135,6 +137,10 @@ open class SeekBarObserver(private val holder: MediaViewHolder) :
             setPlaybackState(data.playing, animate = animationEnabled && data.listening)
         }
         (holder.seekBar as? GlowingSeekBar)?.apply {
+            isScrubbing = data.scrubbing
+            setPlaybackState(data.playing, animate = animationEnabled && data.listening)
+        }
+        (holder.seekBar as? CosSeekBar)?.apply {
             isScrubbing = data.scrubbing
             setPlaybackState(data.playing, animate = animationEnabled && data.listening)
         }

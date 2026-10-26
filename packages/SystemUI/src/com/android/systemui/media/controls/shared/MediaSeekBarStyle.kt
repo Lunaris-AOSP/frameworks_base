@@ -33,7 +33,8 @@ enum class MediaSeekBarStyle(val value: Int) {
     DEFAULT(0),
     WAVEFORM(1),
     GLOWING(2),
-    GRADIENT_WAVE(3);
+    GRADIENT_WAVE(3),
+    COS(4);
 
     companion object {
         fun fromValue(value: Int): MediaSeekBarStyle =

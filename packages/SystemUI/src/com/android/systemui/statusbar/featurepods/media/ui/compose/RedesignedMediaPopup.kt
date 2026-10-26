@@ -36,6 +36,7 @@ import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 import com.android.systemui.media.controls.shared.model.MediaAction
 import com.android.systemui.media.controls.ui.drawable.SquigglyProgress
+import com.android.systemui.media.controls.ui.view.CosSeekBar
 import com.android.systemui.media.controls.ui.view.GlowingSeekBar
 import com.android.systemui.media.controls.ui.view.GradientWaveSeekBar
 import com.android.systemui.media.controls.ui.view.WaveformSeekBar
@@ -116,6 +117,11 @@ fun RedesignedMediaPopup(
                         bar.isScrubbing = scrubbing
                         bar.setPlaybackState(playing)
                     }
+                    is CosSeekBar -> {
+                        bar.setArtwork(artwork)
+                        bar.isScrubbing = scrubbing
+                        bar.setPlaybackState(playing)
+                    }
                     is WaveformSeekBar -> {
                         if (playing && !bar.isPlaying) bar.startWaveAnimation()
                         else if (!playing && bar.isPlaying) bar.stopWaveAnimation()
@@ -161,6 +167,7 @@ private fun createSeekBar(context: Context, style: MediaSeekBarStyle): SeekBar =
     when (style) {
         MediaSeekBarStyle.GRADIENT_WAVE -> GradientWaveSeekBar(context)
         MediaSeekBarStyle.GLOWING -> GlowingSeekBar(context)
+        MediaSeekBarStyle.COS -> CosSeekBar(context)
         MediaSeekBarStyle.WAVEFORM ->
             WaveformSeekBar(context).apply {
                 followsMediaColors = false

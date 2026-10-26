@@ -61,7 +61,8 @@ internal fun MediaSeekBar(
     val height =
         if (
             seekBarStyle == MediaSeekBarStyle.GLOWING ||
-                seekBarStyle == MediaSeekBarStyle.GRADIENT_WAVE
+                seekBarStyle == MediaSeekBarStyle.GRADIENT_WAVE ||
+                seekBarStyle == MediaSeekBarStyle.COS
         ) 34.dp else if (dense) 20.dp else 32.dp
     val progress = session?.let(viewModel::progress) ?: 0f
     val durationMs = session?.durationMs ?: 0L

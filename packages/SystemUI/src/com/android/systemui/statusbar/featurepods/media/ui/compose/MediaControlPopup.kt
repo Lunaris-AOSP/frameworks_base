@@ -236,7 +236,8 @@ private fun MediaProgressSection(
     val seekBarHeight =
         if (
             seekBarStyle == MediaSeekBarStyle.GLOWING ||
-                seekBarStyle == MediaSeekBarStyle.GRADIENT_WAVE
+                seekBarStyle == MediaSeekBarStyle.GRADIENT_WAVE ||
+                seekBarStyle == MediaSeekBarStyle.COS
         ) 34.dp else 28.dp
     var isScrubbing by remember { mutableStateOf(false) }
     var displayedPositionMs by remember { mutableStateOf(positionMs.coerceIn(0L, durationMs)) }
@@ -315,7 +316,8 @@ private fun MediaProgressSection(
 
             if (
                 seekBarStyle == MediaSeekBarStyle.GLOWING ||
-                    seekBarStyle == MediaSeekBarStyle.GRADIENT_WAVE
+                    seekBarStyle == MediaSeekBarStyle.GRADIENT_WAVE ||
+                    seekBarStyle == MediaSeekBarStyle.COS
             ) {
                 StyledMediaSeekBar(
                     style = seekBarStyle,

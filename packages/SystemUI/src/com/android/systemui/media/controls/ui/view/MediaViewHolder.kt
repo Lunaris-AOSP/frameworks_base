@@ -84,6 +84,7 @@ class MediaViewHolder constructor(itemView: View) {
             field = value
             (seekBar as? GradientWaveSeekBar)?.setArtwork(value)
             (seekBar as? GlowingSeekBar)?.setArtwork(value)
+            (seekBar as? CosSeekBar)?.setArtwork(value)
         }
     // These views are only shown while the user is actively scrubbing
     val scrubbingElapsedTimeView: TextView =
@@ -118,6 +119,7 @@ class MediaViewHolder constructor(itemView: View) {
             is WaveformSeekBar -> MediaSeekBarStyle.WAVEFORM
             is GradientWaveSeekBar -> MediaSeekBarStyle.GRADIENT_WAVE
             is GlowingSeekBar -> MediaSeekBarStyle.GLOWING
+            is CosSeekBar -> MediaSeekBarStyle.COS
             else -> MediaSeekBarStyle.DEFAULT
         }
         if (currentStyle == style) return false
@@ -128,6 +130,7 @@ class MediaViewHolder constructor(itemView: View) {
             MediaSeekBarStyle.WAVEFORM -> WaveformSeekBar(player.context)
             MediaSeekBarStyle.GRADIENT_WAVE -> GradientWaveSeekBar(player.context)
             MediaSeekBarStyle.GLOWING -> GlowingSeekBar(player.context)
+            MediaSeekBarStyle.COS -> CosSeekBar(player.context)
             MediaSeekBarStyle.DEFAULT -> SeekBar(player.context, null, 0, R.style.MediaPlayer_ProgressBar)
         }.apply {
             id = oldBar.id
@@ -145,6 +148,7 @@ class MediaViewHolder constructor(itemView: View) {
             thumbTintList = oldBar.thumbTintList
             if (this is GradientWaveSeekBar) setArtwork(seekBarArtwork)
             if (this is GlowingSeekBar) setArtwork(seekBarArtwork)
+            if (this is CosSeekBar) setArtwork(seekBarArtwork)
             if (this is WaveformSeekBar) {
                 progressTintList?.defaultColor?.let { setWaveformColor(it) }
                 thumbTintList?.defaultColor?.let { setThumbColor(it) }

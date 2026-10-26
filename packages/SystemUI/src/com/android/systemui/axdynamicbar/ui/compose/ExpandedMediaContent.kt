@@ -396,7 +396,8 @@ private fun MediaSeekBar(
     val seekBarHeight =
         if (
             seekBarStyle == MediaSeekBarStyle.GLOWING ||
-                seekBarStyle == MediaSeekBarStyle.GRADIENT_WAVE
+                seekBarStyle == MediaSeekBarStyle.GRADIENT_WAVE ||
+                seekBarStyle == MediaSeekBarStyle.COS
         ) 34.dp else SeekBarHeight
     val isPlaying = event.isPlaying
     val durationMs = event.duration
@@ -486,7 +487,8 @@ private fun MediaSeekBar(
         ) {
             if (
                 seekBarStyle == MediaSeekBarStyle.GLOWING ||
-                    seekBarStyle == MediaSeekBarStyle.GRADIENT_WAVE
+                    seekBarStyle == MediaSeekBarStyle.GRADIENT_WAVE ||
+                    seekBarStyle == MediaSeekBarStyle.COS
             ) {
                 StyledMediaSeekBar(
                     style = seekBarStyle,
