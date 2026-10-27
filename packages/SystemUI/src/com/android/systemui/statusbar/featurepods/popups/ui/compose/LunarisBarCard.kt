@@ -57,10 +57,15 @@ import com.android.systemui.common.ui.compose.Icon as StatusBarIcon
 @Composable
 internal fun LunarisBarCard(
     modifier: Modifier = Modifier,
+    compact: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
-        modifier.widthIn(max = 480.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
+        modifier
+            .widthIn(max = if (compact) 240.dp else 480.dp)
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(if (compact) 12.dp else 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         content = content,
     )
@@ -73,17 +78,18 @@ internal fun LunarisBarCardHeader(
     icon: IconModel? = null,
     glyph: ImageVector? = null,
     appName: String? = null,
+    compact: Boolean = false,
     trailing: @Composable () -> Unit = {},
 ) {
     val settings = LocalLunarisBarState.current.settings
     val colors = LocalLunarisBarColors.current
     Row(
         Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (compact) 10.dp else 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(48.dp)
+            Modifier.size(if (compact) 40.dp else 48.dp)
                 .clip(lunarisBarIconShape(settings.integer("card_icon_shape", 2, 0, 31)))
                 .background(MaterialTheme.colorScheme.secondaryContainer),
             contentAlignment = Alignment.Center,
@@ -92,10 +98,17 @@ internal fun LunarisBarCardHeader(
                 StatusBarIcon(
                     icon,
                     tint = if (icon is IconModel.Loaded) Color.Unspecified else colors.accent,
-                    modifier = if (icon is IconModel.Loaded) Modifier.fillMaxSize() else Modifier.size(24.dp),
+                    modifier =
+                        if (icon is IconModel.Loaded) Modifier.fillMaxSize()
+                        else Modifier.size(if (compact) 20.dp else 24.dp),
                 )
             } else if (glyph != null) {
-                Icon(glyph, null, Modifier.size(24.dp), tint = colors.accent)
+                Icon(
+                    glyph,
+                    null,
+                    Modifier.size(if (compact) 20.dp else 24.dp),
+                    tint = colors.accent,
+                )
             }
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -103,8 +116,16 @@ internal fun LunarisBarCardHeader(
                 Text(appName, color = colors.accent, style = MaterialTheme.typography.labelSmall,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
-                color = colors.content, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(
+                title,
+                style =
+                    if (compact) MaterialTheme.typography.titleSmall
+                    else MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.content,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
             if (!subtitle.isNullOrBlank()) {
                 Text(subtitle, style = MaterialTheme.typography.bodySmall,
                     color = colors.content.copy(alpha = 0.72f), maxLines = 3,

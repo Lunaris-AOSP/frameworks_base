@@ -87,15 +87,19 @@ fun SystemEventPopup(model: PopupContentModel.SystemEvent, modifier: Modifier = 
     val message =
         model.kind == SystemEventKind.Notification || model.kind == SystemEventKind.Ongoing
     val bluetooth = model.kind == SystemEventKind.Bluetooth
+    val compact = model.kind == SystemEventKind.Unlock
     val showBattery = !bluetooth || settings.enabled("feature_bluetooth_show_battery", true)
-    LunarisBarCard(modifier) {
+    LunarisBarCard(modifier, compact = compact) {
         LunarisBarCardHeader(
             title = model.title,
             subtitle = model.text.takeUnless { message },
             icon = model.icon.takeUnless { bluetooth && model.image != null },
             glyph = model.kind.glyph,
             appName = model.appName,
+            compact = compact,
         )
+        // Unlock feedback only needs the header, with no empty action row below it.
+        if (compact) return@LunarisBarCard
         if (bluetooth) {
             val artwork = (model.image as? IconModel.Loaded)?.drawable
             if (artwork != null) {
@@ -138,9 +142,9 @@ fun SystemEventPopup(model: PopupContentModel.SystemEvent, modifier: Modifier = 
                     it,
                     tint = Color.Unspecified,
                     modifier =
-                        Modifier.fillMaxWidth()
-                            .heightIn(min = 100.dp, max = 180.dp)
-                            .clip(LunarisBarSquircle(24.dp)),
+                        Modifier.size(64.dp)
+                            .align(Alignment.CenterHorizontally)
+                            .clip(LunarisBarSquircle(12.dp)),
                 )
             }
         }
