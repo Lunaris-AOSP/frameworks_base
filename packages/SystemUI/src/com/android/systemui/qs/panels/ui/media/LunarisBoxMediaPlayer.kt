@@ -16,10 +16,6 @@
 
 package com.android.systemui.qs.panels.ui.media
 
-import android.graphics.Matrix
-import android.graphics.Path as AndroidPath
-import android.graphics.PathMeasure
-import android.graphics.RectF
 import android.text.format.DateUtils
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
@@ -49,11 +45,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon as MaterialIcon
-import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.WavyProgressIndicatorDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -64,9 +61,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.asComposePath
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -74,18 +68,16 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.graphics.shapes.toPath
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.compose.animation.Expandable as ExpandableContainer
 import com.android.compose.animation.rememberExpandableController
 import com.android.systemui.common.shared.model.Icon as IconModel
@@ -313,6 +305,7 @@ private fun BoxMediaControls(
     modifier: Modifier = Modifier,
 ) {
     val playing = session?.state == MediaSessionState.Playing
+    val isShadeInteracting by viewModel.isShadeInteracting.collectAsStateWithLifecycle()
     val accent by
         animateColorAsState(
             targetValue =
@@ -391,6 +384,7 @@ private fun BoxMediaControls(
                         description = stringResource(playPauseDescription(session)),
                         pressedScale = 0.86f,
                         progress = progress.takeIf { session != null },
+                        animateWaves = playing && interactive && !isShadeInteracting,
                         ringColor =
                             if (hasArtwork) Color.White else MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(ringSize),
@@ -426,6 +420,7 @@ private fun BoxMediaAction(
     description: String? = null,
     pressedScale: Float = 0.82f,
     progress: (() -> Float)? = null,
+    animateWaves: Boolean = false,
     ringColor: Color = tint,
 ) {
     if (action == MediaActionModel.ReserveSpace) {
@@ -454,7 +449,12 @@ private fun BoxMediaAction(
         contentAlignment = Alignment.Center,
     ) {
         if (progress != null) {
-            BoxMediaProgressRing(progress, ringColor, Modifier.fillMaxSize())
+            BoxMediaProgressRing(
+                progress = progress,
+                color = ringColor,
+                animateWaves = animateWaves,
+                modifier = Modifier.fillMaxSize(),
+            )
         }
         Box(
             modifier =
@@ -518,50 +518,21 @@ private fun BoxMediaTimestamps(session: MediaSessionModel, progress: () -> Float
 private fun BoxMediaProgressRing(
     progress: () -> Float,
     color: Color,
+    animateWaves: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val currentProgress = progress().coerceIn(0f, 1f)
     val animatedProgress =
         animateFloatAsState(
             targetValue = currentProgress,
-            animationSpec = tween(300),
+            animationSpec = WavyProgressIndicatorDefaults.ProgressAnimationSpec,
             label = "LunarisBoxMediaProgress",
         )
-    val cookiePath = remember { MaterialShapes.Cookie9Sided.toPath() }
-    val cookieBounds = remember(cookiePath) { RectF().also { cookiePath.computeBounds(it, true) } }
-    Box(
-        modifier
-            .semantics { progressBarRangeInfo = ProgressBarRangeInfo(currentProgress, 0f..1f) }
-            .drawWithCache {
-                val stroke = 2.8.dp.toPx()
-                val diameter = (size.minDimension - stroke).coerceAtLeast(0f)
-                val scale = diameter / maxOf(cookieBounds.width(), cookieBounds.height())
-                val matrix =
-                    Matrix().apply {
-                        postTranslate(-cookieBounds.centerX(), -cookieBounds.centerY())
-                        postScale(scale, scale)
-                        postTranslate(size.width / 2f, size.height / 2f)
-                    }
-                val path = AndroidPath(cookiePath).apply { transform(matrix) }
-                val outline = path.asComposePath()
-                val measure = PathMeasure(path, true)
-                val segment = AndroidPath()
-                val segmentPath = segment.asComposePath()
-                val style = Stroke(width = stroke, cap = StrokeCap.Round)
-                onDrawBehind {
-                    drawPath(outline, color.copy(alpha = 0.25f), style = style)
-                    segment.rewind()
-                    if (
-                        measure.getSegment(
-                            0f,
-                            measure.length * animatedProgress.value,
-                            segment,
-                            true,
-                        )
-                    ) {
-                        drawPath(segmentPath, color, style = style)
-                    }
-                }
-            }
+    CircularWavyProgressIndicator(
+        progress = { animatedProgress.value },
+        color = color,
+        trackColor = color.copy(alpha = 0.25f),
+        waveSpeed = if (animateWaves) WavyProgressIndicatorDefaults.CircularWavelength else 0.dp,
+        modifier = modifier,
     )
 }
