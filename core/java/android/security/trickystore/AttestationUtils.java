@@ -54,6 +54,36 @@ public final class AttestationUtils {
     }
 
     /**
+     * Derives a fallback verified-boot hash from the active keybox's issuer certificate, used
+     * ahead of the random fallback so that, when the vbmeta prop is missing, nothing persisted
+     * exists and the TEE is broken, the RootOfTrust hash is still deterministic for a given
+     * keybox instead of changing on every boot. Domain-separated from the boot KEY digest
+     * (a plain SHA-256 of the same cert) so the two fields don't collide.
+     * Returns null if no keybox is loaded.
+     */
+    private static byte[] deriveBootHashFromKeybox() {
+        try {
+            KeyBoxManager keyBoxManager = TrickyStoreService.getInstance().getKeyBoxManager();
+            if (keyBoxManager == null || !keyBoxManager.hasKeyboxes()) {
+                return null;
+            }
+            KeyBoxManager.KeyBox keybox = keyBoxManager.getKeybox("EC");
+            if (keybox == null) {
+                keybox = keyBoxManager.getKeybox("RSA");
+            }
+            if (keybox == null || keybox.certificates == null || keybox.certificates.isEmpty()) {
+                return null;
+            }
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            digest.update("boothash".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return digest.digest(keybox.certificates.get(0).getEncoded());
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to derive boot hash from keybox", e);
+            return null;
+        }
+    }
+
+    /**
      * Derives a fallback verified-boot key from the active keybox's issuer certificate,
      * so that when the real vbmeta property is unavailable the attested key is at least
      * deterministic and tied to whatever keybox is actually signing the chain, rather than
@@ -113,7 +143,10 @@ public final class AttestationUtils {
                 }
             }
             if (sBootHash == null) {
-                Log.w(TAG, "Failed to get boot hash from prop, disk, and TEE, using random bytes");
+                sBootHash = deriveBootHashFromKeybox();
+            }
+            if (sBootHash == null) {
+                Log.w(TAG, "Failed to get boot hash from prop, disk, TEE, and keybox, using random bytes");
                 sBootHash = generateRandomBytes(32);
                 writePersisted(HBK_FILE, sBootHash);
             }
@@ -143,7 +176,13 @@ public final class AttestationUtils {
             Log.i(TAG, "initBootHash: TEE extraction successful, setting prop");
             setVbmetaDigestProp(bytesToHex(hash));
         } else {
-            Log.e(TAG, "initBootHash: Failed to extract boot hash from TEE");
+            hash = deriveBootHashFromKeybox();
+            if (hash != null) {
+                sBootHash = hash;
+                Log.w(TAG, "initBootHash: TEE extraction failed, using keybox-derived boot hash");
+            } else {
+                Log.e(TAG, "initBootHash: Failed to extract boot hash from TEE");
+            }
         }
     }
 

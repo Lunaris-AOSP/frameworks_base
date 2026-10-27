@@ -192,6 +192,96 @@ public final class PixelDeviceRepository {
     // from GENERATION_ORDER, which still drives the Pixel props spoof for other apps.
     public static final String PIF_DEFAULT_CODENAME = "bluejay";
 
+    /** DEVICE_INITIAL_SDK_INT used when a device's launch SDK isn't known. */
+    public static final String DEFAULT_INITIAL_SDK = "32";
+
+    /**
+     * SDK level a Pixel launched with, for DEVICE_INITIAL_SDK_INT and
+     * ro.product.first_api_level. Keeps the first API level consistent with the
+     * spoofed device instead of claiming the Pixel 6a's for every codename.
+     */
+    public static String getInitialSdkInt(String device) {
+        final String known = getKnownInitialSdkInt(device);
+        return known != null ? known : DEFAULT_INITIAL_SDK;
+    }
+
+    /**
+     * Launch SDK for the config's DEVICE_INITIAL_SDK_INT. A known codename always gets
+     * its table value, because a configured one can be stale for the profile it came
+     * with (a Pixel 10 Pro XL "mustang" config carrying the Pixel 6a's 32 fails the
+     * fingerprint cross-check). Only a codename missing from the table falls back to
+     * [configured], which may be null or empty if the config has none.
+     */
+    public static String resolveInitialSdkInt(String device, String configured) {
+        final String known = getKnownInitialSdkInt(device);
+        if (known != null) return known;
+        return configured == null || configured.trim().isEmpty() ? null : configured.trim();
+    }
+
+    /** Launch SDK of a codename in the table, or null for an unknown or missing one. */
+    private static String getKnownInitialSdkInt(String device) {
+        if (device == null) return null;
+        switch (device) {
+            case "oriole":
+            case "raven":
+                return "31";
+            case "bluejay":
+                return "32";
+            case "panther":
+            case "cheetah":
+            case "lynx":
+            case "felix":
+            case "tangorpro":
+                return "33";
+            case "shiba":
+            case "husky":
+            case "akita":
+            case "tokay":
+            case "caiman":
+            case "komodo":
+            case "comet":
+                return "34";
+            case "tegu":
+            case "stallion":
+                return "35";
+            case "frankel":
+            case "blazer":
+            case "mustang":
+            case "rango":
+                return "36";
+            case "cubs":
+            case "grizzly":
+            case "kodiak":
+            case "yogi":
+                return "37";
+            default:
+                return null;
+        }
+    }
+
+    /**
+     * Security patch ("YYYY-MM-DD") encoded in a Pixel build ID: CP3A.260905.009 is
+     * 2026-09-05. For configs that carry no SECURITY_PATCH, so the device's own patch
+     * date doesn't show next to a spoofed fingerprint. Null if [buildId] has no
+     * well-formed YYMMDD segment.
+     */
+    public static String securityPatchFromBuildId(String buildId) {
+        if (buildId == null) return null;
+        final int firstDot = buildId.indexOf('.');
+        final int secondDot = firstDot < 0 ? -1 : buildId.indexOf('.', firstDot + 1);
+        if (firstDot < 0 || secondDot != firstDot + 7) return null;
+        final String yymmdd = buildId.substring(firstDot + 1, secondDot);
+        for (int i = 0; i < yymmdd.length(); i++) {
+            final char c = yymmdd.charAt(i);
+            if (c < '0' || c > '9') return null;
+        }
+        final int month = Integer.parseInt(yymmdd.substring(2, 4));
+        final int day = Integer.parseInt(yymmdd.substring(4, 6));
+        if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+        return "20" + yymmdd.substring(0, 2) + "-" + yymmdd.substring(2, 4) + "-"
+                + yymmdd.substring(4, 6);
+    }
+
     /**
      * Returns the codename Play Integrity spoofing should use: the Pixel 6a when it
      * is in [available], otherwise the newest ranked phone per GENERATION_ORDER.

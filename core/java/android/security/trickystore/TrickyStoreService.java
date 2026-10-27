@@ -45,6 +45,8 @@ public class TrickyStoreService {
 
     private static TrickyStoreService sInstance;
 
+    private static final boolean ENABLE_REVOCATION_CHECK = true;
+
     private final Set<String> mHackPackages = ConcurrentHashMap.newKeySet();
     private final Set<String> mGeneratePackages = ConcurrentHashMap.newKeySet();
     private final Set<String> mSkipPackages = ConcurrentHashMap.newKeySet();
@@ -280,7 +282,9 @@ public class TrickyStoreService {
                 Log.e(TAG, "Keybox XML failed structural validation (missing keys or identifier)");
                 return;
             }
-            checkKeyboxRevocation(xml);
+            if (ENABLE_REVOCATION_CHECK) {
+                checkKeyboxRevocation(xml);
+            }
             if (!mKeyBoxManager.parseKeybox(xml)) {
                 // Rejected as incomplete: the previous keyboxes stay loaded. Don't record
                 // this payload as applied, so the next read looks at it again.
