@@ -49,6 +49,7 @@ data class AxQsSpan(val columns: Int, val rows: Int) {
         val TileWideDefault = AxQsSpan(2, 1)
         val ControlTileMin = TileDefault
         val MediaDefault = AxQsSpan(2, 2)
+        val MediaWide = AxQsSpan(4, 2)
         val MediaMin = AxQsSpan(2, 1)
         val Max = AxQsSpan(4, 4)
 
@@ -116,7 +117,7 @@ enum class AxQsControl(
         id = "control:media",
         defaultSpan = AxQsSpan.MediaDefault,
         minSpan = AxQsSpan.MediaMin,
-        maxSpan = AxQsSpan(4, 2),
+        maxSpan = AxQsSpan.MediaWide,
     ),
     PHOTO(
         id = "control:photo",
@@ -172,6 +173,10 @@ enum class AxQsControl(
     }
 
     fun nextSpan(span: AxQsSpan, columns: Int): AxQsSpan {
+        if (this == MEDIA) {
+            val sizes = mediaSizes(columns)
+            return sizes[(sizes.indexOf(span) + 1) % sizes.size]
+        }
         if (isResizableContent) {
             val sizes = contentSizes(columns)
             return sizes[(sizes.indexOf(span) + 1) % sizes.size]
@@ -257,6 +262,11 @@ enum class AxQsControl(
     fun photoSizes(columns: Int): List<AxQsSpan> =
         listOf(AxQsSpan(1, 1), AxQsSpan(2, 1), AxQsSpan(2, 2), AxQsSpan(1, 2)).filter {
             it.columns <= columns.coerceAtLeast(1)
+        }
+
+    fun mediaSizes(columns: Int): List<AxQsSpan> =
+        listOf(AxQsSpan.MediaMin, AxQsSpan.MediaDefault, AxQsSpan.MediaWide).filter {
+            isSpanAllowed(it, columns)
         }
 
     private val minOrientationLength: Int

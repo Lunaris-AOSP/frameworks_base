@@ -51,6 +51,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -186,13 +187,14 @@ internal fun LunarisAlbumCoverMediaPlayer(
 }
 
 @Composable
-private fun AlbumCoverArtwork(
+internal fun AlbumCoverArtwork(
     artwork: IconModel?,
     modifier: Modifier,
     motionArt: File?,
     motionArtPlaying: Boolean,
+    cornerRadius: Dp = 8.dp,
 ) {
-    Box(modifier.clip(RoundedCornerShape(8.dp))) {
+    Box(modifier.clip(RoundedCornerShape(cornerRadius))) {
         Crossfade(
             targetState = rememberAxMediaArtwork(artwork).artwork,
             animationSpec = tween(250),
@@ -240,18 +242,19 @@ private fun AlbumCoverArtwork(
 }
 
 @Composable
-private fun AlbumCoverMediaOutput(
+internal fun AlbumCoverMediaOutput(
     session: MediaSessionModel?,
     viewModel: AxMediaViewModel,
     interactive: Boolean,
     modifier: Modifier,
+    background: Color = Color.Transparent,
 ) {
     val description =
         session?.outputDevice?.name?.toString()?.takeUnless { it.isBlank() || it == "null" }
             ?: stringResource(R.string.ax_dynamic_bar_media_output)
     ExpandableContainer(
         controller =
-            rememberExpandableController(color = { Color.Transparent }, shape = CircleShape),
+            rememberExpandableController(color = { background }, shape = CircleShape),
         modifier = modifier,
         defaultMinSize = false,
         useModifierBasedImplementation = true,

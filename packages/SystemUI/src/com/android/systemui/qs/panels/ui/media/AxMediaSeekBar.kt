@@ -19,6 +19,7 @@ package com.android.systemui.qs.panels.ui.media
 
 import android.text.format.DateUtils
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -53,6 +54,7 @@ internal fun MediaSeekBar(
     dense: Boolean,
     interactive: Boolean,
     showTimestamps: Boolean = false,
+    timestampsBelow: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val isShadeInteracting by viewModel.isShadeInteracting.collectAsStateWithLifecycle()
@@ -70,6 +72,8 @@ internal fun MediaSeekBar(
     val totalSeconds = durationMs.coerceAtLeast(0L) / 1000L
     val elapsedTime = remember(elapsedSeconds) { DateUtils.formatElapsedTime(elapsedSeconds) }
     val totalTime = remember(totalSeconds) { DateUtils.formatElapsedTime(totalSeconds) }
+    val displayElapsedTime = if (timestampsBelow && durationMs <= 0L) "--:--" else elapsedTime
+    val displayTotalTime = if (timestampsBelow && durationMs <= 0L) "--:--" else totalTime
     val seekDescription =
         if (session != null) {
             stringResource(R.string.controls_media_seekbar_description, elapsedTime, totalTime)
@@ -78,30 +82,41 @@ internal fun MediaSeekBar(
         }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-        Row(
-            modifier = modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (showTimestamps) MediaTimestamp(elapsedTime, colors)
-            key(session?.key) {
-                AndroidMediaSeekBar(
-                    progress = progress,
-                    durationMs = durationMs,
-                    onScrubChange = { value -> session?.let { viewModel.onScrubChange(it, value) } },
-                    onScrubFinished = { delta -> session?.let { viewModel.onScrubFinished(it, delta) } },
-                    style = seekBarStyle,
-                    artwork = (session?.background as? Icon.Loaded)?.drawable,
-                    isPlaying = session?.state == MediaSessionState.Playing,
-                    animationsAllowed = !isShadeInteracting,
-                    enabled = interactive && session?.canBeScrubbed == true,
-                    contentDescription = seekDescription,
-                    color = colors.primary,
-                    backgroundColor = colors.foreground.copy(alpha = 0.3f),
-                    modifier = Modifier.weight(1f).height(height),
-                )
+        Column(modifier = modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (showTimestamps && !timestampsBelow) MediaTimestamp(elapsedTime, colors)
+                key(session?.key) {
+                    AndroidMediaSeekBar(
+                        progress = progress,
+                        durationMs = durationMs,
+                        onScrubChange = { value -> session?.let { viewModel.onScrubChange(it, value) } },
+                        onScrubFinished = { delta -> session?.let { viewModel.onScrubFinished(it, delta) } },
+                        style = seekBarStyle,
+                        artwork = (session?.background as? Icon.Loaded)?.drawable,
+                        isPlaying = session?.state == MediaSessionState.Playing,
+                        animationsAllowed = !isShadeInteracting,
+                        enabled = interactive && session?.canBeScrubbed == true,
+                        contentDescription = seekDescription,
+                        color = colors.primary,
+                        backgroundColor = colors.foreground.copy(alpha = 0.3f),
+                        modifier = Modifier.weight(1f).height(height),
+                    )
+                }
+                if (showTimestamps && !timestampsBelow) MediaTimestamp(totalTime, colors)
             }
-            if (showTimestamps) MediaTimestamp(totalTime, colors)
+            if (showTimestamps && timestampsBelow) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    MediaTimestamp(displayElapsedTime, colors)
+                    MediaTimestamp(displayTotalTime, colors)
+                }
+            }
         }
     }
 }
@@ -111,7 +126,7 @@ private fun MediaTimestamp(text: String, colors: AxMediaColors) {
     Text(
         text = text,
         color = colors.foreground.copy(alpha = 0.65f),
-        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 12.sp),
         maxLines = 1,
         softWrap = false,
     )

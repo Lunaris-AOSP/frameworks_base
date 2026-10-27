@@ -1193,6 +1193,27 @@ private fun AxEditableGridSection(
                 val resizeItem: (AxQsSpan) -> Unit = { span ->
                     if (canResize(span)) listState.update(item.id) { it.copy(span = span) }
                 }
+                val canResizeAfterRepack: (AxQsSpan) -> Boolean = { span ->
+                    canFitAxQsGridItems(
+                        listState.items
+                            .filter { it.section == AxQsGridSection.CONTROLS }
+                            .map { current ->
+                                current.copy(
+                                    span = if (current.id == item.id) span else current.span,
+                                    position = null,
+                                )
+                            },
+                        columns,
+                        maxRows ?: AxQsSpan.MAX_ROWS,
+                    )
+                }
+                val repackControls = {
+                    listState.repack(
+                        listState.items
+                            .filter { it.section == AxQsGridSection.CONTROLS }
+                            .mapTo(mutableSetOf()) { it.id }
+                    )
+                }
                 val finishResize: (AxQsSpan) -> Unit = { span ->
                     if (canResize(span)) {
                         onSaveSpan(item.id, span)
@@ -1237,27 +1258,11 @@ private fun AxEditableGridSection(
                 val canRotateWithoutRepack = rotatedSpan?.let(canResize) == true
                 val canRotate =
                     rotatedSpan != null &&
-                        (canRotateWithoutRepack ||
-                            canFitAxQsGridItems(
-                                listState.items
-                                    .filter { it.section == AxQsGridSection.CONTROLS }
-                                    .map { current ->
-                                        current.copy(
-                                            span = if (current.id == item.id) rotatedSpan else current.span,
-                                            position = null,
-                                        )
-                                    },
-                                columns,
-                                maxRows ?: AxQsSpan.MAX_ROWS,
-                            ))
+                        (canRotateWithoutRepack || canResizeAfterRepack(rotatedSpan))
                 val rotateItem: () -> Unit = {
                     if (canRotate && rotatedSpan != null) {
                         if (!canRotateWithoutRepack) {
-                            listState.repack(
-                                listState.items
-                                    .filter { it.section == AxQsGridSection.CONTROLS }
-                                    .mapTo(mutableSetOf()) { it.id }
-                            )
+                            repackControls()
                         }
                         resizeItem(rotatedSpan)
                         finishResize(rotatedSpan)
@@ -1428,7 +1433,15 @@ private fun AxEditableGridSection(
                                 if (resizable) {
                                     listState.item(item.id)?.let { current ->
                                         val nextSpan =
-                                            if (isContent) {
+                                            if (contentControl == AxQsControl.MEDIA) {
+                                                val options = contentControl.mediaSizes(columns)
+                                                val start = options.indexOf(current.span)
+                                                (1..options.size)
+                                                    .map { options[(start + it) % options.size] }
+                                                    .firstOrNull {
+                                                        canResize(it) || canResizeAfterRepack(it)
+                                                    } ?: current.span
+                                            } else if (isContent) {
                                                 val options = (value as AxEditGridValue.Control)
                                                     .control.contentSizes(columns)
                                                 val start = options.indexOf(current.span)
@@ -1458,9 +1471,18 @@ private fun AxEditableGridSection(
                                                     }
                                                 current.span.copy(columns = width)
                                             }
-                                        if (nextSpan != current.span && canResize(nextSpan)) {
-                                            resizeItem(nextSpan)
-                                            finishResize(nextSpan)
+                                        if (nextSpan != current.span) {
+                                            if (
+                                                contentControl == AxQsControl.MEDIA &&
+                                                    !canResize(nextSpan) &&
+                                                    canResizeAfterRepack(nextSpan)
+                                            ) {
+                                                repackControls()
+                                            }
+                                            if (canResize(nextSpan)) {
+                                                resizeItem(nextSpan)
+                                                finishResize(nextSpan)
+                                            }
                                         }
                                     }
                                 }

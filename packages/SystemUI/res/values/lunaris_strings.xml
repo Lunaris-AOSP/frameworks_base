@@ -18,6 +18,7 @@
     <string name="lunaris_qs_ringer_dnd_on">Turn on Do Not Disturb</string>
     <string name="lunaris_qs_ringer_dnd_off">Turn off Do Not Disturb</string>
     <string name="lunaris_qs_media_not_playing">No media playing</string>
+    <string name="lunaris_qs_media_no_history">No playback history</string>
     <string name="lunaris_qs_tile_stack">Tile stack</string>
     <string name="lunaris_qs_stack_edit">Edit tile stack</string>
     <string name="lunaris_qs_stack_hint">Swipe up or down to switch tiles. Drag a tile onto a 2×2 tile or stack to group them.</string>

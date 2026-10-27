@@ -480,6 +480,12 @@ constructor(
             initialValue = repository.mediaStyle.value,
             source = repository.mediaStyle,
         )
+    val mediaWideStyle by
+        hydrator.hydratedStateOf(
+            traceName = "mediaWideStyle",
+            initialValue = repository.mediaWideStyle.value,
+            source = repository.mediaWideStyle,
+        )
     val mediaMotionArt by
         hydrator.hydratedStateOf(
             traceName = "mediaMotionArt",
@@ -779,6 +785,8 @@ constructor(
     fun resetRows(layout: AxQsGridLayout) = repository.setRows(layout, 0)
 
     fun setMediaStyle(style: LunarisQsMediaStyle) = repository.setMediaStyle(style)
+
+    fun setMediaWideStyle(style: LunarisQsMediaStyle) = repository.setMediaWideStyle(style)
 
     fun setMediaMotionArt(enabled: Boolean) = repository.setMediaMotionArt(enabled)
 

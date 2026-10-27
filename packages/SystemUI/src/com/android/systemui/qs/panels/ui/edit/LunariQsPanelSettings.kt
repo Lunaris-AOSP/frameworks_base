@@ -264,6 +264,27 @@ fun LunariQsPanelSettings(
                         },
                     )
                 }
+                item("media_wide_style") {
+                    SettingsChoice(
+                        title = stringResource(R.string.ax_qs_settings_media_wide_style),
+                        selected = viewModel.mediaWideStyle.settingValue,
+                        options =
+                            LunarisQsMediaStyle.entries.map { style ->
+                                style.settingValue to
+                                    stringResource(
+                                        when (style) {
+                                            LunarisQsMediaStyle.ARTWORK ->
+                                                R.string.ax_qs_settings_style_artwork
+                                            LunarisQsMediaStyle.ALBUM_COVER ->
+                                                R.string.ax_qs_settings_style_album_cover
+                                        }
+                                    )
+                            },
+                        onSelect = {
+                            viewModel.setMediaWideStyle(LunarisQsMediaStyle.fromSetting(it))
+                        },
+                    )
+                }
                 item("media_motion_art") {
                     SettingsSwitch(
                         title = stringResource(R.string.ax_qs_settings_media_motion_art),

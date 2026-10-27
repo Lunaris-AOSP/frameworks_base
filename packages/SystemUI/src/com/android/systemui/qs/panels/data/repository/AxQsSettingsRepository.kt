@@ -267,6 +267,12 @@ constructor(
             .distinctUntilChanged()
             .stateIn(applicationScope, SharingStarted.Eagerly, LunarisQsMediaStyle.ARTWORK)
 
+    val mediaWideStyle: StateFlow<LunarisQsMediaStyle> =
+        intSetting(MEDIA_WIDE_STYLE, LunarisQsMediaStyle.ARTWORK.settingValue)
+            .map(LunarisQsMediaStyle::fromSetting)
+            .distinctUntilChanged()
+            .stateIn(applicationScope, SharingStarted.Eagerly, LunarisQsMediaStyle.ARTWORK)
+
     val mediaMotionArt: StateFlow<Boolean> = boolSetting(MEDIA_MOTION_ART, false)
 
     val gridColumns: StateFlow<Map<AxQsGridLayout, Int>> =
@@ -499,6 +505,8 @@ constructor(
     fun setTileStyle(style: AxQsTileStyle) = putInt(TILE_STYLE, style.settingValue)
 
     fun setMediaStyle(style: LunarisQsMediaStyle) = putInt(MEDIA_STYLE, style.settingValue)
+
+    fun setMediaWideStyle(style: LunarisQsMediaStyle) = putInt(MEDIA_WIDE_STYLE, style.settingValue)
 
     fun setMediaMotionArt(enabled: Boolean) = putInt(MEDIA_MOTION_ART, enabled.toSetting())
 
@@ -895,6 +903,7 @@ constructor(
         private const val GRADIENT_END_COLOR = "ax_qs_gradient_end_color"
         const val TILE_STYLE = "ax_qs_tile_style"
         private const val MEDIA_STYLE = "ax_qs_media_style"
+        private const val MEDIA_WIDE_STYLE = "ax_qs_media_wide_style"
         private const val MEDIA_MOTION_ART = "ax_qs_media_motion_art"
         const val TILE_GAP = "ax_qs_tile_gap"
         const val SIDE_PADDING = "ax_qs_side_padding"

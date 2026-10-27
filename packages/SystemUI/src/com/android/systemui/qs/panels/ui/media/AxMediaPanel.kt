@@ -94,6 +94,7 @@ private enum class AxMediaLayout {
     OneRow,
     Box,
     AlbumCover,
+    Wide,
     Compact,
     Expanded,
 }
@@ -251,11 +252,15 @@ private fun AxMediaCard(
 ) {
     val shape = axQsControlShape(AxQsControl.MEDIA, span, mediaSurface = surface)
     val mediaStyle by viewModel.mediaStyle.collectAsStateWithLifecycle()
+    val mediaWideStyle by viewModel.mediaWideStyle.collectAsStateWithLifecycle()
     val motionArtEnabled by viewModel.mediaMotionArt.collectAsStateWithLifecycle()
     val isShadeInteracting by viewModel.isShadeInteracting.collectAsStateWithLifecycle()
     val keyguardState by viewModel.currentKeyguardState.collectAsStateWithLifecycle()
     val layout =
         when {
+            surface == AxMediaSurface.CONTROL &&
+                span == AxQsSpan.MediaWide &&
+                mediaWideStyle == LunarisQsMediaStyle.ALBUM_COVER -> AxMediaLayout.Wide
             surface == AxMediaSurface.CONTROL && span == AxQsSpan.MediaDefault ->
                 if (mediaStyle == LunarisQsMediaStyle.ALBUM_COVER) AxMediaLayout.AlbumCover
                 else AxMediaLayout.Box
@@ -311,7 +316,9 @@ private fun AxMediaCard(
         animateColorAsState(
             targetValue =
                 when {
-                    (layout == AxMediaLayout.Box || layout == AxMediaLayout.AlbumCover) &&
+                    (layout == AxMediaLayout.Box ||
+                        layout == AxMediaLayout.AlbumCover ||
+                        layout == AxMediaLayout.Wide) &&
                         !gutsVisible -> tileBackground
                     artwork != null && !gutsVisible -> Color.Transparent
                     session != null -> mediaBackground
@@ -427,7 +434,8 @@ private fun AxMediaCard(
                         if (
                             session != null &&
                                 layout != AxMediaLayout.Box &&
-                                layout != AxMediaLayout.AlbumCover
+                                layout != AxMediaLayout.AlbumCover &&
+                                layout != AxMediaLayout.Wide
                         ) {
                             val songKey = "${session.appName}:${session.title}:${session.subtitle}"
                             MediaArtwork(
@@ -453,6 +461,15 @@ private fun AxMediaCard(
                             modifier = Modifier.fillMaxSize(),
                         ) { mediaLayout ->
                             when (mediaLayout) {
+                                AxMediaLayout.Wide ->
+                                    LunarisWideMediaPlayer(
+                                        session = session,
+                                        viewModel = viewModel,
+                                        interactive = interactive,
+                                        hasMultipleSessions = hasMultipleSessions,
+                                        motionArt = motionArt,
+                                        motionArtPlaying = motionArtPlaying,
+                                    )
                                 AxMediaLayout.Box ->
                                     LunarisBoxMediaPlayer(
                                         session = session,

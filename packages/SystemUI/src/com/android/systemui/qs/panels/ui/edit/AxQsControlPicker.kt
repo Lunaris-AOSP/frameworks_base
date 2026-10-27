@@ -188,7 +188,9 @@ internal fun AxAvailableControls(
                     control,
                     label,
                     control.id in currentIds,
-                    if (control.supportsOrientation) sliderSpan(control) else control.defaultSpan,
+                    if (control.supportsOrientation || control == AxQsControl.MEDIA)
+                        sliderSpan(control)
+                    else control.defaultSpan,
                 )
             }
     val folderItem =
@@ -615,7 +617,10 @@ private fun AxAddItemCell(
             style = MaterialTheme.typography.labelMedium,
             modifier = Modifier.fillMaxWidth(),
         )
-        if (item is AxAddItem.Control && item.control.isResizableContent) {
+        if (
+            item is AxAddItem.Control &&
+                (item.control.isResizableContent || item.control == AxQsControl.MEDIA)
+        ) {
             TextButton(onClick = { onResizeContent(item) }, enabled = !item.isAdded) {
                 Text(stringResource(R.string.lunaris_qs_content_size, span.columns, span.rows))
             }
