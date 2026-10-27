@@ -78,7 +78,6 @@ import com.android.compose.animation.bounceable
 import com.android.compose.animation.rememberExpandableController
 import com.android.compose.animation.scene.ContentScope
 import com.android.compose.modifiers.thenIf
-import com.android.compose.theme.LocalAndroidColorScheme
 import com.android.mechanics.compose.modifier.verticalFadeContentReveal
 import com.android.mechanics.compose.modifier.verticalTactileSurfaceReveal
 import com.android.systemui.common.shared.model.Icon
@@ -291,7 +290,15 @@ fun ContentScope.AxTile(
                 iconOnly = compact,
                 isDualTarget = isDualTarget,
                 fillHeight = fillHeight,
-                modifier = contentRevealModifier.then(backgroundModifier),
+                modifier =
+                    contentRevealModifier
+                        .then(backgroundModifier)
+                        .lunarisQsCosTileBorder(
+                            shape = tileShape,
+                            enabled =
+                                LocalLunarisQsCosTileBackground.current &&
+                                    uiState.state != STATE_UNAVAILABLE,
+                        ),
             ) {
                 val iconProvider: Context.() -> Icon = { getAxTileIcon(icon = icon) }
                 AnimatedContent(
@@ -455,14 +462,7 @@ object AxTileColorsDefaults {
 
     @Composable
     @ReadOnlyComposable
-    fun backgroundTileColors(): Color {
-        val blurEnabled = LocalBlurEnabled.current
-        return if (blurEnabled) {
-            LocalAndroidColorScheme.current.surfaceEffect1
-        } else {
-            MaterialTheme.colorScheme.surfaceBright
-        }
-    }
+    fun backgroundTileColors(): Color = AxTileDefaults.backgroundColor()
 
     @Composable
     fun activeTileColors(): TileColors {
@@ -514,7 +514,7 @@ object AxTileColorsDefaults {
     fun inactiveDualTargetTileColors(): TileColors =
         TileColors(
             background = backgroundTileColors(),
-            iconBackground = LocalAndroidColorScheme.current.surfaceEffect2,
+            iconBackground = AxTileDefaults.folderPreviewTileBackgroundColor(),
             label = MaterialTheme.colorScheme.onSurface,
             secondaryLabel = MaterialTheme.colorScheme.onSurface,
             icon = MaterialTheme.colorScheme.onSurface,

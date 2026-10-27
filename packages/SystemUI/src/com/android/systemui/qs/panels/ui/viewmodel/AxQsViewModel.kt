@@ -456,6 +456,12 @@ constructor(
             initialValue = repository.strokeStyle.value,
             source = repository.strokeStyle,
         )
+    val cosTileBackground by
+        hydrator.hydratedStateOf(
+            traceName = "cosTileBackground",
+            initialValue = repository.cosTileBackground.value,
+            source = repository.cosTileBackground,
+        )
     val spacing by
         hydrator.hydratedStateOf(
             traceName = "spacing",
@@ -746,6 +752,8 @@ constructor(
     fun setShowSliderPercentage(show: Boolean) = repository.setShowSliderPercentage(show)
 
     fun setStrokeStyle(enabled: Boolean) = repository.setStrokeStyle(enabled)
+
+    fun setCosTileBackground(enabled: Boolean) = repository.setCosTileBackground(enabled)
 
     fun setFullColorDualTargetTiles(enabled: Boolean) =
         repository.setFullColorDualTargetTiles(enabled)

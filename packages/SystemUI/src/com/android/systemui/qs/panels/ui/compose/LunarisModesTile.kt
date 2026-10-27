@@ -82,6 +82,7 @@ internal fun LunarisModesTile(
             modifier.lunarisTilePressAnimation(interactionSource, enabled)
                 .clip(shape)
                 .background(AxTileDefaults.backgroundColor())
+                .lunarisQsCosTileBorder(shape)
                 .borderOnFocus(MaterialTheme.colorScheme.secondary, shape.topEnd)
                 .combinedClickable(
                     interactionSource = interactionSource,

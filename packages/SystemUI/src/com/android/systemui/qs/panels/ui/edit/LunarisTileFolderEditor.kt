@@ -52,16 +52,17 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.android.axion.compose.dialog.AxAlertDialog
-import com.android.compose.theme.LocalAndroidColorScheme
 import com.android.systemui.animation.Expandable as SystemUiExpandable
 import com.android.systemui.common.ui.compose.Icon as TileIconView
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolder
 import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolderController
+import com.android.systemui.qs.panels.ui.compose.AxTileDefaults
 import com.android.systemui.qs.panels.ui.compose.LocalAxQsTileStyle
 import com.android.systemui.qs.panels.ui.compose.LunarisFolderPreview
 import com.android.systemui.qs.panels.ui.compose.LunarisFolderShapePicker
 import com.android.systemui.qs.panels.ui.compose.LunarisFolderUnavailableTile
+import com.android.systemui.qs.panels.ui.compose.lunarisQsCosTileBorder
 import com.android.systemui.qs.panels.ui.viewmodel.EditTileViewModel
 import com.android.systemui.res.R
 
@@ -84,16 +85,17 @@ internal fun LunarisEditTileFolder(
             tileContent = { spec, _ ->
                 val tile = bySpec[spec]
                 if (tile == null) {
-                    LunarisFolderUnavailableTile(LocalAndroidColorScheme.current.surfaceEffect2)
+                    LunarisFolderUnavailableTile(AxTileDefaults.folderPreviewTileBackgroundColor())
                 } else {
+                    val shape =
+                        RoundedCornerShape(if (style.usesPillShape(isActive = false)) 50 else 25)
                     Box(
                         Modifier.fillMaxSize()
                             .background(
-                                LocalAndroidColorScheme.current.surfaceEffect2,
-                                RoundedCornerShape(
-                                    if (style.usesPillShape(isActive = false)) 50 else 25
-                                ),
-                            ),
+                                AxTileDefaults.folderPreviewTileBackgroundColor(),
+                                shape,
+                            )
+                            .lunarisQsCosTileBorder(shape),
                         contentAlignment = Alignment.Center,
                     ) {
                         TileIconView(

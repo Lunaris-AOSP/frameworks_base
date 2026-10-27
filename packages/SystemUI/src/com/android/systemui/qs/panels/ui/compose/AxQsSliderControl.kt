@@ -81,7 +81,6 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
@@ -233,7 +232,7 @@ internal fun axQsControlShape(
     sliderStyle: LunarisQsSliderStyle = LunarisQsSliderStyle.M3_EXPRESSIVE,
     mediaSurface: AxMediaSurface = AxMediaSurface.CONTROL,
     tileStyle: AxQsTileStyle = AxQsTileStyle.PILL,
-): Shape {
+): RoundedCornerShape {
     return when {
         control.isResizableContent -> RoundedCornerShape(AxQsControlCornerRadius)
         control == AxQsControl.MEDIA &&
@@ -411,10 +410,14 @@ internal fun AxQsSlider(
                         }
                     } else null,
                 modifier =
-                    Modifier.fillMaxWidth().then(
-                        if (flatFill) Modifier.clip(CircleShape)
-                        else Modifier
-                    ),
+                    Modifier.fillMaxWidth()
+                        .lunarisQsCosTileBorder(
+                            shape =
+                                if (roundedSquare) RoundedCornerShape(AxQsControlCornerRadius)
+                                else CircleShape,
+                            verticalSlider = vertical,
+                        )
+                        .then(if (flatFill) Modifier.clip(CircleShape) else Modifier),
             )
             AxQsSliderReadout(
                 percentage = percentageLabel,
@@ -448,6 +451,7 @@ internal fun AxQsSlider(
             height = AxTileDefaults.TileHeight * sliderScale,
         )
     val trackCornerSize = sliderHeight / SLIDER_CORNER_DIVISOR
+    val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     Box(modifier = sliderModifier) {
         Slider(
             value = value,
@@ -477,7 +481,20 @@ internal fun AxQsSlider(
                     trackSize = sliderHeight,
                     activeTrackBrush = activeTrackBrush,
                     activeTrackAlpha = if (active) 1f else 0.7f,
-                    modifier = Modifier.background(trackBackgroundColor, ExpressiveSliderShape),
+                    modifier =
+                        Modifier.background(trackBackgroundColor, ExpressiveSliderShape)
+                            .lunarisQsCosTileBorder(
+                                shape = RoundedCornerShape(trackCornerSize),
+                                verticalSlider = vertical,
+                                horizontalGap = {
+                                    val fraction = sliderState.coercedValueAsFraction
+                                    val thumbCenter =
+                                        size.width * (if (isRtl) 1f - fraction else fraction)
+                                    val gap =
+                                        thumbSize.width.toPx() / 2f + AxSliderThumbTrackGap.toPx()
+                                    (thumbCenter - gap)..(thumbCenter + gap)
+                                },
+                            ),
                 )
             },
         )

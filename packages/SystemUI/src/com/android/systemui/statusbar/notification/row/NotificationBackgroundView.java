@@ -44,6 +44,7 @@ import com.android.axion.blur.model.AxBackdropBlurSettingsSpec;
 import com.android.internal.util.ContrastColorUtil;
 import com.android.systemui.Dumpable;
 import com.android.systemui.common.shared.colors.SurfaceEffectColors;
+import com.android.systemui.common.ui.drawable.CosTileBorderDrawable;
 import com.android.systemui.res.R;
 import com.android.systemui.statusbar.notification.shared.NotificationAddXOnHoverToDismiss;
 import com.android.systemui.util.DrawableDumpKt;
@@ -61,6 +62,8 @@ public class NotificationBackgroundView extends View implements Dumpable,
     private final AxBlurBackgroundRenderer mAxBlurRenderer;
     private final Object mAxBlurKey = new Object();
     private final Rect mBackgroundBounds = new Rect();
+    private final CosTileBorderDrawable mCosTileBorder;
+    private boolean mCosTileBackgroundEnabled;
     private final boolean mDontModifyCorners;
     private Drawable mBackground;
     private int mClipTopAmount;
@@ -104,6 +107,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
 
     public NotificationBackgroundView(Context context, AttributeSet attrs) {
         super(context, attrs);
+        mCosTileBorder = new CosTileBorderDrawable(getResources().getDisplayMetrics().density);
         mAxBlurRenderer = new AxBlurBackgroundRenderer(this, AxBackdropBlurSettingsSpec.system(),
                 false);
         mAxBlurOverlayColor = AxBlurColors.surfaceBrightTint(getContext());
@@ -166,6 +170,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
     @Override
     protected void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
+        mCosTileBorder.setDensity(getResources().getDisplayMetrics().density);
         updateAxBlurOverlayColor();
     }
 
@@ -213,6 +218,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
                     mBackground.setBounds(backgroundBounds);
                     mBackground.draw(canvas);
                 }
+                drawCosTileBorder(canvas, backgroundBounds);
             }
 
             canvas.restore();
@@ -311,6 +317,23 @@ public class NotificationBackgroundView extends View implements Dumpable,
                 drawable.setBounds(left, top, right, bottom);
                 drawable.draw(canvas);
             }
+            drawCosTileBorder(canvas, mBackgroundBounds);
+        }
+    }
+
+    private void drawCosTileBorder(Canvas canvas, Rect bounds) {
+        if (!mCosTileBackgroundEnabled || bounds.isEmpty()) {
+            return;
+        }
+        mCosTileBorder.setBounds(bounds);
+        mCosTileBorder.setAlpha(mBackground.getAlpha());
+        mCosTileBorder.draw(canvas);
+    }
+
+    public void setCosTileBackgroundEnabled(boolean enabled) {
+        if (mCosTileBackgroundEnabled != enabled) {
+            mCosTileBackgroundEnabled = enabled;
+            invalidate();
         }
     }
 
@@ -446,7 +469,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
 
     public void setTint(int tintColor) {
         Drawable baseLayer = getBaseBackgroundLayer();
-        if (mIsBlurSupported) {
+        if (mIsBlurSupported || mCosTileBackgroundEnabled) {
             ((GradientDrawable) baseLayer.mutate()).setColor(tintColor);
         } else {
             baseLayer.mutate().setTintMode(PorterDuff.Mode.SRC_ATOP);
@@ -578,8 +601,11 @@ public class NotificationBackgroundView extends View implements Dumpable,
 
     private void updateBackgroundRadii() {
         if (mDontModifyCorners) {
+            mCosTileBorder.setCornerRadius(
+                    getResources().getDimension(R.dimen.notification_shadow_radius));
             return;
         }
+        mCosTileBorder.setCornerRadii(mCornerRadii);
         if (mBackground instanceof LayerDrawable layerDrawable) {
             int numberOfLayers = layerDrawable.getNumberOfLayers();
             for (int i = 0; i < numberOfLayers; i++) {
@@ -643,6 +669,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
         pw.println("mActualWidth: " + mActualWidth);
         pw.println("mActualHeight: " + mActualHeight);
         pw.println("mTintColor: " + hexColorString(mTintColor));
+        pw.println("mCosTileBackgroundEnabled: " + mCosTileBackgroundEnabled);
         pw.println("mRippleColor: " + hexColorString(mRippleColor));
         pw.println("mBackground: " + DrawableDumpKt.dumpToString(mBackground));
     }

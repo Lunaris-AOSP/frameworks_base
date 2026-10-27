@@ -17,6 +17,7 @@
 package com.android.systemui.qs.panels.ui.compose
 
 import android.service.quicksettings.Tile.STATE_ACTIVE
+import android.service.quicksettings.Tile.STATE_UNAVAILABLE
 import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -64,7 +65,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.compose.animation.Expandable
 import com.android.compose.animation.scene.ContentScope
-import com.android.compose.theme.LocalAndroidColorScheme
 import com.android.systemui.animation.Expandable as SystemUiExpandable
 import com.android.systemui.common.shared.model.Icon as TileIcon
 import com.android.systemui.common.ui.compose.Icon as TileIconView
@@ -102,6 +102,7 @@ internal fun ContentScope.LunarisQsTileFolder(
     val blurEnabled by rememberUpdatedState(LocalBlurEnabled.current)
     val gradientSettings by rememberUpdatedState(LocalLunarisQsGradientSettings.current)
     val strokeStyle by rememberUpdatedState(LocalLunarisQsStrokeStyle.current)
+    val cosTileBackground by rememberUpdatedState(LocalLunarisQsCosTileBackground.current)
     val tileScale by rememberUpdatedState(LocalTileScale.current)
     val bySpec = remember(tiles) { tiles.associateBy { it.spec.spec } }
     val directCount = LunarisQsTileFolderController.directTileCount(span, folder.tileSpecs.size)
@@ -128,6 +129,7 @@ internal fun ContentScope.LunarisQsTileFolder(
                                 LocalBlurEnabled provides blurEnabled,
                                 LocalLunarisQsGradientSettings provides gradientSettings,
                                 LocalLunarisQsStrokeStyle provides strokeStyle,
+                                LocalLunarisQsCosTileBackground provides cosTileBackground,
                                 LocalTileScale provides tileScale,
                             ) {
                                 this@LunarisQsTileFolder.LunarisFolderScreen(
@@ -167,7 +169,7 @@ internal fun ContentScope.LunarisQsTileFolder(
             tileContent = { spec, index ->
                 val tile = bySpec[spec]
                 if (tile == null) {
-                    LunarisFolderUnavailableTile(LocalAndroidColorScheme.current.surfaceEffect2)
+                    LunarisFolderUnavailableTile(AxTileDefaults.folderPreviewTileBackgroundColor())
                 } else if (index < directCount) {
                     this@LunarisQsTileFolder.LunarisFolderLiveTile(tile, preview = true)
                 } else {
@@ -203,7 +205,17 @@ internal fun LunarisFolderPreview(
                 .fillMaxSize()
                 .clip(shape)
                 .then(surfaceModifier)
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), shape),
+                .then(
+                    if (LocalLunarisQsCosTileBackground.current) {
+                        Modifier.lunarisQsCosTileBorder(shape)
+                    } else {
+                        Modifier.border(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                            shape,
+                        )
+                    }
+                ),
             contentAlignment = Alignment.Center,
         ) {
             if (specs.isEmpty()) {
@@ -373,7 +385,7 @@ private fun ContentScope.LunarisFolderLiveTile(tile: TileViewModel, preview: Boo
             tileShapeOverride = shape,
             strokeStyle = false,
             inactiveBackgroundColor =
-                if (preview) LocalAndroidColorScheme.current.surfaceEffect2 else null,
+                if (preview) AxTileDefaults.folderPreviewTileBackgroundColor() else null,
             compactIconSize = minOf(maxWidth, maxHeight) * 0.46f,
             squishiness = { 1f },
             coroutineScope = scope,
@@ -392,7 +404,7 @@ private fun LunarisFolderSmallTile(tile: TileViewModel) {
         AxTileColorsDefaults.getColorForState(
             state.toUiState(LocalResources.current),
             iconOnly = true,
-            inactiveBackgroundColor = LocalAndroidColorScheme.current.surfaceEffect2,
+            inactiveBackgroundColor = AxTileDefaults.folderPreviewTileBackgroundColor(),
         )
     val context = LocalContext.current
     val provider = state.toIconProvider()
@@ -403,12 +415,17 @@ private fun LunarisFolderSmallTile(tile: TileViewModel) {
         }
     val style = LocalAxQsTileStyle.current
     val corner = if (style.usesPillShape(isActive = state.state == STATE_ACTIVE)) 50 else 25
+    val shape = RoundedCornerShape(percent = corner)
     Box(
         Modifier.fillMaxSize()
             .clearAndSetSemantics {}
             .background(
                 colors.backgroundGradient ?: SolidColor(colors.background),
-                RoundedCornerShape(percent = corner),
+                shape,
+            )
+            .lunarisQsCosTileBorder(
+                shape = shape,
+                enabled = LocalLunarisQsCosTileBackground.current && state.state != STATE_UNAVAILABLE,
             ),
         contentAlignment = Alignment.Center,
     ) {

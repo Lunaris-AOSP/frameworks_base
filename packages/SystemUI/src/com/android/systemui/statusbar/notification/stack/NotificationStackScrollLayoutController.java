@@ -407,6 +407,10 @@ public class NotificationStackScrollLayoutController implements Dumpable {
             if (mView.getShelf() instanceof NotificationShelf shelf) {
                 shelf.onUserChanged();
             }
+            if (com.android.systemui.qs.flags.MistQsMode.isEnabled()) {
+                mView.updateBgColor();
+                mView.updateDecorViews();
+            }
             updateSensitivenessWithAnimation(false);
             mHistoryEnabled = null;
         }

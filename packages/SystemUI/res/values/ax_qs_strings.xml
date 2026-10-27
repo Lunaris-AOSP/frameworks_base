@@ -68,6 +68,8 @@
     <string name="ax_qs_settings_notification_media_status_glow_summary">Sweep a glow around the media player when opening the notification panel or changing tracks</string>
     <string name="ax_qs_settings_style_rounded_flat">Rounded square (flat fill)</string>
     <string name="ax_qs_settings_tile_labels">Show tile labels</string>
+    <string name="ax_qs_settings_cos_tile_bg">Cos tile bg</string>
+    <string name="ax_qs_settings_cos_tile_bg_summary">Use alternate backgrounds with a fine gradient border on active and inactive tiles, shade notifications, and notification footer buttons</string>
     <string name="ax_qs_settings_gradient">Active color gradient</string>
     <string name="ax_qs_settings_gradient_enabled">Enable gradient</string>
     <string name="ax_qs_settings_gradient_enabled_summary">Apply a gradient to active tile colors and slider fills in modular Quick Settings</string>

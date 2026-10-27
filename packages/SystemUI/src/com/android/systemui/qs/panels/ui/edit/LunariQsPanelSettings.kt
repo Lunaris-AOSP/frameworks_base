@@ -329,6 +329,14 @@ fun LunariQsPanelSettings(
                         summary = stringResource(R.string.ax_qs_settings_stroke_style_summary),
                         checked = viewModel.strokeStyle,
                         onCheckedChange = viewModel::setStrokeStyle,
+                    )
+                }
+                item("cos_tile_background") {
+                    SettingsSwitch(
+                        title = stringResource(R.string.ax_qs_settings_cos_tile_bg),
+                        summary = stringResource(R.string.ax_qs_settings_cos_tile_bg_summary),
+                        checked = viewModel.cosTileBackground,
+                        onCheckedChange = viewModel::setCosTileBackground,
                         position = SettingPosition.Last,
                     )
                 }

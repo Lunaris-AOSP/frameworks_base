@@ -167,6 +167,7 @@ private fun AxQsButtonControl(
                 .clip(CircleShape)
                 .background(background)
                 .then(fillModifier)
+                .lunarisQsCosTileBorder(CircleShape)
                 .clickable(
                     interactionSource = interactionSource,
                     indication = LocalIndication.current,

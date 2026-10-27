@@ -45,6 +45,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.Icon as MaterialIcon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -107,11 +108,22 @@ object AxTileDefaults {
     }
 
     @Composable
+    @ReadOnlyComposable
     fun backgroundColor(): Color {
-        return if (LocalBlurEnabled.current) {
+        return when {
+            LocalLunarisQsCosTileBackground.current -> LocalAndroidColorScheme.current.surfaceEffect2
+            LocalBlurEnabled.current -> LocalAndroidColorScheme.current.surfaceEffect1
+            else -> MaterialTheme.colorScheme.surfaceBright
+        }
+    }
+
+    @Composable
+    @ReadOnlyComposable
+    fun folderPreviewTileBackgroundColor(): Color {
+        return if (LocalLunarisQsCosTileBackground.current) {
             LocalAndroidColorScheme.current.surfaceEffect1
         } else {
-            MaterialTheme.colorScheme.surfaceBright
+            LocalAndroidColorScheme.current.surfaceEffect2
         }
     }
 }

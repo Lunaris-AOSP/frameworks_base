@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DoNotDisturb
 import androidx.compose.material3.Icon
@@ -53,7 +54,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -85,6 +85,7 @@ import com.android.systemui.qs.panels.ui.compose.axQsTileIconSize
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberQSTileAnimationStyle
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberTileHaptic
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.tileToggleAnimation
+import com.android.systemui.qs.panels.ui.compose.lunarisQsCosTileBorder
 import com.android.systemui.qs.panels.ui.compose.lunarisQsInsetBackground
 import com.android.systemui.qs.panels.ui.compose.lunarisTilePressAnimation
 import com.android.systemui.qs.panels.ui.compose.rememberLunarisQsGradient
@@ -99,7 +100,7 @@ fun RingerSliderTileContent(
     interactable: Boolean = true,
     compact: Boolean = false,
     vertical: Boolean = false,
-    shape: Shape = CircleShape,
+    shape: RoundedCornerShape = CircleShape,
     viewModel: RingerSliderViewModel = LocalRingerSliderViewModel.current,
 ) {
     val initialMode = remember(viewModel) { viewModel.currentMode }
@@ -289,6 +290,7 @@ fun RingerSliderTileContent(
                     .clip(tileShape)
                     .background(background)
                     .then(fillModifier)
+                    .lunarisQsCosTileBorder(tileShape)
                     .borderOnFocus(MaterialTheme.colorScheme.secondary, tileShape.topEnd)
                     .then(interactionModifier),
             contentAlignment = Alignment.Center,
@@ -333,7 +335,11 @@ fun RingerSliderTileContent(
     val trackAlignment = if (vertical) Alignment.TopCenter else Alignment.CenterStart
 
     BoxWithConstraints(
-        modifier = modifier.background(background, shape).clip(shape).then(interactionModifier),
+        modifier =
+            modifier.background(background, shape)
+                .clip(shape)
+                .lunarisQsCosTileBorder(shape)
+                .then(interactionModifier),
         contentAlignment = trackAlignment,
     ) {
         val outerPadding = RINGER_OUTER_PADDING

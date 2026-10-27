@@ -88,6 +88,7 @@ fun LunarisQsPhotoCard(
             .semantics { contentDescription = description }
             .clip(shape)
             .background(AxTileDefaults.backgroundColor())
+            .lunarisQsCosTileBorder(shape)
             .padding(photo.borderDp.dp)
     ) {
         key(photo.userId, photo.fileName) {

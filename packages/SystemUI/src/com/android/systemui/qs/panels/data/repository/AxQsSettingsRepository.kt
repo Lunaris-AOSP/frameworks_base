@@ -21,6 +21,7 @@ import android.provider.Settings
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Background
+import com.android.systemui.qs.flags.QsCosTileBackground
 import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsGridLayout
 import com.android.systemui.qs.panels.shared.model.AxQsGridPosition
@@ -174,6 +175,7 @@ constructor(
     val mediaTileStatusGlow: StateFlow<Boolean> = boolSetting(MEDIA_TILE_STATUS_GLOW, false)
     val showSliderPercentage: StateFlow<Boolean> = boolSetting(SHOW_SLIDER_PERCENTAGE, false)
     val strokeStyle: StateFlow<Boolean> = boolSetting(STROKE_STYLE, false)
+    val cosTileBackground: StateFlow<Boolean> = boolSetting(COS_TILE_BACKGROUND, false)
 
     val fullColorDualTargetTiles: StateFlow<Boolean> =
         userRepository.selectedUserInfo
@@ -475,6 +477,8 @@ constructor(
     fun setShowSliderPercentage(show: Boolean) = putInt(SHOW_SLIDER_PERCENTAGE, show.toSetting())
 
     fun setStrokeStyle(enabled: Boolean) = putInt(STROKE_STYLE, enabled.toSetting())
+
+    fun setCosTileBackground(enabled: Boolean) = putInt(COS_TILE_BACKGROUND, enabled.toSetting())
 
     fun setFullColorDualTargetTiles(enabled: Boolean) {
         val userId = userRepository.getSelectedUserInfo().id
@@ -894,6 +898,7 @@ constructor(
         private const val MEDIA_TILE_STATUS_GLOW = "ax_qs_media_tile_status_glow"
         const val SHOW_SLIDER_PERCENTAGE = "ax_qs_show_slider_percentage"
         private const val STROKE_STYLE = "ax_qs_stroke_style"
+        private const val COS_TILE_BACKGROUND = QsCosTileBackground.SETTING
         private const val GRADIENT_ENABLED = "ax_qs_gradient_enabled"
         private const val GRADIENT_SLIDER_ONLY = "ax_qs_gradient_slider_only"
         private const val GRADIENT_COLOR_MODE = "ax_qs_gradient_color_mode"

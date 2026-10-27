@@ -1356,6 +1356,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         }
         updateBackgroundClipping();
         updateBaseRoundness();
+        updateCosTileBackground();
         updateAxBlurEnabled();
     }
 
@@ -1474,6 +1475,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         if (mIsBlurSupported) {
             updateColors();
         }
+        updateCosTileBackground();
         setChronometerRunning(mLastChronometerRunning);
         if (isAboveShelf() != wasAboveShelf) {
             mAboveShelfChangedListener.onAboveShelfStateChanged(!wasAboveShelf);
@@ -2094,6 +2096,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         if (mIsBlurSupported) {
             updateColors();
         }
+        updateCosTileBackground();
     }
 
     public void setHeadsUpAnimatingAwayListener(Consumer<Boolean> listener) {
@@ -5175,6 +5178,12 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         } else {
             return getEntryLegacy().isExpandAnimationRunning();
         }
+    }
+
+    @Override
+    protected boolean usesCosTileBackground() {
+        return super.usesCosTileBackground()
+                && !(isChildInGroup() && !mNotificationParent.usesCosTileBackground());
     }
 
     @Override

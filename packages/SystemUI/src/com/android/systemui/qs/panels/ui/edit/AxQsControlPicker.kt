@@ -93,6 +93,7 @@ import com.android.systemui.qs.panels.ui.compose.axQsTileShape
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.SmallTileContent
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.TileColors
+import com.android.systemui.qs.panels.ui.compose.lunarisQsCosTileBorder
 import com.android.systemui.qs.panels.ui.compose.useAxQsCircleCells
 import com.android.systemui.qs.panels.ui.viewmodel.EditTileViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.LocalLunarisFlashlightSliderViewModel
@@ -730,7 +731,7 @@ fun AxQsEditTile(
         )
     val shape = axQsTileShape(span, LocalAxQsTileStyle.current)
     BoxWithConstraints(
-        modifier = modifier.clip(shape).background(colors.background),
+        modifier = modifier.clip(shape).background(colors.background).lunarisQsCosTileBorder(shape),
         contentAlignment = Alignment.Center,
     ) {
         val compactIconSize = AxTileDefaults.IconSize * LocalTileScale.current

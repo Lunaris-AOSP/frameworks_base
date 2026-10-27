@@ -184,13 +184,12 @@ internal fun AxTileStack(
 
 @Composable
 internal fun AxTileStackPlaceholder(modifier: Modifier = Modifier) {
+    val shape = axQsTileShape(AxQsTileStacks.Span, LocalAxQsTileStyle.current)
     Column(
         modifier
             .fillMaxSize()
-            .background(
-                AxTileDefaults.backgroundColor(),
-                axQsTileShape(AxQsTileStacks.Span, LocalAxQsTileStyle.current),
-            )
+            .background(AxTileDefaults.backgroundColor(), shape)
+            .lunarisQsCosTileBorder(shape)
             .padding(16.dp),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {

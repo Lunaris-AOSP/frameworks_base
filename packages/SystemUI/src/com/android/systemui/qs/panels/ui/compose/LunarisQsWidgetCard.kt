@@ -121,7 +121,8 @@ fun LunarisQsWidgetCard(
         modifier
             .onGloballyPositioned { inViewport = !it.boundsInWindow().isEmpty }
             .clip(shape)
-            .background(backgroundColor),
+            .background(backgroundColor)
+            .lunarisQsCosTileBorder(shape),
         contentAlignment = Alignment.Center,
     ) {
         val width = maxWidth.value

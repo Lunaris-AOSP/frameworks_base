@@ -83,9 +83,11 @@ import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.LunarisQsMediaStyle
 import com.android.systemui.qs.panels.ui.compose.AxQsControlCornerRadius
 import com.android.systemui.qs.panels.ui.compose.AxTileDefaults
+import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsCosTileBackground
 import com.android.systemui.qs.panels.ui.compose.MaterialMediaExpandedPopup
 import com.android.systemui.qs.panels.ui.compose.SharedMediaState
 import com.android.systemui.qs.panels.ui.compose.axQsControlShape
+import com.android.systemui.qs.panels.ui.compose.lunarisQsCosTileBorder
 import com.android.systemui.qs.panels.ui.compose.rememberMediaState
 import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.res.R
@@ -389,7 +391,15 @@ private fun AxMediaCard(
         defaultMinSize = false,
         useModifierBasedImplementation = true,
     ) { expandable ->
-        Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier.fillMaxSize()
+                .lunarisQsCosTileBorder(
+                    shape = shape,
+                    enabled =
+                        LocalLunarisQsCosTileBackground.current &&
+                            surface != AxMediaSurface.LOCKSCREEN && !gutsVisible,
+                )
+        ) {
             Box(
                 Modifier.fillMaxSize()
                     .combinedClickable(

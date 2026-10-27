@@ -30,12 +30,21 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.database.ContentObserver;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.InsetDrawable;
+import android.graphics.drawable.LayerDrawable;
+import android.graphics.drawable.RippleDrawable;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.UserHandle;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.provider.Settings;
 import android.util.AttributeSet;
 import android.util.IndentingPrintWriter;
 import android.view.View;
@@ -45,6 +54,9 @@ import androidx.annotation.NonNull;
 
 import com.android.internal.graphics.ColorUtils;
 import com.android.systemui.common.shared.colors.SurfaceEffectColors;
+import com.android.systemui.common.ui.drawable.CosTileBorderDrawable;
+import com.android.systemui.qs.flags.MistQsMode;
+import com.android.systemui.qs.flags.QsCosTileBackground;
 import com.android.systemui.res.R;
 import com.android.systemui.scene.shared.flag.SceneContainerFlag;
 import com.android.systemui.statusbar.notification.ColorUpdateLogger;
@@ -70,6 +82,7 @@ public class FooterView extends StackScrollerDecorView {
     private FooterViewButton mHistoryButton;
     private boolean mShouldBeHidden;
     private boolean mIsBlurSupported;
+    private ContentObserver mCosTileBackgroundObserver;
 
     // Footer label
     private TextView mSeenNotifsFooterTextView;
@@ -91,6 +104,32 @@ public class FooterView extends StackScrollerDecorView {
     public FooterView(Context context, AttributeSet attrs) {
         super(context, attrs);
         mVibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        if (MistQsMode.isEnabled()) {
+            mCosTileBackgroundObserver = new ContentObserver(new Handler(Looper.getMainLooper())) {
+                @Override
+                public void onChange(boolean selfChange) {
+                    updateColors();
+                }
+            };
+            mContext.getContentResolver().registerContentObserver(
+                    Settings.Secure.getUriFor(QsCosTileBackground.SETTING),
+                    false, mCosTileBackgroundObserver, UserHandle.USER_ALL);
+            updateColors();
+        }
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        if (mCosTileBackgroundObserver != null) {
+            mContext.getContentResolver().unregisterContentObserver(mCosTileBackgroundObserver);
+            mCosTileBackgroundObserver = null;
+        }
+        super.onDetachedFromWindow();
     }
 
     @Override
@@ -404,7 +443,14 @@ public class FooterView extends StackScrollerDecorView {
                 ? theme.getDrawable(R.drawable.notif_footer_btn_background) : null;
         final @ColorInt int scHigh;
 
-        if (!notificationFooterBackgroundTintOptimization()) {
+        if (QsCosTileBackground.isEnabled(mContext)) {
+            scHigh = SurfaceEffectColors.surfaceEffect2(mContext);
+            applyCosTileBackground(clearAllBg, scHigh);
+            applyCosTileBackground(settingsBg, scHigh);
+            if (historyBg != null) {
+                applyCosTileBackground(historyBg, scHigh);
+            }
+        } else if (!notificationFooterBackgroundTintOptimization()) {
             if (notificationShadeBlur()) {
                 if (mIsBlurSupported) {
                     Color backgroundColor = Color.valueOf(
@@ -457,6 +503,25 @@ public class FooterView extends StackScrollerDecorView {
                             + " backgroundTint(surfaceContainerHigh)=" + hexColorString(scHigh)
                             + " background=" + DrawableDumpKt.dumpToString(settingsBg));
         }
+    }
+
+    private void applyCosTileBackground(Drawable background, @ColorInt int color) {
+        RippleDrawable ripple = (RippleDrawable) background.mutate();
+        InsetDrawable inset = (InsetDrawable) ripple.getDrawable(0);
+        GradientDrawable fill = (GradientDrawable) inset.getDrawable();
+        fill.setColor(color);
+        CosTileBorderDrawable border =
+                new CosTileBorderDrawable(getResources().getDisplayMetrics().density);
+        float[] radii = fill.getCornerRadii();
+        if (radii != null) {
+            border.setCornerRadii(radii);
+        } else {
+            border.setCornerRadius(fill.getCornerRadius());
+        }
+        inset.setDrawable(null);
+        LayerDrawable layers = new LayerDrawable(new Drawable[] {fill, border});
+        layers.setPaddingMode(LayerDrawable.PADDING_MODE_STACK);
+        inset.setDrawable(layers);
     }
 
     public void setIsBlurSupported(boolean isBlurSupported) {

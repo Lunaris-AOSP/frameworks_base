@@ -32,6 +32,7 @@ import android.graphics.Color;
 import android.graphics.Point;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.AttributeSet;
 import android.util.IndentingPrintWriter;
@@ -48,6 +49,8 @@ import com.android.internal.jank.InteractionJankMonitor.Configuration;
 import com.android.systemui.Flags;
 import com.android.systemui.Gefingerpoken;
 import com.android.systemui.common.shared.colors.SurfaceEffectColors;
+import com.android.systemui.qs.flags.MistQsMode;
+import com.android.systemui.qs.flags.QsCosTileBackground;
 import com.android.systemui.res.R;
 import com.android.systemui.shade.TouchLogger;
 import com.android.systemui.statusbar.NotificationShelf;
@@ -92,6 +95,9 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
     private Gefingerpoken mTouchHandler;
 
     private ContentObserver mColorSettingObserver;
+    private boolean mCosTileBackgroundEnabled;
+    private boolean mUseCosTileBackground;
+    private boolean mBackgroundTintNeedsUpdate;
 
     int mBgTint = NO_COLOR;
 
@@ -168,6 +174,7 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
     }
 
     protected void updateColors() {
+        mCosTileBackgroundEnabled = QsCosTileBackground.isEnabled(mContext);
         boolean useAltColor = Settings.System.getInt(
                 mContext.getContentResolver(),
                 Settings.System.NOTIFICATION_BG_ALTERNATE_COLOR,
@@ -175,7 +182,7 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
         ) != 0;
 
         if (usesTransparentBackground()) {
-            mNormalColor = useAltColor
+            mNormalColor = usesCosTileBackground() || useAltColor
                     ? SurfaceEffectColors.surfaceEffect2(getContext())
                     : SurfaceEffectColors.surfaceEffect1(getContext());
             mOpaqueColor = mContext.getColor(
@@ -236,6 +243,10 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
      * be useful in a configuration change.
      */
     protected void initBackground() {
+        boolean useCosTileBackground = usesCosTileBackground();
+        mBackgroundTintNeedsUpdate |= mUseCosTileBackground != useCosTileBackground;
+        mUseCosTileBackground = useCosTileBackground;
+        mBackgroundNormal.setCosTileBackgroundEnabled(mUseCosTileBackground);
         mBackgroundNormal.setCustomBackground(R.drawable.notification_material_bg);
     }
 
@@ -365,13 +376,15 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
     }
 
     protected void setBackgroundTintColor(int color) {
-        if (color != mCurrentBackgroundTint) {
+        if (color != mCurrentBackgroundTint || mBackgroundTintNeedsUpdate) {
             mCurrentBackgroundTint = color;
-            if (notificationBackgroundTintOptimization() && color == mNormalColor) {
+            if (notificationBackgroundTintOptimization() && color == mNormalColor
+                    && !mUseCosTileBackground) {
                 // We don't need to tint a normal notification
                 color = 0;
             }
             mBackgroundNormal.setTint(color);
+            mBackgroundTintNeedsUpdate = false;
         }
         updateAxBlurEnabled();
     }
@@ -416,6 +429,7 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
             return;
         }
         mIsDozing = dozing;
+        updateCosTileBackground();
         updateAxBlurEnabled();
     }
 
@@ -440,7 +454,7 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
     /** Updates background blur/transparency when transparent state changes. */
     public void updateIfNeeded() {
         boolean transparent = usesTransparentBackground();
-        if (mUseTransparent != transparent) {
+        if (mUseTransparent != transparent || mUseCosTileBackground != usesCosTileBackground()) {
             mUseTransparent = transparent;
             if (mBackgroundNormal != null) {
                 mBackgroundNormal.setIsBlurSupported(transparent);
@@ -451,6 +465,17 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
 
     protected boolean usesTransparentBackground() {
         return mIsBlurSupported && !mOnKeyguard;
+    }
+
+    protected boolean usesCosTileBackground() {
+        return mCosTileBackgroundEnabled && !mOnKeyguard && !mIsDozing
+                && !isHeadsUpState() && !isPinned();
+    }
+
+    protected void updateCosTileBackground() {
+        if ((mCosTileBackgroundEnabled || mUseCosTileBackground) && mBackgroundNormal != null) {
+            updateIfNeeded();
+        }
     }
 
     @Override
@@ -840,7 +865,8 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
         if (withTint && mBgTint != NO_COLOR) {
             return mBgTint;
         } else {
-            return usesTransparentBackground() ? mNormalColor : mOpaqueColor;
+            return usesCosTileBackground() || usesTransparentBackground()
+                    ? mNormalColor : mOpaqueColor;
         }
     }
 
@@ -952,6 +978,7 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
         }
 
         mOnKeyguard = onKeyguard;
+        updateCosTileBackground();
         updateAxBlurEnabled();
         if (mIsBlurSupported) {
             updateBackgroundTint();
@@ -980,6 +1007,12 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
                 false,
                 mColorSettingObserver
         );
+        if (MistQsMode.isEnabled()) {
+            mContext.getContentResolver().registerContentObserver(
+                    Settings.Secure.getUriFor(QsCosTileBackground.SETTING),
+                    false, mColorSettingObserver, UserHandle.USER_ALL);
+            updateBackgroundColors();
+        }
         mRowTransparencyObserver = new ContentObserver(new Handler(Looper.getMainLooper())) {
             @Override
             public void onChange(boolean selfChange) {
