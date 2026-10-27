@@ -62,6 +62,7 @@ public class PowerInsightService extends IPowerInsightService.Stub {
 
     private static final String STATS_FILE = "/data/system/power_insight_stats.xml";
     private static final String NOTIF_CHANNEL_ID = "power_insight";
+    private static final String ALARM_CHANNEL_ID = "power_insight_alarm";
     private static final int NOTIF_ID = 1001;
     
     private static final int MAX_FLOW_SAMPLES = 1440;
@@ -634,9 +635,18 @@ public class PowerInsightService extends IPowerInsightService.Stub {
         if (mNotifChannelCreated) return true;
         try {
             NotificationChannel channel = new NotificationChannel(
-                    NOTIF_CHANNEL_ID, "Power Insight", NotificationManager.IMPORTANCE_LOW);
+                    NOTIF_CHANNEL_ID, "Power Insight", NotificationManager.IMPORTANCE_MIN);
             channel.setShowBadge(false);
+            channel.setBlockable(true);
             notifManager.createNotificationChannel(channel);
+
+            NotificationChannel alarmChannel = new NotificationChannel(
+                    ALARM_CHANNEL_ID, "Battery Alarm", NotificationManager.IMPORTANCE_HIGH);
+            alarmChannel.setBlockable(true);
+            alarmChannel.setSound(null, Notification.AUDIO_ATTRIBUTES_DEFAULT);
+            alarmChannel.enableVibration(false);
+            notifManager.createNotificationChannel(alarmChannel);
+
             mNotifChannelCreated = true;
             return true;
         } catch (Throwable t) {
@@ -767,17 +777,24 @@ public class PowerInsightService extends IPowerInsightService.Stub {
     private void sendAlarmNotification(String title, String text) {
         NotificationManager nm = getNotificationManager();
         if (nm == null) return;
-        ensureNotificationReady(nm);
+        if (!ensureNotificationReady(nm)) return;
 
-        Notification.Builder builder = new Notification.Builder(mContext, NOTIF_CHANNEL_ID)
+        NotificationChannel alarmChannel = nm.getNotificationChannel(ALARM_CHANNEL_ID);
+        if (!nm.areNotificationsEnabled() || alarmChannel == null
+                || alarmChannel.getImportance() == NotificationManager.IMPORTANCE_NONE) {
+            return;
+        }
+
+        Notification.Builder builder = new Notification.Builder(mContext, ALARM_CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(text)
             .setSmallIcon(com.android.internal.R.drawable.ic_lock_idle_low_battery)
             .setAutoCancel(true)
-            .setPriority(Notification.PRIORITY_HIGH)
-            .setDefaults(Notification.DEFAULT_ALL);
+            .setPriority(Notification.PRIORITY_HIGH);
 
         nm.notify(NOTIF_ID + 1, builder.build());
+
+        if (alarmChannel.getImportance() < NotificationManager.IMPORTANCE_DEFAULT) return;
 
         // Custom Sound
         String soundUri = getBatteryAlarmSound();
