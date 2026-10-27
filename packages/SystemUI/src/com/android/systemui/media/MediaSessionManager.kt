@@ -92,14 +92,14 @@ class MediaSessionManager private constructor() {
         listenerManager.notifyOnBackground { it.onMediaColorsChanged(color) }
     }
 
-    fun onMetadataChanged(metadata: MediaMetadata) {
-        val newTitle = metadata.getString(MediaMetadata.METADATA_KEY_TITLE) ?: "Unknown"
-        val newArtist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST) ?: "Unknown"
+    fun onMetadataChanged(metadata: MediaMetadata?) {
+        val newTitle = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE) ?: "Unknown"
+        val newArtist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST) ?: "Unknown"
 
         if (trackTitle != newTitle || artist != newArtist) {
             trackTitle = newTitle
             artist = newArtist
-            listenerManager.notifyOnBackground { it.onMetadataChanged(trackTitle, artist) }
+            listenerManager.notifyOnBackground { it.onMetadataChanged(newTitle, newArtist) }
         }
     }
 

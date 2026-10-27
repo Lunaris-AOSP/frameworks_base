@@ -136,7 +136,7 @@ fun FadingLunarisMotionArtVideo(
     }
 }
 
-private class LunarisMotionArtTextureView(context: Context) : TextureView(context) {
+internal class LunarisMotionArtTextureView(context: Context) : TextureView(context) {
     var loopingPlayer: LunarisMotionArtPlayer? = null
 
     override fun onVisibilityAggregated(isVisible: Boolean) {
@@ -145,7 +145,7 @@ private class LunarisMotionArtTextureView(context: Context) : TextureView(contex
     }
 }
 
-private class LunarisMotionArtPlayer(
+internal class LunarisMotionArtPlayer(
     private val view: TextureView,
     private val file: File,
     private val crop: Boolean,

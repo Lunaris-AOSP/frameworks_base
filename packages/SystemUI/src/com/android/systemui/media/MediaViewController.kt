@@ -29,13 +29,16 @@ import android.graphics.drawable.LayerDrawable
 import android.media.session.PlaybackState
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.os.UserHandle
 import android.provider.Settings
 import android.util.Log
 import android.util.TypedValue
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.widget.FrameLayout
 import android.widget.ImageView
 import androidx.annotation.VisibleForTesting
 import com.android.internal.graphics.ColorUtils
@@ -43,8 +46,10 @@ import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.media.MediaScrimState.STATE_SCRIM_HIDDEN
 import com.android.systemui.media.MediaScrimState.STATE_SCRIM_VISIBLE
+import com.android.systemui.media.remedia.motionart.LunarisMotionArt
 import com.android.systemui.util.ScrimUtils
 
+import java.io.File
 import kotlinx.coroutines.*
 import kotlin.math.*
 import javax.inject.Inject
@@ -80,6 +85,7 @@ class MediaViewController @VisibleForTesting internal constructor(
     private var bouncerShowing = false
     private var keyguardGoingAway = false
     private var keyguardFadingAway = false
+    private var screenInteractive = context.getSystemService(PowerManager::class.java).isInteractive
 
     private var mediaFilter = 0
     private var mediaFadeLevel = 40
@@ -99,7 +105,23 @@ class MediaViewController @VisibleForTesting internal constructor(
         }
     }
 
-    private val mediaScrim = object : ImageView(context) {
+    private val mediaBackground = ImageView(context).apply {
+        scaleType = ImageView.ScaleType.CENTER_CROP
+    }
+    private val framedAlbum = FramedMediaArtView(context).apply { visibility = View.GONE }
+
+    private val mediaScrim = object : FrameLayout(context) {
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            val size = minOf(
+                View.MeasureSpec.getSize(widthMeasureSpec) * 0.86f,
+                View.MeasureSpec.getSize(heightMeasureSpec) * 0.44f,
+                480f * resources.displayMetrics.density
+            ).roundToInt().coerceAtLeast(1)
+            framedAlbum.layoutParams.width = size
+            framedAlbum.layoutParams.height = size
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        }
+
         override fun onConfigurationChanged(newConfig: Configuration) {
             super.onConfigurationChanged(newConfig)
             coroutineScope.launch {
@@ -107,16 +129,38 @@ class MediaViewController @VisibleForTesting internal constructor(
                 updateMediaState()
             }
         }
+
+        override fun onAttachedToWindow() {
+            super.onAttachedToWindow()
+            coroutineScope.launch { updateFramedAlbum() }
+        }
+
+        override fun onDetachedFromWindow() {
+            stopMotionArt()
+            super.onDetachedFromWindow()
+        }
     }.apply {
         layoutParams = ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         )
-        scaleType = ImageView.ScaleType.CENTER_CROP
+        clipChildren = false
+        clipToPadding = false
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+        addView(mediaBackground, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+        ))
+        addView(framedAlbum, FrameLayout.LayoutParams(0, 0, Gravity.CENTER))
         visibility = View.GONE
     }
 
     private var mediaArtJob: Job? = null
+    private var motionArtJob: Job? = null
+    private var motionArtKey: Pair<String, String>? = null
+    private var motionArtFile: File? = null
+    private var motionArtResolved = false
+    private var trackTitle = ""
+    private var trackArtist = ""
     private var isAlbumArtVisible = false
         set(visible) {
             if (field == visible) return
@@ -271,12 +315,30 @@ class MediaViewController @VisibleForTesting internal constructor(
         get() = if (expandedMusicOpen) EXPANDED_MUSIC_FADE_LEVEL else mediaFadeLevel
 
     private fun setupMediaFilter() {
-        if ((isDozing() || isPulsing()) && aodEnabled) {
-            val grayscaleEffect = RenderEffect.createColorFilterEffect(
-                ColorMatrixColorFilter(grayscaleMatrix)
+        val ambient = (isDozing() || isPulsing()) && aodEnabled
+        val grayscaleEffect = if (ambient) RenderEffect.createColorFilterEffect(
+            ColorMatrixColorFilter(grayscaleMatrix)
+        ) else null
+        framedAlbum.setRenderEffect(grayscaleEffect)
+
+        if (effectiveMediaFilter == FILTER_FRAMED_ALBUM) {
+            val blurEffect = if (effectiveMediaBlurLevel > 0) RenderEffect.createBlurEffect(
+                effectiveMediaBlurLevel.toFloat(),
+                effectiveMediaBlurLevel.toFloat(),
+                Shader.TileMode.MIRROR
+            ) else null
+            mediaBackground.setRenderEffect(
+                if (blurEffect != null && grayscaleEffect != null) {
+                    RenderEffect.createChainEffect(grayscaleEffect, blurEffect)
+                } else blurEffect ?: grayscaleEffect
             )
-            mediaScrim.setRenderEffect(grayscaleEffect)
-            mediaScrim.colorFilter = null
+            mediaBackground.colorFilter = null
+            return
+        }
+
+        if (ambient) {
+            mediaBackground.setRenderEffect(grayscaleEffect)
+            mediaBackground.colorFilter = null
             return
         }
 
@@ -327,16 +389,16 @@ class MediaViewController @VisibleForTesting internal constructor(
             else -> null
         }
 
-        mediaScrim.setRenderEffect(effect)
+        mediaBackground.setRenderEffect(effect)
         if (effectiveMediaFilter == 4) {
             context.theme.resolveAttribute(android.R.attr.colorAccent, sharedTypedValue, true)
             val accent = sharedTypedValue.data
-            mediaScrim.colorFilter = PorterDuffColorFilter(
+            mediaBackground.colorFilter = PorterDuffColorFilter(
                 Color.argb(150, Color.red(accent), Color.green(accent), Color.blue(accent)),
                 PorterDuff.Mode.SRC_ATOP
             )
         } else {
-            mediaScrim.colorFilter = null
+            mediaBackground.colorFilter = null
         }
     }
 
@@ -386,6 +448,7 @@ class MediaViewController @VisibleForTesting internal constructor(
         dismissingKeyguard = false
         cancelScrimAnim()
         setupMediaFilter()
+        updateFramedAlbum()
         mediaScrim.animate()
             .alpha(targetAlpha)
             .setDuration(300)
@@ -431,7 +494,7 @@ class MediaViewController @VisibleForTesting internal constructor(
             cancelScrimAnim()
             setupMediaFilter()
             if (!isAlbumArtVisible) mediaScrim.alpha = 0f
-            mediaScrim.setImageDrawable(drawable)
+            mediaBackground.setImageDrawable(drawable)
             mediaScrim.visibility = View.VISIBLE
             scrimState = STATE_SCRIM_VISIBLE
             // Depth wallpaper and notification blur must only react to successfully applied art.
@@ -445,6 +508,69 @@ class MediaViewController @VisibleForTesting internal constructor(
         artworkRequestId++
         mediaArtJob?.cancel()
         mediaArtJob = null
+    }
+
+    private fun updateFramedAlbum() {
+        if (effectiveMediaFilter != FILTER_FRAMED_ALBUM || !isAlbumArtVisible ||
+            !shouldShowMediaArt() || dismissingKeyguard) {
+            framedAlbum.visibility = View.GONE
+            framedAlbum.clear()
+            resetMotionArt()
+            return
+        }
+        artworkDrawable?.let(framedAlbum::setArtwork)
+        framedAlbum.visibility = View.VISIBLE
+
+        if (!mediaScrim.isAttachedToWindow || !screenInteractive || isDozing() || isPulsing()) {
+            stopMotionArt()
+            return
+        }
+        if (trackTitle.isBlank() || trackArtist.isBlank() ||
+            trackTitle == "Unknown" || trackArtist == "Unknown") {
+            resetMotionArt()
+            return
+        }
+
+        val key = trackArtist to trackTitle
+        if (key != motionArtKey) {
+            resetMotionArt()
+            motionArtKey = key
+        }
+        if (motionArtResolved) {
+            framedAlbum.setMotionArt(motionArtFile)
+            return
+        }
+        if (motionArtJob?.isActive == true) return
+        motionArtJob = coroutineScope.launch {
+            val file = try {
+                LunarisMotionArt.find(context, key.first, key.second)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Cannot load lockscreen motion art", e)
+                null
+            }
+            ensureActive()
+            if (motionArtKey != key || effectiveMediaFilter != FILTER_FRAMED_ALBUM ||
+                !mediaScrim.isAttachedToWindow || !isAlbumArtVisible || dismissingKeyguard ||
+                !shouldShowMediaArt() || !screenInteractive || isDozing() || isPulsing()) return@launch
+            motionArtFile = file
+            motionArtResolved = true
+            framedAlbum.setMotionArt(file)
+        }
+    }
+
+    private fun stopMotionArt() {
+        motionArtJob?.cancel()
+        motionArtJob = null
+        framedAlbum.clearMotionArt()
+    }
+
+    private fun resetMotionArt() {
+        stopMotionArt()
+        motionArtKey = null
+        motionArtFile = null
+        motionArtResolved = false
     }
 
     private fun processArtwork(
@@ -595,9 +721,11 @@ class MediaViewController @VisibleForTesting internal constructor(
     }
 
     private fun clearResources() {
-        mediaScrim.setImageDrawable(null)
-        mediaScrim.setRenderEffect(null)
-        mediaScrim.colorFilter = null
+        framedAlbum.clear()
+        framedAlbum.visibility = View.GONE
+        mediaBackground.setImageDrawable(null)
+        mediaBackground.setRenderEffect(null)
+        mediaBackground.colorFilter = null
         mediaScrim.visibility = View.GONE
         scrimState = STATE_SCRIM_HIDDEN
         isAlbumArtVisible = false
@@ -608,6 +736,7 @@ class MediaViewController @VisibleForTesting internal constructor(
         showDelayJob?.cancel()
         hideDelayJob?.cancel()
         cancelArtworkUpdate()
+        resetMotionArt()
         cancelScrimAnim()
         
         if (!animate) {
@@ -646,6 +775,16 @@ class MediaViewController @VisibleForTesting internal constructor(
             // Pause/buffering does not necessarily trigger a new artwork callback on resume.
             // Only the artwork producer clears the cached source when a session/artwork is lost.
             updateMediaState()
+        }
+    }
+
+    override fun onMetadataChanged(track: String, artist: String) {
+        coroutineScope.launch {
+            if (trackTitle == track && trackArtist == artist) return@launch
+            trackTitle = track
+            trackArtist = artist
+            resetMotionArt()
+            updateFramedAlbum()
         }
     }
 
@@ -736,6 +875,7 @@ class MediaViewController @VisibleForTesting internal constructor(
     }
 
     override fun onScreenTurnedOff() {
+        screenInteractive = false
         showDelayJob?.cancel()
         hideDelayJob?.cancel()
         dismissingKeyguard = false
@@ -743,6 +883,7 @@ class MediaViewController @VisibleForTesting internal constructor(
     }
 
     override fun onStartedWakingUp() {
+        screenInteractive = true
         dismissingKeyguard = false
         coroutineScope.launch {
             updateMediaState()
@@ -754,7 +895,10 @@ class MediaViewController @VisibleForTesting internal constructor(
         
         showDelayJob?.cancel()
         hideDelayJob?.cancel()
-        if (!shouldShow) cancelArtworkUpdate()
+        if (!shouldShow) {
+            cancelArtworkUpdate()
+            resetMotionArt()
+        }
         
         if (shouldShow && scrimState == STATE_SCRIM_HIDDEN) {
             showDelayJob = coroutineScope.launch {
@@ -814,6 +958,7 @@ class MediaViewController @VisibleForTesting internal constructor(
 
     companion object {
         private const val TAG = "MediaViewController"
+        private const val FILTER_FRAMED_ALBUM = 8
 
         @Volatile
         private var INSTANCE: MediaViewController? = null
