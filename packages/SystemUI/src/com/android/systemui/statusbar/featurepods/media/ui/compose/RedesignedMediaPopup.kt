@@ -25,13 +25,16 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.android.internal.graphics.ColorUtils
 import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 import com.android.systemui.media.controls.shared.model.MediaAction
@@ -44,6 +47,7 @@ import com.android.systemui.res.R
 import com.android.systemui.statusbar.featurepods.media.shared.model.MediaControlChipModel
 import com.android.systemui.statusbar.featurepods.media.ui.view.RedesignedMediaView
 import com.android.systemui.statusbar.featurepods.popups.ui.compose.LocalIslandPopupRevealMillis
+import com.android.systemui.statusbar.featurepods.popups.ui.compose.rememberAlbumArtAccent
 
 @Composable
 fun RedesignedMediaPopup(
@@ -64,6 +68,8 @@ fun RedesignedMediaPopup(
                 ?: appIcon
                 ?: context.getDrawable(com.android.internal.R.drawable.ic_audio_media)
         }
+    val accent =
+        rememberAlbumArtAccent(artwork, fallback = MaterialTheme.colorScheme.primary).toArgb()
     val state =
         remember(model, artwork, appIcon) {
             val controls = model.transportActions
@@ -109,22 +115,34 @@ fun RedesignedMediaPopup(
                 scrubbing ->
                 when (bar) {
                     is GradientWaveSeekBar -> {
+                        bar.setTrackColor(accent)
                         bar.setArtwork(artwork)
                         bar.isScrubbing = scrubbing
                         bar.setPlaybackState(playing)
                     }
                     is GlowingSeekBar -> {
+                        bar.setBarColor(accent)
+                        bar.setArtwork(artwork)
                         bar.isScrubbing = scrubbing
                         bar.setPlaybackState(playing)
                     }
                     is CosSeekBar -> {
+                        bar.setBarColor(accent)
                         bar.setArtwork(artwork)
                         bar.isScrubbing = scrubbing
                         bar.setPlaybackState(playing)
                     }
                     is WaveformSeekBar -> {
+                        bar.setWaveformColor(accent)
+                        bar.setThumbColor(accent)
                         if (playing && !bar.isPlaying) bar.startWaveAnimation()
                         else if (!playing && bar.isPlaying) bar.stopWaveAnimation()
+                    }
+                    else -> {
+                        bar.thumbTintList = ColorStateList.valueOf(accent)
+                        bar.progressTintList = ColorStateList.valueOf(accent)
+                        bar.progressBackgroundTintList =
+                            ColorStateList.valueOf(ColorUtils.setAlphaComponent(accent, 51))
                     }
                 }
                 (bar.progressDrawable as? SquigglyProgress)?.animate =
@@ -171,14 +189,9 @@ private fun createSeekBar(context: Context, style: MediaSeekBarStyle): SeekBar =
         MediaSeekBarStyle.WAVEFORM ->
             WaveformSeekBar(context).apply {
                 followsMediaColors = false
-                setWaveformColor(Color.WHITE)
-                setThumbColor(Color.WHITE)
             }
         MediaSeekBarStyle.DEFAULT ->
             SeekBar(context, null, 0, R.style.MediaPlayer_ProgressBar).apply {
-                thumbTintList = ColorStateList.valueOf(Color.WHITE)
-                progressTintList = ColorStateList.valueOf(Color.WHITE)
-                progressBackgroundTintList = ColorStateList.valueOf(0x33ffffff)
                 (progressDrawable as? SquigglyProgress)?.apply {
                     waveLength =
                         resources.getDimension(R.dimen.qs_media_seekbar_progress_wavelength)
@@ -187,7 +200,6 @@ private fun createSeekBar(context: Context, style: MediaSeekBarStyle): SeekBar =
                     phaseSpeed = resources.getDimension(R.dimen.qs_media_seekbar_progress_phase)
                     strokeWidth =
                         resources.getDimension(R.dimen.qs_media_seekbar_progress_stroke_width)
-                    setTint(Color.WHITE)
                 }
             }
     }

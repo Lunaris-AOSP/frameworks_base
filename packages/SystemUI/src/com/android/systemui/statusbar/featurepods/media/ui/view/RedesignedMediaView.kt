@@ -169,14 +169,14 @@ internal class RedesignedMediaView(context: Context) : ViewGroup(context) {
                         override fun onStartTrackingTouch(bar: SeekBar) {
                             scrubbing = true
                             awaitingSeekUntil = 0L
-                            update(bar, state?.playing == true, true)
+                            updateSeekBar?.invoke(bar, state?.playing == true, true)
                         }
 
                         override fun onStopTrackingTouch(bar: SeekBar) {
                             scrubbing = false
                             if (!cancelScrub) commitSeek() else restorePosition()
                             parent?.requestDisallowInterceptTouchEvent(false)
-                            update(bar, state?.playing == true, false)
+                            updateSeekBar?.invoke(bar, state?.playing == true, false)
                             invalidate()
                         }
                     }
