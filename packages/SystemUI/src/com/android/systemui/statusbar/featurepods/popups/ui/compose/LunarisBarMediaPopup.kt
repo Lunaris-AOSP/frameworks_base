@@ -63,6 +63,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.android.systemui.common.shared.model.ContentDescription
@@ -71,7 +72,7 @@ import com.android.systemui.common.ui.compose.Icon
 import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 import com.android.systemui.media.controls.shared.model.MediaAction
 import com.android.systemui.media.controls.ui.composable.StyledMediaSeekBar
-import com.android.systemui.qs.composefragment.cosStatusGlow
+import com.android.systemui.qs.composefragment.cosMediaRipple
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.featurepods.media.shared.model.MediaControlChipModel
 import kotlin.math.sin
@@ -123,7 +124,7 @@ internal fun LunarisBarMediaPopup(model: MediaControlChipModel, seekBarStyle: Me
     Box(
         Modifier.widthIn(max = 420.dp)
             .fillMaxWidth()
-            .cosStatusGlow(
+            .cosMediaRipple(
                 trigger =
                     Triple(
                         model.packageName,
@@ -132,7 +133,8 @@ internal fun LunarisBarMediaPopup(model: MediaControlChipModel, seekBarStyle: Me
                     ),
                 cornerRadius =
                     if (settings.expandedShape == 0) 48.dp else settings.cornerRadius.dp,
-                enabled = settings.enabled("status_glow", false) && !settings.isReducedMotion,
+                enabled = settings.enabled("status_glow", true) && !settings.isReducedMotion,
+                origin = DpOffset(48.dp, 48.dp),
             )
     ) {
         when (settings.mediaBackground) {

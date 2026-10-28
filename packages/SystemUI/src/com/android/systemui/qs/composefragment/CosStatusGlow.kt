@@ -20,7 +20,11 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.unit.Dp
 
 @Composable
-fun Modifier.cosStatusGlow(trigger: Any?, cornerRadius: Dp, enabled: Boolean): Modifier {
+fun Modifier.cosStatusGlow(
+    trigger: Any?,
+    cornerRadius: Dp,
+    enabled: Boolean,
+): Modifier {
     if (!enabled || trigger == null) return this
     val glow =
         remember {

@@ -326,7 +326,7 @@ private fun LunarisBarChipContent(
                     trigger = viewModel.statusGlowKey(),
                     cornerRadius = if (companion) 100.dp else settings.cornerRadius.dp,
                     enabled =
-                        settings.enabled("status_glow", false) &&
+                        settings.enabled("status_glow", true) &&
                             !settings.isReducedMotion &&
                             !resting &&
                             !viewModel.isPopupShown &&

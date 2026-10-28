@@ -51,7 +51,13 @@ internal class EdgeSweep {
         line.set(turn, LINE_INSET, lineWidth, lineLevel, lineLevel)
     }
 
-    fun draw(canvas: Canvas, width: Int, height: Int, cornerRadius: Float, capsule: Boolean) {
+    fun draw(
+        canvas: Canvas,
+        width: Int,
+        height: Int,
+        cornerRadius: Float,
+        capsule: Boolean,
+    ) {
         if (width <= 0 || height <= 0) return
         glow.draw(canvas, width.toFloat(), height.toFloat(), cornerRadius, capsule)
         line.draw(canvas, width.toFloat(), height.toFloat(), cornerRadius, capsule)
@@ -76,7 +82,13 @@ internal class EdgeSweep {
             )
         }
 
-        fun draw(canvas: Canvas, width: Float, height: Float, radius: Float, capsule: Boolean) {
+        fun draw(
+            canvas: Canvas,
+            width: Float,
+            height: Float,
+            radius: Float,
+            capsule: Boolean,
+        ) {
             shader.setFloatUniform("uSize", width, height)
             shader.setFloatUniform("uRadius", radius)
             shader.setFloatUniform("uCapsule", if (capsule) 1f else 0f)

@@ -76,7 +76,7 @@ import com.android.systemui.media.remedia.shared.model.MediaSessionState
 import com.android.systemui.media.remedia.ui.compose.MediaUiBehavior
 import com.android.systemui.media.remedia.ui.viewmodel.MediaCarouselVisibility
 import com.android.systemui.media.remedia.ui.viewmodel.MediaViewModel
-import com.android.systemui.qs.composefragment.cosStatusGlow
+import com.android.systemui.qs.composefragment.cosMediaRipple
 import com.android.systemui.qs.panels.shared.model.AxMediaSurface
 import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
@@ -388,7 +388,7 @@ private fun AxMediaCard(
             modifier
                 .fillMaxSize()
                 .clip(shape)
-                .cosStatusGlow(
+                .cosMediaRipple(
                     trigger = session?.let { Triple(it.key, it.title, it.subtitle) },
                     cornerRadius = glowCornerRadius,
                     enabled = statusGlowVisible,
