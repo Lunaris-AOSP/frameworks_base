@@ -617,13 +617,7 @@ fun LargeStaticTile(
 private fun Context.getTileIcon(icon: IconProvider): Icon {
     return icon.icon?.let {
         if (it is QSTileImpl.ResourceIcon) {
-            val themed = com.android.systemui.statusbar.connectivity.ThemeIconController
-                .getThemedQsIcon(this, it.resId)
-            if (themed != null) {
-                Icon.Loaded(themed, null, it.resId)
-            } else {
-                Icon.Resource(it.resId, null)
-            }
+            Icon.Resource(it.resId, null)
         } else {
             Icon.Loaded(it.getDrawable(this), null)
         }
