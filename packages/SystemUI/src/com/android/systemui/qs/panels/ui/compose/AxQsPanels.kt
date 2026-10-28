@@ -49,10 +49,11 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -69,7 +70,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -93,6 +98,7 @@ import com.android.systemui.qs.panels.ui.viewmodel.toolbar.ToolbarViewModel
 import com.android.systemui.res.R
 import com.android.systemui.shade.ui.composable.ShadeHeader
 import com.android.systemui.shade.ui.viewmodel.ShadeHeaderViewModel
+import com.android.systemui.util.icuMessageFormat
 import com.android.internal.util.lunaris.OmniJawsClient
 
 @Composable
@@ -288,7 +294,7 @@ internal fun AxQsDateHeader(
             isFullyVisible = isFullyVisible,
             editButtonProgress = editButtonProgress,
             showEdit = showEdit,
-            modifier = Modifier.offset(x = 6.dp),
+            modifier = Modifier.offset(x = 2.dp),
         )
     }
 }
@@ -451,6 +457,7 @@ internal fun AxQsHeaderActions(
     modifier: Modifier = Modifier,
 ) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        AxActiveAppsButton(viewModel)
         if (showEdit) {
             AxEditButton(viewModel, isFullyVisible, editButtonProgress)
         }
@@ -458,16 +465,39 @@ internal fun AxQsHeaderActions(
             model = viewModel.userSwitcherViewModel,
             containerColor = AxTileDefaults.backgroundColor(),
             iconColor = Color.Unspecified,
-            modifier =
-                Modifier.sysuiResTag("multi_user_switch").minimumInteractiveComponentSize(),
+            modifier = Modifier.sysuiResTag("multi_user_switch"),
         )
         FooterIconButton(
             model = viewModel.settingsButtonViewModel,
             containerColor = AxTileDefaults.backgroundColor(),
-            modifier =
-                Modifier.sysuiResTag("settings_button_container").minimumInteractiveComponentSize(),
+            modifier = Modifier.sysuiResTag("settings_button_container"),
         )
         AxFooterOverflowMenu(viewModel)
+    }
+}
+
+@Composable
+private fun AxActiveAppsButton(viewModel: ToolbarViewModel) {
+    val count = viewModel.foregroundServicesCount
+    if (count <= 0) return
+
+    val description =
+        icuMessageFormat(LocalContext.current.resources, R.string.fgs_manager_footer_label, count)
+    AxHeaderButton(
+        onClick = viewModel::onForegroundServicesButtonClicked,
+        modifier =
+            Modifier.sysuiResTag("fgs_manager_button").semantics {
+                contentDescription = description
+            },
+    ) {
+        Text(
+            text = count.toString(),
+            color = ShadeHeader.Colors.textColor,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            modifier = Modifier.clearAndSetSemantics {},
+        )
     }
 }
 
@@ -507,22 +537,16 @@ private fun AxEditButton(
                     else Modifier.gesturesDisabled().clearAndSetSemantics {}
                 )
     ) {
-        Expandable(
-            color = AxTileDefaults.backgroundColor(),
-            shape = CircleShape,
+        AxHeaderButton(
             onClick = { editModeButtonViewModel.onButtonClick() },
-            modifier =
-                Modifier.sysuiResTag("qs_edit_mode_button").minimumInteractiveComponentSize(),
-            useModifierBasedImplementation = true,
+            modifier = Modifier.sysuiResTag("qs_edit_mode_button"),
         ) {
-            Box(modifier = Modifier.size(36.dp), contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Default.Edit,
-                    contentDescription = stringResource(R.string.accessibility_quick_settings_edit),
-                    tint = ShadeHeader.Colors.textColor,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
+            Icon(
+                imageVector = Icons.Default.Edit,
+                contentDescription = stringResource(R.string.accessibility_quick_settings_edit),
+                tint = ShadeHeader.Colors.textColor,
+                modifier = Modifier.size(16.dp),
+            )
         }
     }
 }
@@ -531,27 +555,21 @@ private fun AxEditButton(
 private fun AxFooterOverflowMenu(viewModel: ToolbarViewModel) {
     var expanded by remember { mutableStateOf(false) }
     var expandable by remember { mutableStateOf<SystemUiExpandable?>(null) }
-    val context = LocalContext.current
     val menuColor =
         AxTileDefaults.backgroundColor().compositeOver(MaterialTheme.colorScheme.surface)
     Box {
-        Expandable(
-            color = AxTileDefaults.backgroundColor(),
-            shape = CircleShape,
+        AxHeaderButton(
             onClick = {
                 expandable = it
                 expanded = true
             },
-            modifier = Modifier.minimumInteractiveComponentSize(),
-            useModifierBasedImplementation = true,
         ) {
-            Box(modifier = Modifier.size(36.dp), contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Default.MoreVert,
-                    contentDescription = stringResource(R.string.qs_edit_menu_content_description),
-                    tint = ShadeHeader.Colors.textColor,
-                )
-            }
+            Icon(
+                imageVector = Icons.Default.MoreVert,
+                contentDescription = stringResource(R.string.qs_edit_menu_content_description),
+                tint = ShadeHeader.Colors.textColor,
+                modifier = Modifier.size(AxHeaderActionDimensions.IconSize),
+            )
         }
         DropdownMenu(
             expanded = expanded,
@@ -600,21 +618,51 @@ private fun FooterIconButton(
     iconColor: Color = ShadeHeader.Colors.textColor,
 ) {
     if (model == null) return
-    Expandable(
-        color = containerColor,
-        shape = CircleShape,
+    AxHeaderButton(
+        containerColor = containerColor,
         onClick = model.onClick,
         modifier = modifier,
-        useModifierBasedImplementation = true,
     ) {
-        Box(modifier = Modifier.size(36.dp), contentAlignment = Alignment.Center) {
-            SystemUiIcon(
-                icon = model.icon,
-                tint = iconColor,
-                modifier = Modifier.size(20.dp),
-            )
+        SystemUiIcon(
+            icon = model.icon,
+            tint = iconColor,
+            modifier = Modifier.size(AxHeaderActionDimensions.IconSize),
+        )
+    }
+}
+
+@Composable
+private fun AxHeaderButton(
+    onClick: (SystemUiExpandable) -> Unit,
+    modifier: Modifier = Modifier,
+    containerColor: Color = AxTileDefaults.backgroundColor(),
+    content: @Composable () -> Unit,
+) {
+    CompositionLocalProvider(
+        LocalMinimumInteractiveComponentSize provides AxHeaderActionDimensions.LayoutSize
+    ) {
+        Expandable(
+            color = containerColor,
+            shape = CircleShape,
+            onClick = onClick,
+            modifier = modifier.semantics { role = Role.Button },
+            useModifierBasedImplementation = true,
+            defaultMinSize = false,
+        ) {
+            Box(
+                modifier = Modifier.size(AxHeaderActionDimensions.ButtonSize),
+                contentAlignment = Alignment.Center,
+            ) {
+                content()
+            }
         }
     }
+}
+
+private object AxHeaderActionDimensions {
+    val LayoutSize = 40.dp
+    val ButtonSize = 36.dp
+    val IconSize = 18.dp
 }
 
 private const val EDIT_BUTTON_ENABLE_THRESHOLD = 0.99f

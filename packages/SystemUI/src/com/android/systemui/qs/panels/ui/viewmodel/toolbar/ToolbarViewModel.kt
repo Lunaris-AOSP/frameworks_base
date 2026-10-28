@@ -29,6 +29,7 @@ import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.globalactions.GlobalActionsDialogLite
 import com.android.systemui.lifecycle.ExclusiveActivatable
 import com.android.systemui.lifecycle.Hydrator
+import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.qs.footer.domain.interactor.FooterActionsInteractor
 import com.android.systemui.qs.footer.ui.viewmodel.FooterActionsButtonViewModel
 import com.android.systemui.qs.footer.ui.viewmodel.FooterActionsButtonViewModel.PowerActionViewModel
@@ -64,6 +65,7 @@ constructor(
     private val falsingInteractor: FalsingInteractor,
     private val selectedUserInteractor: SelectedUserInteractor,
     private val hsum: HeadlessSystemUserMode,
+    private val activityStarter: ActivityStarter,
     @ShadeDisplayAware appContext: Context,
     @Main private val mainDispatcher: CoroutineDispatcher,
 ) : ExclusiveActivatable() {
@@ -73,6 +75,13 @@ constructor(
 
     val powerButtonViewModel: FooterActionsButtonViewModel =
         PowerActionViewModel(context = qsThemedContext, onClick = ::onPowerButtonClicked)
+
+    val foregroundServicesCount: Int by
+        hydrator.hydratedStateOf(
+            traceName = "foregroundServicesCount",
+            initialValue = 0,
+            source = footerActionsInteractor.foregroundServicesCount,
+        )
 
     val userSwitcherViewModel: FooterActionsButtonViewModel? by
         hydrator.hydratedStateOf(
@@ -148,6 +157,19 @@ constructor(
 
     private fun onUserSwitcherClicked(expandable: Expandable) {
         falsingInteractor.runIfNotFalseTap { footerActionsInteractor.showUserSwitcher(expandable) }
+    }
+
+    fun onForegroundServicesButtonClicked(expandable: Expandable) {
+        falsingInteractor.runIfNotFalseTap {
+            activityStarter.dismissKeyguardThenExecute(
+                {
+                    footerActionsInteractor.showForegroundServicesDialog(expandable)
+                    false
+                },
+                null,
+                true,
+            )
+        }
     }
 
     private fun onSettingsButtonClicked(expandable: Expandable) {

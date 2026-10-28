@@ -24,12 +24,16 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SmallTest
 import com.android.systemui.Flags.FLAG_HSU_QS_CHANGES
 import com.android.systemui.SysuiTestCase
+import com.android.systemui.animation.Expandable
+import com.android.systemui.classifier.fakeFalsingManager
 import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.kosmos.Kosmos
 import com.android.systemui.kosmos.runCurrent
 import com.android.systemui.kosmos.runTest
 import com.android.systemui.kosmos.testScope
 import com.android.systemui.lifecycle.activateIn
+import com.android.systemui.plugins.ActivityStarter.OnDismissAction
+import com.android.systemui.plugins.activityStarter
 import com.android.systemui.qs.fake
 import com.android.systemui.qs.footer.domain.interactor.FakeFooterActionInteractor
 import com.android.systemui.qs.footer.domain.model.SecurityButtonConfig
@@ -48,6 +52,12 @@ import kotlinx.coroutines.test.advanceTimeBy
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.eq
+import org.mockito.kotlin.isNull
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
+import org.mockito.kotlin.verifyNoInteractions
 
 @RunWith(AndroidJUnit4::class)
 @SmallTest
@@ -62,6 +72,54 @@ class ToolbarViewModelTest : SysuiTestCase() {
     fun setUp() {
         kosmos.underTest.activateIn(kosmos.testScope)
     }
+
+    @Test
+    fun foregroundServicesCount_updatesAsAppsStartAndStop() =
+        with(kosmos) {
+            runTest {
+                runCurrent()
+                assertThat(underTest.foregroundServicesCount).isEqualTo(0)
+
+                for (count in listOf(1, 3, 1, 0)) {
+                    footerActionsInteractor.fake.foregroundServicesCount.value = count
+                    runCurrent()
+                    assertThat(underTest.foregroundServicesCount).isEqualTo(count)
+                }
+            }
+        }
+
+    @Test
+    fun foregroundServicesClick_opensDialogAfterKeyguardDismissed() =
+        with(kosmos) {
+            runTest {
+                val expandable = mock<Expandable>()
+                fakeFalsingManager.setFalseTap(false)
+
+                underTest.onForegroundServicesButtonClicked(expandable)
+
+                val dismissAction = argumentCaptor<OnDismissAction>()
+                verify(activityStarter)
+                    .dismissKeyguardThenExecute(dismissAction.capture(), isNull(), eq(true))
+                assertThat(footerActionsInteractor.fake.foregroundServicesDialogExpandable).isNull()
+
+                assertThat(dismissAction.lastValue.onDismiss()).isFalse()
+                assertThat(footerActionsInteractor.fake.foregroundServicesDialogExpandable)
+                    .isSameInstanceAs(expandable)
+            }
+        }
+
+    @Test
+    fun foregroundServicesClick_falseTapDoesNotOpenDialog() =
+        with(kosmos) {
+            runTest {
+                fakeFalsingManager.setFalseTap(true)
+
+                underTest.onForegroundServicesButtonClicked(mock<Expandable>())
+
+                verifyNoInteractions(activityStarter)
+                assertThat(footerActionsInteractor.fake.foregroundServicesDialogExpandable).isNull()
+            }
+        }
 
     @Test
     fun start_noSecurityInfo_collapsed() =

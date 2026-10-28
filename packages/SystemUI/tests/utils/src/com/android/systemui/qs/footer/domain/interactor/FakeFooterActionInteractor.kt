@@ -29,13 +29,15 @@ import kotlinx.coroutines.flow.emptyFlow
  * This fake is due to the fact that a real QSSecurityUtils is too complex to mock, instead this can
  * be used to directly provide values of the config for viewmodels.
  *
- * Only [securityButtonConfig] is implemented.
+ * Supports security configuration and foreground service count/dialog state.
  */
 class FakeFooterActionInteractor : FooterActionsInteractor {
     override val securityButtonConfig = MutableStateFlow<SecurityButtonConfig?>(null)
 
-    override val foregroundServicesCount: Flow<Int>
-        get() = emptyFlow()
+    override val foregroundServicesCount = MutableStateFlow(0)
+
+    var foregroundServicesDialogExpandable: Expandable? = null
+        private set
 
     override val hasNewForegroundServices: Flow<Boolean>
         get() = emptyFlow()
@@ -54,7 +56,7 @@ class FakeFooterActionInteractor : FooterActionsInteractor {
     }
 
     override fun showForegroundServicesDialog(expandable: Expandable) {
-        // EMPTY
+        foregroundServicesDialogExpandable = expandable
     }
 
     override fun showPowerMenuDialog(
@@ -67,6 +69,8 @@ class FakeFooterActionInteractor : FooterActionsInteractor {
     override fun showSettings(expandable: Expandable) {
         // EMPTY
     }
+
+    override fun showCustomSettings(expandable: Expandable) = Unit
 
     override fun showUserSwitcher(expandable: Expandable) {
         // EMPTY
