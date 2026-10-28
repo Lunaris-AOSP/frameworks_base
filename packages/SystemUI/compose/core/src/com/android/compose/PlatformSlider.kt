@@ -25,6 +25,7 @@ import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -43,11 +44,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -68,6 +71,8 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastFirst
 import androidx.compose.ui.util.fastFirstOrNull
+import kotlin.math.ceil
+import kotlin.math.roundToInt
 
 /**
  * Platform slider implementation that displays a slider with an [icon] and a [label] at the start.
@@ -100,6 +105,7 @@ fun PlatformSlider(
     indicatorBackground: (@Composable (Modifier, Dp) -> Unit)? = null,
     sliderHeight: Dp = 64.dp,
     trackCornerRadius: Dp? = null,
+    indicatorInset: Dp = 0.dp,
 ) {
     val thumbSize: Dp = sliderHeight
     var isDragging by remember { mutableStateOf(false) }
@@ -139,6 +145,7 @@ fun PlatformSlider(
                     label = label,
                     icon = icon,
                     indicatorBackground = indicatorBackground,
+                    indicatorInset = indicatorInset,
                     modifier = Modifier.fillMaxSize(),
                 )
             },
@@ -166,6 +173,7 @@ private fun Track(
     icon: (@Composable (isDragging: Boolean) -> Unit)?,
     label: (@Composable (isDragging: Boolean) -> Unit)?,
     indicatorBackground: (@Composable (Modifier, Dp) -> Unit)?,
+    indicatorInset: Dp,
     modifier: Modifier = Modifier,
 ) {
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
@@ -183,6 +191,7 @@ private fun Track(
                 trackCornerRadius = trackCornerRadius,
                 isDragging = isDragging,
                 indicatorBackground = indicatorBackground,
+                indicatorInset = indicatorInset,
             )
             if (icon != null) {
                 Box(
@@ -256,6 +265,7 @@ private fun TrackBackground(
     trackCornerRadius: Dp?,
     isDragging: Boolean,
     indicatorBackground: (@Composable (Modifier, Dp) -> Unit)?,
+    indicatorInset: Dp,
     modifier: Modifier = Modifier,
 ) {
     val indicatorRadiusDp: Dp by
@@ -276,85 +286,106 @@ private fun TrackBackground(
             colors.getIndicatorColor(enabled),
             label = "PlatformSliderIndicatorColorAnimation",
         )
-    Box(modifier = modifier) {
-        Spacer(
-            Modifier
-                .fillMaxSize()
-                .drawWithCache {
-                    // Read measured geometry here so moving a slider invalidates its cached paths
-                    // without waiting for another composition.
-                    val measuredState = drawingState()
-                    val radius =
-                        (trackCornerRadius?.toPx() ?: (size.height / 2))
-                            .coerceIn(0f, size.height / 2)
-                    val trackCorners = CornerRadius(radius, radius)
-                    val trackPath =
+    Box(
+        contentAlignment = AbsoluteAlignment.TopLeft,
+        modifier =
+            modifier.drawWithCache {
+                val measuredState = drawingState()
+                val radius =
+                    (trackCornerRadius?.toPx() ?: (size.height / 2)).coerceIn(0f, size.height / 2)
+                val trackCorners = CornerRadius(radius, radius)
+                val trackPath =
+                    Path().apply {
+                        addRoundRect(
+                            RoundRect(
+                                left = 0f,
+                                top = 0f,
+                                right = size.width,
+                                bottom = size.height,
+                                cornerRadius = trackCorners,
+                            )
+                        )
+                    }
+                val inset = indicatorInset.toPx().coerceIn(0f, size.minDimension / 2)
+                val indicatorClipPath =
+                    if (inset > 0f) {
                         Path().apply {
                             addRoundRect(
                                 RoundRect(
-                                    left = 0f,
-                                    top = 0f,
-                                    right = size.width,
-                                    bottom = size.height,
-                                    cornerRadius = trackCorners,
+                                    left = inset,
+                                    top = inset,
+                                    right = size.width - inset,
+                                    bottom = size.height - inset,
+                                    cornerRadius = CornerRadius((radius - inset).coerceAtLeast(0f)),
                                 )
                             )
                         }
-                    val indicatorPath =
-                        if (indicatorBackground == null) {
-                            val indicatorCornerRadius =
-                                CornerRadius(indicatorRadiusDp.toPx(), indicatorRadiusDp.toPx())
-                            Path().apply {
-                                addRoundRect(
-                                    RoundRect(
-                                        left = measuredState.indicatorLeft,
-                                        top = measuredState.indicatorTop,
-                                        right = measuredState.indicatorRight,
-                                        bottom = measuredState.indicatorBottom,
-                                        topLeftCornerRadius = trackCorners,
-                                        topRightCornerRadius = indicatorCornerRadius,
-                                        bottomRightCornerRadius = indicatorCornerRadius,
-                                        bottomLeftCornerRadius = trackCorners,
-                                    )
+                    } else {
+                        trackPath
+                    }
+                val indicatorPath =
+                    if (
+                        indicatorBackground == null &&
+                            measuredState.indicatorRight > measuredState.indicatorLeft
+                    ) {
+                        val endRadius = indicatorRadiusDp.toPx().coerceIn(0f, size.height / 2)
+                        val indicatorCornerRadius = CornerRadius(endRadius)
+                        val bounds = measuredState.indicatorBounds(2 * maxOf(radius, endRadius))
+                        val leftCorners =
+                            if (measuredState.isRtl) indicatorCornerRadius else trackCorners
+                        val rightCorners =
+                            if (measuredState.isRtl) trackCorners else indicatorCornerRadius
+                        Path().apply {
+                            addRoundRect(
+                                RoundRect(
+                                    left = bounds.left,
+                                    top = bounds.top,
+                                    right = bounds.right,
+                                    bottom = bounds.bottom,
+                                    topLeftCornerRadius = leftCorners,
+                                    topRightCornerRadius = rightCorners,
+                                    bottomRightCornerRadius = rightCorners,
+                                    bottomLeftCornerRadius = leftCorners,
                                 )
-                            }
-                        } else {
-                            null
+                            )
                         }
-                    onDrawBehind {
-                        drawPath(path = trackPath, color = trackColor)
+                    } else {
+                        null
+                    }
+                onDrawWithContent {
+                    drawPath(path = trackPath, color = trackColor)
+                    clipPath(indicatorClipPath) {
                         if (indicatorPath != null) {
-                            clipPath(trackPath) {
-                                drawPath(path = indicatorPath, color = indicatorColor)
-                            }
+                            drawPath(path = indicatorPath, color = indicatorColor)
                         }
+                        this@onDrawWithContent.drawContent()
                     }
                 }
-        )
-
+            },
+    ) {
         if (indicatorBackground != null) {
             val measuredState = drawingState()
             if (measuredState.indicatorRight > measuredState.indicatorLeft) {
                 val density = LocalDensity.current
+                val bounds =
+                    with(density) {
+                        val halfHeight =
+                            (measuredState.indicatorBottom - measuredState.indicatorTop) / 2
+                        val radius =
+                            (trackCornerRadius?.toPx() ?: halfHeight).coerceIn(0f, halfHeight)
+                        val endRadius = indicatorRadiusDp.toPx().coerceIn(0f, halfHeight)
+                        measuredState.indicatorBounds(ceil(2 * maxOf(radius, endRadius)))
+                    }
                 indicatorBackground(
-                    Modifier
-                        .offset {
+                    Modifier.absoluteOffset {
                             IntOffset(
-                                measuredState.indicatorLeft.toInt(),
-                                measuredState.indicatorTop.toInt(),
+                                bounds.left.roundToInt(),
+                                bounds.top.roundToInt(),
                             )
                         }
                         .size(
-                            with(density) {
-                                (measuredState.indicatorRight - measuredState.indicatorLeft)
-                                    .coerceAtLeast(0f)
-                                    .toDp()
-                            },
-                            with(density) {
-                                (measuredState.indicatorBottom - measuredState.indicatorTop)
-                                    .coerceAtLeast(0f)
-                                    .toDp()
-                            },
+                            with(density) { bounds.width.toDp() },
+                            with(density) { bounds.height.toDp() },
                         ),
                     indicatorRadiusDp,
                 )
@@ -455,6 +486,15 @@ private data class DrawingState(
     val iconWidth: Float = 0f,
     val labelWidth: Float = 0f,
 )
+
+private fun DrawingState.indicatorBounds(minimumWidth: Float): Rect {
+    return Rect(
+        left = if (isRtl) indicatorLeft else minOf(indicatorLeft, indicatorRight - minimumWidth),
+        top = indicatorTop,
+        right = if (isRtl) maxOf(indicatorRight, indicatorLeft + minimumWidth) else indicatorRight,
+        bottom = indicatorBottom,
+    )
+}
 
 private val DrawingState.isLabelOnTopOfIndicator: Boolean
     get() = labelWidth < indicatorRight - indicatorLeft - iconWidth

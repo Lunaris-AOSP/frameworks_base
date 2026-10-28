@@ -378,6 +378,8 @@ internal fun AxQsSlider(
                             sliderScale,
                 sliderHeight = trackHeight,
                 trackCornerRadius = if (roundedSquare) AxQsControlCornerRadius else null,
+                indicatorInset =
+                    if (strokeStyle) LunarisQsSliderStrokeWidth * sliderScale else 0.dp,
                 indicatorBackground =
                     if (activeTrackBrush != null || strokeStyle || flatFill) {
                         { indicatorModifier, cornerRadius ->
