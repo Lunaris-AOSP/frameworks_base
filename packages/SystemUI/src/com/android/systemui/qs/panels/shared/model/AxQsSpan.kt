@@ -50,7 +50,8 @@ data class AxQsSpan(val columns: Int, val rows: Int) {
         val ControlTileMin = TileDefault
         val MediaDefault = AxQsSpan(2, 2)
         val MediaWide = AxQsSpan(4, 2)
-        val MediaMin = AxQsSpan(2, 1)
+        val MediaMin = AxQsSpan(1, 1)
+        val MediaOneRow = AxQsSpan(2, 1)
         val Max = AxQsSpan(4, 4)
 
         fun controlTileMax(columns: Int): AxQsSpan {
@@ -265,9 +266,13 @@ enum class AxQsControl(
         }
 
     fun mediaSizes(columns: Int): List<AxQsSpan> =
-        listOf(AxQsSpan.MediaMin, AxQsSpan.MediaDefault, AxQsSpan.MediaWide).filter {
-            isSpanAllowed(it, columns)
-        }
+        listOf(
+                AxQsSpan.MediaMin,
+                AxQsSpan.MediaOneRow,
+                AxQsSpan.MediaDefault,
+                AxQsSpan.MediaWide,
+            )
+            .filter { isSpanAllowed(it, columns) }
 
     private val minOrientationLength: Int
         get() = if (this == RINGER) 1 else 2

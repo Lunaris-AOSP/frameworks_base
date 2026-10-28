@@ -93,6 +93,7 @@ import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.res.R
 
 private enum class AxMediaLayout {
+    SingleTile,
     OneRow,
     Box,
     AlbumCover,
@@ -225,14 +226,16 @@ fun AxMediaPanel(
             }
         },
         pagerIndicator = { pagerState ->
-            PagerDots(
-                pagerState = pagerState,
-                activeColor = Color(0xffdee0ff),
-                nonActiveColor = Color(0xffa7a9ca),
-                dotSize = 5.dp,
-                spaceSize = 5.dp,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 5.dp),
-            )
+            if (span != AxQsSpan.MediaMin) {
+                PagerDots(
+                    pagerState = pagerState,
+                    activeColor = Color(0xffdee0ff),
+                    nonActiveColor = Color(0xffa7a9ca),
+                    dotSize = 5.dp,
+                    spaceSize = 5.dp,
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 5.dp),
+                )
+            }
         },
     )
 }
@@ -260,6 +263,7 @@ private fun AxMediaCard(
     val keyguardState by viewModel.currentKeyguardState.collectAsStateWithLifecycle()
     val layout =
         when {
+            span == AxQsSpan.MediaMin -> AxMediaLayout.SingleTile
             surface == AxMediaSurface.CONTROL &&
                 span == AxQsSpan.MediaWide &&
                 mediaWideStyle == LunarisQsMediaStyle.ALBUM_COVER -> AxMediaLayout.Wide
@@ -272,7 +276,10 @@ private fun AxMediaCard(
         }
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     var showExpandedPopup by remember(session?.key, isLandscape) { mutableStateOf(false) }
-    val gutsVisible = allowGuts && session?.let(viewModel::isGutsVisible) == true
+    val gutsVisible =
+        allowGuts &&
+            layout != AxMediaLayout.SingleTile &&
+            session?.let(viewModel::isGutsVisible) == true
     val statusGlowEnabled =
         when (surface) {
             AxMediaSurface.CONTROL ->
@@ -307,9 +314,9 @@ private fun AxMediaCard(
         rememberLunarisMotionArtFile(
             artist = session?.subtitle,
             title = session?.title,
-            enabled = motionArtEnabled && motionArtActive && span.columns > 1,
+            enabled = motionArtEnabled && motionArtActive,
         )
-    val artwork = session?.background?.takeIf { span.columns > 1 }
+    val artwork = session?.background
     val tileBackground = AxTileDefaults.backgroundColor()
     val tileForeground = MaterialTheme.colorScheme.onSurface
     val colorScheme = session?.colorScheme
@@ -399,32 +406,36 @@ private fun AxMediaCard(
                         LocalLunarisQsCosTileBackground.current &&
                             surface != AxMediaSurface.LOCKSCREEN && !gutsVisible,
                 )
+                .combinedClickable(
+                    enabled = interactive && (session != null || lastMediaPackage != null),
+                    onClick = {
+                        if (gutsVisible) {
+                            viewModel.closeGuts()
+                        } else if (session != null && isLandscape) {
+                            viewModel.openSession(session, expandable)
+                        } else if (session != null && expandedMediaState.controller != null) {
+                            showExpandedPopup = true
+                        } else if (session == null) {
+                            viewModel.openLastMediaApp(expandable)
+                        } else {
+                            viewModel.openSession(session, expandable)
+                        }
+                    },
+                    onClickLabel = clickLabel,
+                    onLongClick =
+                        if (layout == AxMediaLayout.SingleTile) {
+                            null
+                        } else {
+                            {
+                                if (session != null) {
+                                    viewModel.openSession(session, expandable)
+                                } else {
+                                    viewModel.openLastMediaApp(expandable)
+                                }
+                            }
+                        },
+                )
         ) {
-            Box(
-                Modifier.fillMaxSize()
-                    .combinedClickable(
-                        enabled = interactive && (session != null || lastMediaPackage != null),
-                        onClick = {
-                            if (gutsVisible) {
-                                viewModel.closeGuts()
-                            } else if (session != null && isLandscape) {
-                                viewModel.openSession(session, expandable)
-                            } else if (session != null && expandedMediaState.controller != null) {
-                                showExpandedPopup = true
-                            } else if (session == null) {
-                                viewModel.openLastMediaApp(expandable)
-                            }
-                        },
-                        onClickLabel = clickLabel,
-                        onLongClick = {
-                            if (session != null) {
-                                viewModel.openSession(session, expandable)
-                            } else {
-                                viewModel.openLastMediaApp(expandable)
-                            }
-                        },
-                    )
-            )
             AnimatedContent(
                 targetState = gutsVisible,
                 transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(120)) },
@@ -471,6 +482,13 @@ private fun AxMediaCard(
                             modifier = Modifier.fillMaxSize(),
                         ) { mediaLayout ->
                             when (mediaLayout) {
+                                AxMediaLayout.SingleTile ->
+                                    SingleTileMediaContent(
+                                        session = session,
+                                        viewModel = viewModel,
+                                        colors = colors,
+                                        interactive = interactive,
+                                    )
                                 AxMediaLayout.Wide ->
                                     LunarisWideMediaPlayer(
                                         session = session,
@@ -543,6 +561,26 @@ private fun AxMediaCard(
             onDismiss = { showExpandedPopup = false },
             motionArtEnabled = motionArtEnabled && motionArtVisible,
             motionArtPlaying = motionArtAllowedToPlay && !isShadeInteracting,
+        )
+    }
+}
+
+@Composable
+private fun SingleTileMediaContent(
+    session: MediaSessionModel?,
+    viewModel: AxMediaViewModel,
+    colors: AxMediaColors,
+    interactive: Boolean,
+) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+        MediaControls(
+            session = session,
+            viewModel = viewModel,
+            colors = colors,
+            interactive = interactive,
+            actionSize = 48.dp,
+            maxActions = 1,
+            modifier = Modifier.padding(bottom = 4.dp),
         )
     }
 }
