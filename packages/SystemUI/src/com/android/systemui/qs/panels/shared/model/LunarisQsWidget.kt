@@ -12,6 +12,7 @@ data class LunarisQsWidget(
     val userId: Int = -1,
     val appWidgetId: Int = -1,
     val provider: ComponentName? = null,
+    val showBackground: Boolean = true,
 ) {
     val isConfigured: Boolean
         get() = userId >= 0 && appWidgetId > 0 && provider != null
@@ -20,6 +21,7 @@ data class LunarisQsWidget(
         JSONObject()
             .put("id", appWidgetId)
             .put("provider", provider?.flattenToString())
+            .put("show_background", showBackground)
             .toString()
 
     companion object {
@@ -27,11 +29,14 @@ data class LunarisQsWidget(
             if (value.isNullOrBlank()) return LunarisQsWidget(userId)
             return try {
                 val json = JSONObject(value)
+                val showBackground = json.optBoolean("show_background", true)
                 LunarisQsWidget(
                     userId,
                     json.optInt("id", -1),
                     ComponentName.unflattenFromString(json.optString("provider")),
-                ).takeIf { it.isConfigured } ?: LunarisQsWidget(userId)
+                    showBackground,
+                ).takeIf { it.isConfigured }
+                    ?: LunarisQsWidget(userId = userId, showBackground = showBackground)
             } catch (_: JSONException) {
                 LunarisQsWidget(userId)
             }

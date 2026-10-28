@@ -71,6 +71,7 @@ class LunarisQsWidgetActivity : ComponentActivity() {
                     selected = selected,
                     busy = waiting,
                     error = error,
+                    onShowBackgroundChange = ::setShowBackground,
                     onSelect = ::select,
                     onRemove = ::remove,
                     onBack = ::finish,
@@ -81,6 +82,19 @@ class LunarisQsWidgetActivity : ComponentActivity() {
 
     private fun dimension(extra: String): Float =
         intent.getFloatExtra(extra, 160f).takeIf { it.isFinite() }?.coerceIn(32f, 1600f) ?: 160f
+
+    private fun setShowBackground(showBackground: Boolean) {
+        if (waiting || isFinishing) return
+        try {
+            val widget = selected.copy(userId = userId, showBackground = showBackground)
+            LunarisQsWidgetStore.save(this, key, widget)
+            selected = widget
+            error = null
+            setResult(RESULT_OK)
+        } catch (e: RuntimeException) {
+            fail(e)
+        }
+    }
 
     private fun select(info: AppWidgetProviderInfo) {
         if (waiting || isFinishing) return
@@ -144,7 +158,7 @@ class LunarisQsWidgetActivity : ComponentActivity() {
     private fun commit() {
         val info = manager.getAppWidgetInfo(pendingId) ?: return fail()
         check(host.appWidgetIds.contains(pendingId))
-        val widget = LunarisQsWidget(userId, pendingId, info.provider)
+        val widget = selected.copy(userId = userId, appWidgetId = pendingId, provider = info.provider)
         LunarisQsWidgetStore.save(this, key, widget)
         pendingId = AppWidgetManager.INVALID_APPWIDGET_ID
         selected = widget

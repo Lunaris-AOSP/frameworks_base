@@ -26,7 +26,7 @@ internal object LunarisQsWidgetStore {
             Settings.Secure.putString(
                 context.contentResolver,
                 key.settingKey,
-                if (widget.isConfigured) widget.toJson() else "",
+                if (widget.isConfigured || !widget.showBackground) widget.toJson() else "",
             )
         )
         if (previous.isConfigured && previous.appWidgetId != widget.appWidgetId) {

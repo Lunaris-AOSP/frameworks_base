@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -48,6 +49,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -64,6 +66,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.android.systemui.qs.panels.shared.model.AxQsLayout
@@ -90,6 +93,7 @@ internal fun LunarisQsWidgetPicker(
     selected: LunarisQsWidget,
     busy: Boolean,
     error: Int?,
+    onShowBackgroundChange: (Boolean) -> Unit,
     onSelect: (AppWidgetProviderInfo) -> Unit,
     onRemove: () -> Unit,
     onBack: () -> Unit,
@@ -220,6 +224,43 @@ internal fun LunarisQsWidgetPicker(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            item {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    shape = MaterialTheme.shapes.large,
+                ) {
+                    Row(
+                        modifier =
+                            Modifier.fillMaxWidth()
+                                .toggleable(
+                                    value = selected.showBackground,
+                                    enabled = !busy,
+                                    role = Role.Switch,
+                                    onValueChange = onShowBackgroundChange,
+                                )
+                                .padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                stringResource(R.string.lunaris_qs_widget_show_background),
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                stringResource(R.string.lunaris_qs_widget_show_background_summary),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = selected.showBackground,
+                            onCheckedChange = null,
+                            enabled = !busy,
+                        )
+                    }
+                }
             }
             if (selected.isConfigured) {
                 item {

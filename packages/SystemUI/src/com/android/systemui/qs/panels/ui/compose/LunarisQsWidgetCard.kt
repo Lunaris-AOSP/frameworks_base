@@ -36,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.boundsInWindow
@@ -113,16 +114,21 @@ fun LunarisQsWidgetCard(
     }
     val shown = visible && started && screenOn && inViewport
     val active = shown && playing
-    val backgroundColor = AxTileDefaults.backgroundColor()
+    val backgroundColor =
+        if (widget.showBackground) AxTileDefaults.backgroundColor() else Color.Transparent
     val onLightBackground =
         backgroundColor.compositeOver(MaterialTheme.colorScheme.surface).luminance() > .5f
     val shape = axQsControlShape(control, AxQsSpan(2, 2))
     BoxWithConstraints(
         modifier
             .onGloballyPositioned { inViewport = !it.boundsInWindow().isEmpty }
-            .clip(shape)
-            .background(backgroundColor)
-            .lunarisQsCosTileBorder(shape),
+            .then(
+                if (widget.showBackground)
+                    Modifier.clip(shape)
+                        .background(backgroundColor)
+                        .lunarisQsCosTileBorder(shape)
+                else Modifier
+            ),
         contentAlignment = Alignment.Center,
     ) {
         val width = maxWidth.value

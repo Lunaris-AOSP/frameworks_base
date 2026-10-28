@@ -9,6 +9,8 @@
     <string name="lunaris_qs_widget_performance_warning">Widgets make Quick Settings heavier and may cause lag. Animations pause while you move the shade.</string>
     <string name="lunaris_qs_widget_frame_size">Widget space: %1$d × %2$d dp. Resize it in the panel editor. Larger widgets scale down to fit.</string>
     <string name="lunaris_qs_widget_current">Current widget</string>
+    <string name="lunaris_qs_widget_show_background">Show tile background</string>
+    <string name="lunaris_qs_widget_show_background_summary">Turn off to show only the widget, without the tile background or border.</string>
     <string name="lunaris_qs_widget_remove">Remove widget</string>
     <string name="lunaris_qs_widget_select_again">Choose a new copy</string>
     <string name="lunaris_qs_widget_unavailable">Widget unavailable. Choose another.</string>
