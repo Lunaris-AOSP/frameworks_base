@@ -29,13 +29,14 @@ import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPairGenerator;
 import java.security.KeyStore;
+import java.security.MessageDigest;
 import java.security.spec.ECGenParameterSpec;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * @hide
@@ -45,12 +46,39 @@ public class TrickyStoreService {
 
     private static TrickyStoreService sInstance;
 
+    private static final class FetchResult {
+        final boolean success;
+        final String value;
+
+        FetchResult(boolean success, String value) {
+            this.success = success;
+            this.value = value;
+        }
+    }
+
+    private static final class PatchConfig {
+        final CustomPatchLevel global;
+        final Map<String, CustomPatchLevel> byPackage;
+
+        PatchConfig(CustomPatchLevel global, Map<String, CustomPatchLevel> byPackage) {
+            this.global = global;
+            this.byPackage = Collections.unmodifiableMap(new HashMap<>(byPackage));
+        }
+    }
+
+    private static final class PatchConfigBuilder {
+        CustomPatchLevel global;
+        final Map<String, CustomPatchLevel> byPackage = new HashMap<>();
+
+        PatchConfig build() {
+            return new PatchConfig(global, byPackage);
+        }
+    }
+
     private static final boolean ENABLE_REVOCATION_CHECK = true;
 
-    private final Set<String> mHackPackages = ConcurrentHashMap.newKeySet();
-    private final Set<String> mGeneratePackages = ConcurrentHashMap.newKeySet();
-    private final Set<String> mSkipPackages = ConcurrentHashMap.newKeySet();
-    private final Map<String, Mode> mPackageModes = new ConcurrentHashMap<>();
+    // Publish a whole policy snapshot so readers cannot observe a partial refresh.
+    private volatile Map<String, Mode> mPackageModes = Collections.emptyMap();
 
     private volatile Boolean mTeeBroken = null;
     // A "healthy" result is cached for the process lifetime; a "broken" one is
@@ -65,8 +93,8 @@ public class TrickyStoreService {
     private static final long CACHE_TRUST_WINDOW_MS = 7L * 24 * 60 * 60 * 1000L;
     private static final java.io.File REVOCATION_CACHE_FILE =
         new java.io.File("/data/system/trickystore/revocation_cache.json");
-    private volatile CustomPatchLevel mCustomPatchLevel = null;
-    private final Map<String, CustomPatchLevel> mPerPackagePatchLevels = new ConcurrentHashMap<>();
+    private volatile PatchConfig mPatchConfig =
+            new PatchConfig(null, Collections.emptyMap());
     // Attesting through a hooked process breaks STRONG — always skipped
     // regardless of what mode the target list has for them, and never
     // auto-targeted by AxSpoofManager. Shared so the two can't drift apart.
@@ -157,17 +185,17 @@ public class TrickyStoreService {
         Log.i(TAG, "TrickyStoreService initialized");
     }
 
-    private String fetchFromAms(Fetcher fetcher) {
-        IActivityManager am = ActivityManager.getService();
-        if (am == null) {
-            Log.w(TAG, "ActivityManager not ready, skipping trickystore fetch");
-            return null;
-        }
+    private FetchResult fetchFromAms(Fetcher fetcher) {
         try {
-            return fetcher.fetch(am);
-        } catch (Throwable e) {
-            Log.e(TAG, "Failed to fetch trickystore config from system_server", e);
-            return null;
+            IActivityManager am = ActivityManager.getService();
+            if (am == null) {
+                Log.w(TAG, "ActivityManager not ready, retaining last trickystore configuration");
+                return new FetchResult(false, null);
+            }
+            return new FetchResult(true, fetcher.fetch(am));
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to fetch trickystore config; retaining existing values", e);
+            return new FetchResult(false, null);
         }
     }
 
@@ -175,33 +203,26 @@ public class TrickyStoreService {
         String fetch(IActivityManager am) throws RemoteException;
     }
 
-    public void refreshTargets() {
-        String content = fetchFromAms(am -> am.getSpoofTrickyStoreTarget());
-        mHackPackages.clear();
-        mGeneratePackages.clear();
-        mSkipPackages.clear();
-        mPackageModes.clear();
-
-        if (content == null || content.isEmpty()) {
+    public synchronized void refreshTargets() {
+        FetchResult fetched = fetchFromAms(am -> am.getSpoofTrickyStoreTarget());
+        if (!fetched.success) return;
+        if (fetched.value == null || fetched.value.trim().isEmpty()) {
+            mPackageModes = Collections.emptyMap();
             return;
         }
-
-        String trimmed = content.trim();
+        String content = fetched.value.trim();
         try {
-            if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
-                parseTargetsJson(trimmed);
-            } else {
-                parseTargetsText(trimmed);
-            }
-            Log.i(TAG, "Updated target packages: hack=" + mHackPackages +
-                  ", generate=" + mGeneratePackages + ", skip=" + mSkipPackages +
-                  ", modes=" + mPackageModes);
+            Map<String, Mode> parsed = (content.startsWith("[") || content.startsWith("{"))
+                    ? parseTargetsJson(content) : parseTargetsText(content);
+            mPackageModes = Collections.unmodifiableMap(parsed);
+            Log.i(TAG, "Updated target policies: " + parsed.size());
         } catch (Exception e) {
-            Log.e(TAG, "Failed to parse target packages", e);
+            Log.e(TAG, "Invalid target policies; retaining previous configuration", e);
         }
     }
 
-    private void parseTargetsText(String content) {
+    private Map<String, Mode> parseTargetsText(String content) {
+        Map<String, Mode> parsed = new HashMap<>();
         for (String raw : content.split("\n")) {
             String line = raw.trim();
             if (line.isEmpty() || line.startsWith("#")) {
@@ -210,23 +231,22 @@ public class TrickyStoreService {
 
             if (line.endsWith("!")) {
                 String pkg = line.substring(0, line.length() - 1).trim();
-                mGeneratePackages.add(pkg);
-                mPackageModes.put(pkg, Mode.GENERATE);
+                if (!pkg.isEmpty()) parsed.put(pkg, Mode.GENERATE);
             } else if (line.endsWith("?")) {
                 String pkg = line.substring(0, line.length() - 1).trim();
-                mHackPackages.add(pkg);
-                mPackageModes.put(pkg, Mode.LEAF_HACK);
+                if (!pkg.isEmpty()) parsed.put(pkg, Mode.LEAF_HACK);
             } else if (line.endsWith("-")) {
                 String pkg = line.substring(0, line.length() - 1).trim();
-                mSkipPackages.add(pkg);
-                mPackageModes.put(pkg, Mode.SKIP);
+                if (!pkg.isEmpty()) parsed.put(pkg, Mode.SKIP);
             } else {
-                mPackageModes.put(line, Mode.AUTO);
+                parsed.put(line, Mode.AUTO);
             }
         }
+        return parsed;
     }
 
-    private void parseTargetsJson(String content) throws IOException {
+    private Map<String, Mode> parseTargetsJson(String content) throws IOException {
+        Map<String, Mode> parsed = new HashMap<>();
         try (JsonReader reader = new JsonReader(new StringReader(content))) {
             reader.beginArray();
             while (reader.hasNext()) {
@@ -247,27 +267,33 @@ public class TrickyStoreService {
                 if (pkg == null) continue;
                 Mode mode;
                 try {
-                    mode = Mode.valueOf(modeStr.toUpperCase());
+                    mode = Mode.valueOf(modeStr.toUpperCase(java.util.Locale.ROOT));
                 } catch (IllegalArgumentException e) {
                     mode = Mode.AUTO;
                 }
-                mPackageModes.put(pkg, mode);
-                if (mode == Mode.LEAF_HACK) mHackPackages.add(pkg);
-                if (mode == Mode.GENERATE) mGeneratePackages.add(pkg);
-                if (mode == Mode.SKIP) mSkipPackages.add(pkg);
+                if (!pkg.trim().isEmpty()) parsed.put(pkg.trim(), mode);
             }
             reader.endArray();
+            if (reader.peek() != android.util.JsonToken.END_DOCUMENT) {
+                throw new IOException("Trailing target policy data");
+            }
         }
+        return parsed;
     }
 
     public synchronized void refreshKeyBox() {
-        String raw = fetchFromAms(am -> am.getSpoofTrickyStoreKeyBox());
-        if (raw == null || raw.isEmpty()) {
-            mKeyBoxManager.clear();
+        FetchResult fetched = fetchFromAms(am -> am.getSpoofTrickyStoreKeyBox());
+        if (!fetched.success) return;
+        String raw = fetched.value;
+        if (raw == null || raw.trim().isEmpty()) {
+            if (mKeyBoxManager.hasKeyboxes()) {
+                mKeyBoxManager.clear();
+                AttestationUtils.invalidateFallbackBootState();
+            }
             mLastKeyboxFingerprint = null;
             return;
         }
-        String fingerprint = Integer.toHexString(raw.hashCode()) + ":" + raw.length();
+        String fingerprint = sha256(raw);
         if (fingerprint.equals(mLastKeyboxFingerprint)) {
             return;
         }
@@ -277,14 +303,6 @@ public class TrickyStoreService {
             return;
         }
         try {
-            if (!isValidKeyboxXml(xml)) {
-                mLastKeyboxFingerprint = null;
-                Log.e(TAG, "Keybox XML failed structural validation (missing keys or identifier)");
-                return;
-            }
-            if (ENABLE_REVOCATION_CHECK) {
-                checkKeyboxRevocation(xml);
-            }
             if (!mKeyBoxManager.parseKeybox(xml)) {
                 // Rejected as incomplete: the previous keyboxes stay loaded. Don't record
                 // this payload as applied, so the next read looks at it again.
@@ -293,6 +311,10 @@ public class TrickyStoreService {
             }
             if (mKeyBoxManager.hasKeyboxes()) {
                 mLastKeyboxFingerprint = fingerprint;
+                // Validators used by Duck RKP must not invalidate active boot state.
+                // Only a successful replacement of this service's keybox does so.
+                AttestationUtils.invalidateFallbackBootState();
+                if (ENABLE_REVOCATION_CHECK) checkKeyboxRevocation(xml);
                 Log.i(TAG, "Keybox updated successfully");
             } else {
                 mLastKeyboxFingerprint = null;
@@ -301,6 +323,16 @@ public class TrickyStoreService {
         } catch (Exception e) {
             mLastKeyboxFingerprint = null;
             Log.e(TAG, "Failed to update keybox", e);
+        }
+    }
+
+    private static String sha256(String text) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(text.getBytes(StandardCharsets.UTF_8));
+            return AttestationUtils.bytesToHex(digest);
+        } catch (Exception e) {
+            throw new IllegalStateException("SHA-256 unavailable", e);
         }
     }
 
@@ -320,27 +352,29 @@ public class TrickyStoreService {
         return null;
     }
 
-    public void refreshPatchLevel() {
-        String content = fetchFromAms(am -> am.getSpoofTrickyStorePatch());
-        mPerPackagePatchLevels.clear();
-        if (content == null || content.isEmpty()) {
-            mCustomPatchLevel = null;
+    public synchronized void refreshPatchLevel() {
+        FetchResult fetched = fetchFromAms(am -> am.getSpoofTrickyStorePatch());
+        if (!fetched.success) return;
+        String content = fetched.value;
+        if (content == null || content.trim().isEmpty()) {
+            mPatchConfig = new PatchConfig(null, Collections.emptyMap());
             return;
         }
-
         try {
+            PatchConfigBuilder next = new PatchConfigBuilder();
             String trimmed = content.trim();
             if (trimmed.startsWith("{")) {
-                parsePatchJson(trimmed);
+                parsePatchJson(trimmed, next);
             } else {
-                parsePatchText(trimmed);
+                parsePatchText(trimmed, next);
             }
+            mPatchConfig = next.build();
         } catch (Exception e) {
-            Log.e(TAG, "Failed to parse patch level", e);
+            Log.e(TAG, "Invalid patch levels; retaining previous configuration", e);
         }
     }
 
-    private void parsePatchText(String content) {
+    private void parsePatchText(String content, PatchConfigBuilder next) {
         String currentPackage = null;
         String system = null, vendor = null, boot = null, all = null;
 
@@ -349,7 +383,7 @@ public class TrickyStoreService {
             if (line.isEmpty() || line.startsWith("#")) continue;
 
             if (line.startsWith("[") && line.endsWith("]")) {
-                flushPatchSection(currentPackage, system, vendor, boot, all);
+                flushPatchSection(next, currentPackage, system, vendor, boot, all);
                 currentPackage = line.substring(1, line.length() - 1).trim();
                 system = vendor = boot = all = null;
                 continue;
@@ -369,7 +403,7 @@ public class TrickyStoreService {
                 all = line;
             }
         }
-        flushPatchSection(currentPackage, system, vendor, boot, all);
+        flushPatchSection(next, currentPackage, system, vendor, boot, all);
     }
 
     private static String resolvePatchTemplate(String value) {
@@ -386,7 +420,8 @@ public class TrickyStoreService {
             day);
     }
 
-    private void flushPatchSection(String pkg, String system, String vendor, String boot, String all) {
+    private void flushPatchSection(PatchConfigBuilder next,
+            String pkg, String system, String vendor, String boot, String all) {
         if (system == null && vendor == null && boot == null && all == null) return;
         String resolvedAll    = resolvePatchTemplate(all);
         String resolvedSystem = resolvePatchTemplate(system);
@@ -399,13 +434,13 @@ public class TrickyStoreService {
             resolvedAll
         );
         if (pkg == null) {
-            mCustomPatchLevel = level;
+            next.global = level;
         } else {
-            mPerPackagePatchLevels.put(pkg, level);
+            next.byPackage.put(pkg, level);
         }
     }
 
-    private void parsePatchJson(String content) throws IOException {
+    private void parsePatchJson(String content, PatchConfigBuilder next) throws IOException {
         String system = null, vendor = null, boot = null, all = null;
         try (JsonReader reader = new JsonReader(new StringReader(content))) {
             reader.beginObject();
@@ -433,7 +468,7 @@ public class TrickyStoreService {
                                 }
                             }
                             reader.endObject();
-                            flushPatchSection(pkg, ps, pv, pb, pa);
+                            flushPatchSection(next, pkg, ps, pv, pb, pa);
                         }
                         reader.endObject();
                         break;
@@ -441,8 +476,11 @@ public class TrickyStoreService {
                 }
             }
             reader.endObject();
+            if (reader.peek() != android.util.JsonToken.END_DOCUMENT) {
+                throw new IOException("Trailing patch configuration data");
+            }
         }
-        flushPatchSection(null, system, vendor, boot, all);
+        flushPatchSection(next, null, system, vendor, boot, all);
     }
 
     private boolean isTeeStatusFresh() {
@@ -462,21 +500,9 @@ public class TrickyStoreService {
         }
     }
 
+    /** Validates without changing the active service's keyboxes or boot state. */
     public static boolean isValidKeyboxXml(String xml) {
-        boolean hasEcdsa = xml.contains("<Key algorithm=\"ecdsa\">");
-        boolean hasRsa = xml.contains("<Key algorithm=\"rsa\">");
-        boolean hasId = xml.contains("<serial>") || xml.contains("DeviceID");
-        if (!hasEcdsa && !hasRsa) {
-            Log.e(TAG, "Keybox validation failed: no ECDSA or RSA key block found");
-            return false;
-        }
-        if (!hasId) {
-            Log.e(TAG, "Keybox validation failed: no identifier field (serial/DeviceID)");
-            return false;
-        }
-        if (!hasEcdsa) Log.w(TAG, "Keybox warning: missing ECDSA key block");
-        if (!hasRsa)   Log.w(TAG, "Keybox warning: missing RSA key block");
-        return true;
+        return new KeyBoxManager().parseKeybox(xml);
     }
 
     private void checkKeyboxRevocation(String xml) {
@@ -605,8 +631,13 @@ public class TrickyStoreService {
     }
 
     private boolean checkTeeBroken() {
+        final String alias = "TrickyStoreTeeCheck";
+        KeyStore ks = null;
         try {
-            String alias = "TrickyStoreTeeCheck";
+            ks = KeyStore.getInstance("AndroidKeyStore");
+            ks.load(null);
+            if (ks.containsAlias(alias)) ks.deleteEntry(alias);
+
             KeyPairGenerator kpg = KeyPairGenerator.getInstance(
                     KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore");
             KeyGenParameterSpec.Builder builder = new KeyGenParameterSpec.Builder(
@@ -614,28 +645,33 @@ public class TrickyStoreService {
                     .setAlgorithmParameterSpec(new ECGenParameterSpec("secp256r1"))
                     .setDigests(KeyProperties.DIGEST_SHA256)
                     .setAttestationChallenge(new byte[16]);
-
             kpg.initialize(builder.build());
             kpg.generateKeyPair();
-
-            KeyStore ks = KeyStore.getInstance("AndroidKeyStore");
-            ks.load(null);
-            ks.deleteEntry(alias);
-
-            Log.i(TAG, "TEE verification successful");
+            Log.i(TAG, "Attested key generation probe successful");
             return false;
         } catch (Exception e) {
-            Log.w(TAG, "TEE verification failed, TEE is broken", e);
+            // A failed probe is not proof of a damaged TEE. Unsupported attestation
+            // or unavailable provisioning may produce the same failure.
+            Log.w(TAG, "Attested key generation probe unavailable", e);
             return true;
+        } finally {
+            if (ks != null) {
+                try {
+                    if (ks.containsAlias(alias)) ks.deleteEntry(alias);
+                } catch (Exception e) {
+                    Log.w(TAG, "Failed to delete temporary TEE check alias", e);
+                }
+            }
         }
     }
 
     public boolean needHack(int callingUid, String[] packages) {
         if (packages == null) return false;
         maybeRefreshTargets();
+        Map<String, Mode> modes = mPackageModes;
         for (String pkg : packages) {
             if (XPOSED_PACKAGES.contains(pkg)) continue;
-            Mode mode = mPackageModes.get(pkg);
+            Mode mode = modes.get(pkg);
             if (mode == Mode.SKIP) continue;
             if (mode == Mode.LEAF_HACK) return true;
             // Only AUTO needs to know the TEE state. Probing it costs a real
@@ -648,9 +684,10 @@ public class TrickyStoreService {
     public boolean needGenerate(int callingUid, String[] packages) {
         if (packages == null) return false;
         maybeRefreshTargets();
+        Map<String, Mode> modes = mPackageModes;
         for (String pkg : packages) {
             if (XPOSED_PACKAGES.contains(pkg)) continue;
-            Mode mode = mPackageModes.get(pkg);
+            Mode mode = modes.get(pkg);
             if (mode == Mode.SKIP) continue;
             if (mode == Mode.GENERATE) return hasKeyboxes();
             if (mode == Mode.AUTO && hasKeyboxes() && isTeeBroken()) return true;
@@ -673,18 +710,19 @@ public class TrickyStoreService {
 
     public CustomPatchLevel getCustomPatchLevel() {
         refreshPatchLevel();
-        return mCustomPatchLevel;
+        return mPatchConfig.global;
     }
 
     public CustomPatchLevel getCustomPatchLevelForPackage(String[] packages) {
         refreshPatchLevel();
+        PatchConfig config = mPatchConfig;
         if (packages != null) {
             for (String pkg : packages) {
-                CustomPatchLevel level = mPerPackagePatchLevels.get(pkg);
+                CustomPatchLevel level = config.byPackage.get(pkg);
                 if (level != null) return level;
             }
         }
-        return mCustomPatchLevel;
+        return config.global;
     }
 
     /**

@@ -13,7 +13,6 @@ import android.os.SystemClock;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.security.trickystore.KeyBoxManager;
-import android.security.trickystore.TrickyStoreService;
 import android.util.AtomicFile;
 import android.util.Base64;
 import android.util.Slog;
@@ -228,8 +227,7 @@ public final class DuckRkpManager {
                 throw new IllegalArgumentException("Keybox is not Base64 encoded");
             }
             KeyBoxManager manager = new KeyBoxManager();
-            if (xml.contains("<!DOCTYPE") || !TrickyStoreService.isValidKeyboxXml(xml)
-                    || !manager.parseKeybox(xml) || !manager.hasKeyboxes()) {
+            if (!manager.parseKeybox(xml) || !manager.hasKeyboxes()) {
                 throw new IllegalArgumentException("Keybox contains no usable signing key");
             }
         }

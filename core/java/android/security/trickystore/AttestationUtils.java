@@ -26,6 +26,13 @@ public final class AttestationUtils {
     private static final File BOOT_KEY_FILE = new File(CONFIG_DIR, "boot_key");
     private static final File HBK_FILE = new File(CONFIG_DIR, "hbk");
 
+    // Refreshed without acquiring this class's monitor: boot-value resolution can
+    // call back into TrickyStoreService while that service replaces its keybox.
+    private static volatile Object sKeyboxVersion = new Object();
+    private static Object sBootKeyVersion;
+    private static Object sBootHashVersion;
+    private static boolean sBootKeyFallback;
+    private static boolean sBootHashFallback;
     private static byte[] sBootKey;
     private static byte[] sBootHash;
     private static volatile boolean sTeeBroken = false;
@@ -40,9 +47,16 @@ public final class AttestationUtils {
         return sTeeBroken;
     }
 
-    public static byte[] getBootKey() {
-        if (sBootKey == null) {
+    public static void invalidateFallbackBootState() {
+        sKeyboxVersion = new Object();
+    }
+
+    public static synchronized byte[] getBootKey() {
+        Object version = sKeyboxVersion;
+        if (sBootKey == null || (sBootKeyFallback && sBootKeyVersion != version)) {
+            sBootKeyVersion = version;
             sBootKey = getBootKeyFromProp();
+            sBootKeyFallback = sBootKey == null;
             if (sBootKey == null) {
                 sBootKey = getBootKeyFromKeybox();
             }
@@ -130,59 +144,31 @@ public final class AttestationUtils {
         }
     }
 
-    public static byte[] getBootHash() {
-        if (sBootHash == null) {
+    public static synchronized byte[] getBootHash() {
+        Object version = sKeyboxVersion;
+        if (sBootHash == null || (sBootHashFallback && sBootHashVersion != version)) {
+            sBootHashVersion = version;
             sBootHash = getBootHashFromProp();
-            if (sBootHash == null) {
-                sBootHash = readPersisted(HBK_FILE);
-            }
             if (sBootHash == null && !sTeeBroken) {
                 sBootHash = extractBootHashFromTee();
-                if (sBootHash != null) {
-                    writePersisted(HBK_FILE, sBootHash);
-                }
             }
+            sBootHashFallback = sBootHash == null;
             if (sBootHash == null) {
                 sBootHash = deriveBootHashFromKeybox();
             }
             if (sBootHash == null) {
-                Log.w(TAG, "Failed to get boot hash from prop, disk, TEE, and keybox, using random bytes");
-                sBootHash = generateRandomBytes(32);
-                writePersisted(HBK_FILE, sBootHash);
+                // Persisted values have no measurement provenance and may predate
+                // an OTA. Use them only after current hardware/keybox sources.
+                sBootHash = loadOrCreatePersisted(HBK_FILE);
             }
         }
         return sBootHash;
     }
 
-    public static void initBootHash() {
-        Log.i(TAG, "initBootHash: Starting boot hash initialization");
-        byte[] hash = getBootHashFromProp();
-        if (hash != null) {
-            sBootHash = hash;
-            Log.i(TAG, "initBootHash: Boot hash already set from prop: " + bytesToHex(hash));
-            return;
-        }
-        hash = readPersisted(HBK_FILE);
-        if (hash != null) {
-            sBootHash = hash;
-            Log.i(TAG, "initBootHash: Boot hash loaded from disk: " + bytesToHex(hash));
-            return;
-        }
-        Log.i(TAG, "initBootHash: No prop or disk state, attempting TEE extraction");
-        hash = extractBootHashFromTee();
-        if (hash != null) {
-            sBootHash = hash;
-            writePersisted(HBK_FILE, hash);
-            Log.i(TAG, "initBootHash: TEE extraction successful, setting prop");
+    public static synchronized void initBootHash() {
+        byte[] hash = getBootHash();
+        if (!sBootHashFallback && getBootHashFromProp() == null) {
             setVbmetaDigestProp(bytesToHex(hash));
-        } else {
-            hash = deriveBootHashFromKeybox();
-            if (hash != null) {
-                sBootHash = hash;
-                Log.w(TAG, "initBootHash: TEE extraction failed, using keybox-derived boot hash");
-            } else {
-                Log.e(TAG, "initBootHash: Failed to extract boot hash from TEE");
-            }
         }
     }
 
@@ -196,11 +182,16 @@ public final class AttestationUtils {
     }
 
     private static byte[] extractBootHashFromTee() {
+        final String alias = "trickystore_attestation_key";
+        KeyStore ks = null;
         try {
-            String alias = "trickystore_attestation_key";
-            
+            ks = KeyStore.getInstance("AndroidKeyStore");
+            ks.load(null);
+            // A stale probe must never influence the next probe's result.
+            if (ks.containsAlias(alias)) ks.deleteEntry(alias);
+
             KeyPairGenerator kpg = KeyPairGenerator.getInstance(
-                KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore");
+                    KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore");
             KeyGenParameterSpec spec = new KeyGenParameterSpec.Builder(alias,
                     KeyProperties.PURPOSE_SIGN | KeyProperties.PURPOSE_VERIFY)
                     .setDigests(KeyProperties.DIGEST_SHA256)
@@ -208,55 +199,61 @@ public final class AttestationUtils {
                     .build();
             kpg.initialize(spec);
             kpg.generateKeyPair();
-            
-            KeyStore ks = KeyStore.getInstance("AndroidKeyStore");
-            ks.load(null);
+
             java.security.cert.Certificate[] chain = ks.getCertificateChain(alias);
-            
-            if (chain == null || chain.length == 0) {
-                Log.e(TAG, "No certificate chain from AndroidKeyStore");
-                ks.deleteEntry(alias);
+            if (chain == null || chain.length == 0
+                    || !(chain[0] instanceof X509Certificate)) {
+                Log.w(TAG, "TEE probe did not return an X.509 leaf");
                 return null;
             }
-            
-            X509Certificate leafCert = (X509Certificate) chain[0];
-            byte[] extValue = leafCert.getExtensionValue("1.3.6.1.4.1.11129.2.1.17");
-            
-            ks.deleteEntry(alias);
-            
+            byte[] extValue = ((X509Certificate) chain[0]).getExtensionValue(
+                    "1.3.6.1.4.1.11129.2.1.17");
             if (extValue == null) {
-                Log.e(TAG, "No attestation extension in certificate");
+                Log.w(TAG, "TEE probe leaf has no attestation extension");
                 return null;
             }
-            
-            ASN1InputStream ais = new ASN1InputStream(extValue);
-            ASN1OctetString octet = (ASN1OctetString) ais.readObject();
-            ais.close();
-            
-            ASN1InputStream seqStream = new ASN1InputStream(octet.getOctets());
-            ASN1Sequence keyDesc = (ASN1Sequence) seqStream.readObject();
-            seqStream.close();
-            
-            ASN1Sequence teeEnforced = (ASN1Sequence) keyDesc.getObjectAt(7);
-            
-            for (int i = 0; i < teeEnforced.size(); i++) {
-                ASN1TaggedObject tagged = (ASN1TaggedObject) teeEnforced.getObjectAt(i);
-                if (tagged.getTagNo() == 704) {
-                    ASN1Sequence rootOfTrust = (ASN1Sequence) tagged.getBaseObject();
-                    if (rootOfTrust.size() >= 4) {
-                        ASN1OctetString bootHashOctet = (ASN1OctetString) rootOfTrust.getObjectAt(3);
-                        byte[] hash = bootHashOctet.getOctets();
-                        Log.i(TAG, "Extracted boot hash from TEE: " + bytesToHex(hash));
+
+            try (ASN1InputStream extStream = new ASN1InputStream(extValue)) {
+                ASN1OctetString octet = ASN1OctetString.getInstance(extStream.readObject());
+                try (ASN1InputStream descriptionStream =
+                        new ASN1InputStream(octet.getOctets())) {
+                    ASN1Sequence description = ASN1Sequence.getInstance(
+                            descriptionStream.readObject());
+                    if (description.size() < 8) return null;
+                    ASN1Sequence tee = ASN1Sequence.getInstance(description.getObjectAt(7));
+                    for (int i = 0; i < tee.size(); i++) {
+                        ASN1TaggedObject tagged = ASN1TaggedObject.getInstance(tee.getObjectAt(i));
+                        if (tagged.getTagNo() != 704) continue;
+                        ASN1Sequence rootOfTrust = ASN1Sequence.getInstance(
+                                tagged.getBaseObject());
+                        // The fourth RootOfTrust element is optional on older Keymaster.
+                        if (rootOfTrust.size() < 4) {
+                            Log.i(TAG, "Older Keymaster attestation has no verifiedBootHash");
+                            return null;
+                        }
+                        byte[] hash = ASN1OctetString.getInstance(
+                                rootOfTrust.getObjectAt(3)).getOctets();
+                        if (hash.length != 32) {
+                            Log.w(TAG, "Unexpected verifiedBootHash length: " + hash.length);
+                            return null;
+                        }
                         return hash;
                     }
                 }
             }
-            
-            Log.e(TAG, "RootOfTrust not found in TEE enforced list");
+            Log.w(TAG, "TEE attestation did not expose a RootOfTrust");
             return null;
         } catch (Exception e) {
-            Log.e(TAG, "Failed to extract boot hash from TEE", e);
+            Log.w(TAG, "TEE boot hash probe failed", e);
             return null;
+        } finally {
+            if (ks != null) {
+                try {
+                    if (ks.containsAlias(alias)) ks.deleteEntry(alias);
+                } catch (Exception e) {
+                    Log.w(TAG, "Failed to remove temporary TEE probe key", e);
+                }
+            }
         }
     }
 
@@ -461,10 +458,15 @@ public final class AttestationUtils {
 
     private static byte[] hexStringToByteArray(String hex) {
         int len = hex.length();
+        if ((len & 1) != 0) throw new IllegalArgumentException("Odd hexadecimal length");
         byte[] data = new byte[len / 2];
         for (int i = 0; i < len; i += 2) {
-            data[i / 2] = (byte) ((Character.digit(hex.charAt(i), 16) << 4)
-                    + Character.digit(hex.charAt(i + 1), 16));
+            int hi = Character.digit(hex.charAt(i), 16);
+            int lo = Character.digit(hex.charAt(i + 1), 16);
+            if (hi < 0 || lo < 0) {
+                throw new IllegalArgumentException("Invalid hexadecimal character");
+            }
+            data[i / 2] = (byte) ((hi << 4) | lo);
         }
         return data;
     }
