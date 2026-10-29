@@ -96,16 +96,16 @@ data class AxMediaColors(
 
 @Composable
 internal fun MediaArtwork(
-    artwork: IconModel?,
-    songKey: String,
+    artwork: AxMediaArtwork,
     overlayColor: Color,
     modifier: Modifier = Modifier,
     motionArt: File? = null,
     motionArtPlaying: Boolean = false,
+    topLitVignette: Boolean = false,
 ) {
     Box(modifier.fillMaxSize()) {
         AnimatedContent(
-            targetState = rememberAxMediaArtwork(artwork, songKey),
+            targetState = artwork,
             transitionSpec = {
                 (fadeIn(
                     animationSpec =
@@ -131,21 +131,7 @@ internal fun MediaArtwork(
         ) { targetState ->
             val currentArtwork = targetState.artwork
             val overlayModifier =
-                Modifier.fillMaxSize().drawWithCache {
-                    val radius = max(size.width, size.height) / 2f
-                    val brushCenter = Offset(size.width / 2f, size.height / 2f)
-                    val brush =
-                        Brush.radialGradient(
-                            0f to overlayColor.copy(alpha = 0.65f),
-                            1f to overlayColor.copy(alpha = 0.75f),
-                            center = brushCenter,
-                            radius = radius,
-                        )
-                    onDrawWithContent {
-                        drawContent()
-                        drawRect(brush)
-                    }
-                }
+                Modifier.fillMaxSize().mediaArtworkScrim(overlayColor, topLitVignette)
             when (currentArtwork) {
                 null -> Unit
                 is IconModel.Loaded -> {
@@ -169,23 +155,45 @@ internal fun MediaArtwork(
             file = motionArt,
             crop = true,
             isPlaying = motionArtPlaying,
-            modifier =
-                Modifier.fillMaxSize().drawWithCache {
-                    val brush =
-                        Brush.radialGradient(
-                            0f to overlayColor.copy(alpha = 0.65f),
-                            1f to overlayColor.copy(alpha = 0.75f),
-                            center = Offset(size.width / 2f, size.height / 2f),
-                            radius = max(size.width, size.height).coerceAtLeast(1f) / 2f,
-                        )
-                    onDrawWithContent {
-                        drawContent()
-                        drawRect(brush)
-                    }
-                },
+            modifier = Modifier.fillMaxSize().mediaArtworkScrim(overlayColor, topLitVignette),
         )
     }
 }
+
+private fun Modifier.mediaArtworkScrim(overlayColor: Color, topLitVignette: Boolean): Modifier =
+    drawWithCache {
+        val vignette =
+            if (topLitVignette) {
+                Brush.radialGradient(
+                    0f to overlayColor.copy(alpha = 0.24f),
+                    0.45f to overlayColor.copy(alpha = 0.34f),
+                    0.75f to overlayColor.copy(alpha = 0.60f),
+                    1f to overlayColor.copy(alpha = 0.82f),
+                    center = Offset(size.width * 0.5f, size.height * 0.15f),
+                    radius = max(size.width * 0.6f, size.height * 1.2f).coerceAtLeast(1f),
+                )
+            } else {
+                Brush.radialGradient(
+                    0f to overlayColor.copy(alpha = 0.65f),
+                    1f to overlayColor.copy(alpha = 0.75f),
+                    center = Offset(size.width / 2f, size.height / 2f),
+                    radius = max(size.width, size.height).coerceAtLeast(1f) / 2f,
+                )
+            }
+        val bottomScrim =
+            if (topLitVignette) {
+                Brush.verticalGradient(
+                    0f to Color.Transparent,
+                    0.4f to Color.Transparent,
+                    1f to overlayColor.copy(alpha = 0.52f),
+                )
+            } else null
+        onDrawWithContent {
+            drawContent()
+            drawRect(vignette)
+            bottomScrim?.let { drawRect(it) }
+        }
+    }
 
 @Composable
 internal fun MediaAppIcon(

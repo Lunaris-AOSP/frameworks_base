@@ -54,8 +54,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -81,6 +83,7 @@ import com.android.systemui.qs.panels.shared.model.AxMediaSurface
 import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.LunarisQsMediaStyle
+import com.android.systemui.qs.panels.ui.compose.AxNotificationMediaCornerRadius
 import com.android.systemui.qs.panels.ui.compose.AxQsControlCornerRadius
 import com.android.systemui.qs.panels.ui.compose.AxTileDefaults
 import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsCosTileBackground
@@ -100,6 +103,7 @@ private enum class AxMediaLayout {
     Wide,
     Compact,
     Expanded,
+    Notification,
 }
 
 @Composable
@@ -263,6 +267,7 @@ private fun AxMediaCard(
     val keyguardState by viewModel.currentKeyguardState.collectAsStateWithLifecycle()
     val layout =
         when {
+            surface == AxMediaSurface.SEPARATE_QQS -> AxMediaLayout.Notification
             span == AxQsSpan.MediaMin -> AxMediaLayout.SingleTile
             surface == AxMediaSurface.CONTROL &&
                 span == AxQsSpan.MediaWide &&
@@ -298,8 +303,11 @@ private fun AxMediaCard(
             keyguardState != KeyguardState.DOZING &&
             keyguardState != KeyguardState.AOD
     val glowCornerRadius =
-        if (surface == AxMediaSurface.CONTROL && span == AxQsSpan.MediaDefault) 28.dp
-        else AxQsControlCornerRadius
+        when {
+            surface == AxMediaSurface.SEPARATE_QQS -> AxNotificationMediaCornerRadius
+            surface == AxMediaSurface.CONTROL && span == AxQsSpan.MediaDefault -> 28.dp
+            else -> AxQsControlCornerRadius
+        }
     val motionArtActive =
         interactive &&
             motionArtVisible &&
@@ -317,10 +325,23 @@ private fun AxMediaCard(
             enabled = motionArtEnabled && motionArtActive,
         )
     val artwork = session?.background
+    val songKey = session?.let { "${it.appName}:${it.title}:${it.subtitle}" }
+    val usesBackgroundArtwork =
+        layout != AxMediaLayout.Box &&
+            layout != AxMediaLayout.AlbumCover &&
+            layout != AxMediaLayout.Wide
+    val artworkState =
+        if (usesBackgroundArtwork) rememberAxMediaArtwork(artwork, songKey)
+        else AxMediaArtwork(songKey, artwork)
     val tileBackground = AxTileDefaults.backgroundColor()
     val tileForeground = MaterialTheme.colorScheme.onSurface
     val colorScheme = session?.colorScheme
-    val mediaBackground = colorScheme?.background ?: MaterialTheme.colorScheme.onSurface
+    val mediaBackground =
+        if (layout == AxMediaLayout.Notification) {
+            lerp(colorScheme?.background ?: Color(0xFF30242C), Color.Black, 0.8f)
+        } else {
+            colorScheme?.background ?: MaterialTheme.colorScheme.onSurface
+        }
     val background by
         animateColorAsState(
             targetValue =
@@ -329,6 +350,7 @@ private fun AxMediaCard(
                         layout == AxMediaLayout.AlbumCover ||
                         layout == AxMediaLayout.Wide) &&
                         !gutsVisible -> tileBackground
+                    layout == AxMediaLayout.Notification -> mediaBackground
                     artwork != null && !gutsVisible -> Color.Transparent
                     session != null -> mediaBackground
                     else -> tileBackground
@@ -357,7 +379,9 @@ private fun AxMediaCard(
         )
     val foreground by
         animateColorAsState(
-            targetValue = if (session != null) Color.White else tileForeground,
+            targetValue =
+                if (session != null || layout == AxMediaLayout.Notification) Color.White
+                else tileForeground,
             label = "AxMediaForeground",
         )
     val animatedMediaBackground by
@@ -389,7 +413,7 @@ private fun AxMediaCard(
                 .fillMaxSize()
                 .clip(shape)
                 .cosMediaRipple(
-                    trigger = session?.let { Triple(it.key, it.title, it.subtitle) },
+                    trigger = session?.let { it.key to artworkState },
                     cornerRadius = glowCornerRadius,
                     enabled = statusGlowVisible,
                 ),
@@ -452,19 +476,16 @@ private fun AxMediaCard(
                     )
                 } else {
                     Box(Modifier.fillMaxSize()) {
-                        if (
-                            session != null &&
-                                layout != AxMediaLayout.Box &&
-                                layout != AxMediaLayout.AlbumCover &&
-                                layout != AxMediaLayout.Wide
-                        ) {
-                            val songKey = "${session.appName}:${session.title}:${session.subtitle}"
+                        if (session != null && usesBackgroundArtwork) {
                             MediaArtwork(
-                                artwork = artwork,
-                                songKey = songKey,
+                                artwork = artworkState,
                                 overlayColor = colors.background,
                                 motionArt = motionArt,
                                 motionArtPlaying = motionArtPlaying,
+                                topLitVignette = layout == AxMediaLayout.Notification,
+                                modifier =
+                                    if (layout == AxMediaLayout.Notification) Modifier.blur(2.dp)
+                                    else Modifier,
                             )
                         }
                         AnimatedContent(
@@ -482,6 +503,14 @@ private fun AxMediaCard(
                             modifier = Modifier.fillMaxSize(),
                         ) { mediaLayout ->
                             when (mediaLayout) {
+                                AxMediaLayout.Notification ->
+                                    NotificationMediaContent(
+                                        session = session,
+                                        viewModel = viewModel,
+                                        colors = colors,
+                                        interactive = interactive,
+                                        hasMultipleSessions = hasMultipleSessions,
+                                    )
                                 AxMediaLayout.SingleTile ->
                                     SingleTileMediaContent(
                                         session = session,
@@ -540,7 +569,6 @@ private fun AxMediaCard(
                                         span = span,
                                         colors = colors,
                                         interactive = interactive,
-                                        inlineTimestamps = surface == AxMediaSurface.SEPARATE_QQS,
                                         hasMultipleSessions = hasMultipleSessions,
                                     )
                             }
@@ -783,7 +811,6 @@ private fun ExpandedMediaContent(
     span: AxQsSpan,
     colors: AxMediaColors,
     interactive: Boolean,
-    inlineTimestamps: Boolean = false,
     hasMultipleSessions: Boolean = false,
 ) {
     val title = session?.title?.takeIf { it.isNotBlank() } ?: "No media playing"
@@ -796,13 +823,8 @@ private fun ExpandedMediaContent(
             remember(maxWidth, maxHeight, span) {
                 AxMediaSizing.from(maxWidth, maxHeight, span)
             }
-        val verticalPadding = if (inlineTimestamps) 4.dp else sizing.verticalPadding
-        val bottomPadding =
-            if (hasMultipleSessions) {
-                if (inlineTimestamps) 12.dp else 16.dp
-            } else {
-                verticalPadding
-            }
+        val verticalPadding = sizing.verticalPadding
+        val bottomPadding = if (hasMultipleSessions) 16.dp else verticalPadding
 
         Column(
             modifier =
@@ -839,7 +861,7 @@ private fun ExpandedMediaContent(
                 )
             }
 
-            Spacer(Modifier.height(if (inlineTimestamps) 2.dp else 6.dp))
+            Spacer(Modifier.height(6.dp))
 
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -862,7 +884,7 @@ private fun ExpandedMediaContent(
                 }
             }
 
-            if (!inlineTimestamps) Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(8.dp))
 
             Column(modifier = Modifier.fillMaxWidth()) {
                 MediaSeekBar(
@@ -871,10 +893,9 @@ private fun ExpandedMediaContent(
                     colors = colors,
                     dense = true,
                     interactive = interactive,
-                    showTimestamps = inlineTimestamps && sizing.showTimestamps,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                if (sizing.showTimestamps && !inlineTimestamps) {
+                if (sizing.showTimestamps) {
                     MediaTimestamps(
                         session = session,
                         viewModel = viewModel,
@@ -883,7 +904,7 @@ private fun ExpandedMediaContent(
                 }
             }
 
-            if (!inlineTimestamps) Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(6.dp))
 
             val maxActions = mediaActionLimit(span.columns)
             val additionalActions =

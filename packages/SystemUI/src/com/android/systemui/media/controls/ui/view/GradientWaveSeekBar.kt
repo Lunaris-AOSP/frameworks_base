@@ -38,6 +38,7 @@ import java.util.concurrent.Executors
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 class GradientWaveSeekBar
@@ -57,7 +58,7 @@ constructor(
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
             style = Paint.Style.STROKE
-            strokeWidth = density
+            strokeWidth = 1.8f * density
         }
     private val wavePath = Path()
     private val waveShaders = arrayOfNulls<Shader>(3)
@@ -95,11 +96,15 @@ constructor(
         updateColors()
     }
 
+    override fun setPadding(left: Int, top: Int, right: Int, bottom: Int) {
+        val inset = (THUMB_GLOW_RADIUS_DP * resources.displayMetrics.density).roundToInt()
+        super.setPadding(maxOf(left, inset), top, maxOf(right, inset), bottom)
+    }
+
     fun setTrackColor(color: Int) {
         val trackColor = (color and 0x00ffffff) or 0x66000000
         if (trackPaint.color == trackColor) return
         trackPaint.color = trackColor
-        ringPaint.color = color
         invalidate()
     }
 
@@ -197,6 +202,8 @@ constructor(
             artworkColors.getOrNull(2) ?: ColorUtils.blendARGB(primary, Color.WHITE, 0.25f)
         gradientColors =
             intArrayOf(accent, ColorUtils.blendARGB(primary, accent, 0.15f), secondary, tertiary)
+                .map { vibrantColor(it) }
+                .toIntArray()
         shaderLeft = Float.NaN
         invalidate()
     }
@@ -226,7 +233,12 @@ constructor(
             } else 0f
         val head = left + trackWidth * fraction
         val radius = 2f * density
-        val centerY = height / 2f
+        val contentHeight = (height - paddingTop - paddingBottom).toFloat()
+        if (contentHeight <= 0f) return
+        val trackOffset =
+            min(3f * density, contentHeight / 2f - THUMB_GLOW_RADIUS_DP * density)
+                .coerceAtLeast(0f)
+        val centerY = paddingTop + contentHeight / 2f + trackOffset
         val trackTop = centerY - radius
         val now = SystemClock.uptimeMillis()
         val animate =
@@ -264,9 +276,10 @@ constructor(
 
     private fun drawWave(canvas: Canvas, layer: Int, left: Float, head: Float, baseline: Float) {
         val length = head - left
-        val waveLength = (78f + layer * 19f) * density
-        val waveHeight = min((12f - layer * 2.5f) * density, baseline - density).coerceAtLeast(0f)
-        val taper = min(28f * density, length / 2f)
+        val waveLength = (128f + layer * 26f) * density
+        val availableHeight = (baseline - paddingTop - density).coerceAtLeast(0f)
+        val waveHeight = min(20f * density, availableHeight) * (1f - layer * 0.22f)
+        val taper = min(40f * density, length / 2f)
         if (taper <= 0f) return
         wavePath.rewind()
         wavePath.moveTo(left, baseline)
@@ -276,15 +289,17 @@ constructor(
             val envelope = edge * edge * (3f - 2f * edge)
             val position = (x - left) / waveLength * 2f * PI.toFloat()
             val crest = ((cos(position - phase + layer * 1.9f) + 1f) / 2f)
-            val variation = 0.65f + 0.35f * sin(position * 0.47f + layer + phase * 0.3f)
-            val y = baseline - crest * crest * variation * envelope * waveHeight * amplitude
+            val variation = 0.88f + 0.12f * sin(position * 0.47f + layer + phase * 0.3f)
+            val y =
+                baseline -
+                    (0.55f + 0.45f * crest) * variation * envelope * waveHeight * amplitude
             wavePath.lineTo(x, y)
             x += density
         }
         wavePath.lineTo(head, baseline)
         wavePath.close()
         wavePaint.shader = waveShaders[layer]
-        wavePaint.alpha = 110 + layer * 35
+        wavePaint.alpha = 205 + layer * 20
         canvas.drawPath(wavePath, wavePaint)
     }
 
@@ -299,10 +314,10 @@ constructor(
                 RadialGradient(
                     0f,
                     0f,
-                    10f * density,
+                    THUMB_GLOW_RADIUS_DP * density,
                     intArrayOf(
-                        ColorUtils.setAlphaComponent(color, 150),
-                        ColorUtils.setAlphaComponent(color, 65),
+                        ColorUtils.setAlphaComponent(color, 180),
+                        ColorUtils.setAlphaComponent(color, 80),
                         ColorUtils.setAlphaComponent(color, 0),
                     ),
                     floatArrayOf(0f, 0.4f, 1f),
@@ -311,8 +326,8 @@ constructor(
         }
         val save = canvas.save()
         canvas.translate(x, y)
-        canvas.drawCircle(0f, 0f, 10f * density, glowPaint)
-        val thumbRadius = (if (isScrubbing || isPressed) 4.5f else 3.5f) * density
+        canvas.drawCircle(0f, 0f, THUMB_GLOW_RADIUS_DP * density, glowPaint)
+        val thumbRadius = (if (isScrubbing || isPressed) 8.5f else 7f) * density
         thumbPaint.color = color
         canvas.drawCircle(0f, 0f, thumbRadius, thumbPaint)
         canvas.drawCircle(0f, 0f, thumbRadius, ringPaint)
@@ -320,8 +335,17 @@ constructor(
     }
 
     companion object {
+        private const val THUMB_GLOW_RADIUS_DP = 14f
         private val artworkExecutor = Executors.newSingleThreadExecutor()
         private val artworkColorCache = WeakHashMap<Drawable, List<Int>>()
+
+        private fun vibrantColor(color: Int): Int {
+            val hsl = FloatArray(3)
+            ColorUtils.colorToHSL(color, hsl)
+            hsl[1] = hsl[1].coerceAtLeast(0.65f)
+            hsl[2] = hsl[2].coerceIn(0.5f, 0.65f)
+            return ColorUtils.HSLToColor(hsl)
+        }
 
         private fun extractArtworkColors(drawable: Drawable): List<Int> {
             artworkColorCache[drawable]?.let {

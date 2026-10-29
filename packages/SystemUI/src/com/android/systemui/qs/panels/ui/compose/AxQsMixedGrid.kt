@@ -64,7 +64,7 @@ import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolderController
 import com.android.systemui.qs.panels.shared.model.shouldPlayQsContent
 import com.android.systemui.qs.panels.ui.media.AxMediaPanel
-import com.android.systemui.qs.panels.ui.media.nonQsGridMediaHeight
+import com.android.systemui.qs.panels.ui.media.notificationMediaHeight
 import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.AxQsViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.DetailsViewModel
@@ -488,7 +488,7 @@ internal fun ContentScope.AxQsMixedGrid(
                                     .padding(
                                         horizontal = dimensionResource(R.dimen.qs_horizontal_margin)
                                     )
-                                    .layoutHeight(nonQsGridMediaHeight),
+                                    .layoutHeight(notificationMediaHeight()),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 AxMediaPanel(

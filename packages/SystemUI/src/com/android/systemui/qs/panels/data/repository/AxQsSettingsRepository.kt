@@ -171,7 +171,16 @@ constructor(
     val showWeather: StateFlow<Boolean> = boolSetting(SHOW_WEATHER, true)
     val showNotificationMedia: StateFlow<Boolean> = boolSetting(SHOW_NOTIFICATION_MEDIA, true)
     val notificationMediaStatusGlow: StateFlow<Boolean> =
-        boolSetting(NOTIFICATION_MEDIA_STATUS_GLOW, false)
+        boolSetting(
+            NOTIFICATION_MEDIA_STATUS_GLOW,
+            default = true,
+            initialValue =
+                secureSettings.getIntForUser(
+                    NOTIFICATION_MEDIA_STATUS_GLOW,
+                    1,
+                    userRepository.getSelectedUserInfo().id,
+                ) != 0,
+        )
     val mediaTileStatusGlow: StateFlow<Boolean> = boolSetting(MEDIA_TILE_STATUS_GLOW, false)
     val showSliderPercentage: StateFlow<Boolean> = boolSetting(SHOW_SLIDER_PERCENTAGE, false)
     val strokeStyle: StateFlow<Boolean> = boolSetting(STROKE_STYLE, false)
@@ -650,11 +659,15 @@ constructor(
             .flowOn(backgroundDispatcher)
     }
 
-    private fun boolSetting(key: String, default: Boolean): StateFlow<Boolean> =
+    private fun boolSetting(
+        key: String,
+        default: Boolean,
+        initialValue: Boolean = default,
+    ): StateFlow<Boolean> =
         intSetting(key, default.toSetting())
             .map { it != 0 }
             .distinctUntilChanged()
-            .stateIn(applicationScope, SharingStarted.Eagerly, default)
+            .stateIn(applicationScope, SharingStarted.Eagerly, initialValue)
 
     private fun gridSettings(
         layouts: Iterable<AxQsGridLayout>,

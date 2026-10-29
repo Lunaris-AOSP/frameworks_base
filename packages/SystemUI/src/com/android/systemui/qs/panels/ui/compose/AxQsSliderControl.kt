@@ -1,5 +1,6 @@
 /*
  * Copyright 2025-2026 AxionOS
+ * Copyright (C) 2024-2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -234,6 +235,8 @@ internal fun axQsControlShape(
     tileStyle: AxQsTileStyle = AxQsTileStyle.PILL,
 ): RoundedCornerShape {
     return when {
+        control == AxQsControl.MEDIA && mediaSurface == AxMediaSurface.SEPARATE_QQS ->
+            RoundedCornerShape(AxNotificationMediaCornerRadius)
         control.isResizableContent -> RoundedCornerShape(AxQsControlCornerRadius)
         control == AxQsControl.MEDIA &&
             span == AxQsSpan.MediaDefault &&
@@ -253,6 +256,7 @@ internal fun axQsControlShape(
 }
 
 internal val AxQsControlCornerRadius = 24.dp
+internal val AxNotificationMediaCornerRadius = 36.dp
 private val ExpressiveSliderShape = RoundedCornerShape(30)
 private val AxSliderTrackHeight = 64.dp
 private val AxSliderTrackInsideCornerRadius = 2.dp

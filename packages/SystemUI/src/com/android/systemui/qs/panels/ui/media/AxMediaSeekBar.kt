@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2025-2026 AxionOS
- * Copyright (C) 2026 Lunaris AOSP
+ * Copyright (C) 2024-2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -61,9 +61,9 @@ internal fun MediaSeekBar(
     val seekBarStyle by
         viewModel.seekBarStyle.collectAsStateWithLifecycle(initialValue = MediaSeekBarStyle.DEFAULT)
     val height =
-        if (
+        if (seekBarStyle == MediaSeekBarStyle.GRADIENT_WAVE) 40.dp
+        else if (
             seekBarStyle == MediaSeekBarStyle.GLOWING ||
-                seekBarStyle == MediaSeekBarStyle.GRADIENT_WAVE ||
                 seekBarStyle == MediaSeekBarStyle.COS
         ) 34.dp else if (dense) 20.dp else 32.dp
     val progress = session?.let(viewModel::progress) ?: 0f

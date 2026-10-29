@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2025-2026 AxionOS
+ * Copyright (C) 2024-2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +17,16 @@
 
 package com.android.systemui.qs.panels.ui.media
 
+import android.view.HapticFeedbackConstants
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -32,7 +38,9 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -49,6 +57,7 @@ import androidx.compose.material3.Icon as MaterialIcon
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -56,8 +65,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -73,6 +84,9 @@ import com.android.systemui.media.remedia.domain.model.MediaSessionModel
 import com.android.systemui.media.remedia.shared.model.MediaSessionState
 import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.res.R
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 @Composable
 internal fun MediaControls(
@@ -383,15 +397,17 @@ internal fun MediaAction(
         animateColorAsState(targetValue = background, label = "AxMediaActionBackground")
     when (action) {
         is MediaActionModel.Action -> {
+            val interactionSource = remember { MutableInteractionSource() }
+            val enabled = interactive && action.onClick != null
             Box(
                 contentAlignment = Alignment.Center,
                 modifier =
                     Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                         .clip(CircleShape)
                         .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
+                            interactionSource = interactionSource,
                             indication = ripple(bounded = true, radius = 24.dp),
-                            enabled = interactive && action.onClick != null,
+                            enabled = enabled,
                         ) {
                             viewModel.runAction(action)
                         },
@@ -400,6 +416,7 @@ internal fun MediaAction(
                     contentAlignment = Alignment.Center,
                     modifier =
                         Modifier.size(width = buttonWidth, height = buttonHeight)
+                            .mediaActionPressFeedback(interactionSource, enabled)
                             .clip(shape)
                             .background(buttonBackground),
                 ) {
@@ -443,6 +460,64 @@ internal fun MediaAction(
         MediaActionModel.None -> Unit
         MediaActionModel.ReserveSpace ->
             Spacer(Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).size(width = buttonWidth, height = buttonHeight))
+    }
+}
+
+@Composable
+private fun Modifier.mediaActionPressFeedback(
+    interactionSource: InteractionSource,
+    enabled: Boolean,
+): Modifier {
+    val scale = remember { Animatable(1f) }
+    val view = LocalView.current
+    LaunchedEffect(interactionSource, enabled, view) {
+        scale.snapTo(1f)
+        if (!enabled) return@LaunchedEffect
+
+        val presses = mutableSetOf<PressInteraction.Press>()
+        var animation: Job? = null
+        var release: CompletableDeferred<Unit>? = null
+        interactionSource.interactions.collect { interaction ->
+            when (interaction) {
+                is PressInteraction.Press -> {
+                    if (presses.add(interaction) && presses.size == 1) {
+                        view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                        animation?.cancel()
+                        val released = CompletableDeferred<Unit>()
+                        release = released
+                        animation = launch {
+                            scale.animateTo(0.88f, tween(100, easing = FastOutSlowInEasing))
+                            released.await()
+                            scale.animateTo(
+                                1f,
+                                spring(
+                                    dampingRatio = Spring.DampingRatioLowBouncy,
+                                    stiffness = Spring.StiffnessMedium,
+                                ),
+                            )
+                        }
+                    }
+                }
+                is PressInteraction.Release -> {
+                    if (presses.remove(interaction.press) && presses.isEmpty()) {
+                        release?.complete(Unit)
+                    }
+                }
+                is PressInteraction.Cancel -> {
+                    if (presses.remove(interaction.press) && presses.isEmpty()) {
+                        animation?.cancel()
+                        release = null
+                        animation = launch { scale.animateTo(1f, tween(100)) }
+                    }
+                }
+                else -> Unit
+            }
+        }
+    }
+    return graphicsLayer {
+        val value = if (enabled) scale.value else 1f
+        scaleX = value
+        scaleY = value
     }
 }
 
