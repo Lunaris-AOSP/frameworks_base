@@ -3244,7 +3244,7 @@
     <dimen name="config_hoverTapSlop">20px</dimen>
 
     <!-- The amount of friction applied to scrolls and flings. -->
-    <item name="config_scrollFriction" format="float" type="dimen">0.015</item>
+    <item name="config_scrollFriction" format="float" type="dimen">0.012</item>
 
     <!-- Maximum number of grid columns permitted in the ResolverActivity
          used for picking activities to handle an intent. -->

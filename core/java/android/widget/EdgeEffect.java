@@ -126,18 +126,18 @@ public class EdgeEffect {
     /**
      * The natural frequency of the stretch spring.
      */
-    private static final double NATURAL_FREQUENCY = 24.657;
+    private static final double NATURAL_FREQUENCY = 22.0;
 
     /**
      * The damping ratio of the stretch spring.
      */
-    private static final double DAMPING_RATIO = 0.98;
+    private static final double DAMPING_RATIO = 0.86;
 
     /**
      * The variation of the velocity for the stretch effect when it meets the bound.
      * if value is > 1, it will accentuate the absorption of the movement.
      */
-    private static final float ON_ABSORB_VELOCITY_ADJUSTMENT = 13f;
+    private static final float ON_ABSORB_VELOCITY_ADJUSTMENT = 10f;
 
     /** @hide */
     @IntDef({TYPE_NONE, TYPE_GLOW, TYPE_STRETCH})

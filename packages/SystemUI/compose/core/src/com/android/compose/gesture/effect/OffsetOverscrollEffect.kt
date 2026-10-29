@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.android.compose.gesture.effect.OffsetOverscrollEffect.Companion.DefaultMaxDistance
+import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
 
@@ -105,14 +106,20 @@ class OffsetOverscrollEffect(
         val DefaultMaxDistance = 400.dp
         val ShortMaxDistance = 50.dp
 
+        private const val MAX_OFFSET_FRACTION = 0.2f
+        private const val INITIAL_DRAG_RATE = 0.55f
+
         fun computeOffset(
             density: Density,
             overscrollDistance: Float,
             maxDistance: Dp = DefaultMaxDistance,
         ): Int {
             val maxDistancePx = with(density) { maxDistance.toPx() }
-            val progress = ProgressConverter.Default.convert(overscrollDistance / maxDistancePx)
-            return (progress * maxDistancePx).roundToInt()
+            val maxOffset = maxDistancePx * MAX_OFFSET_FRACTION
+            val resistedDistance = abs(overscrollDistance) * INITIAL_DRAG_RATE
+            val offset = maxOffset * (resistedDistance / (maxOffset + resistedDistance))
+            val roundedOffset = offset.roundToInt()
+            return if (overscrollDistance < 0f) -roundedOffset else roundedOffset
         }
     }
 }
