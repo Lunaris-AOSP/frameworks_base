@@ -138,7 +138,7 @@ public interface VolumeModule {
         final int volumeDialogType = Settings.System.getInt(
                 context.getContentResolver(),
                 "volume_dialog_type",
-                1);
+                0);
         switch (volumeDialogType) {
             case 0:
                 return axionVolumeDialogPlugin.get();

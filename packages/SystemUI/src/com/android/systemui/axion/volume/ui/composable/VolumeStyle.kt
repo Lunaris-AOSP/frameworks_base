@@ -36,7 +36,7 @@ enum class VolumeStyle(val value: Int) {
         const val SETTINGS_KEY = "compose_volume_style"
 
         fun from(value: Int): VolumeStyle =
-            entries.firstOrNull { it.value == value } ?: AXION
+            entries.firstOrNull { it.value == value } ?: MOTO
     }
 }
 
@@ -70,7 +70,7 @@ private fun readStyle(context: Context): VolumeStyle =
         Settings.System.getInt(
             context.contentResolver,
             VolumeStyle.SETTINGS_KEY,
-            VolumeStyle.AXION.value
+            VolumeStyle.MOTO.value
         )
     )
 

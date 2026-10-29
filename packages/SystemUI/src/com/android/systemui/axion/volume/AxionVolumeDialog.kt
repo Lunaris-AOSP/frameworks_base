@@ -50,7 +50,7 @@ class AxionVolumeDialog @Inject constructor(
     private var wakeLock: PowerManager.WakeLock? = null
     var isExpanded: Boolean = false
     var isLeftSide: Boolean = false
-    private var volumeStyle = VolumeStyle.AXION
+    private var volumeStyle = VolumeStyle.MOTO
     private var motoExpanded = false
 
     init {
