@@ -40,6 +40,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.text.style.TextAlign
@@ -248,24 +249,32 @@ private fun ExpandedVolumeDialog(viewModel: AxionVolumeDialogViewModel) {
     )
 
     val collapseButton = @Composable {
-        FilledTonalButton(
-            onClick = { 
-                viewModel.rescheduleTimeout()
-                viewModel.toggleExpanded() 
-            },
+        AxBlurSurface(
             modifier = Modifier.size(VolumeButtonsSize),
             shape = CircleShape,
-            colors = ButtonDefaults.filledTonalButtonColors(
-                containerColor = MaterialTheme.colorScheme.surfaceBright,
-                contentColor = MaterialTheme.colorScheme.onSurface
-            ),
-            contentPadding = PaddingValues(0.dp)
+            cornerRadius = VolumeButtonsSize / 2,
+            surfaceColor = AxBlurSurfaceDefaults.surfaceColor(),
+            contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = Icons.Filled.Close,
-                contentDescription = "Dismiss",
-                modifier = Modifier.size(24.dp)
-            )
+            FilledTonalButton(
+                onClick = {
+                    viewModel.rescheduleTimeout()
+                    viewModel.toggleExpanded()
+                },
+                modifier = Modifier.fillMaxSize(),
+                shape = CircleShape,
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = Color.Transparent,
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ),
+                contentPadding = PaddingValues(0.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = "Dismiss",
+                    modifier = Modifier.size(24.dp)
+                )
+            }
         }
     }
 

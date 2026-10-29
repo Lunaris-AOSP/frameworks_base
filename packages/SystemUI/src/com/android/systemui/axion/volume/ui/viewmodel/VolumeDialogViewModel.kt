@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2025 Axion OS
+ * Copyright (C) 2024-2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +23,7 @@ import com.android.systemui.axion.volume.dagger.AxionVolumeScope
 import com.android.systemui.axion.volume.domain.interactor.AxionVolumeDialogInteractor
 import com.android.systemui.axion.volume.domain.model.AxionRingerMode
 import com.android.systemui.axion.volume.domain.model.AxionVolumeDialogState
+import com.android.systemui.axion.volume.domain.model.AxionVolumeStreamModel
 import com.android.systemui.haptics.slider.compose.ui.SliderHapticsViewModel
 import java.lang.ref.WeakReference
 import javax.inject.Inject
@@ -66,6 +68,8 @@ class AxionVolumeDialogViewModel @Inject constructor(
     private val _visibilityState = MutableStateFlow(VisibilityState.DISMISSED)
     private val _expansionState = MutableStateFlow(ExpansionState.COLLAPSED)
     private val _isInteracting = MutableStateFlow(false)
+    private var manualInteraction = false
+    private val interactionOwners = mutableSetOf<Any>()
     private val _showingAppVolumes = MutableStateFlow(false)
     private val _overscrollOffset = MutableStateFlow(0f)
     private val _volumeKeyHapticTrigger = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
@@ -115,11 +119,26 @@ class AxionVolumeDialogViewModel @Inject constructor(
 
     var isInteracting: Boolean
         get() = _isInteracting.value
-        set(value) { _isInteracting.value = value }
+        set(value) {
+            manualInteraction = value
+            updateInteractionState()
+        }
+
+    fun setInteractionActive(owner: Any, active: Boolean) {
+        if (active) interactionOwners.add(owner) else interactionOwners.remove(owner)
+        updateInteractionState()
+    }
+
+    private fun updateInteractionState() {
+        _isInteracting.value = manualInteraction || interactionOwners.isNotEmpty()
+    }
     
     val overscrollOffset: StateFlow<Float> = _overscrollOffset.asStateFlow()
     val volumeKeyHapticTrigger: SharedFlow<Unit> = _volumeKeyHapticTrigger.asSharedFlow()
     val rescheduleTimeoutTrigger: SharedFlow<Unit> = _rescheduleTimeoutTrigger.asSharedFlow()
+
+    val voiceCallStream: StateFlow<AxionVolumeStreamModel?> = interactor.voiceCallStream
+        .stateIn(scope, SharingStarted.WhileSubscribed(5000), null)
 
     val isHapticEnabled: StateFlow<Boolean> = interactor.isHapticEnabled
         .stateIn(
@@ -133,6 +152,8 @@ class AxionVolumeDialogViewModel @Inject constructor(
     }
 
     fun resetState() {
+        interactionOwners.clear()
+        isInteracting = false
         expansionState = ExpansionState.COLLAPSED
         _showingAppVolumes.value = false
     }
@@ -195,6 +216,11 @@ class AxionVolumeDialogViewModel @Inject constructor(
         visibilityState = VisibilityState.QUICK_DISMISSED
         interactor.openVolumePanel()
     }
+
+    fun onSoundSettingsClick() {
+        visibilityState = VisibilityState.QUICK_DISMISSED
+        interactor.openSoundSettings()
+    }
     
     fun cycleRingerMode() {
         interactor.interact {
@@ -211,11 +237,12 @@ class AxionVolumeDialogViewModel @Inject constructor(
     }
 
     private inline fun AxionVolumeDialogInteractor.interact(action: AxionVolumeDialogInteractor.() -> Unit) {
-        _isInteracting.value = true
+        val owner = Any()
+        setInteractionActive(owner, true)
         try {
             action()
         } finally {
-            _isInteracting.value = false
+            setInteractionActive(owner, false)
         }
     }
 }

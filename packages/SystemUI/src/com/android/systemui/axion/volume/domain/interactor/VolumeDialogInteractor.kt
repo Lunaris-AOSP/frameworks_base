@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2025 Axion OS
+ * Copyright (C) 2024-2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +17,10 @@
 
 package com.android.systemui.axion.volume.domain.interactor
 
+import android.content.Intent
 import android.media.AudioManager
 import android.os.Vibrator
+import android.provider.Settings
 import com.android.systemui.axion.volume.dagger.AxionVolumeScope
 import com.android.systemui.axion.volume.repository.AxionCaptionsRepository
 import com.android.systemui.axion.volume.repository.AxionVolumeRepository
@@ -25,6 +28,7 @@ import com.android.systemui.axion.volume.domain.model.AxionAppVolumeModel
 import com.android.systemui.axion.volume.domain.model.AxionRingerMode
 import com.android.systemui.axion.volume.domain.model.AxionVolumeDialogState
 import com.android.systemui.axion.volume.domain.model.AxionVolumeStreamModel
+import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.volume.domain.interactor.VolumePanelNavigationInteractor
 import com.android.systemui.volume.ui.navigation.VolumeNavigator
 import javax.inject.Inject
@@ -33,6 +37,7 @@ import kotlinx.coroutines.flow.*
 
 interface AxionVolumeDialogInteractor {
     val volumeDialogState: Flow<AxionVolumeDialogState>
+    val voiceCallStream: Flow<AxionVolumeStreamModel>
     fun setVolume(streamType: Int, level: Float)
     fun setActiveStream(streamType: Int)
     fun setRingerMode(mode: AxionRingerMode)
@@ -42,6 +47,7 @@ interface AxionVolumeDialogInteractor {
     fun setAppMute(packageName: String, muted: Boolean)
     fun getSupportedRingerModes(): List<AxionRingerMode>
     fun openVolumePanel()
+    fun openSoundSettings()
     fun rescheduleTimeout()
     fun setExpanded(expanded: Boolean)
     val isHapticEnabled: Flow<Boolean>
@@ -56,7 +62,11 @@ class AxionVolumeDialogInteractorImpl @Inject constructor(
     private val vibrator: Vibrator?,
     private val volumeNavigator: VolumeNavigator,
     private val volumePanelNavigationInteractor: VolumePanelNavigationInteractor,
+    private val activityStarter: ActivityStarter,
 ) : AxionVolumeDialogInteractor {
+
+    override val voiceCallStream: Flow<AxionVolumeStreamModel> =
+        volumeStreamFlow(AudioManager.STREAM_VOICE_CALL)
 
     @Suppress("UNCHECKED_CAST")
     override val volumeDialogState: Flow<AxionVolumeDialogState> = combine(
@@ -172,6 +182,10 @@ class AxionVolumeDialogInteractorImpl @Inject constructor(
         volumeNavigator.openVolumePanel(
             volumePanelNavigationInteractor.getVolumePanelRoute()
         )
+    }
+
+    override fun openSoundSettings() {
+        activityStarter.startActivity(Intent(Settings.ACTION_SOUND_SETTINGS), true)
     }
 
     override fun rescheduleTimeout() {

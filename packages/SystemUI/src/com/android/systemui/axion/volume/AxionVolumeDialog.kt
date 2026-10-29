@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2025 AxionOS
+ * Copyright (C) 2024-2026 Lunaris AOSP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,6 +34,7 @@ import androidx.compose.ui.window.*
 import androidx.lifecycle.*
 import com.android.systemui.animation.*
 import com.android.systemui.axion.volume.ui.composable.*
+import com.android.systemui.axion.volume.ui.composable.moto.MotoPanelWidth
 import com.android.systemui.axion.volume.ui.viewmodel.*
 import com.android.systemui.dagger.qualifiers.*
 import com.android.systemui.res.R
@@ -48,6 +50,8 @@ class AxionVolumeDialog @Inject constructor(
     private var wakeLock: PowerManager.WakeLock? = null
     var isExpanded: Boolean = false
     var isLeftSide: Boolean = false
+    private var volumeStyle = VolumeStyle.AXION
+    private var motoExpanded = false
 
     init {
         with(window!!) {
@@ -77,7 +81,17 @@ class AxionVolumeDialog @Inject constructor(
     }
 
     fun updateWindowGravity(isLeftSide: Boolean) {
-        window?.setGravity((if (isLeftSide) Gravity.START else Gravity.END) or Gravity.CENTER_VERTICAL)
+        val gravity = if (volumeStyle == VolumeStyle.MOTO && motoExpanded) {
+            Gravity.CENTER
+        } else {
+            (if (isLeftSide) Gravity.START else Gravity.END) or Gravity.CENTER_VERTICAL
+        }
+        window?.setGravity(gravity)
+    }
+
+    private fun onMotoExpandedLayoutChanged(expanded: Boolean) {
+        motoExpanded = expanded
+        updateWindowGravity(isLeftSide)
     }
 
     private fun setupContent() {
@@ -122,6 +136,11 @@ class AxionVolumeDialog @Inject constructor(
 
             // Replaced repeatWhenAttached with standard Compose approach
             setContent {
+                val style by rememberVolumeStyle()
+                SideEffect {
+                    volumeStyle = style
+                    updateWindowGravity(isLeftSide)
+                }
                 val lifecycleOwner = LocalLifecycleOwner.current
                 
                 DisposableEffect(lifecycleOwner) {
@@ -151,7 +170,7 @@ class AxionVolumeDialog @Inject constructor(
                             .padding(12.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        VolumeStyleDispatcher(viewModel)
+                        VolumeStyleDispatcher(viewModel, style, ::onMotoExpandedLayoutChanged)
                     }
                 }
             }
@@ -175,7 +194,11 @@ class AxionVolumeDialog @Inject constructor(
         private fun isTouchOutsidePanelBounds(x: Float, y: Float): Boolean {
             if (isExpanded) return false
             val density = resources.displayMetrics.density
-            val widthPx = 66 * density
+            val widthPx = if (volumeStyle == VolumeStyle.MOTO) {
+                (MotoPanelWidth.value + 12) * density
+            } else {
+                66 * density
+            }
             val w = width.toFloat()
             val ls = isLeftSide
             return if (ls) x > widthPx else x < (w - widthPx)

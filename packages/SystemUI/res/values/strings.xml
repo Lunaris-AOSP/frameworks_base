@@ -2094,6 +2094,7 @@
     <string name="volume_panel_enter_media_output_settings">Enter output settings</string>
     <!-- An audible a11y state description for a button, that expands volume sliders menu [CHAR_LIMIT=NONE] -->
     <string name="volume_panel_expanded_sliders">Volume sliders expanded</string>
+    <string name="volume_panel_expand_sliders">Expand volume controls</string>
     <!-- An audible a11y state description for a button, that collapses volume sliders menu [CHAR LIMIT=NONE] -->
     <string name="volume_panel_collapsed_sliders">Volume sliders collapsed</string>
 

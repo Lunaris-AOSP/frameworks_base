@@ -24,11 +24,13 @@ import android.provider.Settings
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import com.android.systemui.axion.volume.ui.composable.lunaris.LunarisVolumeDialogContent
+import com.android.systemui.axion.volume.ui.composable.moto.MotoVolumeDialogContent
 import com.android.systemui.axion.volume.ui.viewmodel.AxionVolumeDialogViewModel
 
 enum class VolumeStyle(val value: Int) {
     AXION(0),
-    LUNARIS(1);
+    LUNARIS(1),
+    MOTO(2);
 
     companion object {
         const val SETTINGS_KEY = "compose_volume_style"
@@ -73,10 +75,14 @@ private fun readStyle(context: Context): VolumeStyle =
     )
 
 @Composable
-fun VolumeStyleDispatcher(viewModel: AxionVolumeDialogViewModel) {
-    val style by rememberVolumeStyle()
+fun VolumeStyleDispatcher(
+    viewModel: AxionVolumeDialogViewModel,
+    style: VolumeStyle = rememberVolumeStyle().value,
+    onMotoExpandedLayoutChanged: (Boolean) -> Unit = {},
+) {
     when (style) {
         VolumeStyle.AXION  -> AxionVolumeDialogContent(viewModel)
         VolumeStyle.LUNARIS -> LunarisVolumeDialogContent(viewModel)
+        VolumeStyle.MOTO -> MotoVolumeDialogContent(viewModel, onMotoExpandedLayoutChanged)
     }
 }
