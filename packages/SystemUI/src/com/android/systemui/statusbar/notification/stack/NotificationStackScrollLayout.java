@@ -5068,7 +5068,6 @@ public class NotificationStackScrollLayout
         mPanelTracking = true;
         mAmbientState.setPanelTracking(true);
         resetExposedMenuView(true /* animate */, true /* force */);
-        boostInteraction(700);
     }
 
     void onPanelTrackingStopped() {

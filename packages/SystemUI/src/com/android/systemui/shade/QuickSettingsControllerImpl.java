@@ -2559,8 +2559,8 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         mAnimatorExpand = expanding;
         mAnimatingHiddenFromCollapsed =
                 computeExpansionFraction() == 0.0f && target == 0;
-        animator.start();
         boostInteraction((int) animator.getDuration());
+        animator.start();
     }
 
     private void flingQsWithCurrentVelocity(float y, boolean isCancelMotionEvent) {

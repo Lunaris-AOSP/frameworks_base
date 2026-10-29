@@ -1617,8 +1617,8 @@ public final class NotificationPanelViewController implements
             animator.setDuration(1);
         }
         setAnimator(animator);
-        animator.start();
         boostInteraction((int) animator.getDuration());
+        animator.start();
     }
 
     @VisibleForTesting

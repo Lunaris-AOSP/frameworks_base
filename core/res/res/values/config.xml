@@ -3246,6 +3246,8 @@
     <!-- The amount of friction applied to scrolls and flings. -->
     <item name="config_scrollFriction" format="float" type="dimen">0.012</item>
 
+    <integer name="config_scrollBoostDurationMillis">700</integer>
+
     <!-- Maximum number of grid columns permitted in the ResolverActivity
          used for picking activities to handle an intent. -->
     <integer name="config_maxResolverActivityColumns">3</integer>
