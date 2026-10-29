@@ -16,6 +16,7 @@
 
 package com.android.systemui.statusbar.featurepods.media.shared.model
 
+import com.android.systemui.animation.ActivityTransitionAnimator
 import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.media.controls.shared.model.MediaAction
 import com.android.systemui.media.controls.shared.model.MediaButton
@@ -44,4 +45,5 @@ data class MediaControlChipModel(
     val transportActions: MediaButton? = null,
     val sourceUserId: Int? = null,
     val openOutput: (() -> Unit)? = null,
+    val openAppFromIsland: ((ActivityTransitionAnimator.Controller?) -> Unit)? = null,
 )

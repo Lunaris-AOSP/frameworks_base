@@ -191,6 +191,22 @@ constructor(
     val shownPopupChips: List<PopupChipModel.Shown>
         get() = if (isOnLockscreen) emptyList() else visiblePopupChips
 
+    val mediaTransitionChip: PopupChipModel.Shown?
+        get() {
+            if (!isDynamicIslandEnabled || !isReadyForAutoPopup || isOnLockscreen || isShadeVisible) {
+                return null
+            }
+            val settings =
+                lunarisBarState.settings.forScreen(
+                    lunarisBarState.screenWidth,
+                    lunarisBarState.screenHeight,
+                )
+            if (settings.isReducedMotion || !settings.enabled("media_mini", true)) return null
+            val chip = mediaControlChip.chip as? PopupChipModel.Shown ?: return null
+            val media = (chip.popupContent as? PopupContentModel.Media)?.model ?: return null
+            return chip.takeIf { media.isPlaying && (media.sourceUserId ?: -1) >= 0 }
+        }
+
     val lockscreenPopupChips: List<PopupChipModel.Shown>
         get() = if (isOnLockscreen) visiblePopupChips else emptyList()
 

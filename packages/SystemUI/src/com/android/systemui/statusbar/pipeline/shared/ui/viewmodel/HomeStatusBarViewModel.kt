@@ -185,6 +185,9 @@ interface HomeStatusBarViewModel : Activatable {
     /** The popup chips that should be shown on the right-hand side of the status bar. */
     val popupChips: List<PopupChipModel.Shown>
 
+    val mediaTransitionChip: PopupChipModel.Shown?
+        get() = null
+
     /**
      * True if the status bar should be visible.
      *
@@ -317,6 +320,9 @@ constructor(
 
     override val popupChips
         get() = statusBarPopupChips.shownPopupChips
+
+    override val mediaTransitionChip
+        get() = statusBarPopupChips.mediaTransitionChip
 
     private val isShadeExpandedEnough =
         // Keep the status bar visible while the shade is just starting to open or while a HUN is

@@ -200,5 +200,5 @@ interface ISystemUiProxy {
      */
     oneway void onSleepEvent(in MotionEvent event) = 61;
 
-    // Next id = 62
+    Rect getLunarisBarTarget(String packageName, int userId, int displayId, int rotation) = 62;
 }

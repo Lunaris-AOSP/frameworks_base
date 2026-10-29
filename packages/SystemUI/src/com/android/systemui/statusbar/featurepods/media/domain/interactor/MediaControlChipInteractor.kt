@@ -30,6 +30,7 @@ import android.os.SystemClock
 import android.os.UserHandle
 import androidx.compose.runtime.snapshotFlow
 import com.android.systemui.ActivityIntentHelper
+import com.android.systemui.animation.ActivityTransitionAnimator
 import com.android.systemui.common.shared.model.ContentDescription
 import com.android.systemui.common.shared.model.Icon as UiIcon
 import com.android.systemui.dagger.SysUISingleton
@@ -312,6 +313,9 @@ private fun MediaDataModel.toMediaControlState(
     lockscreenUserManager: NotificationLockscreenUserManager,
     keyguardStateController: KeyguardStateController,
 ): MediaControlState {
+    val openApp = clickIntent.toAction(
+        activityStarter, activityIntentHelper, lockscreenUserManager, keyguardStateController,
+    )
     return MediaControlState(
         model =
             MediaControlChipModel(
@@ -325,13 +329,8 @@ private fun MediaDataModel.toMediaControlState(
                 playOrPause = playbackStateActions?.getActionById(R.id.actionPlayPause),
                 nextAction = playbackStateActions?.getActionById(R.id.actionNext),
                 previousAction = playbackStateActions?.getActionById(R.id.actionPrev),
-                openApp =
-                    clickIntent.toAction(
-                        activityStarter = activityStarter,
-                        activityIntentHelper = activityIntentHelper,
-                        lockscreenUserManager = lockscreenUserManager,
-                        keyguardStateController = keyguardStateController,
-                    ),
+                openApp = openApp?.let { action -> { action(null) } },
+                openAppFromIsland = openApp,
                 seekTo = token.toSeekAction(context),
                 durationMs = durationMs,
                 positionMs = positionMs,
@@ -349,6 +348,9 @@ private fun MediaData.toMediaControlState(
     lockscreenUserManager: NotificationLockscreenUserManager,
     keyguardStateController: KeyguardStateController,
 ): MediaControlState {
+    val openApp = clickIntent.toAction(
+        activityStarter, activityIntentHelper, lockscreenUserManager, keyguardStateController,
+    )
     val contentDescription = app?.let { ContentDescription.Loaded(it) }
     return MediaControlState(
         model =
@@ -363,13 +365,8 @@ private fun MediaData.toMediaControlState(
                 playOrPause = semanticActions?.getActionById(R.id.actionPlayPause),
                 nextAction = semanticActions?.getActionById(R.id.actionNext),
                 previousAction = semanticActions?.getActionById(R.id.actionPrev),
-                openApp =
-                    clickIntent.toAction(
-                        activityStarter = activityStarter,
-                        activityIntentHelper = activityIntentHelper,
-                        lockscreenUserManager = lockscreenUserManager,
-                        keyguardStateController = keyguardStateController,
-                    ),
+                openApp = openApp?.let { action -> { action(null) } },
+                openAppFromIsland = openApp,
                 seekTo = token.toSeekAction(context),
                 durationMs = 0L,
                 positionMs = 0L,
@@ -397,9 +394,9 @@ private fun PendingIntent?.toAction(
     activityIntentHelper: ActivityIntentHelper,
     lockscreenUserManager: NotificationLockscreenUserManager,
     keyguardStateController: KeyguardStateController,
-): (() -> Unit)? {
+): ((ActivityTransitionAnimator.Controller?) -> Unit)? {
     return this?.let { pendingIntent ->
-        {
+        { controller ->
             val showOverLockscreen =
                 keyguardStateController.isShowing &&
                     activityIntentHelper.wouldPendingShowOverLockscreen(
@@ -411,10 +408,10 @@ private fun PendingIntent?.toAction(
                 activityStarter.startPendingIntentMaybeDismissingKeyguard(
                     pendingIntent,
                     null,
-                    null,
+                    controller,
                 )
             } else {
-                activityStarter.postStartActivityDismissingKeyguard(pendingIntent, null)
+                activityStarter.postStartActivityDismissingKeyguard(pendingIntent, controller)
             }
         }
     }

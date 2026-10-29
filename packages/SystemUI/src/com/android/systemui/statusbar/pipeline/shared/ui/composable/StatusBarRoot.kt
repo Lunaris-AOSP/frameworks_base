@@ -350,6 +350,7 @@ fun StatusBarRoot(
                         setContent {
                             StatusBarDynamicIslandContainer(
                                 chips = statusBarViewModel.popupChips,
+                                mediaTransitionChip = statusBarViewModel.mediaTransitionChip,
                                 onMediaControlPopupVisibilityChanged = { popupShowing ->
                                     mediaHierarchyManager.isMediaControlPopupShowing =
                                         popupShowing

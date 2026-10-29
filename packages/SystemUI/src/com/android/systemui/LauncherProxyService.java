@@ -546,6 +546,14 @@ public class LauncherProxyService implements CallbackController<LauncherProxyLis
             });
         }
 
+        @Override
+        public Rect getLunarisBarTarget(String packageName, int userId, int displayId, int rotation) {
+            return verifyCallerAndClearCallingIdentity("getLunarisBarTarget", () ->
+                    com.android.systemui.statusbar.featurepods.popups.data.repository
+                            .LunarisBarTransitionState.getTarget(
+                                    packageName, userId, displayId, rotation));
+        }
+
         private void onShadeExpansionGesture(MotionEvent event, String reason) {
             if (!SceneContainerFlag.isEnabled()) {
                 return;

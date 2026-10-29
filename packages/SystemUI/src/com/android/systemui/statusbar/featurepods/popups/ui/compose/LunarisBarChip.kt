@@ -90,6 +90,7 @@ internal fun LunarisBarChip(
     onPage: (Int) -> Unit = {},
     companion: Boolean = false,
     onCard: (String) -> Unit = {},
+    measuring: Boolean = false,
 ) {
     LunarisBarContentTheme(viewModel.popupContent, viewModel.chipId) {
         LunarisBarChipContent(
@@ -103,6 +104,7 @@ internal fun LunarisBarChip(
             onPage,
             companion,
             onCard,
+            measuring,
         )
     }
 }
@@ -119,6 +121,7 @@ private fun LunarisBarChipContent(
     onPage: (Int) -> Unit,
     companion: Boolean,
     onCard: (String) -> Unit,
+    measuring: Boolean,
 ) {
     val state = LocalLunarisBarState.current
     val settings = state.settings
@@ -174,8 +177,8 @@ private fun LunarisBarChipContent(
     val cameraGap = if (companion) 0.dp else cutoutSpec.embeddedGapWidth
     val appear =
         remember(companion) { Animatable(if (companion && !settings.isReducedMotion) 0.3f else 1f) }
-    LaunchedEffect(companion, settings.isReducedMotion) {
-        if (settings.isReducedMotion) appear.snapTo(1f)
+    LaunchedEffect(companion, settings.isReducedMotion, measuring) {
+        if (settings.isReducedMotion || measuring) appear.snapTo(1f)
         else appear.animateTo(1f, spring(dampingRatio = 0.68f, stiffness = 480f))
     }
     val collapse by
@@ -190,9 +193,11 @@ private fun LunarisBarChipContent(
         settings.isArtworkRotating,
         settings.isReducedMotion,
         popupAttached,
+        measuring,
     ) {
         if (
-            media?.isPlaying != true ||
+            measuring ||
+                media?.isPlaying != true ||
                 !settings.isArtworkRotating ||
                 settings.isReducedMotion ||
                 popupAttached
@@ -222,6 +227,7 @@ private fun LunarisBarChipContent(
         }
     val pulseIcon =
         !settings.isReducedMotion &&
+            !measuring &&
             !viewModel.isPopupShown &&
             !popupAttached &&
             (recording is ScreenRecordPopupModel.Recording ||
@@ -264,7 +270,7 @@ private fun LunarisBarChipContent(
             ),
         )
     val legacy =
-        if (state.alternativeAnimation && !settings.isReducedMotion)
+        if (state.alternativeAnimation && !settings.isReducedMotion && !measuring)
             rememberDynamicIslandCollapseState(viewModel.isPopupShown, popupAttached)
         else null
     val artwork = media?.artworkIcon ?: viewModel.icons.firstOrNull()?.icon
@@ -328,6 +334,7 @@ private fun LunarisBarChipContent(
                     enabled =
                         settings.enabled("status_glow", true) &&
                             !settings.isReducedMotion &&
+                            !measuring &&
                             !resting &&
                             !viewModel.isPopupShown &&
                             !popupAttached,
@@ -456,7 +463,7 @@ private fun LunarisBarChipContent(
                             media.isPlaying
                     ) {
                         AudioReactiveBars(
-                            isPlaying = !settings.isReducedMotion,
+                            isPlaying = !settings.isReducedMotion && !measuring,
                             color = if (ownMedia) rightPalette.second else colors.miniContent,
                             artworkDrawable = (media.artworkIcon as? IconModel.Loaded)?.drawable,
                         )

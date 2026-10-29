@@ -64,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import com.android.internal.util.lunaris.LunarisBarSettings
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
+import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentModel
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
@@ -85,6 +86,7 @@ fun StatusBarDynamicIslandContainer(
     modifier: Modifier = Modifier,
     onIslandActiveChanged: (Boolean) -> Unit = {},
     onIslandMotionChanged: (Boolean, Float) -> Unit = { _, _ -> },
+    mediaTransitionChip: PopupChipModel.Shown? = null,
 ) {
     LunarisBarTheme {
         LunarisBarContainer(
@@ -94,6 +96,7 @@ fun StatusBarDynamicIslandContainer(
             modifier,
             onIslandActiveChanged,
             onIslandMotionChanged,
+            mediaTransitionChip,
         )
     }
 }
@@ -106,6 +109,7 @@ private fun LunarisBarContainer(
     modifier: Modifier,
     onIslandActiveChanged: (Boolean) -> Unit,
     onIslandMotionChanged: (Boolean, Float) -> Unit,
+    mediaTransitionChip: PopupChipModel.Shown?,
 ) {
     val state = LocalLunarisBarState.current
     val settings = state.settings
@@ -147,6 +151,27 @@ private fun LunarisBarContainer(
     var popupOriginBounds by remember { mutableStateOf<Rect?>(null) }
     var lastDirection by remember { mutableIntStateOf(1) }
 
+    fun withIslandLaunch(chip: PopupChipModel.Shown): PopupChipModel.Shown {
+        val content = chip.popupContent as? PopupContentModel.Media ?: return chip
+        val launch = content.model.openAppFromIsland ?: return chip
+        return chip.copy(
+            popupContent =
+                content.copy(
+                    model =
+                        content.model.copy(openApp = {
+                            val bounds =
+                                if (chip.isPopupShown) popupOriginBounds
+                                else if (chip.chipId == selectedChipId || chips.size == 1) mainChipBounds
+                                else companionChipBounds
+                            val controller =
+                                lunarisBarLaunchController(view, bounds, settings.isReducedMotion)
+                            chip.hidePopup()
+                            launch(controller)
+                        })
+                )
+        )
+    }
+
     LaunchedEffect(state.userId) {
         popupAnchorChip = null
         popupVisible = false
@@ -159,7 +184,9 @@ private fun LunarisBarContainer(
         val currentChipIds = chips.map { it.chipId }
         val newestChipId =
             if (knownChipIds.isEmpty()) {
-                null
+                PopupChipId.MediaControl.takeIf {
+                    mediaTransitionChip != null && it in currentChipIds
+                }
             } else {
                 currentChipIds.lastOrNull { it !in knownChipIds }
             }
@@ -278,7 +305,9 @@ private fun LunarisBarContainer(
     }
     SideEffect {
         onIslandMotionChanged(settings.isReducedMotion, settings.animationSpeed)
-        currentOnIslandActiveChanged(selectedChip != null || popupAnchorChip != null)
+        currentOnIslandActiveChanged(
+            selectedChip != null || popupAnchorChip != null || mediaTransitionChip != null
+        )
         publishIslandBounds()
     }
 
@@ -289,9 +318,30 @@ private fun LunarisBarContainer(
             },
         contentAlignment = Alignment.Center,
     ) {
+        mediaTransitionChip?.let { media ->
+            val destinationCount = chips.size + if (chips.any { it.chipId == media.chipId }) 0 else 1
+            val destinationCompanion =
+                settings.isCompanionEnabled && destinationCount >= COMPANION_MIN_TASKS
+            LunarisBarPositionedContent(cutoutSpec, alignment, settings, hostLeft) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (destinationCompanion && (balanceCompanion || !companionAtEnd)) {
+                        Spacer(Modifier.width(companionBalance))
+                    }
+                    LunarisBarMediaTarget(
+                        media,
+                        cutoutSpec,
+                        if (destinationCompanion) 1 else destinationCount,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (destinationCompanion && (balanceCompanion || companionAtEnd)) {
+                        Spacer(Modifier.width(companionBalance))
+                    }
+                }
+            }
+        }
         popupAnchorChip?.let { anchoredChip ->
             StatusBarPopup(
-                viewModel = shownChip ?: anchoredChip,
+                viewModel = withIslandLaunch(shownChip ?: anchoredChip),
                 isVisible = popupVisible,
                 chipBoundsInScreen = popupOriginBounds,
                 canPage = chips.size > 1,
@@ -325,7 +375,7 @@ private fun LunarisBarContainer(
                         Spacer(modifier = Modifier.width(DynamicIslandCompanionGap))
                     } else {
                         LunarisBarChip(
-                            viewModel = companionChip,
+                            viewModel = withIslandLaunch(companionChip),
                             popupAttached = popupAnchorChip?.chipId == companionChip.chipId,
                             pageCount = 1,
                             cutoutSpec = cutoutSpec,
@@ -412,6 +462,8 @@ private fun LunarisBarContainer(
                     label = "dynamic_island_chip",
                 ) { chipId ->
                     val chip = chips.firstOrNull { it.chipId == chipId } ?: return@AnimatedContent
+                    val launchableChip = withIslandLaunch(chip)
+                    val currentChip by rememberUpdatedState(launchableChip)
                     var dragAccumulator by remember(chipId, chips.size) { mutableFloatStateOf(0f) }
                     var verticalDragAccumulator by
                         remember(chipId, chips.size) { mutableFloatStateOf(0f) }
@@ -421,7 +473,7 @@ private fun LunarisBarContainer(
                     val dragScope = rememberCoroutineScope()
 
                     LunarisBarChip(
-                        viewModel = chip,
+                        viewModel = launchableChip,
                         popupAttached = popupAnchorChip?.chipId == chip.chipId,
                         pageCount = effectivePageCount,
                         cutoutSpec = cutoutSpec,
@@ -453,8 +505,8 @@ private fun LunarisBarContainer(
                                                                 else "notifications",
                                                             ),
                                                             context,
-                                                            chip,
-                                                            chip.showPopup,
+                                                            currentChip,
+                                                            currentChip.showPopup,
                                                             ::selectRelative,
                                                             ::selectCard,
                                                         )
@@ -467,8 +519,8 @@ private fun LunarisBarContainer(
                                                                 "next_card",
                                                             ),
                                                             context,
-                                                            chip,
-                                                            chip.showPopup,
+                                                            currentChip,
+                                                            currentChip.showPopup,
                                                             ::selectRelative,
                                                             ::selectCard,
                                                         )
@@ -481,8 +533,8 @@ private fun LunarisBarContainer(
                                                                 "previous_card",
                                                             ),
                                                             context,
-                                                            chip,
-                                                            chip.showPopup,
+                                                            currentChip,
+                                                            currentChip.showPopup,
                                                             ::selectRelative,
                                                             ::selectCard,
                                                         )
@@ -550,7 +602,7 @@ private fun LunarisBarContainer(
                         Spacer(modifier = Modifier.width(DynamicIslandCompanionGap))
                         if (showCompanionChip) {
                             LunarisBarChip(
-                                viewModel = companionChip,
+                                viewModel = withIslandLaunch(companionChip),
                                 popupAttached = popupAnchorChip?.chipId == companionChip.chipId,
                                 pageCount = 1,
                                 cutoutSpec = cutoutSpec,
