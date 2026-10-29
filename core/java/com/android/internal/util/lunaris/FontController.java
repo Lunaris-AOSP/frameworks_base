@@ -15,8 +15,6 @@
 package com.android.internal.util.lunaris;
 
 import android.app.ActivityThread;
-import android.content.res.Configuration;
-import android.content.res.Resources;
 import android.graphics.Typeface;
 import android.os.SystemProperties;
 import android.util.ArrayMap;
@@ -32,15 +30,16 @@ public class FontController {
 
     private static final String TAG = "FontController";
 
-    private static FontController sInstance;
+    private static final FontController sInstance = new FontController();
 
     public static final String GSF_FONT = "google-sans-flex";
     public static final String PROP_DEFAULT_FONT = "persist.sys.ax_default_font";
     public static final String PROP_OVERLAY_FONTS = "persist.sys.ax_overlay_fonts";
     private static final String SEPARATOR = ":";
 
-    private volatile String[] mFontConfig;
-    private volatile String mRawProp;
+    private String[] mFontConfig;
+    private String mRawProp;
+    private String mDefaultFont;
 
     private static final int IDX_BODY = 0;
     private static final int IDX_BODY_MEDIUM = 1;
@@ -59,6 +58,10 @@ public class FontController {
     private static final Set<String> WHITELIST_FONTS = new HashSet<>(Arrays.asList(
             "serif",
             "monospace",
+            "sans-serif-monospace",
+            "monaco",
+            "courier",
+            "courier new",
             "cursive",
             "NotoSansSC",
             "NotoSansTC",
@@ -181,9 +184,6 @@ public class FontController {
     }
 
     public static FontController get() {
-        if (sInstance == null) {
-            sInstance = new FontController();
-        }
         return sInstance;
     }
 
@@ -206,7 +206,14 @@ public class FontController {
     }
 
     public static boolean isCustomFontActive() {
-        return !GSF_FONT.equals(getBodyFont());
+        return isCustomFontActive(get().resolveConfig());
+    }
+
+    private static boolean isCustomFontActive(String[] config) {
+        for (String family : config) {
+            if (!GSF_FONT.equals(family)) return true;
+        }
+        return false;
     }
 
     public static boolean isExcludedApp() {
@@ -217,7 +224,7 @@ public class FontController {
     public static boolean isFontWhitelisted(String familyName) {
         if (familyName == null) return false;
         for (String wl : WHITELIST_FONTS) {
-            if (familyName.contains(wl)) return true;
+            if (familyName.equals(wl) || familyName.startsWith(wl + "-")) return true;
         }
         return false;
     }
@@ -226,49 +233,41 @@ public class FontController {
         if (familyName == null) return null;
         if (isExcludedApp()) return null;
         if (isFontWhitelisted(familyName)) return null;
-        if (!isCustomFontActive()) return null;
+        return get().resolveOverrideTypeface(familyName);
+    }
 
-        FontController fc = get();
-        String[] config = fc.resolveConfig();
+    private synchronized Typeface resolveOverrideTypeface(String familyName) {
+        String[] config = resolveConfig();
+        if (!isCustomFontActive(config)) return null;
 
-        if (familyName.equals(config[IDX_HEADLINE])) {
-            return Typeface.getSystemDefaultTypeface(config[IDX_HEADLINE]);
-        }
-        if (familyName.equals(config[IDX_HEADLINE_MEDIUM])) {
-            return Typeface.getSystemDefaultTypeface(config[IDX_HEADLINE_MEDIUM]);
-        }
-        if (familyName.equals(config[IDX_BODY_MEDIUM])) {
-            return Typeface.getSystemDefaultTypeface(config[IDX_BODY_MEDIUM]);
+        for (String family : config) {
+            if (familyName.equals(family)) {
+                return Typeface.getSystemDefaultTypeface(family);
+            }
         }
 
         boolean isVariable = familyName.startsWith("variable-");
         int weight = resolveWeight(familyName);
         boolean isItalic = familyName.contains("italic");
 
-        int weightAdjustment = getFontWeightAdjustment();
-        if (weightAdjustment != 0) {
-            weight = Math.min(1000, Math.max(100, weight + weightAdjustment));
-        }
-        
         Typeface base = resolveBase(config, familyName, isVariable, weight);
 
         if (weight == 400 && !isItalic && base == Typeface.DEFAULT) {
             return Typeface.DEFAULT;
         }
 
-        Typeface cached = fc.mCache.get(familyName);
+        Typeface cached = mCache.get(familyName);
         if (cached != null) return cached;
 
         Typeface result = Typeface.create(base, weight, isItalic);
-        fc.mCache.put(familyName, result);
+        mCache.put(familyName, result);
         return result;
     }
 
     private static Typeface resolveBase(String[] config, String name,
             boolean isVariable, int weight) {
-        if (!isVariable) return Typeface.DEFAULT;
-
-        boolean isHeadlineRole = name.startsWith("variable-headline");
+        boolean isHeadlineRole = isVariable && (name.startsWith("variable-headline")
+                || name.startsWith("variable-display"));
         boolean isMediumWeight = weight >= 500;
 
         String baseName;
@@ -295,28 +294,17 @@ public class FontController {
         return 400;
     }
 
-    private static int getFontWeightAdjustment() {
-        try {
-            ActivityThread at = ActivityThread.currentActivityThread();
-            if (at == null) return 0;
-            Resources res = at.getApplication().getResources();
-            if (res == null) return 0;
-            Configuration cfg = res.getConfiguration();
-            return cfg != null ? cfg.fontWeightAdjustment : 0;
-        } catch (Exception e) {
-            return 0;
+    public static void clearCaches() {
+        synchronized (sInstance) {
+            sInstance.mCache.evictAll();
         }
     }
 
-    public static void clearCaches() {
-        get().mCache.evictAll();
-    }
-
-    private String[] resolveConfig() {
+    private synchronized String[] resolveConfig() {
         String defaultFont = SystemProperties.get(PROP_DEFAULT_FONT, GSF_FONT);
         String raw = SystemProperties.get(PROP_OVERLAY_FONTS, "");
 
-        if (raw.equals(mRawProp) && mFontConfig != null) {
+        if (raw.equals(mRawProp) && defaultFont.equals(mDefaultFont) && mFontConfig != null) {
             return mFontConfig;
         }
 
@@ -333,7 +321,9 @@ public class FontController {
         }
 
         mRawProp = raw;
+        mDefaultFont = defaultFont;
         mFontConfig = config;
+        mCache.evictAll();
         logger("Font config: body=" + config[IDX_BODY]
                 + " bodyMed=" + config[IDX_BODY_MEDIUM]
                 + " headline=" + config[IDX_HEADLINE]

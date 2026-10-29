@@ -189,7 +189,7 @@ public final class FontManagerService extends IFontManager.Stub {
 
         @Override
         public boolean isFromTrustedProvider(String fontPath, byte[] pkcs7Signature) {
-            if (axFontFeatureSupport) return true;
+            if (axFontFeatureSupport && pkcs7Signature.length == 0) return true;
             final byte[] digest = VerityUtils.getFsverityDigest(fontPath);
             if (digest == null) {
                 Log.w(TAG, "Failed to get fs-verity digest for " + fontPath);
@@ -245,6 +245,7 @@ public final class FontManagerService extends IFontManager.Stub {
         if (safeMode) {
             Slog.i(TAG, "Entering safe mode. Deleting all font updates.");
             UpdatableFontDir.deleteAllFiles(new File(FONT_FILES_DIR), new File(CONFIG_XML_FILE));
+            UpdatableFontDir.deleteBackup();
         }
         mContext = context;
         mIsSafeMode = safeMode;
@@ -365,13 +366,18 @@ public final class FontManagerService extends IFontManager.Stub {
      * Clears all updates and restarts FontManagerService.
      *
      * <p>CAUTION: this method is not safe. Existing processes may crash due to missing font files.
-     * This method is only for {@link FontManagerShellCommand}.
+     * Callers must restart affected processes after clearing updates.
      */
+    @android.annotation.EnforcePermission(android.Manifest.permission.UPDATE_FONTS)
+    @RequiresPermission(Manifest.permission.UPDATE_FONTS)
     @Override
     public void clearUpdates() {
-        UpdatableFontDir.deleteAllFiles(new File(FONT_FILES_DIR), new File(CONFIG_XML_FILE));
-        UpdatableFontDir.deleteBackup();
-        initialize();
+        super.clearUpdates_enforcePermission();
+        synchronized (mUpdatableFontDirLock) {
+            UpdatableFontDir.deleteAllFiles(new File(FONT_FILES_DIR), new File(CONFIG_XML_FILE));
+            UpdatableFontDir.deleteBackup();
+            initialize();
+        }
     }
 
     /**

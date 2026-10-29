@@ -2450,6 +2450,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     break;
             }
         }
+        mFontFamily = typeface == null ? familyName : null;
     }
 
     private void resolveStyleAndSetTypeface(@NonNull Typeface typeface, @Typeface.Style int style,
@@ -4389,7 +4390,6 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     attributes.mTypefaceIndex = appearance.getInt(attr, attributes.mTypefaceIndex);
                     if (attributes.mTypefaceIndex != -1 && !attributes.mFontFamilyExplicit) {
                         attributes.mFontFamily = null;
-                        mFontFamily = null;
                     }
                     break;
                 case com.android.internal.R.styleable.TextAppearance_fontFamily:
@@ -4402,7 +4402,6 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     }
                     if (attributes.mFontTypeface == null) {
                         attributes.mFontFamily = appearance.getString(attr);
-                        mFontFamily = attributes.mFontFamily;
                     }
                     attributes.mFontFamilyExplicit = true;
                     break;
@@ -4498,7 +4497,6 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
         if (attributes.mTypefaceIndex != -1 && !attributes.mFontFamilyExplicit) {
             attributes.mFontFamily = null;
-            mFontFamily = null;
         }
         setTypefaceFromAttrs(attributes.mFontTypeface, attributes.mFontFamily,
                 attributes.mTypefaceIndex, attributes.mTextStyle, attributes.mFontWeight);
@@ -4677,16 +4675,27 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 invalidate();
             }
         }
-        
-        if (!TextUtils.equals(mFontFamily, Typeface.getFontName())) {
-            Typeface tf = Typeface.getOverrideTypeface(mFontFamily);
-            setTypeface(tf);
-            mFontFamily = Typeface.getFontName();
-        }
-
-        if (mFontWeightAdjustment != newConfig.fontWeightAdjustment) {
-            mFontWeightAdjustment = newConfig.fontWeightAdjustment;
-            setTypeface(getTypeface());
+        boolean weightAdjustmentChanged = mFontWeightAdjustment != newConfig.fontWeightAdjustment;
+        mFontWeightAdjustment = newConfig.fontWeightAdjustment;
+        Typeface original = mOriginalTypeface;
+        String requestedFamily = mFontFamily;
+        String familyName = requestedFamily != null ? requestedFamily
+                : original != null ? original.getSystemFontFamilyName() : null;
+        if (familyName != null) {
+            Typeface base = Typeface.getOverrideTypeface(familyName);
+            if (original == null || !TextUtils.equals(original.getSystemFontFamilyName(),
+                    base.getSystemFontFamilyName())) {
+                setTypeface(original != null
+                        ? Typeface.create(base, original.getWeight(), original.isItalic()) : base);
+            } else if (weightAdjustmentChanged) {
+                setTypeface(original);
+            }
+            mFontFamily = requestedFamily;
+        } else if (original == null) {
+            setTypeface(Typeface.DEFAULT);
+            mOriginalTypeface = null;
+        } else if (weightAdjustmentChanged) {
+            setTypeface(original);
         }
 
         InputMethodManager imm = getInputMethodManager();
@@ -4854,6 +4863,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * @attr ref android.R.styleable#TextView_textStyle
      */
     public void setTypeface(@Nullable Typeface tf) {
+        mFontFamily = null;
         mOriginalTypeface = tf;
         if (mFontWeightAdjustment != 0
                 && mFontWeightAdjustment != Configuration.FONT_WEIGHT_ADJUSTMENT_UNDEFINED) {

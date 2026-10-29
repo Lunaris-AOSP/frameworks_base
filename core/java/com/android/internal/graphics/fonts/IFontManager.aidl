@@ -33,5 +33,6 @@ interface IFontManager {
 
     int updateFontFamily(in List<FontUpdateRequest> request, int baseVersion);
 
+    @EnforcePermission("UPDATE_FONTS")
     void clearUpdates();
 }

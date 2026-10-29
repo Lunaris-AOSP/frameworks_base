@@ -177,6 +177,9 @@ public class Typeface {
     @GuardedBy("SYSTEM_FONT_MAP_LOCK")
     static Typeface sDefaultTypeface;
 
+    @GuardedBy("SYSTEM_FONT_MAP_LOCK")
+    private static Typeface sSystemDefaultTypeface;
+
     /**
      * sSystemFontMap is read only and unmodifiable.
      * Use public API {@link #create(String, int)} to get the typeface for given familyName.
@@ -1389,7 +1392,7 @@ public class Typeface {
     }
 
     /** @hide */
-    public static Typeface getOverrideTypeface(@NonNull String familyName) {
+    public static Typeface getOverrideTypeface(@Nullable String familyName) {
         if (DEFAULT.mPendingTypeface != null && DEFAULT.mPendingTypeface.get() == null) {
             return getSystemDefaultTypeface(familyName);
         }
@@ -1398,7 +1401,7 @@ public class Typeface {
     }
 
     /** @hide */
-    public static Typeface getSystemDefaultTypeface(@NonNull String familyName) {
+    public static Typeface getSystemDefaultTypeface(@Nullable String familyName) {
         Typeface tf = sSystemFontMap.get(familyName);
         return tf == null ? Typeface.DEFAULT : tf;
     }
@@ -1616,13 +1619,15 @@ public class Typeface {
 
         FontController.clearCaches();
 
-        sFontName = FontController.getBodyFont();
+        sFontName = FontController.isExcludedApp() ? DEFAULT_FAMILY : FontController.getBodyFont();
 
-        Typeface base = sSystemFontMap.get(sFontName);
-        if (base == null) base = sSystemFontMap.get(DEFAULT_FAMILY);
+        Typeface base;
+        synchronized (SYSTEM_FONT_MAP_LOCK) {
+            base = DEFAULT_FAMILY.equals(sFontName) ? sSystemDefaultTypeface
+                    : sSystemFontMap.get(sFontName);
+            if (base == null) base = sSystemDefaultTypeface;
+        }
         if (base == null) return;
-
-        sDefaultTypeface = base;
 
         Typeface tf = create(base, NORMAL);
         Typeface tfBold = create(base, BOLD);
@@ -1714,6 +1719,7 @@ public class Typeface {
             for (String genericFamily : genericFamilies) {
                 registerGenericFamilyNative(genericFamily, systemFontMap.get(genericFamily));
             }
+            sSystemDefaultTypeface = sSystemFontMap.get(DEFAULT_FAMILY);
         }
     }
 

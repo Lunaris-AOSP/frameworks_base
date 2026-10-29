@@ -306,6 +306,7 @@ public class FontManager {
     /**
      * @hide
      */
+    @RequiresPermission(Manifest.permission.UPDATE_FONTS)
     public void clearUpdates() {
         try {
             mIFontManager.clearUpdates();
