@@ -457,9 +457,24 @@ internal fun AxQsHeaderActions(
     modifier: Modifier = Modifier,
 ) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
-        AxActiveAppsButton(viewModel)
         if (showEdit) {
-            AxEditButton(viewModel, isFullyVisible, editButtonProgress)
+            val expandedActionsEnabled by remember(editButtonProgress, isFullyVisible) {
+                derivedStateOf {
+                    editButtonProgress() >= EXPANDED_ACTIONS_ENABLE_THRESHOLD && isFullyVisible()
+                }
+            }
+            Row(
+                modifier =
+                    Modifier.graphicsLayer { alpha = editButtonProgress().coerceIn(0f, 1f) }
+                        .then(
+                            if (expandedActionsEnabled) Modifier
+                            else Modifier.gesturesDisabled().clearAndSetSemantics {}
+                        ),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AxActiveAppsButton(viewModel)
+                AxEditButton(viewModel)
+            }
         }
         FooterIconButton(
             model = viewModel.userSwitcherViewModel,
@@ -516,38 +531,20 @@ internal fun AxQsPagerIndicator(pagerState: PagerState, modifier: Modifier = Mod
 }
 
 @Composable
-private fun AxEditButton(
-    viewModel: ToolbarViewModel,
-    isFullyVisible: () -> Boolean,
-    editButtonProgress: () -> Float,
-) {
+private fun AxEditButton(viewModel: ToolbarViewModel) {
     val editModeButtonViewModel =
         rememberViewModel("AxQsActions") { viewModel.editModeButtonViewModelFactory.create() }
     if (!editModeButtonViewModel.isEditButtonVisible) return
-    val editEnabled by remember(editButtonProgress, isFullyVisible) {
-        derivedStateOf {
-            editButtonProgress() >= EDIT_BUTTON_ENABLE_THRESHOLD && isFullyVisible()
-        }
-    }
-    Box(
-        modifier =
-            Modifier.graphicsLayer { alpha = editButtonProgress().coerceIn(0f, 1f) }
-                .then(
-                    if (editEnabled) Modifier
-                    else Modifier.gesturesDisabled().clearAndSetSemantics {}
-                )
+    AxHeaderButton(
+        onClick = { editModeButtonViewModel.onButtonClick() },
+        modifier = Modifier.sysuiResTag("qs_edit_mode_button"),
     ) {
-        AxHeaderButton(
-            onClick = { editModeButtonViewModel.onButtonClick() },
-            modifier = Modifier.sysuiResTag("qs_edit_mode_button"),
-        ) {
-            Icon(
-                imageVector = Icons.Default.Edit,
-                contentDescription = stringResource(R.string.accessibility_quick_settings_edit),
-                tint = ShadeHeader.Colors.textColor,
-                modifier = Modifier.size(16.dp),
-            )
-        }
+        Icon(
+            imageVector = Icons.Default.Edit,
+            contentDescription = stringResource(R.string.accessibility_quick_settings_edit),
+            tint = ShadeHeader.Colors.textColor,
+            modifier = Modifier.size(16.dp),
+        )
     }
 }
 
@@ -665,4 +662,4 @@ private object AxHeaderActionDimensions {
     val IconSize = 18.dp
 }
 
-private const val EDIT_BUTTON_ENABLE_THRESHOLD = 0.99f
+private const val EXPANDED_ACTIONS_ENABLE_THRESHOLD = 0.99f
