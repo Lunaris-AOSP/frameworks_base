@@ -177,7 +177,7 @@ class AxionVolumeRepositoryImpl @Inject constructor(
         .distinctUntilChanged()
         .flowOn(backgroundDispatcher)
 
-    override val inCallFlow: Flow<Boolean> = callbackFlow {
+    private val telephonyInCallFlow: Flow<Boolean> = callbackFlow {
         val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
         
         val callback = object : TelephonyCallback(), TelephonyCallback.CallStateListener {
@@ -192,6 +192,26 @@ class AxionVolumeRepositoryImpl @Inject constructor(
         awaitClose {
             telephonyManager.unregisterTelephonyCallback(callback)
         }
+    }
+    .distinctUntilChanged()
+    .flowOn(backgroundDispatcher)
+
+    private val audioModeFlow: Flow<Int> = callbackFlow {
+        val listener = AudioManager.OnModeChangedListener { mode -> trySend(mode) }
+        audioManager.addOnModeChangedListener(context.mainExecutor, listener)
+        trySend(audioManager.mode)
+
+        awaitClose {
+            audioManager.removeOnModeChangedListener(listener)
+        }
+    }
+
+    override val inCallFlow: Flow<Boolean> = combine(
+        telephonyInCallFlow,
+        audioModeFlow
+    ) { telephonyInCall, audioMode ->
+        telephonyInCall || audioMode == AudioManager.MODE_IN_CALL ||
+            audioMode == AudioManager.MODE_IN_COMMUNICATION
     }
     .distinctUntilChanged()
     .flowOn(backgroundDispatcher)
@@ -326,12 +346,7 @@ class AxionVolumeRepositoryImpl @Inject constructor(
         
         val streams = mutableListOf<Int>()
         
-        val excludedActiveStreams = setOf(
-            AudioManager.STREAM_ACCESSIBILITY,
-            AudioManager.STREAM_VOICE_CALL
-        )
-        
-        if (state.activeStream != -1 && state.activeStream !in excludedActiveStreams &&
+        if (state.activeStream != -1 && state.activeStream != AudioManager.STREAM_ACCESSIBILITY &&
             state.states.get(state.activeStream) != null) {
             streams.add(state.activeStream)
         }
