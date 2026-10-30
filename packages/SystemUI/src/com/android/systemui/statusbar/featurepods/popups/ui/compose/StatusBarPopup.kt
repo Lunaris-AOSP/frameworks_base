@@ -31,6 +31,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -349,6 +350,9 @@ private fun IslandPopupContent(viewModel: PopupChipModel.Shown) {
                 FlashlightPopup(
                     model = popupContent.model,
                     hapticsViewModelFactory = popupContent.hapticsViewModelFactory,
+                    modifier =
+                        if (LocalLunarisBarState.current.settings.isFullWidth) Modifier.fillMaxWidth()
+                        else Modifier,
                 )
             } else {
                 LunarisBarFlashlightPopup(model = popupContent.model)
