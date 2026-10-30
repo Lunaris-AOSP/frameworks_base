@@ -256,6 +256,8 @@ fun LunariQsPanelSettings(
                                                 R.string.ax_qs_settings_style_artwork
                                             LunarisQsMediaStyle.ALBUM_COVER ->
                                                 R.string.ax_qs_settings_style_album_cover
+                                            LunarisQsMediaStyle.ONE_UI ->
+                                                R.string.ax_qs_settings_style_one_ui
                                         }
                                     )
                             },
@@ -277,6 +279,8 @@ fun LunariQsPanelSettings(
                                                 R.string.ax_qs_settings_style_artwork
                                             LunarisQsMediaStyle.ALBUM_COVER ->
                                                 R.string.ax_qs_settings_style_album_cover
+                                            LunarisQsMediaStyle.ONE_UI ->
+                                                R.string.ax_qs_settings_style_one_ui
                                         }
                                     )
                             },

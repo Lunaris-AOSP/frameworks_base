@@ -56,10 +56,12 @@ internal fun MediaSeekBar(
     showTimestamps: Boolean = false,
     timestampsBelow: Boolean = false,
     modifier: Modifier = Modifier,
+    styleOverride: MediaSeekBarStyle? = null,
 ) {
     val isShadeInteracting by viewModel.isShadeInteracting.collectAsStateWithLifecycle()
-    val seekBarStyle by
+    val configuredStyle by
         viewModel.seekBarStyle.collectAsStateWithLifecycle(initialValue = MediaSeekBarStyle.DEFAULT)
+    val seekBarStyle = styleOverride ?: configuredStyle
     val height =
         when (seekBarStyle) {
             MediaSeekBarStyle.GLOWING -> if (dense) 34.dp else 40.dp

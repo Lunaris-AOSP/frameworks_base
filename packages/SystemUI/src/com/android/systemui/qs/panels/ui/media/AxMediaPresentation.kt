@@ -94,6 +94,12 @@ data class AxMediaColors(
     val foreground: Color,
 )
 
+internal enum class AxMediaArtworkScrim {
+    Default,
+    TopLit,
+    CenterLit,
+}
+
 @Composable
 internal fun MediaArtwork(
     artwork: AxMediaArtwork,
@@ -101,7 +107,7 @@ internal fun MediaArtwork(
     modifier: Modifier = Modifier,
     motionArt: File? = null,
     motionArtPlaying: Boolean = false,
-    topLitVignette: Boolean = false,
+    scrim: AxMediaArtworkScrim = AxMediaArtworkScrim.Default,
 ) {
     Box(modifier.fillMaxSize()) {
         AnimatedContent(
@@ -130,8 +136,7 @@ internal fun MediaArtwork(
             modifier = Modifier.fillMaxSize(),
         ) { targetState ->
             val currentArtwork = targetState.artwork
-            val overlayModifier =
-                Modifier.fillMaxSize().mediaArtworkScrim(overlayColor, topLitVignette)
+            val overlayModifier = Modifier.fillMaxSize().mediaArtworkScrim(overlayColor, scrim)
             when (currentArtwork) {
                 null -> Unit
                 is IconModel.Loaded -> {
@@ -155,15 +160,15 @@ internal fun MediaArtwork(
             file = motionArt,
             crop = true,
             isPlaying = motionArtPlaying,
-            modifier = Modifier.fillMaxSize().mediaArtworkScrim(overlayColor, topLitVignette),
+            modifier = Modifier.fillMaxSize().mediaArtworkScrim(overlayColor, scrim),
         )
     }
 }
 
-private fun Modifier.mediaArtworkScrim(overlayColor: Color, topLitVignette: Boolean): Modifier =
+private fun Modifier.mediaArtworkScrim(overlayColor: Color, scrim: AxMediaArtworkScrim): Modifier =
     drawWithCache {
         val vignette =
-            if (topLitVignette) {
+            if (scrim == AxMediaArtworkScrim.TopLit) {
                 Brush.radialGradient(
                     0f to overlayColor.copy(alpha = 0.24f),
                     0.45f to overlayColor.copy(alpha = 0.34f),
@@ -171,6 +176,15 @@ private fun Modifier.mediaArtworkScrim(overlayColor: Color, topLitVignette: Bool
                     1f to overlayColor.copy(alpha = 0.82f),
                     center = Offset(size.width * 0.5f, size.height * 0.15f),
                     radius = max(size.width * 0.6f, size.height * 1.2f).coerceAtLeast(1f),
+                )
+            } else if (scrim == AxMediaArtworkScrim.CenterLit) {
+                Brush.radialGradient(
+                    0f to Color.Black.copy(alpha = 0.42f),
+                    0.45f to Color.Black.copy(alpha = 0.58f),
+                    0.8f to Color.Black.copy(alpha = 0.76f),
+                    1f to Color.Black.copy(alpha = 0.88f),
+                    center = Offset(size.width * 0.5f, size.height * 0.5f),
+                    radius = max(size.width, size.height).coerceAtLeast(1f) * 0.65f,
                 )
             } else {
                 Brush.radialGradient(
@@ -181,7 +195,7 @@ private fun Modifier.mediaArtworkScrim(overlayColor: Color, topLitVignette: Bool
                 )
             }
         val bottomScrim =
-            if (topLitVignette) {
+            if (scrim == AxMediaArtworkScrim.TopLit) {
                 Brush.verticalGradient(
                     0f to Color.Transparent,
                     0.4f to Color.Transparent,

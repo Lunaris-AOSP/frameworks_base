@@ -60,6 +60,7 @@
     <string name="ax_qs_settings_media_wide_style">4×2 media player style</string>
     <string name="ax_qs_settings_style_artwork">Artwork</string>
     <string name="ax_qs_settings_style_album_cover">Album cover</string>
+    <string name="ax_qs_settings_style_one_ui">One UI</string>
     <string name="ax_qs_settings_media_motion_art">Motion art</string>
     <string name="ax_qs_settings_media_motion_art_summary">Animate supported album covers in the Quick Settings tile and notification media player</string>
     <string name="ax_qs_settings_media_tile_status_glow">Media tile glow</string>

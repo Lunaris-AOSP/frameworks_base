@@ -46,6 +46,9 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
@@ -53,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.android.compose.animation.Expandable
 import com.android.compose.animation.rememberExpandableController
+import com.android.systemui.common.ui.compose.Icon as DeviceIcon
 import com.android.systemui.media.remedia.domain.model.MediaSessionModel
 import com.android.systemui.media.remedia.shared.model.MediaCardActionButtonLayout
 import com.android.systemui.media.remedia.shared.model.MediaSessionState
@@ -74,6 +78,7 @@ internal fun NotificationMediaContent(
     colors: AxMediaColors,
     interactive: Boolean,
     hasMultipleSessions: Boolean,
+    fitToTile: Boolean = false,
 ) {
     val title = session?.title?.takeIf { it.isNotBlank() } ?: "No media playing"
     val subtitle = session?.subtitle.orEmpty()
@@ -82,18 +87,49 @@ internal fun NotificationMediaContent(
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val horizontalPadding = if (maxWidth < 360.dp) 16.dp else 24.dp
         val showSecondarySlots = maxWidth - horizontalPadding * 2 >= 240.dp
+        val density = LocalDensity.current
+        val metadataHeight = with(density) { 20.sp.toDp().coerceAtLeast(20.dp) }
+        val outputTextHeight = with(density) { 16.sp.toDp() }
+        val preferredBottomPadding = if (hasMultipleSessions) 12.dp else 8.dp
+        val useCompactSpacing =
+            fitToTile &&
+                maxHeight <
+                    8.dp +
+                        preferredBottomPadding +
+                        maxOf(32.dp, outputTextHeight) +
+                        metadataHeight +
+                        40.dp +
+                        48.dp
+        val topPadding = if (useCompactSpacing) 0.dp else 8.dp
+        val bottomPadding =
+            if (useCompactSpacing && !hasMultipleSessions) 4.dp else preferredBottomPadding
+        val outputMinHeight = if (useCompactSpacing) 24.dp else 32.dp
+        val seekAreaHeight =
+            maxHeight -
+                topPadding -
+                bottomPadding -
+                maxOf(outputMinHeight, outputTextHeight) -
+                metadataHeight -
+                48.dp
+        val showTimestamps = !fitToTile || seekAreaHeight >= with(density) { 12.sp.toDp() }
         Column(
             modifier =
                 Modifier.fillMaxSize()
                     .padding(
                         start = horizontalPadding,
                         end = horizontalPadding,
-                        top = 8.dp,
-                        bottom = if (hasMultipleSessions) 12.dp else 8.dp,
+                        top = topPadding,
+                        bottom = bottomPadding,
                     ),
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
-            NotificationMediaOutput(session, viewModel, colors, interactive)
+            NotificationMediaOutput(
+                session = session,
+                viewModel = viewModel,
+                colors = colors,
+                interactive = interactive,
+                minHeight = outputMinHeight,
+            )
             Row(
                 modifier = Modifier.fillMaxWidth().heightIn(min = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -111,14 +147,20 @@ internal fun NotificationMediaContent(
                     modifier = Modifier.weight(1f),
                 )
             }
-            MediaSeekBar(
-                session = session,
-                viewModel = viewModel,
-                colors = colors,
-                dense = false,
-                interactive = interactive,
-                showTimestamps = true,
-            )
+            Box(
+                modifier =
+                    if (fitToTile) Modifier.weight(1f).fillMaxWidth() else Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                MediaSeekBar(
+                    session = session,
+                    viewModel = viewModel,
+                    colors = colors,
+                    dense = false,
+                    interactive = interactive,
+                    showTimestamps = showTimestamps,
+                )
+            }
             NotificationMediaActions(
                 session = session,
                 viewModel = viewModel,
@@ -131,11 +173,14 @@ internal fun NotificationMediaContent(
 }
 
 @Composable
-private fun NotificationMediaOutput(
+internal fun NotificationMediaOutput(
     session: MediaSessionModel?,
     viewModel: AxMediaViewModel,
     colors: AxMediaColors,
     interactive: Boolean,
+    modifier: Modifier = Modifier,
+    showDeviceIcon: Boolean = false,
+    minHeight: Dp = 32.dp,
 ) {
     val outputName =
         session?.outputDevice?.name?.toString()?.takeUnless { it.isBlank() || it == "null" }
@@ -144,15 +189,19 @@ private fun NotificationMediaOutput(
     Expandable(
         controller =
             rememberExpandableController(color = { Color.Transparent }, shape = CircleShape),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         defaultMinSize = false,
         useModifierBasedImplementation = true,
     ) { expandable ->
         Row(
             modifier =
                 Modifier.fillMaxWidth()
-                    .heightIn(min = 32.dp)
+                    .heightIn(min = minHeight)
                     .clip(CircleShape)
+                    .then(
+                        if (showDeviceIcon) Modifier.semantics { contentDescription = outputName }
+                        else Modifier
+                    )
                     .clickable(
                         enabled = interactive && session != null,
                         role = Role.Button,
@@ -163,18 +212,37 @@ private fun NotificationMediaOutput(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = outputName,
-                color = colors.foreground,
-                style =
-                    MaterialTheme.typography.labelMedium.copy(
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp,
-                    ),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
+            if (showDeviceIcon) {
+                val iconModifier = Modifier.size(22.dp).clearAndSetSemantics {}
+                if (session != null) {
+                    DeviceIcon(
+                        icon = session.outputDevice.icon,
+                        tint = colors.foreground,
+                        modifier = iconModifier,
+                    )
+                } else {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_phone_expressive),
+                        contentDescription = null,
+                        tint = colors.foreground,
+                        modifier = iconModifier,
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+            } else {
+                Text(
+                    text = outputName,
+                    color = colors.foreground,
+                    style =
+                        MaterialTheme.typography.labelMedium.copy(
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                        ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+            }
             Icon(
                 painter = painterResource(R.drawable.ic_qs_notification_media_output),
                 contentDescription = null,

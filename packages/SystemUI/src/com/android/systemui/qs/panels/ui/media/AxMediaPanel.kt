@@ -41,6 +41,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
@@ -100,11 +101,28 @@ private enum class AxMediaLayout {
     OneRow,
     Box,
     AlbumCover,
+    OneUiCompact,
     Wide,
     Compact,
     Expanded,
     Notification,
 }
+
+private fun mediaCardShape(
+    span: AxQsSpan,
+    surface: AxMediaSurface,
+    style: LunarisQsMediaStyle,
+    wideStyle: LunarisQsMediaStyle,
+): RoundedCornerShape =
+    if (
+        surface == AxMediaSurface.CONTROL &&
+            ((span == AxQsSpan.MediaDefault && style == LunarisQsMediaStyle.ONE_UI) ||
+                (span == AxQsSpan.MediaWide && wideStyle == LunarisQsMediaStyle.ONE_UI))
+    ) {
+        RoundedCornerShape(AxNotificationMediaCornerRadius)
+    } else {
+        axQsControlShape(AxQsControl.MEDIA, span, mediaSurface = surface)
+    }
 
 @Composable
 fun AxMediaPanel(
@@ -166,7 +184,9 @@ fun AxMediaPanel(
         return
     }
 
-    val shape = axQsControlShape(AxQsControl.MEDIA, span, mediaSurface = surface)
+    val mediaStyle by viewModel.mediaStyle.collectAsStateWithLifecycle()
+    val mediaWideStyle by viewModel.mediaWideStyle.collectAsStateWithLifecycle()
+    val shape = mediaCardShape(span, surface, mediaStyle, mediaWideStyle)
     val gesturesEnabled = interactive && !viewModel.hasVisibleGuts()
     val carouselScrollingEnabled =
         gesturesEnabled && (surface != AxMediaSurface.LOCKSCREEN || sessions.size > 1)
@@ -259,9 +279,9 @@ private fun AxMediaCard(
     motionArtAllowedToPlay: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    val shape = axQsControlShape(AxQsControl.MEDIA, span, mediaSurface = surface)
     val mediaStyle by viewModel.mediaStyle.collectAsStateWithLifecycle()
     val mediaWideStyle by viewModel.mediaWideStyle.collectAsStateWithLifecycle()
+    val shape = mediaCardShape(span, surface, mediaStyle, mediaWideStyle)
     val motionArtEnabled by viewModel.mediaMotionArt.collectAsStateWithLifecycle()
     val isShadeInteracting by viewModel.isShadeInteracting.collectAsStateWithLifecycle()
     val keyguardState by viewModel.currentKeyguardState.collectAsStateWithLifecycle()
@@ -272,9 +292,15 @@ private fun AxMediaCard(
             surface == AxMediaSurface.CONTROL &&
                 span == AxQsSpan.MediaWide &&
                 mediaWideStyle == LunarisQsMediaStyle.ALBUM_COVER -> AxMediaLayout.Wide
+            surface == AxMediaSurface.CONTROL &&
+                span == AxQsSpan.MediaWide &&
+                mediaWideStyle == LunarisQsMediaStyle.ONE_UI -> AxMediaLayout.Notification
             surface == AxMediaSurface.CONTROL && span == AxQsSpan.MediaDefault ->
-                if (mediaStyle == LunarisQsMediaStyle.ALBUM_COVER) AxMediaLayout.AlbumCover
-                else AxMediaLayout.Box
+                when (mediaStyle) {
+                    LunarisQsMediaStyle.ARTWORK -> AxMediaLayout.Box
+                    LunarisQsMediaStyle.ALBUM_COVER -> AxMediaLayout.AlbumCover
+                    LunarisQsMediaStyle.ONE_UI -> AxMediaLayout.OneUiCompact
+                }
             span.rows == 1 -> AxMediaLayout.OneRow
             span.columns >= 3 -> AxMediaLayout.Expanded
             else -> AxMediaLayout.Compact
@@ -304,7 +330,8 @@ private fun AxMediaCard(
             keyguardState != KeyguardState.AOD
     val glowCornerRadius =
         when {
-            surface == AxMediaSurface.SEPARATE_QQS -> AxNotificationMediaCornerRadius
+            layout == AxMediaLayout.Notification || layout == AxMediaLayout.OneUiCompact ->
+                AxNotificationMediaCornerRadius
             surface == AxMediaSurface.CONTROL && span == AxQsSpan.MediaDefault -> 28.dp
             else -> AxQsControlCornerRadius
         }
@@ -336,11 +363,14 @@ private fun AxMediaCard(
     val tileBackground = AxTileDefaults.backgroundColor()
     val tileForeground = MaterialTheme.colorScheme.onSurface
     val colorScheme = session?.colorScheme
+    val hasDarkArtwork =
+        layout == AxMediaLayout.Notification || layout == AxMediaLayout.OneUiCompact
     val mediaBackground =
-        if (layout == AxMediaLayout.Notification) {
-            lerp(colorScheme?.background ?: Color(0xFF30242C), Color.Black, 0.8f)
-        } else {
-            colorScheme?.background ?: MaterialTheme.colorScheme.onSurface
+        when {
+            session == null -> tileBackground
+            hasDarkArtwork ->
+                lerp(colorScheme?.background ?: Color(0xFF30242C), Color.Black, 0.8f)
+            else -> colorScheme?.background ?: MaterialTheme.colorScheme.onSurface
         }
     val background by
         animateColorAsState(
@@ -348,9 +378,8 @@ private fun AxMediaCard(
                 when {
                     (layout == AxMediaLayout.Box ||
                         layout == AxMediaLayout.AlbumCover ||
-                        layout == AxMediaLayout.Wide) &&
-                        !gutsVisible -> tileBackground
-                    layout == AxMediaLayout.Notification -> mediaBackground
+                        layout == AxMediaLayout.Wide) && !gutsVisible -> tileBackground
+                    hasDarkArtwork -> mediaBackground
                     artwork != null && !gutsVisible -> Color.Transparent
                     session != null -> mediaBackground
                     else -> tileBackground
@@ -379,9 +408,7 @@ private fun AxMediaCard(
         )
     val foreground by
         animateColorAsState(
-            targetValue =
-                if (session != null || layout == AxMediaLayout.Notification) Color.White
-                else tileForeground,
+            targetValue = if (session != null) Color.White else tileForeground,
             label = "AxMediaForeground",
         )
     val animatedMediaBackground by
@@ -428,7 +455,8 @@ private fun AxMediaCard(
                     shape = shape,
                     enabled =
                         LocalLunarisQsCosTileBackground.current &&
-                            surface != AxMediaSurface.LOCKSCREEN && !gutsVisible,
+                            surface != AxMediaSurface.LOCKSCREEN &&
+                            !gutsVisible,
                 )
                 .combinedClickable(
                     enabled = interactive && (session != null || lastMediaPackage != null),
@@ -482,7 +510,12 @@ private fun AxMediaCard(
                                 overlayColor = colors.background,
                                 motionArt = motionArt,
                                 motionArtPlaying = motionArtPlaying,
-                                topLitVignette = layout == AxMediaLayout.Notification,
+                                scrim =
+                                    when (layout) {
+                                        AxMediaLayout.Notification -> AxMediaArtworkScrim.TopLit
+                                        AxMediaLayout.OneUiCompact -> AxMediaArtworkScrim.CenterLit
+                                        else -> AxMediaArtworkScrim.Default
+                                    },
                                 modifier =
                                     if (layout == AxMediaLayout.Notification) Modifier.blur(2.dp)
                                     else Modifier,
@@ -505,6 +538,15 @@ private fun AxMediaCard(
                             when (mediaLayout) {
                                 AxMediaLayout.Notification ->
                                     NotificationMediaContent(
+                                        session = session,
+                                        viewModel = viewModel,
+                                        colors = colors,
+                                        interactive = interactive,
+                                        hasMultipleSessions = hasMultipleSessions,
+                                        fitToTile = surface == AxMediaSurface.CONTROL,
+                                    )
+                                AxMediaLayout.OneUiCompact ->
+                                    LunarisOneUiMediaPlayer(
                                         session = session,
                                         viewModel = viewModel,
                                         colors = colors,

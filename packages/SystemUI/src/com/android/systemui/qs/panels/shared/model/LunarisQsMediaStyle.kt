@@ -18,7 +18,8 @@ package com.android.systemui.qs.panels.shared.model
 
 enum class LunarisQsMediaStyle(val settingValue: Int) {
     ARTWORK(0),
-    ALBUM_COVER(1);
+    ALBUM_COVER(1),
+    ONE_UI(2);
 
     companion object {
         fun fromSetting(value: Int): LunarisQsMediaStyle =
