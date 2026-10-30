@@ -665,6 +665,7 @@ constructor(
     override fun setPanelExpanded(panelExpanded: Boolean) {
         viewModel.isPanelExpanded = panelExpanded
         if (!panelExpanded) {
+            axMediaViewModel.allowGlowOnPanelShown = true
             axQsViewModel.clearCollapseGuard()
         }
         if (!panelExpanded && !viewModel.isInSplitShade) {
@@ -688,6 +689,9 @@ constructor(
 
     override fun setPanelSwipeProgress(progress: Float) {
         currentPanelSwipeProgress = progress
+        if (progress >= 0f) {
+            axMediaViewModel.allowGlowOnPanelShown = false
+        }
         containerView?.let {
             it.panelSwipeInProgress = progress >= 0f
             it.invalidate()

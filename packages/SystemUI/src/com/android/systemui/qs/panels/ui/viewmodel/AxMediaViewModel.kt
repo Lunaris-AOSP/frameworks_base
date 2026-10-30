@@ -85,6 +85,7 @@ constructor(
     val showOnLockscreen = mediaCarouselInteractor.allowMediaOnLockscreen
     val isShadeExpanded: StateFlow<Boolean> = shadeInteractor.isAnyExpanded
     val isShadeInteracting: StateFlow<Boolean> = shadeInteractor.isUserInteracting
+    var allowGlowOnPanelShown by mutableStateOf(true)
     val currentKeyguardState: StateFlow<KeyguardState> =
         keyguardTransitionInteractor.currentKeyguardState
     val lastMediaPackage = mediaHistoryRepository.lastMediaPackage

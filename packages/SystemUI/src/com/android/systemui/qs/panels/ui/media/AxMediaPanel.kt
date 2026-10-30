@@ -440,9 +440,10 @@ private fun AxMediaCard(
                 .fillMaxSize()
                 .clip(shape)
                 .cosMediaRipple(
-                    trigger = session?.let { it.key to artworkState },
+                    trigger = session?.let { Triple(it.key, it.title, it.subtitle) },
                     cornerRadius = glowCornerRadius,
                     enabled = statusGlowVisible,
+                    animateOnEnable = viewModel.allowGlowOnPanelShown,
                 ),
         onClick = null,
         onClickLabel = null,

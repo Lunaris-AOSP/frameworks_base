@@ -15,7 +15,10 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -31,7 +34,22 @@ fun Modifier.cosMediaRipple(
     cornerRadius: Dp,
     enabled: Boolean,
     origin: DpOffset = DpOffset(40.dp, 40.dp),
+    animateOnEnable: Boolean = true,
 ): Modifier {
+    val progress = remember { Animatable(1f) }
+    var lastTrigger by remember { mutableStateOf(trigger) }
+
+    LaunchedEffect(trigger, enabled) {
+        val triggerChanged = trigger != lastTrigger
+        lastTrigger = trigger
+        if (!enabled || trigger == null || (!triggerChanged && !animateOnEnable)) {
+            progress.snapTo(1f)
+            return@LaunchedEffect
+        }
+        progress.snapTo(0f)
+        progress.animateTo(1f, tween(MediaRipple.DURATION_MS.toInt(), easing = LinearEasing))
+    }
+
     if (!enabled || trigger == null) return this
     val ripple =
         remember {
@@ -39,13 +57,6 @@ fun Modifier.cosMediaRipple(
                 .onFailure { Log.w("CosMediaRipple", "Could not create the media ripple", it) }
                 .getOrNull()
         } ?: return this
-    val progress = remember { Animatable(1f) }
-
-    LaunchedEffect(trigger) {
-        progress.snapTo(0f)
-        progress.animateTo(1f, tween(MediaRipple.DURATION_MS.toInt(), easing = LinearEasing))
-    }
-
     return drawWithContent {
         drawContent()
         val p = progress.value
