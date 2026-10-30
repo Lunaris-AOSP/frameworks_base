@@ -414,19 +414,10 @@ public class PowerInsightService extends IPowerInsightService.Stub {
         int chargeCounter = readBatteryInt("charge_counter");
         if (chargeCounter == 0) chargeCounter = readBatteryInt("charge_now");
 
-        int capacityFull = readBatteryInt("capacity_full");
         // Handle both mAh and uAh (some kernels use uAh)
         if (chargeFull > 20000) chargeFull /= 1000;
         if (chargeDesign > 20000) chargeDesign /= 1000;
         if (chargeCounter > 20000) chargeCounter /= 1000;
-        if (capacityFull > 20000) capacityFull /= 1000;
-
-        if (chargeFull <= 0 && capacityFull > 0) {
-        chargeFull = capacityFull;
-        }
-        if (capacityFull <= 0 && chargeFull > 0) {
-            capacityFull = chargeFull;
-        }
 
         if (chargeDesign > 0) {
             stats.totalCapacity = chargeDesign;
@@ -435,7 +426,7 @@ public class PowerInsightService extends IPowerInsightService.Stub {
             float cycleHealth = Math.max(0, 100f - ((stats.cycleCount / 800f) * 20f));
             stats.healthPercent = (stats.capacityHealth * 0.7f) + (cycleHealth * 0.3f);
         } else {
-            stats.totalCapacity = capacityFull;
+            stats.totalCapacity = chargeFull;
             stats.currentCapacity = chargeCounter;
             if (stats.totalCapacity > 0 && stats.currentCapacity > 0) {
                 stats.capacityHealth = (float) stats.currentCapacity * 100f / stats.totalCapacity;
@@ -1002,13 +993,10 @@ public class PowerInsightService extends IPowerInsightService.Stub {
     }
 
     private int getTotalCapacityMah() {
-        int chargeDesign = readBatteryInt("charge_full_design");
-        if (chargeDesign > 20000) chargeDesign /= 1000;
-        if (chargeDesign > 0) return chargeDesign;
-
-        int capacityFull = readBatteryInt("capacity_full");
-        if (capacityFull > 20000) capacityFull /= 1000;
-        if (capacityFull > 0) return capacityFull;
+        // Use the learned full-charge capacity for percentage-to-mAh estimates.
+        int chargeFull = readBatteryInt("charge_full");
+        if (chargeFull > 20000) chargeFull /= 1000;
+        if (chargeFull > 0) return chargeFull;
 
         return 5000;
     }
