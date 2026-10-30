@@ -61,11 +61,12 @@ internal fun MediaSeekBar(
     val seekBarStyle by
         viewModel.seekBarStyle.collectAsStateWithLifecycle(initialValue = MediaSeekBarStyle.DEFAULT)
     val height =
-        if (seekBarStyle == MediaSeekBarStyle.GRADIENT_WAVE) 40.dp
-        else if (
-            seekBarStyle == MediaSeekBarStyle.GLOWING ||
-                seekBarStyle == MediaSeekBarStyle.COS
-        ) 34.dp else if (dense) 20.dp else 32.dp
+        when (seekBarStyle) {
+            MediaSeekBarStyle.GLOWING -> if (dense) 34.dp else 40.dp
+            MediaSeekBarStyle.GRADIENT_WAVE -> 40.dp
+            MediaSeekBarStyle.COS -> 34.dp
+            else -> if (dense) 20.dp else 32.dp
+        }
     val progress = session?.let(viewModel::progress) ?: 0f
     val durationMs = session?.durationMs ?: 0L
     val elapsedSeconds = (progress * durationMs).toLong() / 1000L
@@ -93,8 +94,12 @@ internal fun MediaSeekBar(
                     AndroidMediaSeekBar(
                         progress = progress,
                         durationMs = durationMs,
-                        onScrubChange = { value -> session?.let { viewModel.onScrubChange(it, value) } },
-                        onScrubFinished = { delta -> session?.let { viewModel.onScrubFinished(it, delta) } },
+                        onScrubChange = { value ->
+                            session?.let { viewModel.onScrubChange(it, value) }
+                        },
+                        onScrubFinished = { delta ->
+                            session?.let { viewModel.onScrubFinished(it, delta) }
+                        },
                         style = seekBarStyle,
                         artwork = (session?.background as? Icon.Loaded)?.drawable,
                         isPlaying = session?.state == MediaSessionState.Playing,
