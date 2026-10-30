@@ -65,6 +65,8 @@ HintSessionWrapper::~HintSessionWrapper() {
 }
 
 void HintSessionWrapper::destroy() {
+    ++mCpuLoadUpRequestId;
+    mPendingCpuLoadUpDeadline = 0;
     if (mHintSessionFuture.has_value()) {
         mHintSession = mHintSessionFuture->get();
         mHintSessionFuture = std::nullopt;
@@ -91,8 +93,10 @@ bool HintSessionWrapper::init() {
             mHintSessionFuture = std::nullopt;
             if (mHintSession != nullptr) {
                 mSessionValid = true;
+                sendPendingCpuLoadUpHint();
                 return true;
             }
+            mPendingCpuLoadUpDeadline = 0;
         }
         return false;
     }
@@ -180,8 +184,36 @@ void HintSessionWrapper::sendCpuLoadResetHint() {
 }
 
 void HintSessionWrapper::sendCpuLoadIncreaseHint() {
-    if (!init()) return;
-    mBinding->sendHint(mHintSession, static_cast<int32_t>(SessionHint::CPU_LOAD_UP));
+    mPendingCpuLoadUpDeadline = systemTime() + kCpuLoadUpMaxDelay;
+    retryCpuLoadUpHint(++mCpuLoadUpRequestId);
+}
+
+void HintSessionWrapper::retryCpuLoadUpHint(uint64_t requestId) {
+    if (requestId != mCpuLoadUpRequestId || mPendingCpuLoadUpDeadline == 0) return;
+    if (systemTime() >= mPendingCpuLoadUpDeadline) {
+        mPendingCpuLoadUpDeadline = 0;
+        return;
+    }
+    if (init()) {
+        sendPendingCpuLoadUpHint();
+        return;
+    }
+    if (!mHintSessionFuture.has_value()) {
+        mPendingCpuLoadUpDeadline = 0;
+        return;
+    }
+    RenderThread::getInstance().queue().postDelayed(
+            kCpuLoadUpRetryInterval, [wrapper = weak_from_this(), requestId]() {
+                if (auto self = wrapper.lock()) self->retryCpuLoadUpHint(requestId);
+            });
+}
+
+void HintSessionWrapper::sendPendingCpuLoadUpHint() {
+    const nsecs_t deadline = mPendingCpuLoadUpDeadline;
+    mPendingCpuLoadUpDeadline = 0;
+    if (mHintSession != nullptr && systemTime() < deadline) {
+        mBinding->sendHint(mHintSession, static_cast<int32_t>(SessionHint::CPU_LOAD_UP));
+    }
 }
 
 void HintSessionWrapper::sendGpuLoadIncreaseHint() {
@@ -200,6 +232,8 @@ nsecs_t HintSessionWrapper::getLastUpdate() {
 // Requires passing in its shared_ptr since it shouldn't own a shared_ptr to itself
 void HintSessionWrapper::delayedDestroy(RenderThread& rt, nsecs_t delay,
                                         std::shared_ptr<HintSessionWrapper> wrapperPtr) {
+    ++mCpuLoadUpRequestId;
+    mPendingCpuLoadUpDeadline = 0;
     nsecs_t lastUpdate = wrapperPtr->getLastUpdate();
     rt.queue().postDelayed(delay, [lastUpdate = lastUpdate, wrapper = wrapperPtr]() mutable {
         if (wrapper->getLastUpdate() == lastUpdate) {

@@ -18,6 +18,7 @@ import android.util.AndroidRuntimeException;
 import android.util.SparseArray;
 import android.view.RenderNodeAnimator;
 import android.view.View;
+import android.view.ViewRootImpl;
 import android.view.animation.AnimationUtils;
 
 import java.util.WeakHashMap;
@@ -113,6 +114,7 @@ public final class Luminous {
                 if (!mCancelled && !run.replaced && endAction != null) endAction.run();
             }
         });
+        notifyAnimationStart(view);
         animator.start();
     }
 
@@ -149,6 +151,18 @@ public final class Luminous {
         }
         ApplicationInfo info = view.getContext().getApplicationInfo();
         return info != null && (info.isSystemApp() || info.isUpdatedSystemApp());
+    }
+
+    public static void notifyAnimationStart(@Nullable View view) {
+        if (Looper.myLooper() != Looper.getMainLooper() || view == null
+                || !view.isAttachedToWindow() || !view.isHardwareAccelerated()
+                || !ValueAnimator.areAnimatorsEnabled() || !offloadsViewAnimations(view)) {
+            return;
+        }
+        ViewRootImpl root = view.getViewRootImpl();
+        if (root != null) {
+            root.notifyRendererOfExpensiveFrame("Luminous animation start");
+        }
     }
 
     private static void checkThread() {

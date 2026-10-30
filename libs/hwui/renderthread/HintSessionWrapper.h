@@ -19,6 +19,7 @@
 #include <android/performance_hint.h>
 #include <private/performance_hint_private.h>
 
+#include <cstdint>
 #include <future>
 #include <memory>
 #include <optional>
@@ -33,7 +34,7 @@ namespace renderthread {
 
 class RenderThread;
 
-class HintSessionWrapper {
+class HintSessionWrapper : public std::enable_shared_from_this<HintSessionWrapper> {
 public:
     friend class HintSessionWrapperTests;
 
@@ -55,6 +56,9 @@ public:
     void setActiveFunctorThreads(std::vector<pid_t> threadIds);
 
 private:
+    void retryCpuLoadUpHint(uint64_t requestId);
+    void sendPendingCpuLoadUpHint();
+
     APerformanceHintSession* mHintSession = nullptr;
     // This needs to work concurrently for testing
     std::optional<std::shared_future<APerformanceHintSession*>> mHintSessionFuture;
@@ -64,6 +68,8 @@ private:
     int mResetsSinceLastReport = 0;
     nsecs_t mLastFrameNotification = 0;
     nsecs_t mLastTargetWorkDuration = 0;
+    nsecs_t mPendingCpuLoadUpDeadline = 0;
+    uint64_t mCpuLoadUpRequestId = 0;
 
     pid_t mUiThreadId;
     pid_t mRenderThreadId;
@@ -73,6 +79,8 @@ private:
     bool mSessionValid = true;
 
     static constexpr nsecs_t kResetHintTimeout = 100_ms;
+    static constexpr nsecs_t kCpuLoadUpMaxDelay = 100_ms;
+    static constexpr nsecs_t kCpuLoadUpRetryInterval = 4_ms;
     static constexpr int64_t kSanityCheckLowerBound = 100_us;
     static constexpr int64_t kSanityCheckUpperBound = 10_s;
     static constexpr int64_t kDefaultTargetDuration = 16666667;

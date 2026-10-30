@@ -389,7 +389,7 @@ APerformanceHintSession* APerformanceHintManager::createSession(
             .targetWorkDurationNanos = initialTargetWorkDurationNanos,
     }};
 
-    APerformanceHintSession* sessionOut;
+    APerformanceHintSession* sessionOut = nullptr;
     APerformanceHintManager::createSessionUsingConfig(&creationConfig, &sessionOut, tag, isJava);
     return sessionOut;
 }

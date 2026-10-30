@@ -972,6 +972,7 @@ public class ViewPropertyAnimator {
 
         @Override
         public void start() {
+            Luminous.notifyAnimationStart(mView);
             mStartMillis = AnimationUtils.currentAnimationTimeMillis();
             mScaledDuration = Math.max(1, (long) (mRtDuration * ValueAnimator.getDurationScale()));
             mRunning = true;
