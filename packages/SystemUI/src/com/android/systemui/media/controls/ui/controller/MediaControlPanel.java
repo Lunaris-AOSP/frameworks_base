@@ -1021,7 +1021,7 @@ public class MediaControlPanel {
             final ColorScheme colorScheme = mutableColorScheme;
             mMainExecutor.execute(() -> {
                 // Cancel the request if a later one arrived first
-                if (reqId < mArtworkBoundId) {
+                if (mMediaViewHolder == null || reqId < mArtworkBoundId) {
                     Trace.endAsyncSection(traceName, traceCookie);
                     return;
                 }
