@@ -142,6 +142,8 @@ public final class WMShell implements
     private final Executor mSysUiMainExecutor;
     private final PerDisplayRepository<SysUiState> mPerDisplaySysUiStateRepository;
 
+    private boolean mIsSplitScreenVisible;
+
     // Listeners and callbacks. Note that we prefer member variable over anonymous class here to
     // avoid the situation that some implementations, like KeyguardUpdateMonitor, use WeakReference
     // internally and anonymous class could be released after registration.
@@ -324,6 +326,12 @@ public final class WMShell implements
 
     @VisibleForTesting
     void initSplitScreen(SplitScreen splitScreen) {
+        splitScreen.registerSplitScreenListener(new SplitScreen.SplitScreenListener() {
+            @Override
+            public void onSplitVisibilityChanged(boolean visible) {
+                mIsSplitScreenVisible = visible;
+            }
+        }, mSysUiMainExecutor);
         mWakefulnessLifecycle.addObserver(new WakefulnessLifecycle.Observer() {
             @Override
             public void onStartedGoingToSleep() {
@@ -336,6 +344,20 @@ public final class WMShell implements
             }
         });
         mCommandQueue.addCallback(new CommandQueue.Callbacks() {
+            @Override
+            public void toggleSplitScreen() {
+                if (mKeyguardStateController.isShowing()
+                        || mSysUiState.isFlagEnabled(SYSUI_STATE_DISABLE_GESTURE_SPLIT_INVOCATION)) {
+                    return;
+                }
+                if (mIsSplitScreenVisible) {
+                    splitScreen.goToFullscreenFromSplit();
+                } else {
+                    mCommandQueue.moveFocusedTaskToStageSplit(
+                            mDisplayTracker.getDefaultDisplayId(), true);
+                }
+            }
+
             @Override
             public void moveFocusedTaskToFullscreen(int displayId) {
                 splitScreen.goToFullscreenFromSplit();

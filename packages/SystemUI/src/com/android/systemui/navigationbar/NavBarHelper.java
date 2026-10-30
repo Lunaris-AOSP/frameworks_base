@@ -37,6 +37,8 @@ import static com.android.systemui.shared.statusbar.phone.BarTransitions.MODE_TR
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_A11Y_BUTTON_CLICKABLE;
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_A11Y_BUTTON_LONG_CLICKABLE;
 
+import static org.lineageos.internal.util.DeviceKeysConstants.Action;
+
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.res.Configuration;
@@ -97,6 +99,8 @@ import java.util.Optional;
 import java.util.concurrent.Executor;
 
 import javax.inject.Inject;
+
+import lineageos.providers.LineageSettings;
 
 /**
  * Extracts shared elements between navbar and taskbar delegate to de-dupe logic and help them
@@ -272,6 +276,9 @@ public final class NavBarHelper implements
                 false, mAssistContentObserver, UserHandle.USER_ALL);
         mContentResolver.registerContentObserver(
                 Settings.Secure.getUriFor(Settings.Secure.ASSIST_TOUCH_GESTURE_ENABLED),
+                false, mAssistContentObserver, UserHandle.USER_ALL);
+        mContentResolver.registerContentObserver(
+                LineageSettings.System.getUriFor(LineageSettings.System.KEY_CORNER_LONG_SWIPE_ACTION),
                 false, mAssistContentObserver, UserHandle.USER_ALL);
 
         // Setup display rotation watcher
@@ -497,9 +504,12 @@ public final class NavBarHelper implements
 
         boolean supportsSwipeGesture = QuickStepContract.isGesturalMode(mNavBarMode)
                 || (QuickStepContract.isLegacyMode(mNavBarMode) && Flags.threeButtonCornerSwipe());
-        mAssistantAvailable = assistantAvailableForUser
-                && mAssistantTouchGestureEnabled
-                && supportsSwipeGesture;
+        Action cornerAction = Action.fromIntSafe(LineageSettings.System.getIntForUser(
+                mContentResolver, LineageSettings.System.KEY_CORNER_LONG_SWIPE_ACTION,
+                Action.SEARCH.ordinal(), mUserTracker.getUserId()));
+        mAssistantAvailable = supportsSwipeGesture && cornerAction != Action.NOTHING
+                && (cornerAction != Action.SEARCH
+                        || (assistantAvailableForUser && mAssistantTouchGestureEnabled));
         dispatchAssistantEventUpdate(mAssistantAvailable, mLongPressHomeEnabled);
     }
 
