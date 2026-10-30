@@ -74,11 +74,21 @@ constructor(
 ) : KeyguardSection() {
 
     private val chipViewId = R.id.ax_dynamic_bar_keyguard_chip
+    private val dismissViewId = R.id.ax_dynamic_bar_keyguard_dismiss_area
     private var bindHandle: DisposableHandle? = null
     private var expansionHandle: DisposableHandle? = null
     private var enforceAction: Runnable? = null
 
     override fun addViews(constraintLayout: ConstraintLayout) {
+        val dismissView = View(context).apply {
+            id = dismissViewId
+            visibility = View.GONE
+            isFocusable = false
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            isSoundEffectsEnabled = false
+            setOnClickListener { viewModel.keyguardExpansion.collapse() }
+        }
+        constraintLayout.addView(dismissView, 0)
         val composeView = AxComposeView(context).apply { id = chipViewId }
         constraintLayout.addView(composeView)
     }
@@ -150,6 +160,8 @@ constructor(
         WallpaperDepthUtils.get()?.setDynamicBarExpanded(expanded)
         rebindPreDrawAction(constraintLayout, expanded)
         TransitionManager.endTransitions(constraintLayout)
+        constraintLayout.requireViewById<View>(dismissViewId).visibility =
+            if (expanded) View.VISIBLE else View.GONE
         if (expanded) {
             setHiddenViewsVisibility(constraintLayout, View.INVISIBLE)
             applyExpandedLp(composeView)
@@ -212,6 +224,13 @@ constructor(
         val extraBottomPx = extraBottomMarginPx(context)
         val wrap = ViewGroup.LayoutParams.WRAP_CONTENT
         constraintSet.apply {
+            constrainWidth(dismissViewId, ConstraintSet.MATCH_CONSTRAINT)
+            constrainHeight(dismissViewId, ConstraintSet.MATCH_CONSTRAINT)
+            connect(dismissViewId, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP)
+            connect(dismissViewId, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.BOTTOM)
+            connect(dismissViewId, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START)
+            connect(dismissViewId, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
+            setVisibilityMode(dismissViewId, ConstraintSet.VISIBILITY_MODE_IGNORE)
             when {
                 expanded -> {
                     constrainWidth(chipViewId, ConstraintSet.MATCH_CONSTRAINT)
@@ -297,6 +316,7 @@ constructor(
         bindHandle?.dispose()
         bindHandle = null
         indicationController.setSuppressIndication(false)
+        constraintLayout.removeView(dismissViewId)
         constraintLayout.removeView(chipViewId)
     }
 }

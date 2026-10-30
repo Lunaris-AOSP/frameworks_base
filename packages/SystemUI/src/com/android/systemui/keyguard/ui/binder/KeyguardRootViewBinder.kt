@@ -518,6 +518,7 @@ object KeyguardRootViewBinder {
 
         private fun isUserVisible(view: View): Boolean {
             return view.id != burnInLayerId &&
+                view.id != R.id.ax_dynamic_bar_keyguard_dismiss_area &&
                 view.visibility == VISIBLE &&
                 view.width > 0 &&
                 view.height > 0
