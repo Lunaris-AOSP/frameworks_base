@@ -19,6 +19,9 @@ package com.android.systemui.axion.volume
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
+import android.view.accessibility.AccessibilityManager
+import com.android.systemui.accessibility.data.repository.AccessibilityRepository
 import com.android.systemui.axion.volume.dagger.AxionVolumeComponent
 import com.android.systemui.axion.volume.ui.viewmodel.AxionVolumeDialogViewModel
 import com.android.systemui.axion.volume.ui.viewmodel.ExpansionState
@@ -26,6 +29,8 @@ import com.android.systemui.axion.volume.ui.viewmodel.VisibilityState
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.plugins.VolumeDialog
 import com.android.systemui.plugins.VolumeDialogController
+import com.android.systemui.shared.settings.data.repository.SecureSettingsRepository
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.*
 import javax.inject.Inject
 
@@ -33,6 +38,8 @@ class AxionVolumeDialogPlugin @Inject constructor(
     @Application private val context: Context,
     private val componentFactory: AxionVolumeComponent.Factory,
     private val controller: VolumeDialogController,
+    private val secureSettingsRepository: SecureSettingsRepository,
+    private val accessibilityRepository: AccessibilityRepository,
 ) : VolumeDialog {
 
     private val handler: Handler = Handler(Looper.getMainLooper())
@@ -46,8 +53,8 @@ class AxionVolumeDialogPlugin @Inject constructor(
     private var previousVisibilityState: VisibilityState? = null
 
     companion object {
-        private const val DISMISS_TIMEOUT_MS = 3000L
-        private const val DISMISS_TIMEOUT_EXPANDED_MS = 5000L
+        private const val DISMISS_TIMEOUT_MS = 3000
+        private const val DISMISS_TIMEOUT_EXPANDED_MS = 5000
     }
 
     private val controllerCallbacks = object : VolumeDialogController.Callbacks {
@@ -197,13 +204,22 @@ class AxionVolumeDialogPlugin @Inject constructor(
 
     fun rescheduleAutoDismiss() {
         autoDismissJob?.cancel()
-        val timeout = if (viewModel.expansionState == ExpansionState.EXPANDED) {
+        val defaultTimeout = if (viewModel.expansionState == ExpansionState.EXPANDED) {
             DISMISS_TIMEOUT_EXPANDED_MS
         } else {
             DISMISS_TIMEOUT_MS
         }
         autoDismissJob = pluginScope?.launch {
-            delay(timeout)
+            val timeout = secureSettingsRepository.getInt(
+                Settings.Secure.VOLUME_DIALOG_DISMISS_TIMEOUT,
+                defaultTimeout,
+            ).milliseconds
+            delay(
+                accessibilityRepository.getRecommendedTimeout(
+                    timeout,
+                    AccessibilityManager.FLAG_CONTENT_CONTROLS,
+                )
+            )
             if (viewModel.visibilityState == VisibilityState.SHOWING && !viewModel.isInteracting) {
                 viewModel.visibilityState = VisibilityState.DISMISSED
             }
