@@ -830,7 +830,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         return com.android.systemui.qs.flags.MistQsMode.isEnabled();
     }
 
-    private boolean isMistSeparateShade() {
+    boolean isMistSeparateShade() {
         return isMistQsEnabled() && mAxQsShadePolicy.get().isSeparateShade();
     }
 
@@ -932,7 +932,8 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
                 || isMistSeparateNotificationShade()) {
             return false;
         }
-        if (getExpanded() && yDiff < 0 && isMistSeparateShade()) {
+        if (getExpanded() && yDiff < 0 && isMistSeparateShade()
+                && mBarState == StatusBarState.SHADE) {
             return false;
         }
         int headerTop, headerBottom;

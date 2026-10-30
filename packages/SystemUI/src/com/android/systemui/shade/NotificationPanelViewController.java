@@ -1424,6 +1424,22 @@ public final class NotificationPanelViewController implements
         endClosing();
     }
 
+    private void cancelHeightAnimatorForTouch() {
+        if (mHeightAnimator == null || mBarState != SHADE || mDozing
+                || !mQsController.isMistSeparateShade()
+                || (!mQsController.getExpanded() && !mQsController.isExpandImmediate())) {
+            cancelHeightAnimator();
+            return;
+        }
+        float overscroll = mShadeOverscroll;
+        float overExpansion = mOverExpansion;
+        boolean expandImmediate = mQsController.isExpandImmediate();
+        cancelHeightAnimator();
+        mShadeOverscroll = overscroll;
+        setOverExpansion(overExpansion);
+        mQsController.setExpandImmediate(expandImmediate);
+    }
+
     @Override
     public void cancelAnimation() {
         mView.animate().cancel();
@@ -4209,7 +4225,7 @@ public final class NotificationPanelViewController implements
                     mDownTime = mSystemClock.uptimeMillis();
                     mTouchDownCancelAnimator = mAnimatingOnDown && isClosing();
                     if (mAnimatingOnDown && isClosing()) {
-                        cancelHeightAnimator();
+                        cancelHeightAnimatorForTouch();
                         mTouchSlopExceeded = true;
                         mShadeLog.v("NotificationPanelViewController MotionEvent intercepted:"
                                 + " mAnimatingOnDown: true, isClosing(): true");
@@ -4279,7 +4295,7 @@ public final class NotificationPanelViewController implements
                                 || ((openShadeWithoutHun || mAnimatingOnDown) && hAbs > touchSlop))
                                 && hAbs > Math.abs(x - mInitialExpandX)) {
                             float startHeight = mExpandedHeight + Math.max(0f, mShadeOverscroll);
-                            cancelHeightAnimator();
+                            cancelHeightAnimatorForTouch();
                             startExpandMotion(x, y, true /* startTracking */,
                                     startHeight);
                             mShadeLog.v("NotificationPanelViewController MotionEvent"
@@ -4548,7 +4564,7 @@ public final class NotificationPanelViewController implements
                     if (!mGestureWaitForTouchSlop || regularHeightAnimationRunning) {
                         mTouchSlopExceeded = regularHeightAnimationRunning
                                 || mTouchSlopExceededBeforeDown;
-                        cancelHeightAnimator();
+                        cancelHeightAnimatorForTouch();
                         onTrackingStarted();
                     }
                     if (isFullyCollapsed() && !mHeadsUpManager.hasPinnedHeadsUp()
@@ -4628,7 +4644,7 @@ public final class NotificationPanelViewController implements
                                         mExpandedHeight + Math.max(0f, mShadeOverscroll));
                                 h = 0;
                             }
-                            cancelHeightAnimator();
+                            cancelHeightAnimatorForTouch();
                             onTrackingStarted();
                         }
                     }
