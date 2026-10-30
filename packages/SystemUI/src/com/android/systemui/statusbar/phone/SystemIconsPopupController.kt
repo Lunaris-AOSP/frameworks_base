@@ -25,8 +25,6 @@ import android.content.BroadcastReceiver
 import android.content.Intent.ACTION_SCREEN_OFF
 import android.graphics.PixelFormat
 import android.hardware.display.ColorDisplayManager
-import android.hardware.camera2.CameraManager
-import android.hardware.camera2.CameraCharacteristics
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -107,9 +105,11 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import android.graphics.Matrix as AndroidMatrix
 import android.graphics.Path as AndroidPath
 import android.graphics.RectF
+import com.android.systemui.Dependency
 import com.android.systemui.res.R
 import com.android.systemui.qs.panels.ui.compose.SharedMediaState
 import com.android.systemui.qs.panels.ui.compose.rememberMediaState
+import com.android.systemui.statusbar.policy.FlashlightController
 import com.android.systemui.util.MemoryUtils
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -140,10 +140,9 @@ class SystemIconsPopupController(
         context.getSystemService(ColorDisplayManager::class.java)
     }
 
-    private val cameraManagerRef by lazy {
-        context.getSystemService(Context.CAMERA_SERVICE) as? CameraManager
+    private val flashlightController by lazy {
+        Dependency.get(FlashlightController::class.java)
     }
-    private var torchCameraId: String? = null
     private val torchEnabledState = mutableStateOf(false)
     private val torchUnavailableState = mutableStateOf(false)
 
@@ -157,42 +156,44 @@ class SystemIconsPopupController(
         try { colorDisplayManagerRef?.isReduceBrightColorsActivated ?: false } catch (e: Exception) { false }
     )
 
-    private val torchCallback = object : CameraManager.TorchCallback() {
-        override fun onTorchModeChanged(cameraId: String, enabled: Boolean) {
-            if (cameraId == torchCameraId) {
-                torchEnabledState.value = enabled
-                torchUnavailableState.value = false
+    private val torchCallback = object : FlashlightController.FlashlightListener {
+        override fun onFlashlightChanged(enabled: Boolean) {
+            context.mainExecutor.execute {
+                torchEnabledState.value = enabled && !torchUnavailableState.value
             }
         }
-        override fun onTorchModeUnavailable(cameraId: String) {
-            if (cameraId == torchCameraId) {
-                torchUnavailableState.value = true
+
+        override fun onFlashlightError() {
+            context.mainExecutor.execute {
                 torchEnabledState.value = false
+                if (isShowing) {
+                    Toast.makeText(context, "Flashlight unavailable", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
+        override fun onFlashlightAvailabilityChanged(available: Boolean) {
+            context.mainExecutor.execute {
+                torchUnavailableState.value = !available || !flashlightController.hasFlashlight()
+                torchEnabledState.value =
+                    !torchUnavailableState.value && flashlightController.isEnabled
             }
         }
     }
     private var torchCallbackRegistered = false
 
-    private fun findTorchCameraId(cm: CameraManager?): String? = try {
-        cm?.cameraIdList?.firstOrNull { id ->
-            cm.getCameraCharacteristics(id)
-                .get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
-        }
-    } catch (e: Exception) { null }
-
     private fun registerTorchCallback() {
         if (torchCallbackRegistered) return
-        val cm = cameraManagerRef ?: return
-        torchCameraId = findTorchCameraId(cm)
-        try {
-            cm.registerTorchCallback(context.mainExecutor, torchCallback)
-            torchCallbackRegistered = true
-        } catch (e: Exception) { }
+        torchUnavailableState.value =
+            !flashlightController.hasFlashlight() || !flashlightController.isAvailable
+        torchEnabledState.value = !torchUnavailableState.value && flashlightController.isEnabled
+        flashlightController.addCallback(torchCallback)
+        torchCallbackRegistered = true
     }
 
     private fun unregisterTorchCallback() {
         if (torchCallbackRegistered) {
-            try { cameraManagerRef?.unregisterTorchCallback(torchCallback) } catch (e: Exception) { }
+            flashlightController.removeCallback(torchCallback)
             torchCallbackRegistered = false
         }
     }
@@ -737,13 +738,12 @@ class SystemIconsPopupController(
     private fun QuickTogglesSection(onDismiss: () -> Unit) {
         val wifiManager = wifiManagerRef
         val bluetoothAdapter = bluetoothAdapterRef
-        val cameraManager = cameraManagerRef
         val colorDisplayManager = colorDisplayManagerRef
         val haptic = LocalHapticFeedback.current
 
         var isWifiEnabled by wifiEnabledState
         var isBluetoothEnabled by bluetoothEnabledState
-        var isTorchEnabled by torchEnabledState
+        val isTorchEnabled by torchEnabledState
         val isTorchUnavailable by torchUnavailableState
         var isAirplaneModeEnabled by airplaneModeState
         var isExtraDimEnabled by extraDimState
@@ -815,19 +815,9 @@ class SystemIconsPopupController(
                     onToggle = {
                         if (isTorchUnavailable) return@ShapeMorphingToggle
                         haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
-                        val id = torchCameraId
-                        if (cameraManager != null && id != null) {
-                            try {
-                                cameraManager.setTorchMode(id, !isTorchEnabled)
-                                torchToggleCount++
-                            } catch (e: Exception) {
-                                Toast.makeText(
-                                    context,
-                                    "Flashlight unavailable",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        }
+                        // Reuse the saved strength when enabling the flashlight.
+                        flashlightController.setFlashlight(!flashlightController.isEnabled)
+                        torchToggleCount++
                     },
                     onLongPress = { }
                 )
