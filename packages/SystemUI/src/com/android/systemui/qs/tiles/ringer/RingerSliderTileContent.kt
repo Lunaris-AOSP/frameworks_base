@@ -76,7 +76,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.ui.compose.AxTileDefaults
-import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsStrokeStyle
+import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsSliderStrokeStyle
+import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsTileStrokeStyle
 import com.android.systemui.qs.panels.ui.compose.LocalTileScale
 import com.android.systemui.qs.panels.ui.compose.LunarisQsSliderStrokeWidth
 import com.android.systemui.qs.panels.ui.compose.LunarisQsTileStrokeWidth
@@ -245,7 +246,7 @@ fun RingerSliderTileContent(
         val tileState = if (active) STATE_ACTIVE else STATE_INACTIVE
         val tileShape = animateAxQsTileShape(AxQsSpan.TileDefault, tileState)
         val activeBrush = gradient.tileBrush()
-        val strokeStyle = LocalLunarisQsStrokeStyle.current
+        val strokeStyle = LocalLunarisQsTileStrokeStyle.current
         val scale = LocalTileScale.current
         val background by
             animateColorAsState(
@@ -320,7 +321,12 @@ fun RingerSliderTileContent(
             label = "RingerPosition",
         )
     val activeBrush = gradient.sliderBrush()
-    val strokeWidth = LunarisQsSliderStrokeWidth * LocalTileScale.current
+    val strokeWidth =
+        if (LocalLunarisQsSliderStrokeStyle.current) {
+            LunarisQsSliderStrokeWidth * LocalTileScale.current
+        } else {
+            0.dp
+        }
     val activeBg = MaterialTheme.colorScheme.primary
     val activeIcon =
         if (activeBrush != null) gradient.contentColor else MaterialTheme.colorScheme.onPrimary

@@ -183,7 +183,8 @@ constructor(
         )
     val mediaTileStatusGlow: StateFlow<Boolean> = boolSetting(MEDIA_TILE_STATUS_GLOW, false)
     val showSliderPercentage: StateFlow<Boolean> = boolSetting(SHOW_SLIDER_PERCENTAGE, false)
-    val strokeStyle: StateFlow<Boolean> = boolSetting(STROKE_STYLE, false)
+    val tileStrokeStyle: StateFlow<Boolean> = strokeStyleSetting(TILE_STROKE_STYLE)
+    val sliderStrokeStyle: StateFlow<Boolean> = strokeStyleSetting(SLIDER_STROKE_STYLE)
     val cosTileBackground: StateFlow<Boolean> = boolSetting(COS_TILE_BACKGROUND, false)
 
     val fullColorDualTargetTiles: StateFlow<Boolean> =
@@ -485,7 +486,9 @@ constructor(
 
     fun setShowSliderPercentage(show: Boolean) = putInt(SHOW_SLIDER_PERCENTAGE, show.toSetting())
 
-    fun setStrokeStyle(enabled: Boolean) = putInt(STROKE_STYLE, enabled.toSetting())
+    fun setTileStrokeStyle(enabled: Boolean) = putInt(TILE_STROKE_STYLE, enabled.toSetting())
+
+    fun setSliderStrokeStyle(enabled: Boolean) = putInt(SLIDER_STROKE_STYLE, enabled.toSetting())
 
     fun setCosTileBackground(enabled: Boolean) = putInt(COS_TILE_BACKGROUND, enabled.toSetting())
 
@@ -668,6 +671,30 @@ constructor(
             .map { it != 0 }
             .distinctUntilChanged()
             .stateIn(applicationScope, SharingStarted.Eagerly, initialValue)
+
+    private fun strokeStyleSetting(key: String): StateFlow<Boolean> =
+        userRepository.selectedUserInfo
+            .flatMapLatest { user ->
+                secureSettings
+                    .observerFlow(user.id, key, LEGACY_STROKE_STYLE)
+                    .onStart { emit(Unit) }
+                    .map { readStrokeStyle(key, user.id) }
+            }
+            .flowOn(backgroundDispatcher)
+            .distinctUntilChanged()
+            .stateIn(
+                applicationScope,
+                SharingStarted.Eagerly,
+                readStrokeStyle(key, userRepository.getSelectedUserInfo().id),
+            )
+
+    // Keep the old shared value as a fallback until each stroke setting is changed independently.
+    private fun readStrokeStyle(key: String, userId: Int): Boolean =
+        secureSettings.getIntForUser(
+            key,
+            secureSettings.getIntForUser(LEGACY_STROKE_STYLE, 0, userId),
+            userId,
+        ) != 0
 
     private fun gridSettings(
         layouts: Iterable<AxQsGridLayout>,
@@ -910,7 +937,9 @@ constructor(
         private const val NOTIFICATION_MEDIA_STATUS_GLOW = "ax_qs_notification_media_status_glow"
         private const val MEDIA_TILE_STATUS_GLOW = "ax_qs_media_tile_status_glow"
         const val SHOW_SLIDER_PERCENTAGE = "ax_qs_show_slider_percentage"
-        private const val STROKE_STYLE = "ax_qs_stroke_style"
+        private const val LEGACY_STROKE_STYLE = "ax_qs_stroke_style"
+        private const val TILE_STROKE_STYLE = "ax_qs_tile_stroke_style"
+        private const val SLIDER_STROKE_STYLE = "ax_qs_slider_stroke_style"
         private const val COS_TILE_BACKGROUND = QsCosTileBackground.SETTING
         private const val GRADIENT_ENABLED = "ax_qs_gradient_enabled"
         private const val GRADIENT_SLIDER_ONLY = "ax_qs_gradient_slider_only"

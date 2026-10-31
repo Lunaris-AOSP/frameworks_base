@@ -143,7 +143,7 @@ private fun LunarisModeButton(
 ) {
     val gradient = rememberLunarisQsGradient()
     val brush = gradient.tileBrush().takeIf { mode.enabled }
-    val strokeStyle = LocalLunarisQsStrokeStyle.current
+    val strokeStyle = LocalLunarisQsTileStrokeStyle.current
     val background by
         animateColorAsState(
             if (mode.enabled && !strokeStyle) MaterialTheme.colorScheme.primary

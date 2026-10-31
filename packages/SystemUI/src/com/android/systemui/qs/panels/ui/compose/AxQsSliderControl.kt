@@ -343,7 +343,7 @@ internal fun AxQsSlider(
         )
     val sliderScale = sliderHeight / AxSliderTrackHeight
     if (sliderStyle.usesPlatformSlider) {
-        val strokeStyle = LocalLunarisQsStrokeStyle.current
+        val strokeStyle = LocalLunarisQsSliderStrokeStyle.current
         val flatFill = sliderStyle == LunarisQsSliderStyle.ROUNDED_SQUARE_FLAT
         val roundedSquare = sliderStyle == LunarisQsSliderStyle.ROUNDED_SQUARE
         val trackHeight = AxTileDefaults.TileHeight * sliderScale

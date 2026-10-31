@@ -101,7 +101,7 @@ internal fun ContentScope.LunarisQsTileFolder(
     val panelStyle by rememberUpdatedState(LocalAxQsTileStyle.current)
     val blurEnabled by rememberUpdatedState(LocalBlurEnabled.current)
     val gradientSettings by rememberUpdatedState(LocalLunarisQsGradientSettings.current)
-    val strokeStyle by rememberUpdatedState(LocalLunarisQsStrokeStyle.current)
+    val tileStrokeStyle by rememberUpdatedState(LocalLunarisQsTileStrokeStyle.current)
     val cosTileBackground by rememberUpdatedState(LocalLunarisQsCosTileBackground.current)
     val tileScale by rememberUpdatedState(LocalTileScale.current)
     val bySpec = remember(tiles) { tiles.associateBy { it.spec.spec } }
@@ -128,7 +128,7 @@ internal fun ContentScope.LunarisQsTileFolder(
                                 LocalAxQsTileStyle provides (currentFolder.tileStyle ?: panelStyle),
                                 LocalBlurEnabled provides blurEnabled,
                                 LocalLunarisQsGradientSettings provides gradientSettings,
-                                LocalLunarisQsStrokeStyle provides strokeStyle,
+                                LocalLunarisQsTileStrokeStyle provides tileStrokeStyle,
                                 LocalLunarisQsCosTileBackground provides cosTileBackground,
                                 LocalTileScale provides tileScale,
                             ) {

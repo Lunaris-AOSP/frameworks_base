@@ -29,7 +29,8 @@ import androidx.compose.ui.graphics.drawscope.inset
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-internal val LocalLunarisQsStrokeStyle = staticCompositionLocalOf { false }
+internal val LocalLunarisQsTileStrokeStyle = staticCompositionLocalOf { false }
+internal val LocalLunarisQsSliderStrokeStyle = staticCompositionLocalOf { false }
 internal val LunarisQsTileStrokeWidth = 7.dp
 internal val LunarisQsSliderStrokeWidth = 4.dp
 

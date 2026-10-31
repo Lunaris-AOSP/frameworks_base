@@ -128,7 +128,7 @@ private fun AxQsButtonControl(
     val interactionSource = remember { MutableInteractionSource() }
     val gradient = rememberLunarisQsGradient()
     val activeBackgroundBrush = gradient.tileBrush().takeIf { active }
-    val strokeStyle = LocalLunarisQsStrokeStyle.current
+    val strokeStyle = LocalLunarisQsTileStrokeStyle.current
     val background by
         animateColorAsState(
             targetValue =

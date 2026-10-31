@@ -128,7 +128,7 @@ fun ContentScope.AxTile(
     compactIconSize: Dp = AxTileDefaults.IconSize,
     tileShapeOverride: RoundedCornerShape? = null,
     deviceArtwork: Drawable? = null,
-    strokeStyle: Boolean = LocalLunarisQsStrokeStyle.current,
+    strokeStyle: Boolean = LocalLunarisQsTileStrokeStyle.current,
     inactiveBackgroundColor: Color? = null,
 ) {
     trace(tile.spec.spec) {
@@ -156,8 +156,6 @@ fun ContentScope.AxTile(
                 !compact &&
                 span.rows == 1 &&
                 uiState.handlesSecondaryClick
-        val isIconOnlyDualTarget =
-            dualTargetTileStyle == DualTargetTileStyle.DUAL && uiState.handlesSecondaryClick
         val colors =
             AxTileColorsDefaults.getColorForState(
                 uiState = uiState,
@@ -171,7 +169,7 @@ fun ContentScope.AxTile(
         val defaultTileShape = animateAxQsTileShape(span, uiState.state)
         val tileShape = tileShapeOverride ?: defaultTileShape
         val useStrokeStyle =
-            strokeStyle && !isIconOnlyDualTarget && uiState.state != STATE_UNAVAILABLE
+            strokeStyle && !useDualTargetStyle && uiState.state != STATE_UNAVAILABLE
         val animatedColor by animateColorAsState(
             if (useStrokeStyle) inactiveBackgroundColor ?: AxTileDefaults.backgroundColor()
             else colors.background,

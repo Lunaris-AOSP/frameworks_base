@@ -327,12 +327,20 @@ fun LunariQsPanelSettings(
                         onCheckedChange = viewModel::setFullColorDualTargetTiles,
                     )
                 }
-                item("stroke_style") {
+                item("tile_stroke_style") {
                     SettingsSwitch(
-                        title = stringResource(R.string.ax_qs_settings_stroke_style),
-                        summary = stringResource(R.string.ax_qs_settings_stroke_style_summary),
-                        checked = viewModel.strokeStyle,
-                        onCheckedChange = viewModel::setStrokeStyle,
+                        title = stringResource(R.string.ax_qs_settings_tile_stroke_style),
+                        summary = stringResource(R.string.ax_qs_settings_tile_stroke_style_summary),
+                        checked = viewModel.tileStrokeStyle,
+                        onCheckedChange = viewModel::setTileStrokeStyle,
+                    )
+                }
+                item("slider_stroke_style") {
+                    SettingsSwitch(
+                        title = stringResource(R.string.ax_qs_settings_slider_stroke_style),
+                        summary = stringResource(R.string.ax_qs_settings_slider_stroke_style_summary),
+                        checked = viewModel.sliderStrokeStyle,
+                        onCheckedChange = viewModel::setSliderStrokeStyle,
                     )
                 }
                 item("cos_tile_background") {

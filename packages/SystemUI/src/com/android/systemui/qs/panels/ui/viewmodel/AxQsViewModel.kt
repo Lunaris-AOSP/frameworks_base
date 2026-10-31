@@ -450,11 +450,17 @@ constructor(
             initialValue = repository.fullColorDualTargetTiles.value,
             source = repository.fullColorDualTargetTiles,
         )
-    val strokeStyle by
+    val tileStrokeStyle by
         hydrator.hydratedStateOf(
-            traceName = "strokeStyle",
-            initialValue = repository.strokeStyle.value,
-            source = repository.strokeStyle,
+            traceName = "tileStrokeStyle",
+            initialValue = repository.tileStrokeStyle.value,
+            source = repository.tileStrokeStyle,
+        )
+    val sliderStrokeStyle by
+        hydrator.hydratedStateOf(
+            traceName = "sliderStrokeStyle",
+            initialValue = repository.sliderStrokeStyle.value,
+            source = repository.sliderStrokeStyle,
         )
     val cosTileBackground by
         hydrator.hydratedStateOf(
@@ -751,7 +757,9 @@ constructor(
 
     fun setShowSliderPercentage(show: Boolean) = repository.setShowSliderPercentage(show)
 
-    fun setStrokeStyle(enabled: Boolean) = repository.setStrokeStyle(enabled)
+    fun setTileStrokeStyle(enabled: Boolean) = repository.setTileStrokeStyle(enabled)
+
+    fun setSliderStrokeStyle(enabled: Boolean) = repository.setSliderStrokeStyle(enabled)
 
     fun setCosTileBackground(enabled: Boolean) = repository.setCosTileBackground(enabled)
 
