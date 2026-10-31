@@ -18,6 +18,8 @@
 package com.android.systemui.qs.panels.ui.media
 
 import android.content.res.Configuration
+import android.service.quicksettings.Tile.STATE_ACTIVE
+import android.service.quicksettings.Tile.STATE_INACTIVE
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -90,6 +92,7 @@ import com.android.systemui.qs.panels.ui.compose.AxTileDefaults
 import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsCosTileBackground
 import com.android.systemui.qs.panels.ui.compose.MaterialMediaExpandedPopup
 import com.android.systemui.qs.panels.ui.compose.SharedMediaState
+import com.android.systemui.qs.panels.ui.compose.animateAxQsTileShape
 import com.android.systemui.qs.panels.ui.compose.axQsControlShape
 import com.android.systemui.qs.panels.ui.compose.lunarisQsCosTileBorder
 import com.android.systemui.qs.panels.ui.compose.rememberMediaState
@@ -108,13 +111,17 @@ private enum class AxMediaLayout {
     Notification,
 }
 
+@Composable
 private fun mediaCardShape(
     span: AxQsSpan,
     surface: AxMediaSurface,
     style: LunarisQsMediaStyle,
     wideStyle: LunarisQsMediaStyle,
+    isPlaying: Boolean,
 ): RoundedCornerShape =
-    if (
+    if (surface == AxMediaSurface.CONTROL && span == AxQsSpan.MediaMin) {
+        animateAxQsTileShape(span, if (isPlaying) STATE_ACTIVE else STATE_INACTIVE)
+    } else if (
         surface == AxMediaSurface.CONTROL &&
             ((span == AxQsSpan.MediaDefault && style == LunarisQsMediaStyle.ONE_UI) ||
                 (span == AxQsSpan.MediaWide && wideStyle == LunarisQsMediaStyle.ONE_UI))
@@ -186,7 +193,14 @@ fun AxMediaPanel(
 
     val mediaStyle by viewModel.mediaStyle.collectAsStateWithLifecycle()
     val mediaWideStyle by viewModel.mediaWideStyle.collectAsStateWithLifecycle()
-    val shape = mediaCardShape(span, surface, mediaStyle, mediaWideStyle)
+    val shape =
+        mediaCardShape(
+            span,
+            surface,
+            mediaStyle,
+            mediaWideStyle,
+            isPlaying = currentSession?.state == MediaSessionState.Playing,
+        )
     val gesturesEnabled = interactive && !viewModel.hasVisibleGuts()
     val carouselScrollingEnabled =
         gesturesEnabled && (surface != AxMediaSurface.LOCKSCREEN || sessions.size > 1)
@@ -281,7 +295,14 @@ private fun AxMediaCard(
 ) {
     val mediaStyle by viewModel.mediaStyle.collectAsStateWithLifecycle()
     val mediaWideStyle by viewModel.mediaWideStyle.collectAsStateWithLifecycle()
-    val shape = mediaCardShape(span, surface, mediaStyle, mediaWideStyle)
+    val shape =
+        mediaCardShape(
+            span,
+            surface,
+            mediaStyle,
+            mediaWideStyle,
+            isPlaying = session?.state == MediaSessionState.Playing,
+        )
     val motionArtEnabled by viewModel.mediaMotionArt.collectAsStateWithLifecycle()
     val isShadeInteracting by viewModel.isShadeInteracting.collectAsStateWithLifecycle()
     val keyguardState by viewModel.currentKeyguardState.collectAsStateWithLifecycle()
@@ -643,7 +664,7 @@ private fun SingleTileMediaContent(
     colors: AxMediaColors,
     interactive: Boolean,
 ) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         MediaControls(
             session = session,
             viewModel = viewModel,
@@ -651,7 +672,6 @@ private fun SingleTileMediaContent(
             interactive = interactive,
             actionSize = 48.dp,
             maxActions = 1,
-            modifier = Modifier.padding(bottom = 4.dp),
         )
     }
 }

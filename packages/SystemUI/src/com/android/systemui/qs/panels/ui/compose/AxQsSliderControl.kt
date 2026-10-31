@@ -237,6 +237,9 @@ internal fun axQsControlShape(
     return when {
         control == AxQsControl.MEDIA && mediaSurface == AxMediaSurface.SEPARATE_QQS ->
             RoundedCornerShape(AxNotificationMediaCornerRadius)
+        control == AxQsControl.MEDIA &&
+            span == AxQsSpan.MediaMin &&
+            mediaSurface == AxMediaSurface.CONTROL -> axQsTileShape(span, tileStyle)
         control.isResizableContent -> RoundedCornerShape(AxQsControlCornerRadius)
         control == AxQsControl.MEDIA &&
             span == AxQsSpan.MediaDefault &&
