@@ -129,6 +129,9 @@ sealed interface PopupContentModel {
     data class Alarm(val model: AlarmPopupModel) : PopupContentModel
 }
 
+internal val PopupContentModel.isNotificationPopup: Boolean
+    get() = this is PopupContentModel.SystemEvent && kind == SystemEventKind.Notification
+
 /** Model for individual status bar popup chips. */
 sealed class PopupChipModel {
     abstract val logName: String

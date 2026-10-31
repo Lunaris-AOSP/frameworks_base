@@ -18,6 +18,7 @@ package com.android.systemui.statusbar.featurepods.popups.ui.compose
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -53,12 +54,15 @@ import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -77,7 +81,11 @@ import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentMo
 import com.android.systemui.statusbar.featurepods.popups.ui.model.SystemEventKind
 
 @Composable
-fun SystemEventPopup(model: PopupContentModel.SystemEvent, modifier: Modifier = Modifier) {
+fun SystemEventPopup(
+    model: PopupContentModel.SystemEvent,
+    modifier: Modifier = Modifier,
+    onDismissNotification: () -> Unit = {},
+) {
     if (model.kind == SystemEventKind.Call) {
         CallPopup(model, modifier)
         return
@@ -90,14 +98,36 @@ fun SystemEventPopup(model: PopupContentModel.SystemEvent, modifier: Modifier = 
     val compact = model.kind == SystemEventKind.Unlock
     val showBattery = !bluetooth || settings.enabled("feature_bluetooth_show_battery", true)
     LunarisBarCard(modifier, compact = compact) {
-        LunarisBarCardHeader(
-            title = model.title,
-            subtitle = model.text.takeUnless { message },
-            icon = model.icon.takeUnless { bluetooth && model.image != null },
-            glyph = model.kind.glyph,
-            appName = model.appName,
-            compact = compact,
-        )
+        val headerModifier =
+            if (model.kind == SystemEventKind.Notification) {
+                val currentDismissNotification by rememberUpdatedState(onDismissNotification)
+                val dismissThresholdPx = with(LocalDensity.current) { 56.dp.toPx() }
+                Modifier.pointerInput(dismissThresholdPx) {
+                    var verticalDrag = 0f
+                    detectVerticalDragGestures(
+                        onDragStart = { verticalDrag = 0f },
+                        onDragEnd = {
+                            if (verticalDrag <= -dismissThresholdPx) currentDismissNotification()
+                            verticalDrag = 0f
+                        },
+                        onDragCancel = { verticalDrag = 0f },
+                        onVerticalDrag = { change, dragAmount ->
+                            verticalDrag += dragAmount
+                            change.consume()
+                        },
+                    )
+                }
+            } else Modifier
+        Box(headerModifier) {
+            LunarisBarCardHeader(
+                title = model.title,
+                subtitle = model.text.takeUnless { message },
+                icon = model.icon.takeUnless { bluetooth && model.image != null },
+                glyph = model.kind.glyph,
+                appName = model.appName,
+                compact = compact,
+            )
+        }
         // Unlock feedback only needs the header, with no empty action row below it.
         if (compact) return@LunarisBarCard
         if (bluetooth) {

@@ -70,6 +70,7 @@ import com.android.systemui.statusbar.featurepods.media.ui.compose.RedesignedMed
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.SystemEventKind
+import com.android.systemui.statusbar.featurepods.popups.ui.model.isNotificationPopup
 import kotlinx.coroutines.launch
 
 /** Displays an island card that grows from, and returns to, the tapped capsule. */
@@ -108,6 +109,8 @@ private fun LunarisBarPopupWindow(
 ) {
     val density = LocalDensity.current
     val settings = LocalLunarisBarState.current.settings
+    val notification = viewModel.popupContent.isNotificationPopup
+    val currentNotification by rememberUpdatedState(notification)
     val topInsetPx =
         with(density) {
             dimensionResource(R.dimen.status_bar_height).roundToPx() + 8.dp.roundToPx()
@@ -128,34 +131,52 @@ private fun LunarisBarPopupWindow(
         properties =
             PopupProperties(
                 flags =
-                    WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
-                        WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM or
-                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                        WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                dismissOnBackPress = true,
-                dismissOnClickOutside = true,
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                        WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                        if (notification) {
+                            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                        } else {
+                            WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
+                                WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
+                        },
+                dismissOnBackPress = !notification,
+                dismissOnClickOutside = !notification,
             ),
         onDismissRequest = { currentHidePopup() },
     ) {
         val popupView = LocalView.current
-        DisposableEffect(popupView) {
+        DisposableEffect(popupView, notification) {
             val windowView = popupView.rootView
             val params = windowView.layoutParams as? WindowManager.LayoutParams
+            val trustedOverlayFlag = WindowManager.LayoutParams.PRIVATE_FLAG_TRUSTED_OVERLAY
+            val originalTrustedOverlay = (params?.privateFlags ?: 0) and trustedOverlayFlag
+            val manager =
+                windowView.context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
             if (params != null && windowView.isAttachedToWindow) {
                 params.layoutInDisplayCutoutMode =
                     WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
                 params.setFitInsetsTypes(0)
                 params.windowAnimations = 0
-                val manager =
-                    windowView.context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                if (notification) {
+                    params.privateFlags = params.privateFlags or trustedOverlayFlag
+                }
                 manager.updateViewLayout(windowView, params)
             }
+            val observer = popupView.viewTreeObserver
             val listener =
                 ViewTreeObserver.OnWindowFocusChangeListener { hasFocus ->
-                    if (!hasFocus) currentHidePopup()
+                    if (!hasFocus && !currentNotification) currentHidePopup()
                 }
-            popupView.viewTreeObserver.addOnWindowFocusChangeListener(listener)
-            onDispose { popupView.viewTreeObserver.removeOnWindowFocusChangeListener(listener) }
+            observer.addOnWindowFocusChangeListener(listener)
+            onDispose {
+                if (observer.isAlive) observer.removeOnWindowFocusChangeListener(listener)
+                if (notification && params != null && windowView.isAttachedToWindow) {
+                    params.privateFlags =
+                        (params.privateFlags and trustedOverlayFlag.inv()) or originalTrustedOverlay
+                    manager.updateViewLayout(windowView, params)
+                }
+            }
         }
         LunarisBarPopupMotion(
             isVisible = isVisible,
@@ -163,6 +184,7 @@ private fun LunarisBarPopupWindow(
             topInsetPx = topInsetPx,
             onDismissRequest = { currentHidePopup() },
             onHidden = onHidden,
+            allowOutsideInteraction = notification,
             fastEnter =
                 (viewModel.popupContent as? PopupContentModel.SystemEvent)?.kind ==
                     SystemEventKind.Unlock,
@@ -186,9 +208,6 @@ private fun LunarisBarPopupWindow(
             var pageAccumulator by remember(viewModel.chipId) { mutableFloatStateOf(0f) }
             var followJob by
                 remember(viewModel.chipId) { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-            val notification =
-                (viewModel.popupContent as? PopupContentModel.SystemEvent)?.kind ==
-                    SystemEventKind.Notification
             val currentDismissNotification by rememberUpdatedState(viewModel.dismissNotification)
             val dismissLabel = stringResource(R.string.lunaris_bar_swipe_dismiss)
             val pageThresholdPx = with(density) { 56.dp.toPx() }
@@ -351,7 +370,8 @@ private fun IslandPopupContent(viewModel: PopupChipModel.Shown) {
                     model = popupContent.model,
                     hapticsViewModelFactory = popupContent.hapticsViewModelFactory,
                     modifier =
-                        if (LocalLunarisBarState.current.settings.isFullWidth) Modifier.fillMaxWidth()
+                        if (LocalLunarisBarState.current.settings.isFullWidth)
+                            Modifier.fillMaxWidth()
                         else Modifier,
                 )
             } else {
@@ -360,7 +380,14 @@ private fun IslandPopupContent(viewModel: PopupChipModel.Shown) {
         }
         is PopupContentModel.Stopwatch -> LunarisBarStopwatchPopup(model = popupContent.model)
         is PopupContentModel.Alarm -> LunarisBarAlarmPopup(model = popupContent.model)
-        is PopupContentModel.SystemEvent -> SystemEventPopup(model = popupContent)
+        is PopupContentModel.SystemEvent ->
+            SystemEventPopup(
+                model = popupContent,
+                onDismissNotification = {
+                    viewModel.hidePopup()
+                    viewModel.dismissNotification?.invoke()
+                },
+            )
         PopupContentModel.None -> LunarisBarPrivacyPopup(viewModel)
     }
 }

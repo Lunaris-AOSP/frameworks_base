@@ -55,6 +55,7 @@ import com.android.systemui.statusbar.featurepods.popups.ui.model.ChipIcon
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentModel
+import com.android.systemui.statusbar.featurepods.popups.ui.model.isNotificationPopup
 import com.android.systemui.statusbar.featurepods.screenrecord.ui.viewmodel.ScreenRecordPopupChipViewModel
 import com.android.systemui.statusbar.featurepods.sharescreen.ui.viewmodel.ShareScreenPrivacyIndicatorViewModel
 import com.android.systemui.statusbar.featurepods.stopwatch.ui.viewmodel.StopwatchPopupChipViewModel
@@ -193,7 +194,9 @@ constructor(
 
     val mediaTransitionChip: PopupChipModel.Shown?
         get() {
-            if (!isDynamicIslandEnabled || !isReadyForAutoPopup || isOnLockscreen || isShadeVisible) {
+            if (
+                !isDynamicIslandEnabled || !isReadyForAutoPopup || isOnLockscreen || isShadeVisible
+            ) {
                 return null
             }
             val settings =
@@ -233,6 +236,9 @@ constructor(
 
     private fun hiddenByForeground(chip: PopupChipModel.Shown): Boolean {
         if (isOnLockscreen) return false
+        if (chip.chipId == currentShownPopupChipId && chip.popupContent.isNotificationPopup) {
+            return false
+        }
         val foreground = foregroundApp ?: return false
         val media = (chip.popupContent as? PopupContentModel.Media)?.model
         val packageName = chip.sourcePackageName ?: media?.packageName ?: return false
@@ -440,7 +446,10 @@ constructor(
                             ?.let { chip ->
                                 showPopup(chip.chipId)
                                 chip.onAutoPopupShown()
-                                if (chip.autoPopupDurationMs > 0L)
+                                if (
+                                    chip.autoPopupDurationMs > 0L &&
+                                        !chip.popupContent.isNotificationPopup
+                                )
                                     autoPopupJob = launch {
                                         delay(chip.autoPopupDurationMs)
                                         if (currentShownPopupChipId == chip.chipId) {
@@ -448,6 +457,22 @@ constructor(
                                         }
                                     }
                             }
+                    }
+            }
+            launch {
+                snapshotFlow {
+                        systemEventChips.chips
+                            .firstOrNull {
+                                it.chipId == currentShownPopupChipId &&
+                                    it.popupContent.isNotificationPopup
+                            }
+                            ?.let { Triple(it.chipId, it.autoPopupRequest, it.autoPopupDurationMs) }
+                    }
+                    .collectLatest { popup ->
+                        if (popup != null && popup.third > 0L) {
+                            delay(popup.third)
+                            if (currentShownPopupChipId == popup.first) showPopup(null)
+                        }
                     }
             }
             launch { systemEventChips.activate() }

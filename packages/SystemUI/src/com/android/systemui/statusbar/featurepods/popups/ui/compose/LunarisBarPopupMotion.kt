@@ -58,6 +58,7 @@ internal fun LunarisBarPopupMotion(
     onHidden: () -> Unit,
     fastEnter: Boolean = false,
     useRedesignedMediaBackground: Boolean = false,
+    allowOutsideInteraction: Boolean = false,
     secondaryContent: @Composable () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
@@ -71,6 +72,7 @@ internal fun LunarisBarPopupMotion(
             onHidden,
             fastEnter,
             useRedesignedMediaBackground,
+            allowOutsideInteraction,
             secondaryContent,
             content,
         )
@@ -216,6 +218,11 @@ internal fun LunarisBarPopupMotion(
     val currentFrame by rememberUpdatedState(frame)
     var secondaryBounds by remember { mutableStateOf(Rect.Zero) }
     val currentSecondary by rememberUpdatedState(secondaryBounds)
+    LunarisBarPopupTouchRegion(
+        enabled = allowOutsideInteraction,
+        bounds = if (isVisible) frame else Rect.Zero,
+        secondaryBounds = if (isVisible) secondaryBounds else Rect.Zero,
+    )
     val originRadius = with(density) { minOf(settings.cornerRadius.dp.toPx(), origin.height / 2f) }
     val targetRadius =
         if (settings.expandedShape == 0)
@@ -238,13 +245,14 @@ internal fun LunarisBarPopupMotion(
                     screenOffset = Offset(location[0].toFloat(), location[1].toFloat())
                     rootSize = it.size
                 }
-                .pointerInput(Unit) {
+                .pointerInput(allowOutsideInteraction) {
                     awaitPointerEventScope {
                         while (true) {
                             val event = awaitPointerEvent(PointerEventPass.Initial)
                             for (change in event.changes) {
                                 if (
-                                    change.changedToDownIgnoreConsumed() &&
+                                    !allowOutsideInteraction &&
+                                        change.changedToDownIgnoreConsumed() &&
                                         !currentFrame.contains(change.position) &&
                                         !currentSecondary.contains(change.position)
                                 ) {

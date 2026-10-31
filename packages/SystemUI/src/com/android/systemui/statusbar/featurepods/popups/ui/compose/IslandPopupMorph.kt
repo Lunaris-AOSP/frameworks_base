@@ -160,6 +160,7 @@ internal fun IslandPopupMorph(
     onHidden: () -> Unit,
     fastEnter: Boolean = false,
     useRedesignedMediaBackground: Boolean = false,
+    allowOutsideInteraction: Boolean = false,
     secondaryContent: @Composable () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
@@ -393,6 +394,11 @@ internal fun IslandPopupMorph(
             frame.bottom + gap + secondarySize.height,
         )
     val currentSecondaryBounds by rememberUpdatedState(secondaryBounds)
+    LunarisBarPopupTouchRegion(
+        enabled = allowOutsideInteraction,
+        bounds = if (isVisible) frame else Rect.Zero,
+        secondaryBounds = if (isVisible) secondaryBounds else Rect.Zero,
+    )
     val surfaceReveal = ((expansion - 0.82f) / 0.18f).coerceIn(0f, 1f)
     val contentClip =
         object : Shape {
@@ -454,13 +460,14 @@ internal fun IslandPopupMorph(
                         }
                     }
                 }
-                .pointerInput(Unit) {
+                .pointerInput(allowOutsideInteraction) {
                     awaitPointerEventScope {
                         while (true) {
                             val event = awaitPointerEvent(PointerEventPass.Initial)
                             event.changes.forEach { change ->
                                 if (
-                                    change.changedToDownIgnoreConsumed() &&
+                                    !allowOutsideInteraction &&
+                                        change.changedToDownIgnoreConsumed() &&
                                         !currentBounds.contains(change.position) &&
                                         !currentSecondaryBounds.contains(change.position)
                                 ) {
