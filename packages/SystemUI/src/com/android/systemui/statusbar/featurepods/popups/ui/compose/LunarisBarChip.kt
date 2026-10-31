@@ -579,10 +579,9 @@ private fun LunarisBarChipContent(
                             overflow = TextOverflow.Ellipsis,
                             modifier =
                                 Modifier.widthIn(max = 116.dp)
-                                    .clip(rightShape)
                                     .then(
                                         if (ownRight)
-                                            Modifier.background(rightPalette.first)
+                                            Modifier.background(rightPalette.first, rightShape)
                                                 .padding(horizontal = 6.dp, vertical = 3.dp)
                                         else Modifier
                                     )
