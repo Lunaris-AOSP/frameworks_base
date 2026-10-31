@@ -54,6 +54,10 @@ public abstract class BcSmartspaceTemplateDataUtils {
     }
 
     public static void updateVisibility(View view, int visibility) {
+        if (view instanceof BcSmartspaceView) {
+            ((BcSmartspaceView) view).setSmartspaceDataVisibility(visibility);
+            return;
+        }
         if (view == null || view.getVisibility() == visibility) {
             return;
         }

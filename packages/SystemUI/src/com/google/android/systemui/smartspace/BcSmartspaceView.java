@@ -79,6 +79,90 @@ public class BcSmartspaceView extends FrameLayout implements BcSmartspaceDataPlu
     public ViewPager2 mViewPager2;
     public final ViewPager2.OnPageChangeCallback mViewPager2OnPageChangeCallback;
     public final ViewPager.OnPageChangeListener mViewPagerOnPageChangeListener;
+    private FrameLayout mDefaultContent;
+    private View mExtrasView;
+    private boolean mExtrasEnabled;
+    private int mDataVisibility = View.VISIBLE;
+    private int mRequestedVisibility = View.VISIBLE;
+
+    public void setExtrasView(View extrasView) {
+        if (mExtrasView == extrasView) {
+            return;
+        }
+        if (mExtrasView != null) {
+            removeView(mExtrasView);
+        }
+        mExtrasView = extrasView;
+        mExtrasEnabled = false;
+        if (extrasView != null) {
+            if (mDefaultContent == null) {
+                mDefaultContent = new FrameLayout(getContext());
+                while (getChildCount() > 0) {
+                    View child = getChildAt(0);
+                    removeViewAt(0);
+                    mDefaultContent.addView(child);
+                }
+                addView(mDefaultContent, new LayoutParams(
+                        LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+            }
+            int padding = getResources().getDimensionPixelSize(
+                    R.dimen.non_remoteviews_card_padding_start);
+            extrasView.setPaddingRelative(padding, 0, padding, 0);
+            extrasView.setMinimumHeight(getResources().getDimensionPixelSize(
+                    R.dimen.enhanced_smartspace_height));
+            addView(extrasView, new LayoutParams(
+                    LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+        }
+        updateContentVisibility();
+    }
+
+    public void setExtrasEnabled(boolean enabled) {
+        if (enabled && (!mExtrasEnabled || getVisibility() == View.GONE)) {
+            setAlpha(1f);
+        }
+        mExtrasEnabled = enabled && mExtrasView != null;
+        if (mExtrasEnabled && mRequestedVisibility == View.GONE) {
+            mRequestedVisibility = View.VISIBLE;
+        }
+        updateContentVisibility();
+    }
+
+    public boolean isShowingExtras() {
+        return mExtrasEnabled && mExtrasView.getVisibility() == View.VISIBLE;
+    }
+
+    public void setSmartspaceDataVisibility(int visibility) {
+        mDataVisibility = visibility;
+        if (mExtrasView == null) {
+            super.setVisibility(visibility);
+        } else {
+            updateContentVisibility();
+        }
+    }
+
+    @Override
+    public void setVisibility(int visibility) {
+        if (visibility == View.GONE && isShowingExtras()) {
+            return;
+        }
+        mRequestedVisibility = visibility;
+        if (mExtrasView == null) {
+            super.setVisibility(visibility);
+        } else {
+            updateContentVisibility();
+        }
+    }
+
+    private void updateContentVisibility() {
+        if (mDefaultContent != null) {
+            mDefaultContent.setVisibility(mExtrasEnabled ? View.GONE : View.VISIBLE);
+        }
+        int visibility = mRequestedVisibility;
+        if (visibility == View.VISIBLE) {
+            visibility = mExtrasEnabled ? mExtrasView.getVisibility() : mDataVisibility;
+        }
+        super.setVisibility(visibility);
+    }
 
     public final class ViewPager2OnPageChangeCallback extends ViewPager2.OnPageChangeCallback {
         @Override
@@ -465,7 +549,7 @@ public class BcSmartspaceView extends FrameLayout implements BcSmartspaceDataPlu
 
     @Override
     public final boolean onInterceptTouchEvent(MotionEvent event) {
-        if (mViewPager2 == null) {
+        if (mExtrasEnabled || mViewPager2 == null) {
             return super.onInterceptTouchEvent(event);
         }
         handleTouchOverride(event, (ev) -> mViewPager2.onInterceptTouchEvent(ev));
@@ -485,7 +569,7 @@ public class BcSmartspaceView extends FrameLayout implements BcSmartspaceDataPlu
     public final void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         int height = View.MeasureSpec.getSize(heightMeasureSpec);
         int desiredHeight = getContext().getResources().getDimensionPixelSize(R.dimen.enhanced_smartspace_height);
-        if (height <= 0 || height >= desiredHeight) {
+        if (mExtrasEnabled || height <= 0 || height >= desiredHeight) {
             super.onMeasure(widthMeasureSpec, heightMeasureSpec);
             setScaleX(1.0f);
             setScaleY(1.0f);
@@ -548,7 +632,7 @@ public class BcSmartspaceView extends FrameLayout implements BcSmartspaceDataPlu
 
     @Override
     public final boolean onTouchEvent(MotionEvent event) {
-        if (mViewPager2 == null) {
+        if (mExtrasEnabled || mViewPager2 == null) {
             return super.onTouchEvent(event);
         }
         return handleTouchOverride(event, (ev) -> mViewPager2.onTouchEvent(ev));
@@ -607,7 +691,7 @@ public class BcSmartspaceView extends FrameLayout implements BcSmartspaceDataPlu
             BcSmartspaceTemplateDataUtils.updateVisibility(this, View.VISIBLE);
         }
         float alpha = 1.0f;
-        if (mAdapter.getHasAodLockscreenTransition()) {
+        if (!mExtrasEnabled && mAdapter.getHasAodLockscreenTransition()) {
             if (dozeAmount == mPreviousDozeAmount) {
                 alpha = getAlpha();
             } else if (mPreviousDozeAmount > dozeAmount) {

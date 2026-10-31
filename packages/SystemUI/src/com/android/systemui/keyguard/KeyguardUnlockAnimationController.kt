@@ -55,6 +55,7 @@ import com.android.systemui.statusbar.phone.BiometricUnlockController
 import com.android.systemui.statusbar.phone.BiometricUnlockController.MODE_WAKE_AND_UNLOCK_FROM_DREAM
 import com.android.systemui.statusbar.phone.CentralSurfaces
 import com.android.systemui.statusbar.policy.KeyguardStateController
+import com.google.android.systemui.smartspace.BcSmartspaceView
 import dagger.Lazy
 import javax.inject.Inject
 
@@ -1310,6 +1311,9 @@ constructor(
 
     /** Note: declared open for ease of testing */
     open fun shouldPerformSmartspaceTransition(): Boolean {
+        if ((lockscreenSmartspace as? BcSmartspaceView)?.isShowingExtras == true) {
+            return false
+        }
         // Feature is disabled, so we don't want to.
         if (!featureFlags.isEnabled(Flags.SMARTSPACE_SHARED_ELEMENT_TRANSITION_ENABLED)) {
             return false

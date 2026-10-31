@@ -40,6 +40,7 @@ import com.android.systemui.plugins.keyguard.ui.clocks.ClockViewIds
 import com.android.systemui.res.R
 import com.android.systemui.shared.R as sharedR
 import com.google.android.material.math.MathUtils
+import com.google.android.systemui.smartspace.BcSmartspaceView
 import java.lang.ref.WeakReference
 import kotlin.math.abs
 
@@ -438,6 +439,14 @@ class ClockSizeTransition(
                 to.isVisible = !viewModel.hasCustomWeatherDataDisplay.value || !isLargeClock
                 to.visibility = if (to.isVisible) View.VISIBLE else View.GONE
                 to.alpha = if (to.isVisible) 1f else 0f
+            }
+            if (
+                to.visibility == View.GONE &&
+                    (to.view as? BcSmartspaceView)?.isShowingExtras == true
+            ) {
+                to.isVisible = true
+                to.visibility = View.VISIBLE
+                to.alpha = 1f
             }
         }
 

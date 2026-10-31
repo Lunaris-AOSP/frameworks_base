@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (C) 2024-2026 Lunaris AOSP. SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <item name="lockscreen_smartspace_extras" type="id" />
+    <dimen name="smartspace_extras_icon_size">32dp</dimen>
+    <dimen name="smartspace_extras_album_art_size">44dp</dimen>
+    <dimen name="smartspace_extras_album_art_radius">9dp</dimen>
+    <string name="smartspace_extras_weather_forecast">Weather forecast</string>
+    <string name="smartspace_extras_bluetooth_device">Bluetooth device</string>
+    <string name="smartspace_extras_bluetooth_connected">Connected</string>
+    <string name="smartspace_extras_bluetooth_battery">%1$d%%</string>
+    <string name="smartspace_extras_bluetooth_left_battery">L %1$d%%</string>
+    <string name="smartspace_extras_bluetooth_right_battery">R %1$d%%</string>
+    <string name="smartspace_extras_bluetooth_case_battery">Case %1$d%%</string>
+    <string name="smartspace_extras_bluetooth_charging">%1$s (charging)</string>
+    <string name="smartspace_extras_morning">Good morning</string>
+    <string name="smartspace_extras_afternoon">Good afternoon</string>
+    <string name="smartspace_extras_evening">Good evening</string>
+    <string name="smartspace_extras_night">Good night</string>
+    <string name="smartspace_extras_torch_on">Torch is on</string>
+    <string name="smartspace_extras_torch_off_action">Tap to turn off</string>
+    <string name="smartspace_extras_next_alarm">Upcoming alarm</string>
+    <string name="smartspace_extras_charging">Charging</string>
+    <string name="smartspace_extras_low_battery">Low battery</string>
+    <string name="smartspace_extras_event_now">Happening now</string>
+    <string name="smartspace_extras_event_untitled">Calendar event</string>
+
+    <string-array name="smartspace_extras_messages_morning">
+        <item>New sunrise, new chances.</item>
+        <item>Early light, big potential.</item>
+        <item>Wake up and lock in.</item>
+        <item>Time to secure the bag.</item>
+        <item>Fresh day, fresh mindset.</item>
+        <item>Rise, shine, and stay on brand.</item>
+    </string-array>
+    <string-array name="smartspace_extras_messages_afternoon">
+        <item>Every minute has potential.</item>
+        <item>Build a day you actually like.</item>
+        <item>Dream big, move smart, repeat.</item>
+        <item>Chase the goal, not the noise.</item>
+        <item>Keep the pace, not the pressure.</item>
+        <item>Stay in your bag, bestie.</item>
+    </string-array>
+    <string-array name="smartspace_extras_messages_evening">
+        <item>Enjoy the ride, not just the result.</item>
+        <item>Stay curious. Stay grateful.</item>
+        <item>Small moments can feel magical.</item>
+        <item>Time to reflect, reset, and recharge.</item>
+        <item>In the stillness, clarity shows up.</item>
+        <item>Be the reason the vibe stays good.</item>
+    </string-array>
+    <string-array name="smartspace_extras_messages_night">
+        <item>Progress over perfection, always.</item>
+        <item>Find joy in the stillness.</item>
+        <item>Dream big.</item>
+        <item>Stay hopeful.</item>
+        <item>Keep it peaceful, keep it practical.</item>
+        <item>Blissfully unbothered.</item>
+    </string-array>
+</resources>

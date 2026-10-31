@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (C) 2024-2026 Lunaris AOSP. SPDX-License-Identifier: Apache-2.0 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="64dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:background="?android:attr/selectableItemBackgroundBorderless">
+
+    <ImageView
+        android:id="@+id/smartspace_extras_icon"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:layout_marginEnd="8dp"
+        android:scaleType="fitCenter"
+        android:importantForAccessibility="no" />
+
+    <LinearLayout
+        android:id="@+id/smartspace_extras_text"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/smartspace_extras_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="variable-title-medium-emphasized"
+            android:textSize="18sp"
+            android:textColor="@android:color/white"
+            android:shadowColor="#99000000"
+            android:shadowRadius="3"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/smartspace_extras_subtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="variable-body-medium-emphasized"
+            android:textSize="14sp"
+            android:textColor="@android:color/white"
+            android:shadowColor="#99000000"
+            android:shadowRadius="3"
+            android:maxLines="2"
+            android:ellipsize="end" />
+    </LinearLayout>
+</LinearLayout>

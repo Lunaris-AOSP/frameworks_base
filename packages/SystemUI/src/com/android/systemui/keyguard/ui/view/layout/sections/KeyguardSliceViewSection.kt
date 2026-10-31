@@ -20,12 +20,14 @@ package com.android.systemui.keyguard.ui.view.layout.sections
 import android.content.Context
 import android.os.Handler
 import android.view.LayoutInflater
+import android.widget.LinearLayout
 import androidx.constraintlayout.widget.Barrier
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
 import com.android.keyguard.KeyguardSliceView
 import com.android.keyguard.KeyguardSliceViewController
 import com.android.systemui.customization.clocks.R as clocksR
+import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.dump.DumpManager
@@ -38,11 +40,13 @@ import com.android.systemui.plugins.keyguard.ui.clocks.ClockViewIds
 import com.android.systemui.power.domain.interactor.PowerInteractor
 import com.android.systemui.res.R
 import com.android.systemui.settings.DisplayTracker
+import com.android.systemui.smartspace.LockscreenSmartspaceExtrasController
 import com.android.systemui.statusbar.lockscreen.LockscreenSmartspaceController
 import com.android.systemui.statusbar.policy.ConfigurationController
 import javax.inject.Inject
 import kotlinx.coroutines.DisposableHandle
 
+@SysUISingleton
 class KeyguardSliceViewSection
 @Inject
 constructor(
@@ -58,24 +62,40 @@ constructor(
     val keyguardInteractor: KeyguardInteractor,
     val powerInteractor: PowerInteractor,
     val aodBurnInViewModel: AodBurnInViewModel,
+    private val smartspaceExtrasController: LockscreenSmartspaceExtrasController,
 ) : KeyguardSection() {
-    private lateinit var sliceView: KeyguardSliceView
+    private var sliceView: KeyguardSliceView? = null
     private var disposableHandle: DisposableHandle? = null
 
     override fun addViews(constraintLayout: ConstraintLayout) {
         if (smartspaceController.isEnabled) return
-        sliceView =
+        val view =
             layoutInflater.inflate(R.layout.keyguard_slice_view, null, false) as KeyguardSliceView
-        constraintLayout.addView(sliceView)
+        view.addView(
+            smartspaceExtrasController.buildView(context),
+            LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                )
+                .apply {
+                    marginEnd =
+                        context.resources.getDimensionPixelSize(clocksR.dimen.clock_padding_start) +
+                            context.resources.getDimensionPixelSize(
+                                clocksR.dimen.status_view_margin_horizontal
+                            )
+                },
+        )
+        sliceView = view
+        constraintLayout.addView(view)
     }
 
     override fun bindData(constraintLayout: ConstraintLayout) {
-        if (smartspaceController.isEnabled) return
+        val view = sliceView ?: return
         val controller =
             KeyguardSliceViewController(
                 handler,
                 bgHandler,
-                sliceView,
+                view,
                 activityStarter,
                 configurationController,
                 dumpManager,
@@ -88,16 +108,11 @@ constructor(
 
         disposableHandle?.dispose()
         disposableHandle =
-            KeyguardSliceViewBinder.bind(
-                sliceView,
-                keyguardInteractor,
-                controller,
-                aodBurnInViewModel,
-            )
+            KeyguardSliceViewBinder.bind(view, keyguardInteractor, controller, aodBurnInViewModel)
     }
 
     override fun applyConstraints(constraintSet: ConstraintSet) {
-        if (smartspaceController.isEnabled) return
+        if (sliceView == null) return
         constraintSet.apply {
             connect(
                 R.id.keyguard_slice_view,
@@ -143,8 +158,9 @@ constructor(
     }
 
     override fun removeViews(constraintLayout: ConstraintLayout) {
-        if (smartspaceController.isEnabled) return
-
-        constraintLayout.removeView(R.id.keyguard_slice_view)
+        disposableHandle?.dispose()
+        disposableHandle = null
+        sliceView?.let { constraintLayout.removeView(it) }
+        sliceView = null
     }
 }

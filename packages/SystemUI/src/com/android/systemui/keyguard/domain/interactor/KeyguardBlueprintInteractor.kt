@@ -29,6 +29,8 @@ import com.android.systemui.keyguard.ui.view.layout.blueprints.DefaultKeyguardBl
 import com.android.systemui.keyguard.ui.view.layout.blueprints.SplitShadeKeyguardBlueprint
 import com.android.systemui.keyguard.ui.view.layout.blueprints.transitions.IntraBlueprintTransition.Config
 import com.android.systemui.keyguard.ui.view.layout.blueprints.transitions.IntraBlueprintTransition.Type
+import com.android.systemui.keyguard.ui.view.layout.sections.KeyguardSliceViewSection
+import com.android.systemui.keyguard.ui.view.layout.sections.SmartspaceExtrasSection
 import com.android.systemui.keyguard.ui.view.layout.sections.SmartspaceSection
 import com.android.systemui.scene.shared.flag.SceneContainerFlag
 import com.android.systemui.shade.ShadeDisplayAware
@@ -78,10 +80,17 @@ constructor(
                 .collect { refreshBlueprint() }
         }
         applicationScope.launch {
-            val refreshConfig =
-                Config(Type.NoTransition, rebuildSections = listOf(smartspaceSection))
             configurationInteractor.onAnyConfigurationChange.collect {
-                refreshBlueprint(refreshConfig)
+                refreshBlueprint(
+                    Config(
+                        Type.NoTransition,
+                        rebuildSections =
+                            listOf(smartspaceSection) +
+                                blueprint.value.sections.filter {
+                                    it is SmartspaceExtrasSection || it is KeyguardSliceViewSection
+                                },
+                    )
+                )
             }
         }
     }

@@ -20,10 +20,12 @@ package com.android.systemui.keyguard.ui.view.layout.blueprints
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.keyguard.shared.model.KeyguardBlueprint
 import com.android.systemui.keyguard.shared.model.KeyguardSection
+import com.android.systemui.keyguard.ui.view.layout.sections.AODStyleSection
 import com.android.systemui.keyguard.ui.view.layout.sections.AccessibilityActionsSection
 import com.android.systemui.keyguard.ui.view.layout.sections.AodBurnInSection
 import com.android.systemui.keyguard.ui.view.layout.sections.AodNotificationIconsSection
 import com.android.systemui.keyguard.ui.view.layout.sections.AodPromotedNotificationSection
+import com.android.systemui.keyguard.ui.view.layout.sections.AxDynamicBarKeyguardChipSection
 import com.android.systemui.keyguard.ui.view.layout.sections.ClockSection
 import com.android.systemui.keyguard.ui.view.layout.sections.DefaultDeviceEntrySection
 import com.android.systemui.keyguard.ui.view.layout.sections.DefaultIndicationAreaSection
@@ -33,14 +35,13 @@ import com.android.systemui.keyguard.ui.view.layout.sections.DefaultSettingsPopu
 import com.android.systemui.keyguard.ui.view.layout.sections.DefaultShortcutsSection
 import com.android.systemui.keyguard.ui.view.layout.sections.DefaultStatusBarSection
 import com.android.systemui.keyguard.ui.view.layout.sections.DefaultUdfpsAccessibilityOverlaySection
-import com.android.systemui.keyguard.ui.view.layout.sections.AxDynamicBarKeyguardChipSection
-import com.android.systemui.keyguard.ui.view.layout.sections.KeyguardSectionsModule.Companion.KEYGUARD_AMBIENT_INDICATION_AREA_SECTION
-import com.android.systemui.keyguard.ui.view.layout.sections.KeyguardSliceViewSection
-import com.android.systemui.keyguard.ui.view.layout.sections.KeyguardWidgetViewSection
 import com.android.systemui.keyguard.ui.view.layout.sections.InfoWidgetsSection
 import com.android.systemui.keyguard.ui.view.layout.sections.KeyguardClockStyleSection
-import com.android.systemui.keyguard.ui.view.layout.sections.AODStyleSection
+import com.android.systemui.keyguard.ui.view.layout.sections.KeyguardSectionsModule.Companion.KEYGUARD_AMBIENT_INDICATION_AREA_SECTION
+import com.android.systemui.keyguard.ui.view.layout.sections.KeyguardSliceViewSection
 import com.android.systemui.keyguard.ui.view.layout.sections.KeyguardWeatherViewSection
+import com.android.systemui.keyguard.ui.view.layout.sections.KeyguardWidgetViewSection
+import com.android.systemui.keyguard.ui.view.layout.sections.SmartspaceExtrasSection
 import com.android.systemui.keyguard.ui.view.layout.sections.SmartspaceSection
 import java.util.Optional
 import javax.inject.Inject
@@ -72,6 +73,7 @@ constructor(
     aodBurnInSection: AodBurnInSection,
     clockSection: ClockSection,
     smartspaceSection: SmartspaceSection,
+    smartspaceExtrasSection: SmartspaceExtrasSection,
     keyguardWeatherViewSection: KeyguardWeatherViewSection,
     keyguardSliceViewSection: KeyguardSliceViewSection,
     keyguardWidgetViewSection: KeyguardWidgetViewSection,
@@ -97,6 +99,7 @@ constructor(
             aodNotificationIconsSection,
             aodPromotedNotificationSection,
             smartspaceSection,
+            smartspaceExtrasSection,
             aodBurnInSection,
             clockSection,
             keyguardWeatherViewSection,

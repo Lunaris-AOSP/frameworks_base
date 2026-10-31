@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (C) 2024-2026 Lunaris AOSP. SPDX-License-Identifier: Apache-2.0 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:orientation="vertical"
+    android:visibility="gone">
+
+    <com.android.systemui.smartspace.SmartspaceExtrasViewPager
+        android:id="@+id/smartspace_extras_pager"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="48dp" />
+
+    <com.google.android.systemui.smartspace.PagerDots
+        android:id="@+id/smartspace_extras_indicator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="start"
+        android:layoutDirection="ltr"
+        android:paddingTop="4dp"
+        android:importantForAccessibility="no"
+        android:visibility="gone" />
+</LinearLayout>

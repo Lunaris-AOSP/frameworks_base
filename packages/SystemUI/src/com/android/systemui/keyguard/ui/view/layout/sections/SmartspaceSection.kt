@@ -359,14 +359,7 @@ constructor(
     }
 
     override fun removeViews(constraintLayout: ConstraintLayout) {
-        if (!keyguardSmartspaceViewModel.isSmartspaceEnabled) return
-
-        val list =
-            if (clockReactiveSmartspaceLayout()) {
-                listOf(smartspaceView, dateView, dateViewLargeClock)
-            } else {
-                listOf(smartspaceView, dateView)
-            }
+        val list = listOf(smartspaceView, dateView, dateViewLargeClock)
         list.forEach {
             it?.let {
                 if (it.parent == constraintLayout) {
@@ -376,8 +369,15 @@ constructor(
         }
         smartspaceView?.viewTreeObserver?.removeOnGlobalLayoutListener(smartspaceVisibilityListener)
         smartspaceVisibilityListener = null
+        if (keyguardUnlockAnimationController.lockscreenSmartspace == smartspaceView) {
+            keyguardUnlockAnimationController.lockscreenSmartspace = null
+        }
+        smartspaceView = null
+        dateView = null
+        dateViewLargeClock = null
 
         disposableHandle?.dispose()
+        disposableHandle = null
     }
 
     private fun updateVisibility(constraintSet: ConstraintSet, isLargeClockVisible: Boolean) {

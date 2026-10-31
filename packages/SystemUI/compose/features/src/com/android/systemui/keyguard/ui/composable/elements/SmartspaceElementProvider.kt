@@ -42,7 +42,9 @@ import com.android.systemui.plugins.keyguard.ui.composable.elements.LockscreenSc
 import com.android.systemui.plugins.keyguard.ui.composable.elements.MovableLockscreenElement
 import com.android.systemui.res.R
 import com.android.systemui.shade.ShadeDisplayAware
+import com.android.systemui.smartspace.LockscreenSmartspaceExtrasController
 import com.android.systemui.statusbar.lockscreen.LockscreenSmartspaceController
+import com.google.android.systemui.smartspace.BcSmartspaceView
 import javax.inject.Inject
 import kotlin.collections.List
 
@@ -51,6 +53,7 @@ class SmartspaceElementProvider
 constructor(
     @ShadeDisplayAware private val context: Context,
     private val smartspaceController: LockscreenSmartspaceController,
+    private val smartspaceExtrasController: LockscreenSmartspaceExtrasController,
     private val keyguardUnlockAnimationController: KeyguardUnlockAnimationController,
     private val keyguardSmartspaceViewModel: KeyguardSmartspaceViewModel,
     private val aodBurnInViewModel: AodBurnInViewModel,
@@ -73,7 +76,10 @@ constructor(
 
         @Composable
         override fun LockscreenScope<MovableElementContentScope>.LockscreenElement() {
-            if (!keyguardSmartspaceViewModel.isDateWeatherDecoupled) {
+            if (
+                !keyguardSmartspaceViewModel.isSmartspaceEnabled ||
+                    !keyguardSmartspaceViewModel.isDateWeatherDecoupled
+            ) {
                 return
             }
 
@@ -99,7 +105,10 @@ constructor(
 
         @Composable
         override fun LockscreenScope<MovableElementContentScope>.LockscreenElement() {
-            if (!keyguardSmartspaceViewModel.isDateWeatherDecoupled) {
+            if (
+                !keyguardSmartspaceViewModel.isSmartspaceEnabled ||
+                    !keyguardSmartspaceViewModel.isDateWeatherDecoupled
+            ) {
                 return
             }
 
@@ -142,15 +151,35 @@ constructor(
 
         @Composable
         override fun LockscreenScope<MovableElementContentScope>.LockscreenElement() {
+            val clockPadding = dimensionResource(clocksR.dimen.clock_padding_start)
             if (!keyguardSmartspaceViewModel.isSmartspaceEnabled) {
+                AndroidView(
+                    factory = { ctx ->
+                        smartspaceExtrasController.buildView(ctx).apply {
+                            setPaddingRelative(
+                                0,
+                                0,
+                                0,
+                                resources.getDimensionPixelSize(
+                                    R.dimen.keyguard_status_view_bottom_margin
+                                ),
+                            )
+                        }
+                    },
+                    modifier =
+                        Modifier.fillMaxWidth()
+                            .padding(start = clockPadding, end = clockPadding)
+                            .then(context.burnInModifier),
+                )
                 return
             }
-
-            val clockPadding = dimensionResource(clocksR.dimen.clock_padding_start)
 
             AndroidView(
                 factory = { ctx ->
                     val view = smartspaceController.buildAndConnectView(ctx)!!
+                    if (view is BcSmartspaceView) {
+                        smartspaceExtrasController.attachToSmartspace(view)
+                    }
                     keyguardUnlockAnimationController.lockscreenSmartspace = view
                     view
                 },
