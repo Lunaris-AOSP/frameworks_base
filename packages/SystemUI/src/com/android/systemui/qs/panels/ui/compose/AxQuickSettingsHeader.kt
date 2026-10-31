@@ -173,7 +173,6 @@ fun AxQuickSettingsHeader(
                         foregroundColor = foregroundColor.toArgb(),
                         backgroundColor = Color.Transparent.toArgb(),
                     )
-                    val context = LocalContext.current
                     AxBatteryInfo(
                         viewModel = viewModel,
                         showIcon = true,
@@ -181,15 +180,7 @@ fun AxQuickSettingsHeader(
                         textColor = foregroundColor,
                         iconTint = foregroundColor,
                         iconBackgroundColor = Color.Transparent,
-                        onClick = {
-                            try {
-                                val intent =
-                                    Intent(Intent.ACTION_POWER_USAGE_SUMMARY).apply {
-                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                    }
-                                context.startActivity(intent)
-                            } catch (_: Exception) {}
-                        },
+                        onClick = viewModel::onBatteryClicked,
                     )
                     if (viewModel.isPrivacyChipVisible) {
                         AxPrivacyChip(

@@ -219,6 +219,13 @@ constructor(
         }
     }
 
+    fun onBatteryClicked() {
+        activityStarter.postStartActivityDismissingKeyguard(
+            Intent(Intent.ACTION_POWER_USAGE_SUMMARY),
+            0,
+        )
+    }
+
     /** Notifies that the notification icons container was clicked. */
     fun onNotificationIconChipClicked() {
         if (!shadeModeInteractor.isDualShade) {
