@@ -37,7 +37,60 @@ import java.util.Arrays;
 import java.util.Objects;
 import java.util.function.Consumer;
 
-public class DefaultSurfaceAnimator {
+public class DefaultSurfaceAnimator implements Runnable {
+
+    private static final ThreadLocal<DefaultSurfaceAnimator> sSurfaceAnimator =
+            ThreadLocal.withInitial(DefaultSurfaceAnimator::new);
+
+    private final Choreographer mChoreographer = Choreographer.getInstance();
+    private SurfaceControl.Transaction mTransaction;
+    private TransactionPool mTransactionPool;
+    private boolean mScheduled;
+    private int mNumRunningAnimations;
+
+    private DefaultSurfaceAnimator() {
+    }
+
+    private void schedule() {
+        if (!mScheduled) {
+            mChoreographer.postCallback(Choreographer.CALLBACK_TRAVERSAL, this, null /* token */);
+            mScheduled = true;
+        }
+    }
+
+    @Override
+    public void run() {
+        if (!mScheduled) return;
+        mScheduled = false;
+        mTransaction.setFrameTimelineVsync(mChoreographer.getVsyncId());
+        mTransaction.apply();
+    }
+
+    private static void onAnimationStart(@NonNull AnimationAdapter animation) {
+        final DefaultSurfaceAnimator animator = sSurfaceAnimator.get();
+        animation.mSurfaceAnimator = animator;
+        if (animator.mTransaction == null) {
+            animator.mTransactionPool = animation.mTransactionPool;
+            animator.mTransaction = animator.mTransactionPool.acquire();
+        }
+        animation.mTransaction = animator.mTransaction;
+        animator.mNumRunningAnimations++;
+    }
+
+    private static void onAnimationEnd(@NonNull AnimationAdapter animation) {
+        final DefaultSurfaceAnimator animator = animation.mSurfaceAnimator;
+        animator.mNumRunningAnimations--;
+        if (animator.mScheduled) {
+            animator.mChoreographer.removeCallbacks(Choreographer.CALLBACK_TRAVERSAL,
+                    animator, null /* token */);
+            animator.run();
+        }
+        if (animator.mNumRunningAnimations == 0) {
+            animator.mTransactionPool.release(animator.mTransaction);
+            animator.mTransaction = null;
+            animator.mTransactionPool = null;
+        }
+    }
 
     /** Builds an animator for the surface and adds it to the `animations` list. */
     static void buildSurfaceAnimation(@NonNull ArrayList<Animator> animations,
@@ -56,14 +109,13 @@ public class DefaultSurfaceAnimator {
             @NonNull Animation anim, @NonNull Runnable finishCallback,
             @NonNull TransactionPool pool, @NonNull ShellExecutor mainExecutor,
             @NonNull AnimationAdapter updateListener) {
-        final SurfaceControl.Transaction transaction = pool.acquire();
-        updateListener.setTransaction(transaction);
+        updateListener.mTransactionPool = pool;
         final ValueAnimator va = ValueAnimator.ofFloat(0f, 1f);
         // Animation length is already expected to be scaled.
         va.overrideDurationScale(1.0f);
         va.setDuration(anim.computeDurationHint());
         setupValueAnimator(va, updateListener, (vanim) -> {
-            pool.release(transaction);
+            DefaultSurfaceAnimator.onAnimationEnd(updateListener);
             mainExecutor.execute(() -> {
                 animations.remove(vanim);
                 finishCallback.run();
@@ -76,14 +128,11 @@ public class DefaultSurfaceAnimator {
     abstract static class AnimationAdapter implements ValueAnimator.AnimatorUpdateListener {
         @NonNull final SurfaceControl mLeash;
         @NonNull SurfaceControl.Transaction mTransaction;
-        private Choreographer mChoreographer;
+        private TransactionPool mTransactionPool;
+        private DefaultSurfaceAnimator mSurfaceAnimator;
 
         AnimationAdapter(@NonNull SurfaceControl leash) {
             mLeash = Objects.requireNonNull(leash, "leash is null in AnimationAdapter constructor");
-        }
-
-        void setTransaction(@NonNull SurfaceControl.Transaction transaction) {
-            mTransaction = transaction;
         }
 
         @Override
@@ -94,11 +143,7 @@ public class DefaultSurfaceAnimator {
                     ? animator.getDuration()
                     : Math.min(animator.getDuration(), animator.getCurrentPlayTime());
             applyTransformation(animator, currentPlayTime);
-            if (mChoreographer == null) {
-                mChoreographer = Choreographer.getInstance();
-            }
-            mTransaction.setFrameTimelineVsync(mChoreographer.getVsyncId());
-            mTransaction.apply();
+            mSurfaceAnimator.schedule();
         }
 
         abstract void applyTransformation(@NonNull ValueAnimator animator, long currentPlayTime);
@@ -209,6 +254,10 @@ public class DefaultSurfaceAnimator {
 
             @Override
             public void onAnimationStart(Animator animation) {
+                if (mFinished) return;
+                if (updateListener instanceof AnimationAdapter animationAdapter) {
+                    DefaultSurfaceAnimator.onAnimationStart(animationAdapter);
+                }
             }
 
             @Override

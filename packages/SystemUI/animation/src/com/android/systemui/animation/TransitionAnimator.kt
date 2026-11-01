@@ -70,12 +70,12 @@ class TransitionAnimator(
         /** Default parameters for the multi-spring animator. */
         private val DEFAULT_SPRING_PARAMS =
             SpringParams(
-                centerXStiffness = 450f,
-                centerXDampingRatio = 0.965f,
-                centerYStiffness = 400f,
-                centerYDampingRatio = 0.95f,
-                scaleStiffness = 500f,
-                scaleDampingRatio = 0.99f,
+                centerXStiffness = 340f,
+                centerXDampingRatio = 1.1f,
+                centerYStiffness = 340f,
+                centerYDampingRatio = 0.9f,
+                scaleStiffness = 340f,
+                scaleDampingRatio = 1f,
             )
 
         /**
@@ -977,12 +977,7 @@ class TransitionAnimator(
                             ),
                     )
                     .apply {
-                        visible =
-                            if (useDynamicPivot) {
-                                checkSpringVisibility(state.scale, controller.isLaunching)
-                            } else {
-                                checkVisibility(timings, state.scale, controller.isLaunching)
-                            }
+                        visible = checkSpringVisibility(state.scale, controller.isLaunching)
                     }
 
             if (!movedBackgroundLayer) {
@@ -1042,19 +1037,14 @@ class TransitionAnimator(
 
         fun dampenSpeed(speed: Float): Float {
             val absolute = abs(speed)
-            val sign = speed / absolute
             if (absolute <= SPRING_SPEED_FALLOFF_THRESHOLD) return speed
+            val sign = speed / absolute
             return SPRING_MAX_SPEED *
                 (absolute / (absolute + SPRING_SPEED_FALLOFF_COEFFICIENT)) *
                 sign
         }
 
-        val scaledVelocity =
-            if (useDynamicPivot) {
-                PointF(dampenSpeed(startVelocity.x), dampenSpeed(startVelocity.y))
-            } else {
-                startVelocity
-            }
+        val scaledVelocity = PointF(dampenSpeed(startVelocity.x), dampenSpeed(startVelocity.y))
 
         springX =
             SpringAnimation(

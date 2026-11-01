@@ -922,7 +922,7 @@ public class BackAnimationController implements RemoteCallable<BackAnimationCont
                             ? mBackNavigationInfo.getFocusedTaskId()
                             : INVALID_TASK_ID);
         }
-        final boolean hasRequestAnimation = mThresholdCrossed;
+        final boolean hasRequestAnimation = mThresholdCrossed || mOnBackStartDispatched;
         // Reset gesture states.
         mThresholdCrossed = false;
         mPointersPilfered = false;
@@ -1464,13 +1464,6 @@ public class BackAnimationController implements RemoteCallable<BackAnimationCont
             if (transition == mClosePrepareTransition && aborted) {
                 mClosePrepareTransition = null;
                 applyFinishOpenTransition();
-            } else if (!aborted) {
-                // Since the closing target participates in the predictive back transition, the
-                // merged transition must be applied with the first transition to ensure a seamless
-                // animation.
-                if (mFinishOpenTransaction != null && finishTransaction != null) {
-                    mFinishOpenTransaction.merge(finishTransaction);
-                }
             }
         }
 
@@ -1651,6 +1644,9 @@ public class BackAnimationController implements RemoteCallable<BackAnimationCont
             finishCallback.onTransitionFinished(null);
             startT.apply();
             if (mCloseTransitionRequested) {
+                if (mFinishOpenTransaction != null) {
+                    mFinishOpenTransaction.merge(finishT);
+                }
                 if (mApps == null || mApps.length == 0) {
                     // animation was done
                     applyFinishOpenTransition();

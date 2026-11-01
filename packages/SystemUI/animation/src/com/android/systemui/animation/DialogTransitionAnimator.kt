@@ -273,6 +273,15 @@ constructor(
         controller: Controller,
         animateBackgroundBoundsChange: Boolean = false,
     ) {
+        tryShow(dialog, controller, animateBackgroundBoundsChange)
+    }
+
+    @JvmOverloads
+    fun tryShow(
+        dialog: Dialog,
+        controller: Controller,
+        animateBackgroundBoundsChange: Boolean = false,
+    ): Boolean {
         if (Looper.myLooper() != Looper.getMainLooper()) {
             throw IllegalStateException(
                 "showFromView must be called from the main thread and dialog must be created in " +
@@ -280,7 +289,7 @@ constructor(
             )
         }
 
-        showWithControllerResolver(
+        return showWithControllerResolverInternal(
             dialog,
             { controller },
             controller.cuj,
@@ -295,13 +304,27 @@ constructor(
         cuj: DialogCuj? = null,
         animateBackgroundBoundsChange: Boolean = false,
     ) {
+        showWithControllerResolverInternal(
+            dialog,
+            resolveController,
+            cuj,
+            animateBackgroundBoundsChange,
+        )
+    }
+
+    private fun showWithControllerResolverInternal(
+        dialog: Dialog,
+        resolveController: (DialogCuj?) -> Controller?,
+        cuj: DialogCuj?,
+        animateBackgroundBoundsChange: Boolean,
+    ): Boolean {
         check(Looper.myLooper() == Looper.getMainLooper()) {
             "Dialog transitions must be started on the main thread"
         }
         val startController = resolveController(cuj)
         if (startController == null) {
             dialog.show()
-            return
+            return true
         }
 
         // If the view we are launching from belongs to another dialog, then this means the caller
@@ -316,14 +339,17 @@ constructor(
             } ?: startController
 
         // Make sure we don't run the launch animation from the same source twice at the same time.
-        if (openedDialogs.any { it.controller.sourceIdentity == controller.sourceIdentity }) {
+        val openedDialog =
+            openedDialogs.firstOrNull { it.controller.sourceIdentity == controller.sourceIdentity }
+        if (openedDialog != null) {
             Log.e(
                 TAG,
                 "Not running dialog launch animation from source as it is already expanded into a" +
                     " dialog",
             )
+            if (openedDialog.isDialogDismissing()) return false
             dialog.show()
-            return
+            return true
         }
 
         val animatedDialog =
@@ -343,6 +369,7 @@ constructor(
 
         openedDialogs.add(animatedDialog)
         animatedDialog.start()
+        return true
     }
 
     /**
@@ -877,6 +904,8 @@ private class AnimatedDialog(
             },
         )
     }
+
+    fun isDialogDismissing(): Boolean = isDismissing
 
     fun onDialogDismissed() {
         if (Looper.myLooper() != Looper.getMainLooper()) {

@@ -1438,9 +1438,6 @@ public class RecentsTransitionHandler implements Transitions.TransitionHandler,
                 return;
             }
 
-            // At this point, we are accepting the merge.
-            consumeMerge(info, startT, finishT, finishCallback);
-
             // Notify Launcher of the new opening tasks if necessary
             boolean passTransitionInfo = ENABLE_DESKTOP_RECENTS_TRANSITIONS_CORNERS_BUGFIX.isTrue();
             if (appearedTargets != null) {
@@ -1454,6 +1451,7 @@ public class RecentsTransitionHandler implements Transitions.TransitionHandler,
                     Slog.e(TAG, "Error sending appeared tasks to recents animation", e);
                 }
             }
+            consumeMerge(info, startT, finishT, finishCallback);
         }
 
         /**

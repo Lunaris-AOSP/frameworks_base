@@ -35,6 +35,7 @@ import android.view.IRemoteAnimationFinishedCallback
 import android.view.IRemoteAnimationRunner
 import android.view.RemoteAnimationTarget
 import android.view.SurfaceControl
+import android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL
 import android.view.animation.DecelerateInterpolator
 import android.view.animation.Interpolator
 import android.view.animation.Transformation
@@ -55,6 +56,7 @@ import com.android.internal.policy.SystemBarUtils
 import com.android.internal.protolog.ProtoLog
 import com.android.wm.shell.R
 import com.android.wm.shell.RootTaskDisplayAreaOrganizer
+import com.android.wm.shell.common.split.SplitScreenUtils
 import com.android.wm.shell.protolog.ShellProtoLogGroup
 import com.android.wm.shell.shared.animation.Interpolators
 import com.android.wm.shell.shared.annotations.ShellMainThread
@@ -82,7 +84,7 @@ abstract class CrossActivityBackAnimation(
     private val cropRect = Rect()
     private val tempRectF = RectF()
 
-    private var cornerRadius = ScreenDecorationsUtils.getWindowCornerRadius(context)
+    protected var cornerRadius = ScreenDecorationsUtils.getWindowCornerRadius(context)
     private var statusbarHeight = SystemBarUtils.getStatusBarHeight(context)
 
     private val backAnimationRunner =
@@ -199,6 +201,14 @@ abstract class CrossActivityBackAnimation(
         }
         // Offset start rectangle to align task bounds.
         backAnimRect.offsetTo(0, 0)
+
+        val isGestureNav =
+            context.resources.getInteger(
+                com.android.internal.R.integer.config_navBarInteractionMode
+            ) == NAV_BAR_MODE_GESTURAL
+        if (isGestureNav || SplitScreenUtils.isLargeScreen(context.resources)) {
+            backAnimRect.inset(0, 0, 0, closingTarget!!.contentInsets.bottom)
+        }
 
         preparePreCommitClosingRectMovement(backMotionEvent.swipeEdge)
         preparePreCommitEnteringRectMovement()
@@ -576,7 +586,8 @@ abstract class CrossActivityBackAnimation(
 
     companion object {
         /** Max scale of the closing window. */
-        internal const val MAX_SCALE = 0.9f
+        internal const val MAX_SCALE = 0.85f
+        internal const val INITIAL_ENTERING_SCALE = 0.95f
         private const val MAX_SCRIM_ALPHA_DARK = 0.8f
         private const val MAX_SCRIM_ALPHA_LIGHT = 0.2f
         private const val SPRING_SCALE = 100f

@@ -401,11 +401,14 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
         @Nullable
         private final InputMethodJankContext mInputMethodJankContext;
 
+        @Nullable
+        private final Handler mHandler;
+
         public InternalAnimationControlListener(boolean show, boolean hasAnimationCallbacks,
                 @InsetsType int requestedTypes, @Behavior int behavior, boolean disable,
                 int floatingImeBottomInset,
                 @Nullable WindowInsetsAnimationControlListener loggingListener,
-                @Nullable InputMethodJankContext jankContext) {
+                @Nullable InputMethodJankContext jankContext, @Nullable Handler handler) {
             mShow = show;
             mHasAnimationCallbacks = hasAnimationCallbacks;
             mRequestedTypes = requestedTypes;
@@ -414,6 +417,7 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
             mFloatingImeBottomInset = floatingImeBottomInset;
             mLoggingListener = loggingListener;
             mInputMethodJankContext = jankContext;
+            mHandler = handler;
         }
 
         @Override
@@ -470,7 +474,8 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
                     ImeTracker.forJank().onRequestAnimation(
                             mInputMethodJankContext,
                             getAnimationType(),
-                            !mHasAnimationCallbacks);
+                            !mHasAnimationCallbacks,
+                            mHandler);
                 }
 
                 @Override
@@ -1940,10 +1945,19 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
         }
 
         final boolean hasAnimationCallbacks = mHost.hasAnimationCallbacks();
+        final boolean useInsetsAnimationThread = !hasAnimationCallbacks || skipsCallbacks;
+
+        Handler handler = null;
+        if (useInsetsAnimationThread) {
+            handler = android.view.InsetsAnimationThread.getHandler();
+        } else if (mHost.getRootViewContext() != null) {
+            handler = mHost.getRootViewContext().getMainThreadHandler();
+        }
+
         final var listener = new InternalAnimationControlListener(
                 show, hasAnimationCallbacks, types, mHost.getSystemBarsBehavior(),
                 skipsAnim || mAnimationsDisabled, mHost.dipToPx(FLOATING_IME_BOTTOM_INSET_DP),
-                mLoggingListener, mJankContext);
+                mLoggingListener, mJankContext, handler);
 
         // We are about to playing the default animation (show/hide). Passing a null frame indicates
         // the controlled types should be animated regardless of the frame.
@@ -1952,8 +1966,7 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
                 listener /* insetsAnimationSpec */,
                 show ? ANIMATION_TYPE_SHOW : ANIMATION_TYPE_HIDE,
                 show ? LAYOUT_INSETS_DURING_ANIMATION_SHOWN : LAYOUT_INSETS_DURING_ANIMATION_HIDDEN,
-                !hasAnimationCallbacks || skipsCallbacks /* useInsetsAnimationThread */, statsToken,
-                false /* fromPredictiveBack */);
+                useInsetsAnimationThread, statsToken, false /* fromPredictiveBack */);
     }
 
     /**

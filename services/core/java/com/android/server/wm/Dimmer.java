@@ -159,7 +159,7 @@ class Dimmer {
          * Whether anyone is currently requesting the dim
          */
         boolean isDimming() {
-            return mLastDimmingWindow != null && mHostContainer.isVisibleRequested();
+            return mLastDimmingWindow != null && mHostContainer.isVisible();
         }
 
         @NonNull
@@ -216,7 +216,7 @@ class Dimmer {
      */
     protected void adjustAppearance(@NonNull WindowState dimmingContainer,
             float alpha, int blurRadius) {
-        if (!mHost.isVisibleRequested()) {
+        if (!mHost.isVisible()) {
             // If the host is already going away, there is no point in keeping dimming
             return;
         }

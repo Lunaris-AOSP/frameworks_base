@@ -147,9 +147,19 @@ constructor(
                             INTERACTION_JANK_TAG,
                         )
                     )
-                controller?.let {
-                    dialogTransitionAnimator.show(dialog, it, animateBackgroundBoundsChange = true)
-                } ?: dialog.show()
+                if (controller != null) {
+                    if (
+                        !dialogTransitionAnimator.tryShow(
+                            dialog,
+                            controller,
+                            animateBackgroundBoundsChange = true,
+                        )
+                    ) {
+                        return@launch
+                    }
+                } else {
+                    dialog.show()
+                }
                 // contentManager is created after dialog.show
                 contentManager = dialogDelegate.contentManager
                 contentManager.bind(
@@ -165,7 +175,9 @@ constructor(
     /** Unbinds the details view when it goes away. */
     fun unbindDetailsView() {
         cancelJob()
-        contentManager.releaseView()
+        if (::contentManager.isInitialized) {
+            contentManager.releaseView()
+        }
     }
 
     private fun createInitialDetailsUIState(): DetailsUIState =

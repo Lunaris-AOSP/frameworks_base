@@ -228,7 +228,13 @@ constructor(
         }
 
         private fun defaultDialogToAppAnimator(mainExecutor: Executor): TransitionAnimator {
-            return TransitionAnimator(mainExecutor, DIALOG_TIMINGS, INTERPOLATORS)
+            return TransitionAnimator(
+                mainExecutor,
+                DIALOG_TIMINGS,
+                INTERPOLATORS,
+                SPRING_TIMINGS,
+                SPRING_INTERPOLATORS,
+            )
         }
 
         private fun assertShellMigration() {
@@ -2206,6 +2212,7 @@ constructor(
             if (controller.windowAnimatorState == null) {
                 startAnimation(
                     window,
+                    useSpring = !controller.isLaunching,
                     startTransaction = startTransaction,
                     onAnimationFinished = onAnimationFinished,
                 )

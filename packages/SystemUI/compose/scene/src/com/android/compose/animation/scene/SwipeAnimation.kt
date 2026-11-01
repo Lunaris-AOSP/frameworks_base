@@ -36,6 +36,7 @@ import com.android.mechanics.GestureContext
 import com.android.mechanics.MutableDragOffsetGestureContext
 import kotlin.math.absoluteValue
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 
 internal fun createSwipeAnimation(
@@ -455,7 +456,7 @@ internal class SwipeAnimation<T : ContentKey>(
     fun freezeAndAnimateToCurrentState() {
         if (isAnimatingOffset()) return
 
-        contentTransition.coroutineScope.launch {
+        contentTransition.coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
             animateOffset(initialVelocity = 0f, targetContent = currentContent)
         }
     }

@@ -258,6 +258,9 @@ public final class Choreographer {
         // being skipped due to FPSDivisor.
         public int numberWaitsForNextVsync = 0;
 
+        private static final long MAX_BUFFER_STUFFING_DELAY_NS = 100000000L;
+        public long accumulatedDelayNanos = 0;
+
         /**
          * After buffer stuffing recovery has ended with a detected idle state, the
          * recovery data trackers can be reset in preparation for any future
@@ -267,6 +270,11 @@ public final class Choreographer {
             isStuffed.set(false);
             isRecovering = false;
             numberWaitsForNextVsync = 0;
+            accumulatedDelayNanos = 0;
+        }
+
+        public boolean maxDelayReached() {
+            return accumulatedDelayNanos >= MAX_BUFFER_STUFFING_DELAY_NS;
         }
     }
 
@@ -664,6 +672,29 @@ public final class Choreographer {
     }
 
     /**
+     * Posts a vsync callback to run on the next frame.
+     * <p>
+     * The callback runs once then is automatically removed.
+     * </p>
+     *
+     * @param callbackType The callback type.
+     * @param callback The vsync callback to run during the next frame.
+     *
+     * @see #removeVsyncCallback
+     * @hide
+     */
+    public void postVsyncCallback(int callbackType, @NonNull VsyncCallback callback) {
+        if (callbackType < 0 || callbackType > CALLBACK_LAST) {
+            throw new IllegalArgumentException("callbackType is invalid");
+        }
+        if (callback == null) {
+            throw new IllegalArgumentException("callback must not be null");
+        }
+
+        postCallbackDelayedInternal(callbackType, callback, VSYNC_CALLBACK_TOKEN, 0);
+    }
+
+    /**
      * Removes callbacks that have the specified action and token.
      *
      * @param callbackType The callback type.
@@ -765,6 +796,24 @@ public final class Choreographer {
         }
 
         removeCallbacksInternal(CALLBACK_ANIMATION, callback, VSYNC_CALLBACK_TOKEN);
+    }
+
+    /**
+     * Removes a previously posted vsync callback of the specified type.
+     *
+     * @param callbackType The callback type.
+     * @param callback The vsync callback to remove.
+     * @hide
+     */
+    public void removeVsyncCallback(int callbackType, @NonNull VsyncCallback callback) {
+        if (callbackType < 0 || callbackType > CALLBACK_LAST) {
+            throw new IllegalArgumentException("callbackType is invalid");
+        }
+        if (callback == null) {
+            throw new IllegalArgumentException("callback must not be null");
+        }
+
+        removeCallbacksInternal(callbackType, callback, VSYNC_CALLBACK_TOKEN);
     }
 
     /**
@@ -971,8 +1020,13 @@ public final class Choreographer {
                     }
                     mBufferStuffingState.isRecovering = true;
                 }
-                Trace.instant(Trace.TRACE_TAG_VIEW, "buffer stuffed");
-                return BufferStuffingState.RecoveryAction.DELAY_FRAME;
+                if (mBufferStuffingState.maxDelayReached()) {
+                    Trace.instant(Trace.TRACE_TAG_VIEW,
+                            "buffer stuffed - max recovery delay reached");
+                } else {
+                    Trace.instant(Trace.TRACE_TAG_VIEW, "buffer stuffed");
+                    return BufferStuffingState.RecoveryAction.DELAY_FRAME;
+                }
 
             // No recovery action needed when there is no buffer stuffing and
             // no recovery currently occurring.
@@ -1056,6 +1110,7 @@ public final class Choreographer {
                 case DELAY_FRAME:
                     // Intentional frame delay to help reduce queued buffer count.
                     mBufferStuffingState.numberWaitsForNextVsync++;
+                    mBufferStuffingState.accumulatedDelayNanos += Math.max(0, frameIntervalNanos);
                     scheduleVsyncLocked();
                     return;
                 default:
