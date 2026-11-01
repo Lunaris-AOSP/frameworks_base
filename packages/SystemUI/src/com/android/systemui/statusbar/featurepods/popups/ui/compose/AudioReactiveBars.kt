@@ -295,7 +295,7 @@ fun AudioReactiveBars(
 
             val barH = maxH * level
             val left = index * (barPx + spacingPx)
-            val top = maxH - barH
+            val top = (maxH - barH) / 2f
 
             val peakAlpha = (0.65f + level * 0.35f).coerceIn(0.65f, 1.00f)
             val rootAlpha = (0.22f + level * 0.18f).coerceIn(0.22f, 0.40f)
@@ -306,7 +306,7 @@ fun AudioReactiveBars(
                     1f to color.copy(alpha = rootAlpha * color.alpha),
                 ),
                 startY = top,
-                endY = maxH,
+                endY = top + barH,
             )
 
             drawRoundRect(
