@@ -244,8 +244,7 @@ internal fun axQsControlShape(
         control == AxQsControl.MEDIA &&
             span == AxQsSpan.MediaDefault &&
             mediaSurface == AxMediaSurface.CONTROL -> RoundedCornerShape(28.dp)
-        control == AxQsControl.RINGER ->
-            if (span == AxQsSpan.TileDefault) axQsTileShape(span, tileStyle) else CircleShape
+        control == AxQsControl.RINGER -> axQsTileShape(AxQsSpan.TileDefault, tileStyle)
         control.isSlider ->
             when (sliderStyle) {
                 LunarisQsSliderStyle.M3_EXPRESSIVE -> ExpressiveSliderShape

@@ -100,6 +100,7 @@ import com.android.systemui.qs.panels.ui.viewmodel.LocalLunarisFlashlightSliderV
 import com.android.systemui.qs.shared.model.CategoryAndName
 import com.android.systemui.qs.shared.model.TileCategory
 import com.android.systemui.qs.shared.model.groupAndSort
+import com.android.systemui.qs.tiles.ringer.animateRingerTileShape
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.policy.ui.dialog.viewmodel.ModeTileViewModel
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -528,12 +529,16 @@ private fun AxAddItemCell(
             is AxAddItem.Stack -> axQsTileShape(span, LocalAxQsTileStyle.current)
             is AxAddItem.Tile -> axQsTileShape(span, LocalAxQsTileStyle.current)
             is AxAddItem.Control ->
-                axQsControlShape(
-                    item.control,
-                    span,
-                    controlStyle,
-                    tileStyle = LocalAxQsTileStyle.current,
-                )
+                if (item.control == AxQsControl.RINGER) {
+                    animateRingerTileShape()
+                } else {
+                    axQsControlShape(
+                        item.control,
+                        span,
+                        controlStyle,
+                        tileStyle = LocalAxQsTileStyle.current,
+                    )
+                }
         }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,

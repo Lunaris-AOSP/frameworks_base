@@ -101,7 +101,6 @@ fun RingerSliderTileContent(
     interactable: Boolean = true,
     compact: Boolean = false,
     vertical: Boolean = false,
-    shape: RoundedCornerShape = CircleShape,
     viewModel: RingerSliderViewModel = LocalRingerSliderViewModel.current,
 ) {
     val initialMode = remember(viewModel) { viewModel.currentMode }
@@ -239,12 +238,11 @@ fun RingerSliderTileContent(
             Modifier
         }
 
+    val tileShape = animateRingerTileShape(currentRingerMode, isDndEnabled)
     val gradient = rememberLunarisQsGradient()
     if (compact) {
         val active =
             interactable && (isDndEnabled || currentRingerMode == AudioManager.RINGER_MODE_NORMAL)
-        val tileState = if (active) STATE_ACTIVE else STATE_INACTIVE
-        val tileShape = animateAxQsTileShape(AxQsSpan.TileDefault, tileState)
         val activeBrush = gradient.tileBrush()
         val strokeStyle = LocalLunarisQsTileStrokeStyle.current
         val scale = LocalTileScale.current
@@ -342,9 +340,10 @@ fun RingerSliderTileContent(
 
     BoxWithConstraints(
         modifier =
-            modifier.background(background, shape)
-                .clip(shape)
-                .lunarisQsCosTileBorder(shape)
+            modifier
+                .background(background, tileShape)
+                .clip(tileShape)
+                .lunarisQsCosTileBorder(tileShape)
                 .then(interactionModifier),
         contentAlignment = trackAlignment,
     ) {
@@ -411,6 +410,28 @@ fun RingerSliderTileContent(
             )
         }
     }
+}
+
+@Composable
+internal fun animateRingerTileShape(
+    viewModel: RingerSliderViewModel = LocalRingerSliderViewModel.current
+): RoundedCornerShape {
+    val initialMode = remember(viewModel) { viewModel.currentMode }
+    val ringerMode by
+        viewModel.ringerModeChanges.collectAsStateWithLifecycle(initialValue = initialMode)
+    val isDndEnabled by viewModel.isDndEnabled.collectAsStateWithLifecycle()
+    return animateRingerTileShape(ringerMode, isDndEnabled)
+}
+
+@Composable
+private fun animateRingerTileShape(ringerMode: Int, isDndEnabled: Boolean): RoundedCornerShape {
+    val tileState =
+        when (ringerMode.takeUnless { isDndEnabled }) {
+            AudioManager.RINGER_MODE_NORMAL,
+            AudioManager.RINGER_MODE_VIBRATE -> STATE_ACTIVE
+            else -> STATE_INACTIVE
+        }
+    return animateAxQsTileShape(AxQsSpan.TileDefault, tileState)
 }
 
 private val RINGER_OUTER_PADDING = 3.dp

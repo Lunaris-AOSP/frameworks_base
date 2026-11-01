@@ -240,7 +240,6 @@ fun AxQsControlPreview(
                 interactable = false,
                 compact = span == AxQsSpan.TileDefault,
                 vertical = span.columns == 1,
-                shape = axQsControlShape(AxQsControl.RINGER, span),
                 modifier = modifier.fillMaxSize(),
             )
         AxQsControl.MEDIA ->

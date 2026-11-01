@@ -144,6 +144,7 @@ import com.android.systemui.qs.panels.ui.compose.useAxQsCircleCells
 import com.android.systemui.qs.panels.ui.viewmodel.AxQsViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.EditModeViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.EditTileViewModel
+import com.android.systemui.qs.tiles.ringer.animateRingerTileShape
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.policy.ui.dialog.viewmodel.ModeTileViewModel
 import kotlinx.coroutines.delay
@@ -1283,13 +1284,17 @@ private fun AxEditableGridSection(
                                 value.folder.tileStyle ?: LocalAxQsTileStyle.current,
                             )
                         is AxEditGridValue.Control ->
-                            if (isPhoto) RoundedCornerShape(photoCornerDp.dp)
-                            else axQsControlShape(
-                                value.control,
-                                item.span,
-                                controlStyle,
-                                tileStyle = LocalAxQsTileStyle.current,
-                            )
+                            when {
+                                isPhoto -> RoundedCornerShape(photoCornerDp.dp)
+                                value.control == AxQsControl.RINGER -> animateRingerTileShape()
+                                else ->
+                                    axQsControlShape(
+                                        value.control,
+                                        item.span,
+                                        controlStyle,
+                                        tileStyle = LocalAxQsTileStyle.current,
+                                    )
+                            }
                     }
                 val selectionColor =
                     if (sliderControl != null) {
