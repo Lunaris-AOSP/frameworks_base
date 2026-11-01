@@ -20,7 +20,8 @@ enum class LunarisQsSliderStyle(val settingValue: Int) {
     M3_EXPRESSIVE(0),
     PLATFORM(1),
     ROUNDED_SQUARE(2),
-    ROUNDED_SQUARE_FLAT(3);
+    PILL_FLAT(3),
+    ROUNDED_SQUARE_FLAT(4);
 
     val usesPlatformSlider: Boolean
         get() = this != M3_EXPRESSIVE

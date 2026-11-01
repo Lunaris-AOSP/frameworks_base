@@ -250,8 +250,10 @@ internal fun axQsControlShape(
             when (sliderStyle) {
                 LunarisQsSliderStyle.M3_EXPRESSIVE -> ExpressiveSliderShape
                 LunarisQsSliderStyle.PLATFORM,
-                LunarisQsSliderStyle.ROUNDED_SQUARE_FLAT -> CircleShape
-                LunarisQsSliderStyle.ROUNDED_SQUARE -> RoundedCornerShape(AxQsControlCornerRadius)
+                LunarisQsSliderStyle.PILL_FLAT -> CircleShape
+                LunarisQsSliderStyle.ROUNDED_SQUARE,
+                LunarisQsSliderStyle.ROUNDED_SQUARE_FLAT ->
+                    RoundedCornerShape(AxQsControlCornerRadius)
             }
         span == AxQsSpan.TileDefault && control != AxQsControl.MEDIA -> CircleShape
         else -> RoundedCornerShape(AxQsControlCornerRadius)
@@ -344,8 +346,14 @@ internal fun AxQsSlider(
     val sliderScale = sliderHeight / AxSliderTrackHeight
     if (sliderStyle.usesPlatformSlider) {
         val strokeStyle = LocalLunarisQsSliderStrokeStyle.current
-        val flatFill = sliderStyle == LunarisQsSliderStyle.ROUNDED_SQUARE_FLAT
-        val roundedSquare = sliderStyle == LunarisQsSliderStyle.ROUNDED_SQUARE
+        val flatFill =
+            sliderStyle == LunarisQsSliderStyle.PILL_FLAT ||
+                sliderStyle == LunarisQsSliderStyle.ROUNDED_SQUARE_FLAT
+        val roundedSquare =
+            sliderStyle == LunarisQsSliderStyle.ROUNDED_SQUARE ||
+                sliderStyle == LunarisQsSliderStyle.ROUNDED_SQUARE_FLAT
+        val trackShape =
+            if (roundedSquare) RoundedCornerShape(AxQsControlCornerRadius) else CircleShape
         val trackHeight = AxTileDefaults.TileHeight * sliderScale
         val indicatorColor by animateColorAsState(
             if (enabled) activeTrackColor else MaterialTheme.colorScheme.primary.copy(alpha = 0.38f),
@@ -420,13 +428,8 @@ internal fun AxQsSlider(
                     } else null,
                 modifier =
                     Modifier.fillMaxWidth()
-                        .lunarisQsCosTileBorder(
-                            shape =
-                                if (roundedSquare) RoundedCornerShape(AxQsControlCornerRadius)
-                                else CircleShape,
-                            verticalSlider = vertical,
-                        )
-                        .then(if (flatFill) Modifier.clip(CircleShape) else Modifier),
+                        .lunarisQsCosTileBorder(shape = trackShape, verticalSlider = vertical)
+                        .then(if (flatFill) Modifier.clip(trackShape) else Modifier),
             )
             AxQsSliderReadout(
                 percentage = percentageLabel,

@@ -738,6 +738,8 @@ private fun SliderStyleSetting(
                             LunarisQsSliderStyle.PLATFORM -> R.string.ax_qs_settings_style_classic
                             LunarisQsSliderStyle.ROUNDED_SQUARE ->
                                 R.string.ax_qs_settings_shape_rounded
+                            LunarisQsSliderStyle.PILL_FLAT ->
+                                R.string.ax_qs_settings_style_pill_flat
                             LunarisQsSliderStyle.ROUNDED_SQUARE_FLAT ->
                                 R.string.ax_qs_settings_style_rounded_flat
                         }
