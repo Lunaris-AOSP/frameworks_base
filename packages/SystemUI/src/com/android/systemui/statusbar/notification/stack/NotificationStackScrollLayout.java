@@ -1992,6 +1992,9 @@ public class NotificationStackScrollLayout
 
         // Update the expand progress between started/stopped events
         mAmbientState.setExpansionFraction(expandFraction);
+        if ((oldFraction > 0f) != (expandFraction > 0f)) {
+            updateNotificationShadeExpansion();
+        }
 
         if (!shouldSkipHeightUpdate()) {
             updateStackEndHeightAndStackHeight(expandFraction);
@@ -2025,7 +2028,11 @@ public class NotificationStackScrollLayout
     @Override
     public void setQsExpandFraction(float expandFraction) {
         if (SceneContainerFlag.isUnexpectedlyInLegacyMode()) return;
+        boolean wasExpanded = mAmbientState.getQsExpansionFraction() > 0f;
         mAmbientState.setQsExpansionFraction(expandFraction);
+        if (wasExpanded != (expandFraction > 0f)) {
+            updateNotificationShadeExpansion();
+        }
     }
 
     @Override
@@ -3630,6 +3637,7 @@ public class NotificationStackScrollLayout
         }
         if (child instanceof ActivatableNotificationView activatableView) {
             activatableView.setDozing(mNotificationsDozing);
+            activatableView.setShadeExpanded(isShadeOrQsExpanded());
         }
         generateAddAnimation(child, false /* fromMoreCard */);
         updateAnimationState(child);
@@ -5089,6 +5097,9 @@ public class NotificationStackScrollLayout
         mStateAnimator.setShadeExpanded(isExpanded);
         mSwipeHelper.setIsExpanded(isExpanded);
         if (changed) {
+            if (!SceneContainerFlag.isEnabled()) {
+                updateNotificationShadeExpansion();
+            }
             mWillExpand = false;
             if (mIsExpanded) {
                 // Resetting headsUpAnimatingAway on Shade expansion avoids delays caused by
@@ -5111,6 +5122,28 @@ public class NotificationStackScrollLayout
             requestChildrenUpdate();
             updateUseRoundedRectClipping();
             updateDismissBehavior();
+        }
+    }
+
+    private boolean isShadeOrQsExpanded() {
+        if (SceneContainerFlag.isEnabled()) {
+            return mAmbientState.getExpansionFraction() > 0f
+                    || mAmbientState.getQsExpansionFraction() > 0f;
+        }
+        return mIsExpanded || mQsExpansionFraction > 0f;
+    }
+
+    private void updateNotificationShadeExpansion() {
+        boolean expanded = isShadeOrQsExpanded();
+        for (int i = 0; i < getChildCount(); i++) {
+            if (getChildAt(i) instanceof ActivatableNotificationView child) {
+                child.setShadeExpanded(expanded);
+            }
+        }
+        for (int i = 0; i < getTransientViewCount(); i++) {
+            if (getTransientView(i) instanceof ActivatableNotificationView child) {
+                child.setShadeExpanded(expanded);
+            }
         }
     }
 
@@ -5874,7 +5907,11 @@ public class NotificationStackScrollLayout
 
     public void setQsExpansionFraction(float qsExpansionFraction) {
         SceneContainerFlag.assertInLegacyMode();
+        boolean wasExpanded = mQsExpansionFraction > 0f;
         mQsExpansionFraction = qsExpansionFraction;
+        if (wasExpanded != (qsExpansionFraction > 0f)) {
+            updateNotificationShadeExpansion();
+        }
         updateUseRoundedRectClipping();
 
         // If notifications are scrolled,

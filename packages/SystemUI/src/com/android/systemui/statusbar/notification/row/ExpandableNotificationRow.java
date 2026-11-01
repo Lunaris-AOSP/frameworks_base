@@ -1208,9 +1208,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     public void markHeadsUpSeen() {
         super.markHeadsUpSeen();
         mMustStayOnScreen = false;
-        if (mIsBlurSupported) {
-            updateColors();
-        }
+        updateIfNeeded();
     }
 
     /**
@@ -1352,6 +1350,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         if (mNotificationParent != null) {
             setOverrideTintColor(NO_COLOR, 0.0f);
             setDozing(mNotificationParent.isNotificationDozing());
+            setShadeExpanded(mNotificationParent.mShadeExpanded);
             mNotificationParent.updateBackgroundForGroupState();
         }
         updateBackgroundClipping();
@@ -1472,10 +1471,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             setUserExpanded(true);
         }
 
-        if (mIsBlurSupported) {
-            updateColors();
-        }
-        updateCosTileBackground();
+        updateIfNeeded();
         setChronometerRunning(mLastChronometerRunning);
         if (isAboveShelf() != wasAboveShelf) {
             mAboveShelfChangedListener.onAboveShelfStateChanged(!wasAboveShelf);
@@ -2093,10 +2089,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         if (isAboveShelf() != wasAboveShelf) {
             mAboveShelfChangedListener.onAboveShelfStateChanged(!wasAboveShelf);
         }
-        if (mIsBlurSupported) {
-            updateColors();
-        }
-        updateCosTileBackground();
+        updateIfNeeded();
     }
 
     public void setHeadsUpAnimatingAwayListener(Consumer<Boolean> listener) {
@@ -3419,6 +3412,17 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             if (mIsSummaryWithChildren) {
                 mChildrenContainer.updateGroupOverflow();
                 resetChildSystemExpandedStates();
+            }
+        }
+    }
+
+    @Override
+    public void setShadeExpanded(boolean expanded) {
+        super.setShadeExpanded(expanded);
+        if (mIsSummaryWithChildren && mChildrenContainer != null) {
+            List<ExpandableNotificationRow> children = mChildrenContainer.getAttachedChildren();
+            for (int i = 0; i < children.size(); i++) {
+                children.get(i).setShadeExpanded(expanded);
             }
         }
     }
@@ -5193,8 +5197,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         // Also, for an unpinned HUN on the unlocked shade, the row bg should be transparent.
         if (mOnKeyguard) return mIsLockscreenBlurSupported;
         return super.usesTransparentBackground()
-                && !mustStayOnScreen()
-                && !(isChildInGroup() && !mNotificationParent.usesTransparentBackground())
-                && !mHeadsupDisappearRunning;
+                && (mShadeExpanded || (!mustStayOnScreen() && !mHeadsupDisappearRunning))
+                && !(isChildInGroup() && !mNotificationParent.usesTransparentBackground());
     }
 }

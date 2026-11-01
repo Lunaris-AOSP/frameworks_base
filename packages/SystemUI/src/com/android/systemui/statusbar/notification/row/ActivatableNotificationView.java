@@ -144,6 +144,7 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
     protected boolean mIsLockscreenBlurSupported;
     protected boolean mUseTransparent;
     protected boolean mIsDozing;
+    protected boolean mShadeExpanded;
 
     private static final String NOTIFICATION_ROW_TRANSPARENCY =
             Settings.Secure.NOTIFICATION_ROW_TRANSPARENCY;
@@ -397,7 +398,7 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
 
     protected boolean shouldUseAxBlurBackground() {
         boolean keyguardAllowed = mRowTransparencyLockscreenEnabled && isAxBlurKeyguardVisible();
-        boolean headsUpAllowed = mRowTransparencyEnabled && isHeadsUp();
+        boolean headsUpAllowed = mRowTransparencyEnabled && isHeadsUpState() && !mShadeExpanded;
         return (keyguardAllowed || headsUpAllowed)
                 && mBackgroundNormal.getVisibility() == VISIBLE
                 && !mIsDozing
@@ -437,6 +438,14 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
         return mIsDozing;
     }
 
+    public void setShadeExpanded(boolean expanded) {
+        if (mShadeExpanded == expanded) {
+            return;
+        }
+        mShadeExpanded = expanded;
+        updateIfNeeded();
+    }
+
     protected void updateBackgroundClipping() {
         mBackgroundNormal.setBottomAmountClips(!isChildInGroup());
     }
@@ -461,6 +470,7 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
             }
             updateBackgroundColors();
         }
+        updateAxBlurEnabled();
     }
 
     protected boolean usesTransparentBackground() {
@@ -469,7 +479,7 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
 
     protected boolean usesCosTileBackground() {
         return mCosTileBackgroundEnabled && !mOnKeyguard && !mIsDozing
-                && !isHeadsUpState() && !isPinned();
+                && (mShadeExpanded || (!isHeadsUpState() && !isPinned()));
     }
 
     protected void updateCosTileBackground() {
