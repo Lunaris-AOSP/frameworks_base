@@ -282,8 +282,15 @@ public final class CertificateGenerator {
             tee.put(718, new ASN1Integer(AttestationUtils.getVendorPatchLevel(true, params.packages)));
             tee.put(719, new ASN1Integer(AttestationUtils.getBootPatchLevel(true, params.packages)));
 
+            final int attestVersion = AttestationUtils.getAttestVersion();
             java.util.TreeMap<Integer, ASN1Encodable> sw = new java.util.TreeMap<>();
             sw.put(701, new ASN1Integer(System.currentTimeMillis()));
+            if (attestVersion >= 400) {
+                byte[] moduleHash = AttestationUtils.getModuleHash();
+                if (moduleHash != null) {
+                    sw.put(724, new DEROctetString(moduleHash));
+                }
+            }
             try {
                 sw.put(709, createApplicationId(uid));
             } catch (Throwable e) {
@@ -291,7 +298,7 @@ public final class CertificateGenerator {
             }
 
             ASN1Encodable[] keyDescriptionElements = new ASN1Encodable[] {
-                new ASN1Integer(AttestationUtils.getAttestVersion()),
+                new ASN1Integer(attestVersion),
                 new ASN1Enumerated(securityLevel),
                 new ASN1Integer(AttestationUtils.getKeymasterVersion()),
                 new ASN1Enumerated(securityLevel),
