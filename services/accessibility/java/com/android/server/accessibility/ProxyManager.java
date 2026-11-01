@@ -506,6 +506,9 @@ public class ProxyManager {
      * Returns the relevant event types for a Client.
      */
     public int computeRelevantEventTypesLocked(AccessibilityManagerService.Client client) {
+        if (client.isAccessibilitySpoofed()) {
+            return 0;
+        }
         int relevantEventTypes = 0;
         for (int i = 0; i < mProxyA11yServiceConnections.size(); i++) {
             final ProxyAccessibilityServiceConnection proxy =
@@ -652,7 +655,7 @@ public class ProxyManager {
                 synchronized (mLock) {
                     broadcastToClientsLocked(ignoreRemoteException(client -> {
                         if (client.mDeviceId == deviceId) {
-                            client.mCallback.setState(proxyState);
+                            client.mCallback.setState(client.getState(proxyState));
                         }
                     }));
                 }

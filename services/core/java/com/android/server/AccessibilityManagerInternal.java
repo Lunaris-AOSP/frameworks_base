@@ -62,6 +62,9 @@ public abstract class AccessibilityManagerInternal {
      */
     public abstract boolean isTouchExplorationEnabled(@UserIdInt int userId);
 
+    public abstract void onAccessibilitySettingsSpoofChanged(
+            String packageName, @UserIdInt int userId);
+
     private static final AccessibilityManagerInternal NOP = new AccessibilityManagerInternal() {
         @Override
         public void setImeSessionEnabled(SparseArray<IAccessibilityInputMethodSession> sessions,
@@ -92,6 +95,10 @@ public abstract class AccessibilityManagerInternal {
 
         @Override
         public void performSystemAction(int actionId) {
+        }
+
+        @Override
+        public void onAccessibilitySettingsSpoofChanged(String packageName, int userId) {
         }
     };
 

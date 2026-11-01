@@ -448,7 +448,8 @@ public class SettingsProvider extends ContentProvider {
     public Bundle call(String method, String name, Bundle args) {
         final @CanBeCURRENT @UserIdInt int requestingUserId = getRequestingUserId(args);
         final int callingDeviceId = getDeviceId();
-        if (method != null && method.startsWith("GET_")) {
+        if (method != null && method.startsWith("GET_")
+                && !isAccessibilitySpoofSetting(name)) {
             String spoofed = getSpoofedValue(name);
             if (spoofed != null) {
                 return Bundle.forPair(Settings.NameValueTable.VALUE, spoofed);
@@ -478,8 +479,16 @@ public class SettingsProvider extends ContentProvider {
                         && (setting == null || setting.isNull())) {
                     setting = getSecureSetting(name, requestingUserId, Context.DEVICE_ID_DEFAULT);
                 }
+                if (isAccessibilitySpoofSetting(name) && isSecureSettingAccessible(name)) {
+                    String spoofed = getSpoofedValue(name);
+                    if (spoofed != null) {
+                        return Bundle.forPair(Settings.NameValueTable.VALUE, spoofed);
+                    }
+                }
                 return packageValueForCallResult(SETTINGS_TYPE_SECURE, name, requestingUserId,
-                        callingDeviceId, setting, isTrackingGeneration(args));
+                        callingDeviceId, setting,
+                        isTrackingGeneration(args) && !(isAccessibilitySpoofSetting(name)
+                                && UserHandle.isApp(Binder.getCallingUid())));
             }
             case Settings.CALL_METHOD_GET_SYSTEM -> {
                 Setting setting = getSystemSetting(name, requestingUserId, callingDeviceId);
@@ -627,12 +636,22 @@ public class SettingsProvider extends ContentProvider {
         return null;
     }
 
+    private static boolean isAccessibilitySpoofSetting(String name) {
+        return Settings.Secure.ACCESSIBILITY_ENABLED.equals(name)
+                || Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES.equals(name)
+                || Settings.Secure.ACCESSIBILITY_DISPLAY_INVERSION_ENABLED.equals(name);
+    }
+
     private String getSpoofedValue(String name) {
         String callingPackage = getCallingPackage();
         if (callingPackage == null) return null;
 
-        if (callingPackage.startsWith("com.android.")
-                || callingPackage.startsWith("com.google.android.")) {
+        final boolean accessibilitySetting = isAccessibilitySpoofSetting(name);
+        if (accessibilitySetting && !UserHandle.isApp(Binder.getCallingUid())) {
+            return null;
+        }
+        if (!accessibilitySetting && (callingPackage.startsWith("com.android.")
+                || callingPackage.startsWith("com.google.android."))) {
             return null;
         }
 
@@ -641,6 +660,24 @@ public class SettingsProvider extends ContentProvider {
             AxSandboxManager sandboxManager =
                     getContext().getSystemService(AxSandboxManager.class);
             if (sandboxManager != null) {
+                if (accessibilitySetting) {
+                    String[] packages = mPackageManager.getPackagesForUid(Binder.getCallingUid());
+                    if (packages == null) return null;
+                    for (String packageName : packages) {
+                        List<String> enabled = sandboxManager.getEnabledSpoofSettings(
+                                packageName, UserHandle.getCallingUserId());
+                        boolean spoofed = Settings.Secure.ACCESSIBILITY_DISPLAY_INVERSION_ENABLED
+                                .equals(name) ? enabled.contains(name)
+                                : enabled.contains(Settings.Secure.ACCESSIBILITY_ENABLED)
+                                        || enabled.contains(
+                                                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+                        if (spoofed) {
+                            return Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES.equals(name)
+                                    ? "" : "0";
+                        }
+                    }
+                    return null;
+                }
                 settings = sandboxManager.getSpoofedSetting(callingPackage, name, UserHandle.getCallingUserId());
             }
         } catch (Exception e) {}
@@ -673,7 +710,7 @@ public class SettingsProvider extends ContentProvider {
             return new MatrixCursor(normalizedProjection, 0);
         }
 
-        if (args.name != null) {
+        if (args.name != null && !isAccessibilitySpoofSetting(args.name)) {
             String spoofed = getSpoofedValue(args.name);
             if (spoofed != null) {
                 synchronized (mLock) {
@@ -699,7 +736,9 @@ public class SettingsProvider extends ContentProvider {
                 final int userId = UserHandle.getCallingUserId();
                 if (args.name != null) {
                     Setting setting = getSecureSetting(args.name, userId, callingDeviceId);
-                    return packageSettingForQuery(setting, normalizedProjection);
+                    String spoofed = isAccessibilitySpoofSetting(args.name)
+                            ? getSpoofedValue(args.name) : null;
+                    return packageSettingForQuery(setting, normalizedProjection, spoofed);
                 } else {
                     return getAllSecureSettings(userId, Context.DEVICE_ID_DEFAULT, projection);
                 }
@@ -1738,6 +1777,10 @@ public class SettingsProvider extends ContentProvider {
         final int ssaidUserId = resolveOwningUserIdForSecureSetting(callingUserId,
                 Settings.Secure.ANDROID_ID);
         final PackageInfo ssaidCallingPkg = getCallingPackageInfo(ssaidUserId);
+        final String accessibilityEnabled = getSpoofedValue(Settings.Secure.ACCESSIBILITY_ENABLED);
+        final String enabledServices = getSpoofedValue(Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+        final String displayInversion = getSpoofedValue(
+                Settings.Secure.ACCESSIBILITY_DISPLAY_INVERSION_ENABLED);
 
         synchronized (mLock) {
             List<String> names = getSettingsNamesLocked(SETTINGS_TYPE_SECURE, callingUserId,
@@ -1776,7 +1819,13 @@ public class SettingsProvider extends ContentProvider {
                     setting = mSettingsRegistry.getSettingLocked(SETTINGS_TYPE_SECURE, owningUserId,
                             deviceId, name);
                 }
-                appendSettingToCursor(result, setting);
+                final String spoofed = switch (name) {
+                    case Settings.Secure.ACCESSIBILITY_ENABLED -> accessibilityEnabled;
+                    case Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES -> enabledServices;
+                    case Settings.Secure.ACCESSIBILITY_DISPLAY_INVERSION_ENABLED -> displayInversion;
+                    default -> null;
+                };
+                appendSettingToCursor(result, setting, spoofed);
             }
 
             return result;
@@ -3042,11 +3091,16 @@ public class SettingsProvider extends ContentProvider {
     }
 
     private static MatrixCursor packageSettingForQuery(Setting setting, String[] projection) {
-        if (setting.isNull()) {
+        return packageSettingForQuery(setting, projection, null);
+    }
+
+    private static MatrixCursor packageSettingForQuery(Setting setting, String[] projection,
+            @Nullable String spoofedValue) {
+        if (setting == null || setting.isNull()) {
             return new MatrixCursor(projection, 0);
         }
         MatrixCursor cursor = new MatrixCursor(projection, 1);
-        appendSettingToCursor(cursor, setting);
+        appendSettingToCursor(cursor, setting, spoofedValue);
         return cursor;
     }
 
@@ -3067,6 +3121,11 @@ public class SettingsProvider extends ContentProvider {
     }
 
     private static void appendSettingToCursor(MatrixCursor cursor, Setting setting) {
+        appendSettingToCursor(cursor, setting, null);
+    }
+
+    private static void appendSettingToCursor(MatrixCursor cursor, Setting setting,
+            @Nullable String spoofedValue) {
         if (setting == null || setting.isNull()) {
             return;
         }
@@ -3085,7 +3144,7 @@ public class SettingsProvider extends ContentProvider {
                     values[i] = setting.getName();
                 }
                 case Settings.NameValueTable.VALUE -> {
-                    values[i] = setting.getValue();
+                    values[i] = spoofedValue != null ? spoofedValue : setting.getValue();
                 }
                 case Settings.NameValueTable.IS_PRESERVED_IN_RESTORE -> {
                     values[i] = String.valueOf(setting.isValuePreservedInRestore());

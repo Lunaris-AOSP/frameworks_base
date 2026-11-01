@@ -448,6 +448,7 @@ import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.MemInfoReader;
 import com.android.internal.util.Preconditions;
 import com.android.internal.util.function.pooled.PooledLambda;
+import com.android.server.AccessibilityManagerInternal;
 import com.android.server.AlarmManagerInternal;
 import com.android.server.AxExtServiceFactory;
 import com.android.server.BootReceiver;
@@ -20291,6 +20292,11 @@ public class ActivityManagerService extends IActivityManager.Stub
     public void setSandboxSpoofSettingEnabled(String packageName, String settingKey,
             boolean enabled, int userId) {
         AxSandboxService.getInstance().setSpoofSettingEnabled(packageName, settingKey, enabled, userId);
+        if (Settings.Secure.ACCESSIBILITY_ENABLED.equals(settingKey)
+                || Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES.equals(settingKey)) {
+            AccessibilityManagerInternal.get().onAccessibilitySettingsSpoofChanged(
+                    packageName, userId);
+        }
     }
  
     @Override
