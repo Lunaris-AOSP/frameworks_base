@@ -12193,6 +12193,16 @@ public final class Settings {
         public static final String DOZE_ALWAYS_ON_AUTO_TIME = "doze_always_on_auto_time";
 
         /**
+         * Indicates whether doze should show only the fingerprint icon.
+         * <p>
+         * Type: int (0 for false, 1 for true)
+         *
+         * @hide
+         */
+        @Readable
+        public static final String DOZE_FP_ONLY = "doze_fp_only";
+
+        /**
          * Indicates whether doze should briefly show AOD when the screen turns off.
          * <p>
          * Type: int (0 for false, 1 for true)

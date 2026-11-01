@@ -48,9 +48,6 @@ object WindowRootViewBinder {
         choreographer: Choreographer?,
         mainDispatcher: CoroutineDispatcher,
     ) {
-        if (!Flags.bouncerUiRevamp() && !Flags.glanceableHubBlurredBackground()) return
-        if (blurUtils == null || choreographer == null) return
-
         view.repeatWhenAttached(mainDispatcher) {
             if (DEBUG) Log.d(TAG, "Binding root view")
             view.viewModel(
@@ -58,6 +55,19 @@ object WindowRootViewBinder {
                 factory = { viewModelFactory.create() },
                 traceName = "WindowRootViewBinder#bind",
             ) { viewModel ->
+                launchTraced("AodFpOnly") {
+                    try {
+                        viewModel.isAodFpOnly.collect { view.aodFpOnly = it }
+                    } finally {
+                        view.aodFpOnly = false
+                    }
+                }
+                if (
+                    (!Flags.bouncerUiRevamp() && !Flags.glanceableHubBlurredBackground()) ||
+                        blurUtils == null || choreographer == null
+                ) {
+                    awaitCancellation()
+                }
                 try {
                     if (DEBUG) {
                         Log.d(TAG, "Launching coroutines that update window root view state")

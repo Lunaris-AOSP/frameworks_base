@@ -20,6 +20,7 @@ import com.android.systemui.accessibility.domain.interactor.accessibilityInterac
 import com.android.systemui.deviceentry.domain.interactor.deviceEntryInteractor
 import com.android.systemui.deviceentry.domain.interactor.deviceEntrySourceInteractor
 import com.android.systemui.deviceentry.domain.interactor.deviceEntryUdfpsInteractor
+import com.android.systemui.keyguard.domain.interactor.aodFpOnlyInteractor
 import com.android.systemui.keyguard.domain.interactor.burnInInteractor
 import com.android.systemui.keyguard.domain.interactor.keyguardInteractor
 import com.android.systemui.keyguard.domain.interactor.keyguardTransitionInteractor
@@ -43,6 +44,7 @@ val Kosmos.deviceEntryIconViewModel by Fixture {
         burnInInteractor = burnInInteractor,
         shadeInteractor = shadeInteractor,
         deviceEntryUdfpsInteractor = deviceEntryUdfpsInteractor,
+        aodFpOnlyInteractor = aodFpOnlyInteractor,
         transitionInteractor = keyguardTransitionInteractor,
         keyguardInteractor = keyguardInteractor,
         viewModel = aodToLockscreenTransitionViewModel,

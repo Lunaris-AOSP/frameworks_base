@@ -18,6 +18,7 @@ package com.android.systemui.keyguard.ui.viewmodel
 
 import com.android.systemui.deviceentry.domain.interactor.deviceEntryBypassInteractor
 import com.android.systemui.deviceentry.domain.interactor.deviceEntryUdfpsInteractor
+import com.android.systemui.keyguard.domain.interactor.aodFpOnlyInteractor
 import com.android.systemui.keyguard.domain.interactor.keyguardBlueprintInteractor
 import com.android.systemui.keyguard.shared.transition.KeyguardTransitionAnimationCallback
 import com.android.systemui.keyguard.shared.transition.keyguardTransitionAnimationCallbackDelegator
@@ -39,6 +40,7 @@ val Kosmos.lockscreenContentViewModelFactory by Fixture {
                 shadeModeInteractor = shadeModeInteractor,
                 deviceEntryBypassInteractor = deviceEntryBypassInteractor,
                 deviceEntryUdfpsInteractor = deviceEntryUdfpsInteractor,
+                aodFpOnlyInteractor = aodFpOnlyInteractor,
                 keyguardTransitionAnimationCallbackDelegator =
                     keyguardTransitionAnimationCallbackDelegator,
                 keyguardTransitionAnimationCallback = keyguardTransitionAnimationCallback,

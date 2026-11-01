@@ -25,6 +25,7 @@ import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.deviceentry.domain.interactor.DeviceEntryInteractor
 import com.android.systemui.deviceentry.domain.interactor.DeviceEntrySourceInteractor
 import com.android.systemui.deviceentry.domain.interactor.DeviceEntryUdfpsInteractor
+import com.android.systemui.keyguard.domain.interactor.AodFpOnlyInteractor
 import com.android.systemui.keyguard.domain.interactor.BurnInInteractor
 import com.android.systemui.keyguard.domain.interactor.KeyguardInteractor
 import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInteractor
@@ -64,6 +65,7 @@ constructor(
     burnInInteractor: BurnInInteractor,
     shadeInteractor: ShadeInteractor,
     deviceEntryUdfpsInteractor: DeviceEntryUdfpsInteractor,
+    aodFpOnlyInteractor: AodFpOnlyInteractor,
     transitionInteractor: KeyguardTransitionInteractor,
     val keyguardInteractor: KeyguardInteractor,
     val viewModel: AodToLockscreenTransitionViewModel,
@@ -223,9 +225,11 @@ constructor(
             }
 
     val iconType: Flow<DeviceEntryIconView.IconType> =
-        combine(deviceEntryUdfpsInteractor.isListeningForUdfps, isUnlocked) {
-            isListeningForUdfps,
-            isUnlocked ->
+        combine(
+            deviceEntryUdfpsInteractor.isListeningForUdfps,
+            isUnlocked,
+            aodFpOnlyInteractor.isActive,
+        ) { isListeningForUdfps, isUnlocked, fpOnly ->
             if (isListeningForUdfps) {
                 if (isUnlocked) {
                     // Don't show any UI until isUnlocked=false. This covers the case
@@ -235,6 +239,8 @@ constructor(
                 } else {
                     DeviceEntryIconView.IconType.FINGERPRINT
                 }
+            } else if (fpOnly) {
+                DeviceEntryIconView.IconType.NONE
             } else if (isUnlocked) {
                 DeviceEntryIconView.IconType.UNLOCK
             } else {

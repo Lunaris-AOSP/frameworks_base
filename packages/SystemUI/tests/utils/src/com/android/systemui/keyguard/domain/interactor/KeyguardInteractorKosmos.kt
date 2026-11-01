@@ -19,12 +19,27 @@ package com.android.systemui.keyguard.domain.interactor
 import com.android.internal.widget.lockPatternUtils
 import com.android.systemui.bouncer.data.repository.keyguardBouncerRepository
 import com.android.systemui.common.ui.domain.interactor.configurationInteractor
+import com.android.systemui.deviceentry.domain.interactor.deviceEntryUdfpsInteractor
 import com.android.systemui.keyguard.data.repository.keyguardRepository
 import com.android.systemui.kosmos.Kosmos
+import com.android.systemui.kosmos.testDispatcher
 import com.android.systemui.kosmos.testScope
 import com.android.systemui.scene.domain.interactor.sceneInteractor
 import com.android.systemui.shade.data.repository.shadeRepository
+import com.android.systemui.user.data.repository.userRepository
+import com.android.systemui.util.settings.fakeSettings
 import com.android.systemui.wallpapers.domain.interactor.wallpaperFocalAreaInteractor
+
+val Kosmos.aodFpOnlyInteractor by Kosmos.Fixture {
+    AodFpOnlyInteractor(
+        secureSettings = fakeSettings,
+        userRepository = userRepository,
+        udfpsInteractor = deviceEntryUdfpsInteractor,
+        keyguardInteractor = keyguardInteractor,
+        backgroundDispatcher = testDispatcher,
+        applicationScope = testScope.backgroundScope,
+    )
+}
 
 val Kosmos.keyguardInteractor: KeyguardInteractor by
     Kosmos.Fixture {

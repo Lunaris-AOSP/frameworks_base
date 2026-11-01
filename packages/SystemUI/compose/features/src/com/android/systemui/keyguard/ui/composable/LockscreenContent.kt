@@ -150,7 +150,8 @@ class LockscreenContent(
             onDispose { handle.dispose() }
         }
 
-        val blueprint = blueprintByBlueprintId[viewModel.blueprintId] ?: return
+        val blueprintId = if (viewModel.isAodFpOnly) "default" else viewModel.blueprintId
+        val blueprint = blueprintByBlueprintId[blueprintId] ?: return
         with(blueprint) {
             LockscreenBehindScrim(
                 lockscreenBehindScrimViewModel,

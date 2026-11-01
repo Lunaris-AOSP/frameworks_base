@@ -18,6 +18,9 @@ package com.android.systemui.scene.ui.view
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.PointF
 import android.util.AttributeSet
 import android.util.Pair
 import android.view.DisplayCutout
@@ -27,10 +30,82 @@ import android.view.WindowInsets
 import android.widget.FrameLayout
 import androidx.core.view.updateMargins
 import com.android.systemui.compose.ComposeInitializer
+import com.android.systemui.keyguard.ui.view.KeyguardRootView
 import com.android.systemui.res.R
 
 /** A view that can serve as the root of the main SysUI window. */
 open class WindowRootView(context: Context, attrs: AttributeSet?) : FrameLayout(context, attrs) {
+
+    var aodFpOnly: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            for (index in 0 until childCount) {
+                updateAodFpOnly(getChildAt(index))
+            }
+            invalidate()
+            notifySubtreeAccessibilityStateChangedIfNeeded()
+        }
+
+    override fun onViewAdded(child: View) {
+        super.onViewAdded(child)
+        updateAodFpOnly(child)
+    }
+
+    private fun updateAodFpOnly(child: View) {
+        when (child) {
+            is KeyguardRootView -> child.aodFpOnly = aodFpOnly
+            is WindowRootView -> child.aodFpOnly = aodFpOnly
+        }
+    }
+
+    override fun dispatchDraw(canvas: Canvas) {
+        if (aodFpOnly) canvas.drawColor(Color.BLACK)
+        super.dispatchDraw(canvas)
+    }
+
+    override fun drawChild(canvas: Canvas, child: View, drawingTime: Long): Boolean {
+        if (aodFpOnly && !isAodFpOnlyChild(child)) return false
+        return super.drawChild(canvas, child, drawingTime)
+    }
+
+    override fun isTransformedTouchPointInView(
+        x: Float,
+        y: Float,
+        child: View,
+        outLocalPoint: PointF?,
+    ): Boolean {
+        if (aodFpOnly && !isAodFpOnlyChild(child)) return false
+        return super.isTransformedTouchPointInView(x, y, child, outLocalPoint)
+    }
+
+    override fun addChildrenForAccessibility(outChildren: ArrayList<View>) {
+        if (!aodFpOnly) {
+            super.addChildrenForAccessibility(outChildren)
+            return
+        }
+        if (accessibilityNodeProvider != null) return
+        for (index in 0 until childCount) {
+            val child = getChildAt(index)
+            if (child.visibility != VISIBLE || !isAodFpOnlyChild(child)) continue
+            if (child.includeForAccessibility()) {
+                outChildren.add(child)
+            } else {
+                child.addChildrenForAccessibility(outChildren)
+            }
+        }
+    }
+
+    private fun isAodFpOnlyChild(child: View): Boolean =
+        when (child.id) {
+            R.id.legacy_window_root,
+            R.id.scene_container_root_composable,
+            R.id.keyguard_root_view,
+            R.id.scrim_behind,
+            R.id.scrim_in_front,
+            R.id.light_reveal_scrim -> true
+            else -> false
+        }
 
     private lateinit var layoutInsetsController: LayoutInsetsController
     private var leftInset = 0

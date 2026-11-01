@@ -21,6 +21,7 @@ import com.android.app.tracing.coroutines.launchTraced as launch
 import com.android.compose.animation.scene.content.state.TransitionState
 import com.android.systemui.deviceentry.domain.interactor.DeviceEntryBypassInteractor
 import com.android.systemui.deviceentry.domain.interactor.DeviceEntryUdfpsInteractor
+import com.android.systemui.keyguard.domain.interactor.AodFpOnlyInteractor
 import com.android.systemui.keyguard.domain.interactor.KeyguardBlueprintInteractor
 import com.android.systemui.keyguard.shared.transition.KeyguardTransitionAnimationCallback
 import com.android.systemui.keyguard.shared.transition.KeyguardTransitionAnimationCallbackDelegator
@@ -48,6 +49,7 @@ constructor(
     shadeModeInteractor: ShadeModeInteractor,
     deviceEntryBypassInteractor: DeviceEntryBypassInteractor,
     deviceEntryUdfpsInteractor: DeviceEntryUdfpsInteractor,
+    aodFpOnlyInteractor: AodFpOnlyInteractor,
     private val keyguardTransitionAnimationCallbackDelegator:
         KeyguardTransitionAnimationCallbackDelegator,
     private val wallpaperFocalAreaInteractor: WallpaperFocalAreaInteractor,
@@ -58,6 +60,12 @@ constructor(
 ) : ExclusiveActivatable() {
 
     private val hydrator = Hydrator("LockscreenContentViewModel.hydrator")
+
+    val isAodFpOnly: Boolean by
+        hydrator.hydratedStateOf(
+            traceName = "isAodFpOnly",
+            source = aodFpOnlyInteractor.isActive,
+        )
 
     /** @see ShadeModeInteractor.isFullWidthShade */
     val isFullWidthShade: Boolean by

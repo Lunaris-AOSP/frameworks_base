@@ -189,25 +189,29 @@ fun LockscreenScope<ContentScope>.LockscreenSceneLayout(
         val settingsMenuPleaceable = settingsMenuMeasurable.measure(constraints)
 
         layout(constraints.maxWidth, constraints.maxHeight) {
-            statusBarPlaceable.place(0, 0)
-            upperRegionPlaceable.placeRelative(0, statusBarPlaceable.measuredHeight)
+            if (!viewModel.isAodFpOnly) {
+                statusBarPlaceable.place(0, 0)
+                upperRegionPlaceable.placeRelative(0, statusBarPlaceable.measuredHeight)
+            }
             lockIconPlaceable.place(lockIconBounds.left, lockIconBounds.top)
 
-            ambientIndicationPlaceable.place(
-                0,
-                if (viewModel.isUdfpsSupported) lockIconBounds.bottom
-                else lockIconBounds.top - ambientIndicationPlaceable.measuredHeight,
-            )
+            if (!viewModel.isAodFpOnly) {
+                ambientIndicationPlaceable.place(
+                    0,
+                    if (viewModel.isUdfpsSupported) lockIconBounds.bottom
+                    else lockIconBounds.top - ambientIndicationPlaceable.measuredHeight,
+                )
 
-            lowerRegionPlaceable.place(
-                0,
-                constraints.maxHeight - lowerRegionPlaceable.measuredHeight,
-            )
+                lowerRegionPlaceable.place(
+                    0,
+                    constraints.maxHeight - lowerRegionPlaceable.measuredHeight,
+                )
 
-            settingsMenuPleaceable.placeRelative(
-                (constraints.maxWidth - settingsMenuPleaceable.measuredWidth) / 2,
-                constraints.maxHeight - settingsMenuPleaceable.measuredHeight,
-            )
+                settingsMenuPleaceable.placeRelative(
+                    (constraints.maxWidth - settingsMenuPleaceable.measuredWidth) / 2,
+                    constraints.maxHeight - settingsMenuPleaceable.measuredHeight,
+                )
+            }
         }
     }
 }

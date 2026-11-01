@@ -17,6 +17,7 @@
 package com.android.systemui.window.ui.viewmodel
 
 import com.android.systemui.communal.domain.interactor.communalSceneInteractor
+import com.android.systemui.keyguard.domain.interactor.aodFpOnlyInteractor
 import com.android.systemui.keyguard.domain.interactor.keyguardInteractor
 import com.android.systemui.keyguard.ui.transitions.FakeBouncerTransition
 import com.android.systemui.keyguard.ui.transitions.FakeGlanceableHubTransition
@@ -44,5 +45,6 @@ val Kosmos.windowRootViewModel by
             windowRootViewBlurInteractor,
             keyguardInteractor,
             shadeInteractor,
+            aodFpOnlyInteractor,
         )
     }

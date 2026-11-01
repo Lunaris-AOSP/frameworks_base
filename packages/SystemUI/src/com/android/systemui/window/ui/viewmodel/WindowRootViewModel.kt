@@ -20,6 +20,7 @@ import android.os.Build
 import android.util.Log
 import com.android.systemui.Flags
 import com.android.systemui.communal.domain.interactor.CommunalSceneInteractor
+import com.android.systemui.keyguard.domain.interactor.AodFpOnlyInteractor
 import com.android.systemui.keyguard.domain.interactor.KeyguardInteractor
 import com.android.systemui.keyguard.ui.transitions.GlanceableHubTransition
 import com.android.systemui.keyguard.ui.transitions.PrimaryBouncerTransition
@@ -49,7 +50,10 @@ constructor(
     private val blurInteractor: WindowRootViewBlurInteractor,
     private val keyguardInteractor: KeyguardInteractor,
     private val shadeInteractor: ShadeInteractor,
+    aodFpOnlyInteractor: AodFpOnlyInteractor,
 ) {
+
+    val isAodFpOnly = aodFpOnlyInteractor.isActive
 
     private val bouncerBlurRadiusFlows =
         if (Flags.bouncerUiRevamp())
