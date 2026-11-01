@@ -275,6 +275,7 @@ import kotlinx.coroutines.CoroutineScope;
         RootDozeModule.class,
         DreamModule.class,
         EventLogModule.class,
+        com.android.systemui.edgeaurora.EdgeAuroraModule.class,
         FalsingModule.class,
         FlagsModule.class,
         FlagDependenciesModule.class,

@@ -64,6 +64,12 @@ public final class GameSpaceService extends SystemService {
         }
     }
 
+    @Override
+    public void onUserStarting(TargetUser user) {
+        final int userId = user.getUserIdentifier();
+        mHandler.post(() -> mGameStateDispatcher.resetGameState(userId));
+    }
+
     public void onAppFocusChanged(ActivityRecord record, Task task) {
         if (record == null || record.packageName == null) {
             return;

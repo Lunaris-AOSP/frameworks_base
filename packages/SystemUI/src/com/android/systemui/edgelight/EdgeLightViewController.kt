@@ -38,6 +38,7 @@ import com.android.settingslib.Utils
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Main
+import com.android.systemui.doze.DozeHost
 import com.android.systemui.keyguard.WakefulnessLifecycle
 import com.android.systemui.plugins.statusbar.StatusBarStateController
 import com.android.systemui.settings.UserTracker
@@ -62,6 +63,7 @@ class EdgeLightViewController @Inject constructor(
     private val keyguardStateController: KeyguardStateController,
     private val statusBarStateController: StatusBarStateController,
     private val wakefulnessLifecycle: WakefulnessLifecycle,
+    private val dozeHost: DozeHost,
     private val userTracker: UserTracker,
     configurationController: ConfigurationController,
     @Application private val scope: CoroutineScope,
@@ -74,6 +76,7 @@ class EdgeLightViewController @Inject constructor(
     private var currentSettings = settingsRepo.currentSettings()
     private var lockscreenContainer: ViewGroup? = null
     private var overlayAdded = false
+    private var auroraOverlay = false
     private var preDrawListener: OneShotPreDrawListener? = null
     private var ambientPulse = false
     private var requestGeneration = 0
@@ -85,6 +88,17 @@ class EdgeLightViewController @Inject constructor(
 
     private val finishPulse = Runnable { stopPulse() }
     private val unlockPulse = Runnable { maybePulseOnUnlock() }
+    private val refreshAuroraOverlay = Runnable {
+        if (isAuroraPulseContext()) {
+            if (ambientPulse && !overlayAdded && edgeLightView.pulseRunning) {
+                val key = activeNotificationKey
+                stopPulse()
+                startLockscreenPulse(key)
+            }
+        } else if (auroraOverlay) {
+            stopPulse()
+        }
+    }
 
     private val keyguardCallback = object : KeyguardStateController.Callback {
         override fun onKeyguardShowingChanged() {
@@ -189,6 +203,12 @@ class EdgeLightViewController @Inject constructor(
         wakefulnessLifecycle.addObserver(wakefulnessObserver)
         userTracker.addCallback(userCallback, mainExecutor)
         configurationController.addCallback(configurationListener)
+        dozeHost.addCallback(object : DozeHost.Callback {
+            override fun onAuroraPulseChanged() {
+                mainHandler.removeCallbacks(refreshAuroraOverlay)
+                mainHandler.post(refreshAuroraOverlay)
+            }
+        })
         applySettings(currentSettings)
         scope.launch(mainDispatcher) { settingsRepo.settingsFlow.collect { applySettings(it) } }
     }
@@ -321,17 +341,25 @@ class EdgeLightViewController @Inject constructor(
             if (preDrawListener == null && edgeLightView.isAttachedToWindow) startPulse()
             return
         }
-        showUnlockedPulse(requestGeneration)
+        showOverlayPulse(requestGeneration)
     }
 
-    private fun showUnlockedPulse(generation: Int) {
+    private fun isAuroraPulseContext(): Boolean =
+        currentSettings.showOnLockscreen && statusBarStateController.isDozing &&
+            dozeHost.auroraPulseBrightness >= 0f &&
+            !keyguardStateController.isKeyguardGoingAway &&
+            !keyguardStateController.isKeyguardFadingAway
+
+    private fun showOverlayPulse(generation: Int, forAurora: Boolean = false) {
+        auroraOverlay = forAurora
         (edgeLightView.parent as? ViewGroup)?.removeView(edgeLightView)
         edgeLightView.alpha = 0f
         edgeLightView.visible = true
         preDrawListener = OneShotPreDrawListener.add(edgeLightView) {
             preDrawListener = null
             if (generation == requestGeneration) {
-                if (overlayAdded && edgeLightView.isAttachedToWindow && isUnlockedContext()) {
+                val allowed = if (forAurora) isAuroraPulseContext() else isUnlockedContext()
+                if (overlayAdded && edgeLightView.isAttachedToWindow && allowed) {
                     startPulse()
                 } else {
                     stopPulse()
@@ -374,6 +402,7 @@ class EdgeLightViewController @Inject constructor(
         preDrawListener = null
         edgeLightView.pulseRunning = false
         ambientPulse = false
+        auroraOverlay = false
         activeNotificationKey = null
         if (overlayAdded) {
             overlayAdded = false
@@ -400,8 +429,14 @@ class EdgeLightViewController @Inject constructor(
             keyguardStateController.isKeyguardGoingAway ||
             keyguardStateController.isKeyguardFadingAway ||
             (statusBarStateController.isDreaming && !statusBarStateController.isDozing) ||
-            overlayAdded ||
-            edgeLightView.parent !== lockscreenContainer || !edgeLightView.isAttachedToWindow) return
+            overlayAdded) return
+        if (isAuroraPulseContext()) {
+            activeNotificationKey = notificationKey
+            ambientPulse = true
+            showOverlayPulse(requestGeneration, forAurora = true)
+            return
+        }
+        if (edgeLightView.parent !== lockscreenContainer || !edgeLightView.isAttachedToWindow) return
         activeNotificationKey = notificationKey
         ambientPulse = statusBarStateController.isDozing
         startPulse()

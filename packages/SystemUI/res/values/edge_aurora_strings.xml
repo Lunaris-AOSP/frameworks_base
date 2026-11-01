@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (C) 2024-2026 Lunaris AOSP -->
+<resources>
+    <string name="edge_aurora_title">Edge Aurora</string>
+    <string name="edge_aurora_peek_hint">Tap to open · Swipe to clear</string>
+    <string name="edge_aurora_peek_app">Peek at %1$s notifications</string>
+    <string name="edge_aurora_expand">Expand</string>
+    <string name="edge_aurora_reply">Reply</string>
+    <string name="edge_aurora_reply_hint">Reply…</string>
+    <string name="edge_aurora_reply_failed">Could not send. Your reply is saved; try again or open the app.</string>
+    <string name="edge_aurora_send">Send</string>
+    <string name="edge_aurora_collapse">Collapse</string>
+    <string name="edge_aurora_clear">Clear</string>
+    <string name="edge_aurora_open_app">Open app</string>
+    <string name="edge_aurora_float">Float</string>
+    <string name="edge_aurora_unlock">Unlock to read</string>
+    <string name="edge_aurora_attachment">Attachment</string>
+</resources>

@@ -33,6 +33,7 @@ import android.util.SparseArray;
 
 import com.android.internal.R;
 import com.android.internal.util.ArrayUtils;
+import com.android.internal.util.lunaris.EdgeAuroraConfig;
 
 import java.util.Map;
 
@@ -109,6 +110,7 @@ public class AmbientDisplayConfiguration {
                 || pulseOnCustomDozeEventEnabled(user)
                 || screenOffAodEnabled(user)
                 || edgeLightEnabled(user)
+                || edgeAuroraEnabled(user)
                 || isAmbientTickerEnabled(user)
                 || wakeLockScreenGestureEnabled(user)
                 || wakeDisplayGestureEnabled(user)
@@ -202,6 +204,14 @@ public class AmbientDisplayConfiguration {
     public boolean edgeLightEnabled(int user) {
         return Settings.System.getIntForUser(mContext.getContentResolver(),
             Settings.System.EDGE_LIGHT_ENABLED, 0, user) != 0;
+    }
+
+    private boolean edgeAuroraEnabled(int user) {
+        return ambientDisplayAvailable() && !accessibilityInversionEnabled(user)
+                && Settings.System.getIntForUser(mContext.getContentResolver(),
+                        EdgeAuroraConfig.ENABLED, 0, user) == 1
+                && Settings.System.getIntForUser(mContext.getContentResolver(),
+                        EdgeAuroraConfig.WAKE, 1, user) == 1;
     }
 
     /** @hide */

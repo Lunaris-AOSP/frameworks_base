@@ -30,6 +30,11 @@ public interface DozeHost {
     void removeCallback(@NonNull Callback callback);
     void startDozing();
     void pulseWhileDozing(@NonNull PulseCallback callback, int reason);
+    default boolean requestAuroraPulse(float brightness, @NonNull PulseCallback callback) {
+        return false;
+    }
+    default void stopAuroraPulse() {}
+    default float getAuroraPulseBrightness() { return -1f; }
     void stopDozing();
     @MainThread
     void dozeTimeTick();
@@ -107,6 +112,12 @@ public interface DozeHost {
     boolean isAlwaysOnSuppressed();
 
     interface Callback {
+        default boolean onAuroraPulseRequested(Runnable onPulseSuppressedListener) {
+            return false;
+        }
+
+        default void onAuroraPulseChanged() {}
+
         /**
          * Called when a high priority notification is added.
          * @param onPulseSuppressedListener A listener that is invoked if the pulse is being

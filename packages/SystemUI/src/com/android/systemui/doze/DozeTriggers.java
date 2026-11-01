@@ -809,6 +809,23 @@ public class DozeTriggers implements DozeMachine.Part {
     private DozeHost.Callback mHostCallback = new DozeHost.Callback() {
         private int mUdfpsHelpMessagesThisAodSession = 0;
         @Override
+        public boolean onAuroraPulseRequested(Runnable onPulseSuppressedListener) {
+            if (mMachine.isExecutingTransition() || !mAllowPulseTriggers
+                    || !sWakeDisplaySensorState || mDozeHost.isAlwaysOnSuppressed()
+                    || mDozeHost.isPulsingBlocked()) {
+                return false;
+            }
+            final State state = mMachine.getState();
+            if (state == State.DOZE_REQUEST_PULSE || state == State.DOZE_PULSING) {
+                return mMachine.getPulseReason() == DozeLog.PULSE_REASON_NOTIFICATION;
+            }
+            if (!canPulse(state, true)) return false;
+            mDozeHost.setPulsePending(false);
+            requestPulse(DozeLog.PULSE_REASON_NOTIFICATION, true, onPulseSuppressedListener);
+            return true;
+        }
+
+        @Override
         public void onNotificationAlerted(Runnable onPulseSuppressedListener) {
             onNotification(onPulseSuppressedListener);
         }

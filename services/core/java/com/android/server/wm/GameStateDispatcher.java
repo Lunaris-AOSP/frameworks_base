@@ -63,6 +63,11 @@ class GameStateDispatcher {
         updateBypassCharge(active);
     }
 
+    void resetGameState(int userId) {
+        Settings.Secure.putIntForUser(mContext.getContentResolver(), KEY_GAMING_MODE_ACTIVE,
+                0, userId);
+    }
+
     void boostGame(boolean enable) {
         final int perfByUser = Settings.System.getIntForUser(mContext.getContentResolver(),
                 KEY_POWER_MODE_PERF_BY_USER, 0, UserHandle.USER_CURRENT);
