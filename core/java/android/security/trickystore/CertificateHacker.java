@@ -371,7 +371,9 @@ public final class CertificateHacker {
             String[] packages) throws Exception {
 
         byte[] bootKey = rootOfTrustOctet(originalRootOfTrust, 0);
-        if (bootKey == null) bootKey = AttestationUtils.getBootKey();
+        if (AttestationUtils.isNullOrZeroBootKey(bootKey)) {
+            bootKey = AttestationUtils.getBootKey();
+        }
 
         // Keep the three-element RootOfTrust used by older Keymaster versions.
         boolean hasBootHash = !(originalRootOfTrust instanceof ASN1Sequence)

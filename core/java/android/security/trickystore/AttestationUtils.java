@@ -84,17 +84,30 @@ public final class AttestationUtils {
         sKeyboxVersion = new Object();
     }
 
+    public static boolean isNullOrZeroBootKey(byte[] key) {
+        if (key == null) return true;
+        for (byte value : key) {
+            if (value != 0) return false;
+        }
+        return true;
+    }
+
     public static synchronized byte[] getBootKey() {
         Object version = sKeyboxVersion;
-        if (sBootKey == null || (sBootKeyFallback && sBootKeyVersion != version)) {
+        if (isNullOrZeroBootKey(sBootKey)
+                || (sBootKeyFallback && sBootKeyVersion != version)) {
             sBootKeyVersion = version;
             sBootKey = getBootKeyFromProp();
-            sBootKeyFallback = sBootKey == null;
-            if (sBootKey == null) {
+            sBootKeyFallback = isNullOrZeroBootKey(sBootKey);
+            if (isNullOrZeroBootKey(sBootKey)) {
                 sBootKey = getBootKeyFromKeybox();
             }
-            if (sBootKey == null) {
+            if (isNullOrZeroBootKey(sBootKey)) {
                 sBootKey = loadOrCreatePersisted(BOOT_KEY_FILE);
+                if (isNullOrZeroBootKey(sBootKey)) {
+                    sBootKey = generateRandomBytes(32);
+                    writePersisted(BOOT_KEY_FILE, sBootKey);
+                }
             }
         }
         return sBootKey;
