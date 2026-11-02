@@ -128,6 +128,7 @@ import com.android.mechanics.GestureContext
 import com.android.systemui.Dumpable
 import com.android.systemui.Flags
 import com.android.systemui.Flags.notificationShadeBlur
+import com.android.systemui.animation.DialogTransitionAnimator
 import com.android.systemui.brightness.ui.compose.BrightnessSliderContainer
 import com.android.systemui.brightness.ui.compose.ContainerColors
 import com.android.systemui.compose.modifiers.sysUiResTagContainer
@@ -236,6 +237,7 @@ constructor(
     private val audioStreamSliderViewModelFactory: AudioStreamSliderViewModel.Factory,
     private val shadeHeaderController: ShadeHeaderController,
     private val tintedIconManagerFactory: TintedIconManager.Factory,
+    private val dialogTransitionAnimator: DialogTransitionAnimator,
 ) : LifecycleFragment(), QS, Dumpable {
 
     private val toolbarViewModel: ToolbarViewModel by lazy { toolbarViewModelFactory.create() }
@@ -268,6 +270,22 @@ constructor(
     private var sharedLayoutActive by mutableStateOf(false)
     private var currentPanelSwipeProgress by mutableFloatStateOf(-1f)
     private var lastQsExpansion = 0f
+    private val isSeparateShade: Boolean
+        get() =
+            axQsViewModel.panelMode == AxQsPanelMode.SEPARATE && !viewModel.isInSplitShade &&
+                viewModel.statusBarState == StatusBarState.SHADE
+
+    private val sceneExpansionState: QSFragmentComposeViewModel.QSExpansionState
+        get() {
+            if (!isSeparateShade || currentPanelSwipeProgress >= 0f) {
+                return viewModel.expansionState
+            }
+            val showQs =
+                axQsViewModel.holdQsSceneDuringCollapse || axQsViewModel.isQsBypassingShade ||
+                    viewModel.isQsExpanded
+            return QSFragmentComposeViewModel.QSExpansionState(if (showQs) 1f else 0f)
+        }
+
     private val containerView: FrameLayoutTouchPassthrough?
         get() = view as? FrameLayoutTouchPassthrough
 
@@ -408,9 +426,7 @@ constructor(
      */
     @Composable
     private fun CollapsableQuickSettingsSTL() {
-        val separateShade =
-            axQsViewModel.panelMode == AxQsPanelMode.SEPARATE && !viewModel.isInSplitShade &&
-                viewModel.statusBarState == StatusBarState.SHADE
+        val separateShade = isSeparateShade
         val sharedLayout =
             axQsViewModel.useSharedQsLayout && !viewModel.isInSplitShade &&
                 LocalConfiguration.current.orientation != Configuration.ORIENTATION_LANDSCAPE
@@ -427,7 +443,7 @@ constructor(
         val sceneState =
             rememberMutableSceneTransitionLayoutState(
                 initialScene = remember {
-                    if (sharedLayout) QuickSettings else viewModel.expansionState.toIdleSceneKey()
+                    if (sharedLayout) QuickSettings else sceneExpansionState.toIdleSceneKey()
                 },
                 transitions =
                     transitions {
@@ -492,7 +508,7 @@ constructor(
                     sceneState,
                     viewModel.containerViewModel.editModeViewModel.isEditing,
                     snapshotFlow {
-                        viewModel.expansionState.progress to (currentPanelSwipeProgress >= 0f)
+                        sceneExpansionState.progress to (currentPanelSwipeProgress >= 0f)
                     },
                     snapshotFlow { currentSharedLayout },
                 )
@@ -690,6 +706,9 @@ constructor(
     }
 
     override fun setPanelSwipeProgress(progress: Float) {
+        if (progress >= 0f && progress != currentPanelSwipeProgress) {
+            cancelTileDialogExitAnimations()
+        }
         currentPanelSwipeProgress = progress
         if (progress >= 0f) {
             axMediaViewModel.allowGlowOnPanelShown = false
@@ -706,6 +725,9 @@ constructor(
     }
 
     override fun setQsVisible(qsVisible: Boolean) {
+        if (!qsVisible) {
+            cancelTileDialogExitAnimations()
+        }
         containerView?.qsVisible = qsVisible
         viewModel.isQsVisible = qsVisible
     }
@@ -728,6 +750,12 @@ constructor(
         headerTranslation: Float,
         squishinessFraction: Float,
     ) {
+        if (
+            qsExpansionFraction < lastQsExpansion ||
+                panelExpansionFraction < viewModel.panelExpansionFraction
+        ) {
+            cancelTileDialogExitAnimations()
+        }
         lastQsExpansion = qsExpansionFraction
         viewModel.setQsExpansionValue(
             if (currentPanelSwipeProgress >= 0f) currentPanelSwipeProgress else qsExpansionFraction
@@ -735,6 +763,10 @@ constructor(
         viewModel.panelExpansionFraction = panelExpansionFraction
         viewModel.squishinessFraction = squishinessFraction
         viewModel.proposedTranslation = headerTranslation
+    }
+
+    private fun cancelTileDialogExitAnimations() {
+        view?.viewRootImpl?.let(dialogTransitionAnimator::cancelExitAnimations)
     }
 
     override fun setHeaderListening(listening: Boolean) {
@@ -1057,7 +1089,8 @@ constructor(
                     // scrollState never changes
                     LaunchedEffect(Unit) {
                         snapshotFlow {
-                                viewModel.isQsFullyCollapsed && currentPanelSwipeProgress < 0f
+                                viewModel.isQsFullyCollapsed && currentPanelSwipeProgress < 0f &&
+                                    (!isSeparateShade || !viewModel.isPanelExpanded)
                             }
                             .collect { collapsed ->
                                 if (collapsed) {
@@ -1070,7 +1103,7 @@ constructor(
                         remember(viewModel, sharedLayout) {
                                 derivedStateOf {
                                     viewModel.isQsVisibleAndAnyShadeExpanded &&
-                                        (sharedLayout || viewModel.expansionState.progress >
+                                        (sharedLayout || sceneExpansionState.progress >
                                             QSFragmentComposeViewModel.QS_LISTENING_THRESHOLD) &&
                                         !viewModel.isEditing &&
                                         !viewModel.isStackScrollerOverscrolling
@@ -1103,6 +1136,10 @@ constructor(
                             volumeSliderViewModel = volumeSliderViewModel,
                             scrollState = scrollState,
                             sharedLayout = sharedLayout,
+                            holdExpandedContent = {
+                                isSeparateShade && currentPanelSwipeProgress < 0f &&
+                                    sceneExpansionState.progress == 1f
+                            },
                             onCollapsedHeightChanged = onCollapsedHeightChanged,
                             modifier =
                                 Modifier.fillMaxSize()

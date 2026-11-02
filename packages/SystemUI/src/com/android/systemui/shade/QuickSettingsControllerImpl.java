@@ -969,7 +969,9 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
 
     /** Returns amount header should be translated */
     private float getHeaderTranslation() {
-        if (mSplitShadeEnabled || (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE)) {
+        if (mSplitShadeEnabled
+                || ((isLegacySplitShadeEligible() || isMistSeparateShade())
+                        && mBarState == StatusBarState.SHADE)) {
             // in split shade QS don't translate, just (un)squish and overshoot
             return 0;
         }

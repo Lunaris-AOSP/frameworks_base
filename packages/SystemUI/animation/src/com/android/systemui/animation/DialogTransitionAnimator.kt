@@ -542,6 +542,17 @@ constructor(
         openedDialogs.forEach { it.exitAnimationDisabled = true }
     }
 
+    fun cancelExitAnimations(viewRoot: ViewRootImpl) {
+        check(Looper.myLooper() == Looper.getMainLooper()) {
+            "Dialog transitions must be cancelled on the main thread"
+        }
+        openedDialogs.toList().forEach {
+            if (it.controller.viewRoot == viewRoot) {
+                it.cancelExitAnimation()
+            }
+        }
+    }
+
     /**
      * Dismiss [dialog]. If it was launched from another dialog using this animator, also dismiss
      * the stack of dialogs and simply fade out [dialog].
@@ -638,6 +649,7 @@ private class AnimatedDialog(
 
     private var dismissRequested = false
     var exitAnimationDisabled = false
+    private var exitAnimation: TransitionAnimator.Animation? = null
 
     private var isSourceDrawnInDialog = false
     private var isOriginalDialogViewLaidOut = false
@@ -907,6 +919,12 @@ private class AnimatedDialog(
 
     fun isDialogDismissing(): Boolean = isDismissing
 
+    fun cancelExitAnimation() {
+        val animation = exitAnimation ?: return
+        exitAnimation = null
+        animation.cancel()
+    }
+
     fun onDialogDismissed() {
         if (Looper.myLooper() != Looper.getMainLooper()) {
             dialog.context.mainExecutor.execute { onDialogDismissed() }
@@ -1022,6 +1040,7 @@ private class AnimatedDialog(
         endController.transitionContainer = decorView
 
         val endState = endController.createAnimatorState()
+        var animationEnded = false
         val controller =
             object : TransitionAnimator.Controller {
                 override var transitionContainer: ViewGroup
@@ -1052,6 +1071,8 @@ private class AnimatedDialog(
                 }
 
                 override fun onTransitionAnimationEnd(isExpandingFullyAbove: Boolean) {
+                    animationEnded = true
+                    exitAnimation = null
                     val onEnd = {
                         startController.onTransitionAnimationEnd(isExpandingFullyAbove)
                         endController.onTransitionAnimationEnd(isExpandingFullyAbove)
@@ -1105,14 +1126,18 @@ private class AnimatedDialog(
                 }
             }
 
-        transitionAnimator.startAnimation(
-            controller,
-            { endController.createAnimatorState() },
-            originalDialogBackgroundColor,
-            startVelocity = PointF(0f, 0f),
-            springParams = if (isLaunching) LAUNCH_SPRING_PARAMS else COLLAPSE_SPRING_PARAMS,
-            useDynamicPivot = true,
-        )
+        val animation =
+            transitionAnimator.startAnimation(
+                controller,
+                { endController.createAnimatorState() },
+                originalDialogBackgroundColor,
+                startVelocity = PointF(0f, 0f),
+                springParams = if (isLaunching) LAUNCH_SPRING_PARAMS else COLLAPSE_SPRING_PARAMS,
+                useDynamicPivot = true,
+            )
+        if (!isLaunching && !animationEnded) {
+            exitAnimation = animation
+        }
     }
 
     private fun updateTouchInterceptorViewConstraints(state: TransitionAnimator.State) {

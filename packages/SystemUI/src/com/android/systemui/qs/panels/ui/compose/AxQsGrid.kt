@@ -345,7 +345,7 @@ fun <T> AxQsTileGrid(
             } else {
                 itemHeight * rows + spacing * (rows - 1)
             }
-        val pagerPadding = if (pageCount > 1) spacing else 0.dp
+        val pagerPadding = spacing
         HorizontalPager(
             state = pagerState,
             modifier =

@@ -90,6 +90,7 @@ internal fun ContentScope.AxQsMixedGrid(
     scrollState: ScrollState,
     modifier: Modifier = Modifier,
     sharedLayout: Boolean = false,
+    holdExpandedContent: () -> Boolean = { false },
     onCollapsedHeightChanged: (Int) -> Unit = {},
 ) {
     val tiles = viewModel.containerViewModel.tileGridViewModel.tileViewModels
@@ -263,19 +264,23 @@ internal fun ContentScope.AxQsMixedGrid(
     val rowHeight = AxTileDefaults.TileHeight * LocalTileScale.current
     val spacing = axQsViewModel.spacing.tileGap.dp * LocalTileScale.current
     val qsEntranceProgress = {
-        ((viewModel.expansionState.progress - QS_ENTRANCE_START) / (1f - QS_ENTRANCE_START))
-            .coerceIn(0f, 1f)
+        if (holdExpandedContent()) 1f
+        else
+            ((viewModel.expansionState.progress - QS_ENTRANCE_START) / (1f - QS_ENTRANCE_START))
+                .coerceIn(0f, 1f)
     }
     val separateQqs =
         qqs && !splitShade && axQsViewModel.panelMode == AxQsPanelMode.SEPARATE
     val qqsHideBypass = separateQqs && axQsViewModel.isQsBypassingShade
-    val contentVisible by remember(viewModel, qqs, splitShade, qqsHideBypass, sharedLayout) {
-        derivedStateOf {
-            viewModel.isQsVisibleAndAnyShadeExpanded && !viewModel.isEditing &&
-                if (qqs) !qqsHideBypass && !viewModel.isQsFullyExpanded
-                else sharedLayout || splitShade || !viewModel.isQsFullyCollapsed
+    val contentVisible by
+        remember(viewModel, qqs, splitShade, qqsHideBypass, sharedLayout, holdExpandedContent) {
+            derivedStateOf {
+                viewModel.isQsVisibleAndAnyShadeExpanded && !viewModel.isEditing &&
+                    if (qqs) !qqsHideBypass && !viewModel.isQsFullyExpanded
+                    else sharedLayout || splitShade || holdExpandedContent() ||
+                        !viewModel.isQsFullyCollapsed
+            }
         }
-    }
     val contentPlaying by remember(viewModel, axQsViewModel, scrollState, layout, contentVisible, sharedLayout) {
         derivedStateOf {
             shouldPlayQsContent(
