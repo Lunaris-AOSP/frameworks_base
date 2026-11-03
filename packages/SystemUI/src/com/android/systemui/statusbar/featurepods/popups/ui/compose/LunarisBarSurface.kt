@@ -117,9 +117,7 @@ internal fun LunarisBarSurface(
         if (resting) colors.miniSurface.copy(alpha = settings.collapsedOpacity)
         else if (mini) colors.miniSurface else colors.surface
     val foreground = if (mini) colors.miniContent else colors.content
-    val blur =
-        settings.enabled(if (mini) "mini_blur" else "capsule_blur", false) &&
-            !(resting && (settings.collapsedBorder > 0 || settings.collapsedOpacity == 0f))
+    val blur = !mini && settings.enabled("capsule_blur", false)
     val elevation = if (settings.shadow(colors.dark)) settings.shadowElevation.dp else 0.dp
     Surface(
         modifier = modifier,
@@ -143,13 +141,9 @@ internal fun LunarisBarSurface(
             } else if (blur) {
                 PopupBlurBackground(
                     shape = shape,
-                    overlayColor =
-                        surfaceColor
-                            .copy(alpha = if (resting) 0.55f else surfaceColor.alpha * 0.55f)
-                            .toArgb(),
+                    overlayColor = surfaceColor.copy(alpha = surfaceColor.alpha * 0.55f).toArgb(),
                     fallbackColor = surfaceColor.toArgb(),
                     modifier = Modifier.matchParentSize(),
-                    alpha = if (resting) settings.collapsedOpacity else 1f,
                 )
             }
             CompositionLocalProvider(LocalContentColor provides foreground) { content() }

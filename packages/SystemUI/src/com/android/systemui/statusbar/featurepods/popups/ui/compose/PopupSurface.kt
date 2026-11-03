@@ -51,7 +51,6 @@ import com.android.axion.blur.AxBlurBackgroundRenderer
 import com.android.axion.blur.LocalAxBlurEnabled
 import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.observeDynamicIslandPopupColorMode
 import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.readDynamicIslandPopupColorMode
-import kotlin.math.roundToInt
 
 internal class PopupBlurHost(context: Context) : View(context) {
     private val blur = AxBlurBackgroundRenderer(this)
@@ -63,7 +62,6 @@ internal class PopupBlurHost(context: Context) : View(context) {
     private var clipPath: AndroidPath? = null
     private var cornerRadiusPx = 0f
     private var overlayColor = 0
-    private var surfaceAlpha = 255
 
     fun updateAppearance(
         shape: Shape,
@@ -71,7 +69,6 @@ internal class PopupBlurHost(context: Context) : View(context) {
         layoutDirection: LayoutDirection,
         overlayColor: Int,
         fallbackColor: Int,
-        alpha: Float,
         enabled: Boolean,
     ) {
         if (
@@ -86,9 +83,8 @@ internal class PopupBlurHost(context: Context) : View(context) {
         }
         this.overlayColor = overlayColor
         fallbackPaint.color = fallbackColor
-        surfaceAlpha = (alpha.coerceIn(0f, 1f) * 255).roundToInt()
-        blur.setSurfaceAlpha(surfaceAlpha)
-        blur.setEnabled(enabled && surfaceAlpha > 0)
+        blur.setSurfaceAlpha(255)
+        blur.setEnabled(enabled)
         invalidate()
     }
 
@@ -119,7 +115,7 @@ internal class PopupBlurHost(context: Context) : View(context) {
         blur.verifyDrawable(who) || super.verifyDrawable(who)
 
     override fun draw(canvas: Canvas) {
-        if (width <= 0 || height <= 0 || surfaceAlpha == 0) return
+        if (width <= 0 || height <= 0) return
         val currentShape = shape ?: return
         val path =
             clipPath
@@ -154,7 +150,7 @@ internal class PopupBlurHost(context: Context) : View(context) {
                         .asAndroidPath()
                         .also { clipPath = it }
                 }
-        if (!blur.draw(canvas, bounds, path, cornerRadiusPx, overlayColor, surfaceAlpha)) {
+        if (!blur.draw(canvas, bounds, path, cornerRadiusPx, overlayColor, 255)) {
             canvas.drawPath(path, fallbackPaint)
         }
     }
@@ -166,7 +162,6 @@ internal fun PopupBlurBackground(
     overlayColor: Int,
     fallbackColor: Int,
     modifier: Modifier = Modifier,
-    alpha: Float = 1f,
 ) {
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
@@ -180,7 +175,6 @@ internal fun PopupBlurBackground(
                 layoutDirection,
                 overlayColor,
                 fallbackColor,
-                alpha,
                 enabled,
             )
         },
