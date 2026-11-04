@@ -16,20 +16,24 @@
 
 package com.android.systemui.statusbar.pipeline.mobile.ui.compose
 
+import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement.spacedBy
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.android.systemui.Dependency
 import com.android.systemui.statusbar.featurepods.popups.ui.compose.dynamicIslandIconFade
 import com.android.systemui.statusbar.pipeline.mobile.ui.viewmodel.MobileIconsViewModel
 import com.android.systemui.statusbar.pipeline.mobile.ui.viewmodel.StackedMobileIconViewModel
 import com.android.systemui.statusbar.pipeline.shared.ui.composable.StackedMobileIcon
+import com.android.systemui.tuner.TunerService
 
 /** Renders the mobile icons for the status bar. */
 @Composable
@@ -45,6 +49,15 @@ fun MobileIcons(
             modifier = modifier.dynamicIslandIconFade(),
         )
     } else {
+        val showSmallNetworkType by produceState(initialValue = false) {
+            val tunerService = Dependency.get(TunerService::class.java)
+            val key = "system:" + Settings.System.STATUS_BAR_SMALL_NETWORK_TYPE
+            val tunable = TunerService.Tunable { _, newValue ->
+                value = TunerService.parseIntegerSwitch(newValue, false)
+            }
+            tunerService.addTunable(tunable, key)
+            awaitDispose { tunerService.removeTunable(tunable) }
+        }
         val mobileSubViewModels by viewModel.mobileSubViewModels.collectAsStateWithLifecycle()
         val iconPaddingSp = 4.sp
         val iconSpacingSp = 2.sp
@@ -57,7 +70,10 @@ fun MobileIcons(
             modifier = modifier.padding(horizontal = padding),
         ) {
             mobileSubViewModels.forEach { mobileViewModel ->
-                MobileIcon(viewModel = mobileViewModel)
+                MobileIcon(
+                    viewModel = mobileViewModel,
+                    showSmallNetworkType = showSmallNetworkType,
+                )
             }
         }
     }

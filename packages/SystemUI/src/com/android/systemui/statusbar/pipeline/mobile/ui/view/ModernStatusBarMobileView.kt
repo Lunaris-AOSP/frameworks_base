@@ -105,6 +105,8 @@ class ModernStatusBarMobileView(context: Context, attrs: AttributeSet?) :
             layoutParams.height =
                 context.resources.getDimensionPixelSize(R.dimen.status_bar_mobile_type_size_updated)
         }
+
+        requireViewById<MobileSignalIconLayout>(R.id.mobile_signal_layout).updateNetworkTypeSize()
     }
 
     companion object {

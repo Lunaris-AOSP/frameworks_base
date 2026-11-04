@@ -168,6 +168,12 @@
         android:title="@string/disable_stacked_mobile_icons_title"
         sysui:defValue="false" />
 
+    <com.android.systemui.tuner.TunerSwitch
+        android:icon="@drawable/ic_statusbar_fourg"
+        android:key="system:status_bar_small_network_type"
+        android:title="@string/status_bar_small_network_type_title"
+        sysui:defValue="false" />
+
     <!-- other weird signal stuff -->
 
     <com.android.systemui.tuner.StatusBarSwitch

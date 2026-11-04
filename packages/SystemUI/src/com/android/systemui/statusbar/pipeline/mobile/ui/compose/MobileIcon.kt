@@ -43,27 +43,38 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.constrainHeight
+import androidx.compose.ui.unit.constrainWidth
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.systemui.Flags
+import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.common.ui.compose.load
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.featurepods.popups.ui.compose.dynamicIslandIconFade
 import com.android.systemui.statusbar.pipeline.mobile.domain.model.SignalIconModel
 import com.android.systemui.statusbar.pipeline.mobile.ui.viewmodel.MobileIconViewModelCommon
+import kotlin.math.max
+import kotlin.math.min
 
 /** Composable for displaying a single mobile icon. */
 @Composable
-fun MobileIcon(viewModel: MobileIconViewModelCommon, modifier: Modifier = Modifier) {
+fun MobileIcon(
+    viewModel: MobileIconViewModelCommon,
+    modifier: Modifier = Modifier,
+    showSmallNetworkType: Boolean = false,
+) {
     val isVisible by viewModel.isVisible.collectAsStateWithLifecycle()
 
     if (!isVisible) return
@@ -105,29 +116,39 @@ fun MobileIcon(viewModel: MobileIconViewModelCommon, modifier: Modifier = Modifi
             }
         }
 
-        networkTypeIcon?.let { networkIcon ->
-            val height = with(LocalDensity.current) { MobileIconDimensions.IconHeightSp.toDp() }
-            Box(
-                modifier = Modifier.height(height).dynamicIslandIconFade(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Image(
-                    painter = painterResource(networkIcon.resId),
-                    contentDescription = networkIcon.contentDescription?.load(),
-                    modifier = Modifier.height(height),
-                    colorFilter = ColorFilter.tint(contentColor, BlendMode.SrcIn),
-                    contentScale = ContentScale.FillHeight,
-                )
+        val smallNetworkIcon = networkTypeIcon.takeIf { showSmallNetworkType }
+        if (smallNetworkIcon != null) {
+            SmallNetworkTypeSignalIcon(
+                networkIcon = smallNetworkIcon,
+                signalIcon = icon as SignalIconModel.Cellular,
+                color = contentColor,
+                modifier = Modifier.dynamicIslandIconFade(),
+            )
+        } else {
+            networkTypeIcon?.let { networkIcon ->
+                val height = with(LocalDensity.current) { MobileIconDimensions.IconHeightSp.toDp() }
+                Box(
+                    modifier = Modifier.height(height).dynamicIslandIconFade(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Image(
+                        painter = painterResource(networkIcon.resId),
+                        contentDescription = networkIcon.contentDescription?.load(),
+                        modifier = Modifier.height(height),
+                        colorFilter = ColorFilter.tint(contentColor, BlendMode.SrcIn),
+                        contentScale = ContentScale.FillHeight,
+                    )
+                }
             }
+
+            Spacer(Modifier.size(spacing))
+
+            MobileSignalIcon(
+                viewModel = icon as SignalIconModel.Cellular,
+                color = contentColor,
+                modifier = Modifier.dynamicIslandIconFade(),
+            )
         }
-
-        Spacer(Modifier.size(spacing))
-
-        MobileSignalIcon(
-            viewModel = icon as SignalIconModel.Cellular,
-            color = contentColor,
-            modifier = Modifier.dynamicIslandIconFade(),
-        )
 
         Spacer(Modifier.size(spacing))
 
@@ -143,6 +164,43 @@ fun MobileIcon(viewModel: MobileIconViewModelCommon, modifier: Modifier = Modifi
                 colorFilter = ColorFilter.tint(contentColor, BlendMode.SrcIn),
                 contentScale = ContentScale.FillHeight,
             )
+        }
+    }
+}
+
+@Composable
+private fun SmallNetworkTypeSignalIcon(
+    networkIcon: Icon.Resource,
+    signalIcon: SignalIconModel.Cellular,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    val networkTypeHeight = dimensionResource(R.dimen.status_bar_mobile_type_size_small)
+    val networkTypePadding = dimensionResource(R.dimen.status_bar_mobile_type_small_padding)
+    Layout(
+        modifier = modifier,
+        content = {
+            MobileSignalIcon(viewModel = signalIcon, color = color)
+            Image(
+                painter = painterResource(networkIcon.resId),
+                contentDescription = networkIcon.contentDescription?.load(),
+                modifier = Modifier.height(networkTypeHeight),
+                colorFilter = ColorFilter.tint(color, BlendMode.SrcIn),
+                contentScale = ContentScale.FillHeight,
+            )
+        },
+    ) { measurables, constraints ->
+        val childConstraints = constraints.copy(minWidth = 0, minHeight = 0)
+        val signal = measurables[0].measure(childConstraints)
+        val networkType = measurables[1].measure(childConstraints)
+        val padding = networkTypePadding.roundToPx()
+        val overlap = min(networkType.width, (signal.width / 4 - padding).coerceAtLeast(0))
+        val width = constraints.constrainWidth(networkType.width + signal.width - overlap)
+        val height =
+            constraints.constrainHeight(max(networkType.height, signal.height + 2 * padding))
+        layout(width, height) {
+            signal.placeRelative(networkType.width - overlap, (height - signal.height) / 2)
+            networkType.placeRelative(0, 0)
         }
     }
 }

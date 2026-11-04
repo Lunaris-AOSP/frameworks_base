@@ -7265,6 +7265,11 @@ public final class Settings {
         /**
          * @hide
          */
+        public static final String STATUS_BAR_SMALL_NETWORK_TYPE = "status_bar_small_network_type";
+
+        /**
+         * @hide
+         */
         public static final String STATUSBAR_EXTRA_PADDING_START = "statusbar_extra_padding_start";
 
         /**
