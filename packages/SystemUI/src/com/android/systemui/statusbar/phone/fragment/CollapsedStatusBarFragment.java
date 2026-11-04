@@ -134,6 +134,7 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
     private MultiSourceMinAlphaController mEndSideAlphaController;
     private LinearLayout mEndSideContent;
     private View mClockView;
+    private View mNetworkSpeedLeftContainer;
     private View mPrimaryOngoingActivityChip;
     private View mSecondaryOngoingActivityChip;
     private View mNotificationIconAreaInner;
@@ -394,6 +395,7 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
         mEndSideContent = mStatusBar.findViewById(R.id.status_bar_end_side_content);
         mEndSideAlphaController = new MultiSourceMinAlphaController(mEndSideContent);
         mClockView = mStatusBar.findViewById(R.id.clock);
+        mNetworkSpeedLeftContainer = mStatusBar.findViewById(R.id.network_speed_left_container);
         mPrimaryOngoingActivityChip = mStatusBar.findViewById(R.id.ongoing_activity_chip_primary);
         mSecondaryOngoingActivityChip =
                 mStatusBar.findViewById(R.id.ongoing_activity_chip_secondary);
@@ -891,11 +893,13 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
     public void hideNotificationIconArea(boolean animate) {
         StatusBarRootModernization.assertInLegacyMode();
         animateHide(mNotificationIconAreaInner, animate);
+        animateHide(mNetworkSpeedLeftContainer, animate);
     }
 
     public void showNotificationIconArea(boolean animate) {
         StatusBarRootModernization.assertInLegacyMode();
         animateShow(mNotificationIconAreaInner, animate);
+        animateShow(mNetworkSpeedLeftContainer, animate);
     }
 
     public void hideOperatorName(boolean animate) {

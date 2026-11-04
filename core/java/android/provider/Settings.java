@@ -7208,6 +7208,30 @@ public final class Settings {
         public static final String BLUETOOTH_SHOW_BATTERY = "bluetooth_show_battery";
 
         /**
+         * Show the status bar network speed indicator. 0 = disabled, 1 = enabled.
+         * @hide
+         */
+        public static final String NETWORK_SPEED_ENABLED = "network_speed_enabled";
+
+        /**
+         * Hide the network speed indicator when no bytes are transferred.
+         * @hide
+         */
+        public static final String NETWORK_SPEED_AUTO_HIDE = "network_speed_auto_hide";
+
+        /**
+         * Network speed placement. 0 = left, 1 = right (default).
+         * @hide
+         */
+        public static final String NETWORK_SPEED_POSITION = "network_speed_position";
+
+        /**
+         * Network speed layout. 0 = single line, 1 = dual line (default).
+         * @hide
+         */
+        public static final String NETWORK_SPEED_LAYOUT = "network_speed_layout";
+
+        /**
          * Statusbar logo
          * @hide
          */

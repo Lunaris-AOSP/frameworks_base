@@ -53,6 +53,8 @@ import com.android.systemui.statusbar.data.repository.StatusBarConfigurationCont
 import com.android.systemui.statusbar.data.repository.StatusBarContentInsetsProviderStore
 import com.android.systemui.statusbar.policy.Clock
 import com.android.systemui.statusbar.policy.ConfigurationController
+import com.android.systemui.statusbar.policy.NetworkSpeedController
+import com.android.systemui.statusbar.policy.networkspeed.NetworkSpeedView
 import com.android.systemui.statusbar.window.StatusBarWindowControllerStore
 import com.android.systemui.statusbar.window.StatusBarWindowStateController
 import com.android.systemui.tuner.TunerService
@@ -98,6 +100,7 @@ private constructor(
 ) : ViewController<PhoneStatusBarView>(view), TunerService.Tunable {
 
     private lateinit var battery: BatteryMeterView
+    private lateinit var networkSpeedLeft: NetworkSpeedView
     private lateinit var clock: Clock
     private lateinit var clockCenter: Clock
     private lateinit var clockRight: Clock
@@ -203,6 +206,8 @@ private constructor(
         }
 
     override fun onViewAttached() {
+        networkSpeedLeft = mView.requireViewById(R.id.network_speed_left)
+        NetworkSpeedController.init(context).addLeftView(networkSpeedLeft)
         clock = mView.requireViewById(R.id.clock)
         clockCenter = mView.requireViewById(R.id.clock_center)
         clockRight = mView.requireViewById(R.id.clock_right)
@@ -351,6 +356,7 @@ private constructor(
         systemIconsPopupController = null
         tunerService.removeTunable(this)
         removeDarkReceivers()
+        NetworkSpeedController.get().removeLeftView(networkSpeedLeft)
         startSideContainer.setOnHoverListener(null)
         endSideContainer.setOnHoverListener(null)
         endSideContainer.setOnLongClickListener(null)
@@ -422,6 +428,7 @@ private constructor(
     }
 
     private fun addDarkReceivers() {
+        darkIconDispatcher.addDarkReceiver(networkSpeedLeft)
         darkIconDispatcher.addDarkReceiver(battery)
         darkIconDispatcher.addDarkReceiver(clock)
         darkIconDispatcher.addDarkReceiver(clockCenter)
@@ -429,6 +436,7 @@ private constructor(
     }
 
     private fun removeDarkReceivers() {
+        darkIconDispatcher.removeDarkReceiver(networkSpeedLeft)
         darkIconDispatcher.removeDarkReceiver(battery)
         darkIconDispatcher.removeDarkReceiver(clock)
         darkIconDispatcher.removeDarkReceiver(clockCenter)

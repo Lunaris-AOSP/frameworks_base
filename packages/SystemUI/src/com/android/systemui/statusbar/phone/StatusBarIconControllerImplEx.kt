@@ -18,7 +18,6 @@ package com.android.systemui.statusbar.phone
 import android.content.Context
 import android.view.ViewGroup
 import android.widget.LinearLayout
-import com.android.systemui.res.R
 import com.android.systemui.statusbar.StatusIconDisplayable
 import com.android.systemui.statusbar.phone.ui.StatusBarIconControllerImpl
 import com.android.systemui.statusbar.phone.ui.StatusBarIconList
@@ -85,8 +84,8 @@ class StatusBarIconControllerImplEx private constructor(
     }
 
     private fun createLayoutParams(): LinearLayout.LayoutParams {
-        val width = context.resources.getDimensionPixelSize(R.dimen.network_speed_view_width)
-        return LinearLayout.LayoutParams(width, LinearLayout.LayoutParams.MATCH_PARENT)
+        return LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.MATCH_PARENT)
     }
 
     fun onSetIconHolder(viewIndex: Int, holder: StatusBarIconHolder, rootGroup: ViewGroup) {

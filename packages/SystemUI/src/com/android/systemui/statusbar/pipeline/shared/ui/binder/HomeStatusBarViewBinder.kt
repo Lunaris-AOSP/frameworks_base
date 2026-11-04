@@ -60,6 +60,7 @@ import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFea
 import com.android.systemui.statusbar.notification.icon.ui.viewbinder.ConnectedDisplaysStatusBarNotificationIconViewStore
 import com.android.systemui.statusbar.notification.promoted.PromotedNotificationUi
 import com.android.systemui.statusbar.phone.fragment.CollapsedStatusBarFragment
+import com.android.systemui.statusbar.policy.networkspeed.NetworkSpeedView
 import com.android.systemui.statusbar.phone.ongoingcall.StatusBarChipsModernization
 import com.android.systemui.statusbar.phone.ui.StatusBarIconController
 import com.android.systemui.statusbar.pipeline.shared.ui.model.VisibilityModel
@@ -144,6 +145,8 @@ constructor(
         val centerClock: Clock = view.findViewById(R.id.clock_center)
         val rightClock: Clock = view.findViewById(R.id.clock_right)
         val notificationIconsArea = view.requireViewById<View>(R.id.notificationIcons)
+        val networkSpeedLeftContainer = view.requireViewById<View>(R.id.network_speed_left_container)
+        val networkSpeedLeft = view.requireViewById<NetworkSpeedView>(R.id.network_speed_left)
 
         val leftPaddingInit = leftClock.capturePadding()
         val centerPaddingInit = centerClock.capturePadding()
@@ -166,12 +169,24 @@ constructor(
             batteryBar.hideInitially()
             leftLogo.hideInitially()
             notificationIconsArea.hideInitially()
+            networkSpeedLeftContainer.hideInitially()
             lyricContainer?.hideInitially()
         }
 
         view.repeatWhenAttached {
             repeatOnLifecycle(Lifecycle.State.CREATED) {
                 val context = view.context
+
+                launch {
+                    combine(
+                        viewModel.hideStartSideContentForHeadsUp,
+                        viewModel.systemInfoCombinedVis,
+                    ) { hideForHun, systemInfo ->
+                        !hideForHun && systemInfo.baseVisibility.visibility == View.VISIBLE
+                    }.distinctUntilChanged().collect { visible ->
+                        networkSpeedLeft.setVisibleByPolicy(visible)
+                    }
+                }
 
                 val clockState =
                     MutableStateFlow(
@@ -616,6 +631,7 @@ constructor(
                     launch {
                         viewModel.isNotificationIconContainerVisible.collect {
                             notificationIconsArea.adjustVisibility(it)
+                            networkSpeedLeftContainer.adjustVisibility(it)
                             batteryBar.adjustVisibility(it)
                             leftLogo.adjustVisibility(it)
                         }

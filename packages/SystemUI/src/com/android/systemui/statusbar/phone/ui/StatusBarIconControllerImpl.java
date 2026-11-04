@@ -206,6 +206,7 @@ public class StatusBarIconControllerImpl implements Tunable,
         }
         mIconHideList.clear();
         mIconHideList.addAll(StatusBarIconController.getIconHideList(mContext, newValue));
+        mIconHideList.remove(NetworkSpeedController.SLOT_NETWORK_SPEED);
         List<Slot> currentSlots = mStatusBarIconList.getSlots();
         ArrayMap<Slot, List<StatusBarIconHolder>> slotsToReAdd = new ArrayMap<>();
 

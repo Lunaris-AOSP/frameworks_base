@@ -24,6 +24,7 @@ import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.res.R
 import com.android.systemui.shared.settings.data.repository.SecureSettingsRepository
 import com.android.systemui.statusbar.phone.ui.StatusBarIconController
+import com.android.systemui.statusbar.policy.NetworkSpeedController
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -52,7 +53,8 @@ constructor(
         secureSettingsRepository
             .stringSetting(StatusBarIconController.ICON_HIDE_LIST)
             .map { hideListStr ->
-                StatusBarIconController.getIconHideList(context, hideListStr).toSet()
+                StatusBarIconController.getIconHideList(context, hideListStr).toSet() -
+                    NetworkSpeedController.SLOT_NETWORK_SPEED
             }
             .distinctUntilChanged()
 

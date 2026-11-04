@@ -429,6 +429,7 @@ class DynamicIslandIconFader(
                 "clock_right",
                 "battery",
                 "network_speed",
+                "network_speed_left",
                 "networkSpeed",
                 "user_switcher_container",
                 "operator_name_frame",

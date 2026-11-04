@@ -15,140 +15,171 @@
  */
 package com.android.systemui.statusbar.policy
 
-import android.content.*
+import android.content.Context
 import android.database.ContentObserver
-import android.net.*
+import android.net.ConnectivityManager
+import android.net.Network
 import android.net.TrafficStats
-import android.os.*
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import android.os.UserHandle
 import android.provider.Settings
 import android.view.ViewGroup
 import com.android.keyguard.KeyguardUpdateMonitor
 import com.android.keyguard.KeyguardUpdateMonitorCallback
 import com.android.systemui.Dependency
 import com.android.systemui.statusbar.StatusIconDisplayable
-import com.android.systemui.statusbar.phone.StatusBarIconHolder
 import com.android.systemui.statusbar.phone.NetworkSpeedIconHolder
 import com.android.systemui.statusbar.phone.StatusBarIconControllerImplEx
+import com.android.systemui.statusbar.phone.StatusBarIconHolder
 import com.android.systemui.statusbar.policy.networkspeed.NetworkSpeedIconState
 import com.android.systemui.statusbar.policy.networkspeed.NetworkSpeedView
-import kotlinx.coroutines.*
 
 class NetworkSpeedController private constructor(
     private val context: Context
 ) {
-
     private val connectivityManager =
-        context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        context.getSystemService(ConnectivityManager::class.java)
     private val contentResolver = context.contentResolver
-
+    private val handler = Handler(Looper.getMainLooper())
+    private val leftViews = mutableSetOf<NetworkSpeedView>()
+    private var initialized = false
     private var isSwitchOn = false
-    private var isConnected = false
-    private var networkVisibility = false
-
+    private var currentNetwork: Network? = null
+    private val isConnected: Boolean
+        get() = currentNetwork != null
+    private var autoHide = false
+    private var position = POSITION_RIGHT
+    private var singleLine = false
     private var lastTime = 0L
     private var lastTotalBytes = 0L
+    private var speed = 0L
 
-    private var keyguardUpdateMonitor: KeyguardUpdateMonitor? = null
-    private var keyguardCallback: KeyguardUpdateMonitorCallback? = null
-
-    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-    private var speedUpdateJob: Job? = null
+    private val speedUpdate = object : Runnable {
+        override fun run() {
+            if (!isConnected || !isSwitchOn) return
+            val currentTime = SystemClock.elapsedRealtime()
+            val totalBytes = getTotalBytes()
+            val elapsed = currentTime - lastTime
+            speed = if (elapsed > 0 && totalBytes >= lastTotalBytes) {
+                (totalBytes - lastTotalBytes) * 1000 / elapsed
+            } else {
+                0L
+            }
+            lastTime = currentTime
+            lastTotalBytes = totalBytes
+            publishState()
+            handler.postDelayed(this, REFRESH_INTERVAL_MS)
+        }
+    }
 
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
-            updateConnectionState(true)
+            if (currentNetwork == network) return
+            currentNetwork = network
+            restartSpeedUpdates()
         }
 
         override fun onLost(network: Network) {
-            updateConnectionState(false)
+            if (currentNetwork != network) return
+            currentNetwork = null
+            restartSpeedUpdates()
         }
     }
 
-    private val networkSpeedObserver =
-        object : ContentObserver(Handler(Looper.getMainLooper())) {
-            override fun onChange(selfChange: Boolean) {
-                reset()
-                updateSwitchState()
+    private val networkSpeedObserver = object : ContentObserver(handler) {
+        override fun onChange(selfChange: Boolean) {
+            val wasEnabled = isSwitchOn
+            updateSettings()
+            if (wasEnabled != isSwitchOn) {
                 restartSpeedUpdates()
+            } else {
+                publishState()
             }
         }
+    }
+
+    private val keyguardCallback = object : KeyguardUpdateMonitorCallback() {
+        override fun onUserSwitchComplete(newUserId: Int) {
+            updateSettings()
+            restartSpeedUpdates()
+        }
+    }
 
     fun init() {
-        connectivityManager.registerDefaultNetworkCallback(networkCallback)
-
-        contentResolver.registerContentObserver(
-            Settings.Secure.getUriFor(ICON_HIDE_LIST),
-            true,
-            networkSpeedObserver
-        )
-        networkSpeedObserver.onChange(true)
-
-        keyguardUpdateMonitor = Dependency.get(KeyguardUpdateMonitor::class.java)
-        keyguardCallback = object : KeyguardUpdateMonitorCallback() {
-            override fun onUserSwitchComplete(newUserId: Int) {
-                networkSpeedObserver.onChange(true)
-            }
+        if (initialized) return
+        initialized = true
+        listOf(
+            Settings.System.NETWORK_SPEED_ENABLED,
+            Settings.System.NETWORK_SPEED_AUTO_HIDE,
+            Settings.System.NETWORK_SPEED_POSITION,
+            Settings.System.NETWORK_SPEED_LAYOUT,
+        ).forEach { key ->
+            contentResolver.registerContentObserver(
+                Settings.System.getUriFor(key), false, networkSpeedObserver, UserHandle.USER_ALL)
         }
-        keyguardUpdateMonitor?.registerCallback(keyguardCallback)
-    }
-
-    private fun updateSwitchState() {
-        val iconHideList = Settings.Secure.getStringForUser(
-            contentResolver,
-            ICON_HIDE_LIST,
-            UserHandle.USER_CURRENT
-        )
-        isSwitchOn = !iconHideList.isNullOrEmpty() 
-            && !iconHideList.contains(SLOT_NETWORK_SPEED)
-    }
-
-    private fun updateConnectionState(connected: Boolean) {
-        isConnected = connected
+        updateSettings()
+        currentNetwork = connectivityManager.activeNetwork
         restartSpeedUpdates()
+        connectivityManager.registerDefaultNetworkCallback(networkCallback, handler)
+        Dependency.get(KeyguardUpdateMonitor::class.java).registerCallback(keyguardCallback)
     }
+
+    private fun updateSettings() {
+        if (Settings.System.getStringForUser(contentResolver,
+                Settings.System.NETWORK_SPEED_ENABLED, UserHandle.USER_CURRENT) == null) {
+            val hiddenIcons = Settings.Secure.getStringForUser(
+                contentResolver, ICON_HIDE_LIST, UserHandle.USER_CURRENT)
+            val wasEnabled = !hiddenIcons.isNullOrEmpty() &&
+                SLOT_NETWORK_SPEED !in hiddenIcons.split(',').map { it.trim() }
+            Settings.System.putIntForUser(contentResolver,
+                Settings.System.NETWORK_SPEED_ENABLED, if (wasEnabled) 1 else 0,
+                UserHandle.USER_CURRENT)
+        }
+        isSwitchOn = readSetting(Settings.System.NETWORK_SPEED_ENABLED, 0) != 0
+        autoHide = readSetting(Settings.System.NETWORK_SPEED_AUTO_HIDE, 0) != 0
+        position = if (readSetting(Settings.System.NETWORK_SPEED_POSITION, POSITION_RIGHT) ==
+                POSITION_LEFT) POSITION_LEFT else POSITION_RIGHT
+        singleLine = readSetting(Settings.System.NETWORK_SPEED_LAYOUT, 1) == 0
+    }
+
+    private fun readSetting(key: String, defaultValue: Int): Int =
+        Settings.System.getIntForUser(contentResolver, key, defaultValue, UserHandle.USER_CURRENT)
 
     private fun restartSpeedUpdates() {
-        speedUpdateJob?.cancel()
+        handler.removeCallbacks(speedUpdate)
+        lastTime = SystemClock.elapsedRealtime()
+        lastTotalBytes = getTotalBytes()
+        speed = 0L
+        publishState()
         if (isConnected && isSwitchOn) {
-            speedUpdateJob = scope.launch {
-                while (isActive) {
-                    updateNetworkSpeed()
-                    delay(REFRESH_INTERVAL_MS)
-                }
-            }
-        } else {
-            scope.launch {
-                updateNetworkSpeed()
-            }
+            handler.postDelayed(speedUpdate, REFRESH_INTERVAL_MS)
         }
     }
 
-    private suspend fun updateNetworkSpeed() {
-        val currentTime = System.currentTimeMillis()
-        val totalBytes = getTotalBytes()
+    private fun stateForPosition(targetPosition: Int) = NetworkSpeedIconState().apply {
+        setVisible(isConnected && isSwitchOn && position == targetPosition &&
+            (!autoHide || speed > 0))
+        setSpeedText(speed)
+        setSlot(SLOT_NETWORK_SPEED)
+        singleLine = this@NetworkSpeedController.singleLine
+    }
 
-        var speed = 0L
-        if (lastTime > 0 && lastTotalBytes > 0 &&
-            totalBytes > lastTotalBytes && currentTime > lastTime
-        ) {
-            speed = (((totalBytes - lastTotalBytes) * 1000) / (currentTime - lastTime)).toLong()
-        }
+    private fun publishState() {
+        StatusBarIconControllerImplEx.get().setNetworkSpeedIcon(
+            SLOT_NETWORK_SPEED, stateForPosition(POSITION_RIGHT))
+        val leftState = stateForPosition(POSITION_LEFT)
+        leftViews.forEach { it.applyNetworkState(leftState) }
+    }
 
-        val iconState = NetworkSpeedIconState().apply {
-            setVisible(isConnected && isSwitchOn)
-            setSpeedText(speed)
-            setSlot(SLOT_NETWORK_SPEED)
-        }
+    fun addLeftView(view: NetworkSpeedView) {
+        leftViews.add(view)
+        view.applyNetworkState(stateForPosition(POSITION_LEFT))
+    }
 
-        withContext(Dispatchers.Main) {
-            StatusBarIconControllerImplEx.get().setNetworkSpeedIcon(SLOT_NETWORK_SPEED, iconState)
-            if (networkVisibility != iconState.isVisible()) {
-                networkVisibility = iconState.isVisible()
-            }
-        }
-
-        lastTime = currentTime
-        lastTotalBytes = totalBytes
+    fun removeLeftView(view: NetworkSpeedView) {
+        leftViews.remove(view)
     }
 
     private fun getTotalBytes(): Long {
@@ -156,13 +187,6 @@ class NetworkSpeedController private constructor(
         val tx = TrafficStats.getTotalTxBytes()
         return if (rx >= 0 && tx >= 0) rx + tx else 0
     }
-
-    private fun reset() {
-        lastTime = 0
-        lastTotalBytes = 0
-    }
-
-    fun isSwitchOn(): Boolean = isSwitchOn
 
     fun addHolder(
         index: Int,
@@ -176,7 +200,7 @@ class NetworkSpeedController private constructor(
     }
 
     fun onSetIconHolder(viewIndex: Int, holder: StatusBarIconHolder, rootGroup: ViewGroup) {
-        if (holder.type == 6 && holder is NetworkSpeedIconHolder) {
+        if (holder is NetworkSpeedIconHolder) {
             val view = rootGroup.getChildAt(viewIndex) as? NetworkSpeedView ?: return
             view.applyNetworkState(holder.getNetworkSpeedIconState())
         }
@@ -198,9 +222,10 @@ class NetworkSpeedController private constructor(
             return instance ?: throw IllegalStateException("init must be called first!!!")
         }
 
-        const val TAG = "NetworkSpeedController"
         const val SLOT_NETWORK_SPEED = "network_speed"
-        const val ICON_HIDE_LIST = "icon_blacklist"
-        const val REFRESH_INTERVAL_MS = 4000L
+        private const val ICON_HIDE_LIST = "icon_blacklist"
+        private const val POSITION_LEFT = 0
+        private const val POSITION_RIGHT = 1
+        private const val REFRESH_INTERVAL_MS = 4000L
     }
 }

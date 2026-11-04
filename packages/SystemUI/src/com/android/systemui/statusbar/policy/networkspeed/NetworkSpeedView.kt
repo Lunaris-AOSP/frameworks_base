@@ -16,12 +16,15 @@
 package com.android.systemui.statusbar.policy.networkspeed
 
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Rect
 import android.util.AttributeSet
 import android.util.Log
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.TextView
 import com.android.systemui.plugins.DarkIconDispatcher
 import com.android.systemui.res.R
@@ -45,7 +48,6 @@ class NetworkSpeedView @JvmOverloads constructor(
             val view = LayoutInflater.from(context)
                 .inflate(R.layout.network_speed_view, null) as NetworkSpeedView
             view.setSlot(slot)
-            view.initDotView()
             view.isBlocked = blocked
             return view
         }
@@ -54,8 +56,9 @@ class NetworkSpeedView @JvmOverloads constructor(
     private var isBlocked: Boolean = false
     private var speedNumber: TextView? = null
     private var speedUnit: TextView? = null
+    private lateinit var speedText: LinearLayout
     private lateinit var dotView: StatusBarIconView
-    private var slot: String = ""
+    private var slot: String = NetworkSpeedController.SLOT_NETWORK_SPEED
     private var speed: Long = 0L
     private var iconTint: Int = -1
     private var isStaticDrawableColor: Boolean = false
@@ -64,11 +67,14 @@ class NetworkSpeedView @JvmOverloads constructor(
     private var darkIntensity: Float = 0f
     private var tintArea: MutableList<Rect> = mutableListOf()
     private var state: NetworkSpeedIconState? = null
+    private var visibleByPolicy = true
 
     override fun onFinishInflate() {
         super.onFinishInflate()
         speedNumber = findViewById(R.id.number)
         speedUnit = findViewById(R.id.unit)
+        speedText = findViewById(R.id.network_speed_text)
+        initDotView()
     }
 
     private fun initDotView() {
@@ -83,11 +89,11 @@ class NetworkSpeedView @JvmOverloads constructor(
         addView(dotView, layoutParams)
     }
 
-    private fun updateNetworkSpeed(fullSpeed: String, parts: List<String>) {
+    private fun updateNetworkSpeed(parts: List<String>) {
         if (parts.size < 2) return
         speedNumber?.text = parts[0]
         speedUnit?.text = parts[1]
-        requestLayout()
+        contentDescription = parts.joinToString(" ")
     }
 
     private fun speedChanged(newSpeed: Long) {
@@ -95,7 +101,7 @@ class NetworkSpeedView @JvmOverloads constructor(
 
         speed = newSpeed
         val formatted = formatSpeed(speed)
-        updateNetworkSpeed(formatted, formatted.split(":"))
+        updateNetworkSpeed(formatted.split(":"))
     }
 
     private fun formatSpeed(speed: Long): String {
@@ -251,15 +257,69 @@ class NetworkSpeedView @JvmOverloads constructor(
             return
         }
 
+        if (state == null || state?.singleLine != newState.singleLine) {
+            updateTextLayout(newState.singleLine)
+        }
         state = newState.copy()
-        visibility = if (newState.isVisible()) View.VISIBLE else View.GONE
+        updateVisibility()
 
         if (newState.isVisible()) {
             speedChanged(newState.getSpeedText())
         }
     }
 
+    fun setVisibleByPolicy(visible: Boolean) {
+        if (visibleByPolicy == visible) return
+        visibleByPolicy = visible
+        updateVisibility()
+    }
+
+    private fun updateVisibility() {
+        visibility = when {
+            state?.isVisible() != true -> View.GONE
+            !visibleByPolicy -> View.INVISIBLE
+            else -> View.VISIBLE
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        minimumWidth = resources.getDimensionPixelSize(R.dimen.network_speed_view_width)
+        setPaddingRelative(paddingStart, paddingTop,
+            resources.getDimensionPixelSize(R.dimen.network_speed_view_padding_end), paddingBottom)
+        updateTextLayout(state?.singleLine ?: false)
+        val size = resources.getDimensionPixelSize(R.dimen.status_bar_icon_size)
+        dotView.layoutParams = dotView.layoutParams.apply {
+            width = size
+            height = size
+        }
+    }
+
+    private fun updateTextLayout(singleLine: Boolean) {
+        speedText.orientation = if (singleLine) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+        speedNumber?.setTextSize(TypedValue.COMPLEX_UNIT_PX, resources.getDimension(
+            if (singleLine) R.dimen.network_speed_single_line_text_size
+            else R.dimen.network_speed_text_size))
+        speedUnit?.setTextSize(TypedValue.COMPLEX_UNIT_PX, resources.getDimension(
+            if (singleLine) R.dimen.network_speed_single_line_unit_text_size
+            else R.dimen.network_speed_unit_text_size))
+        speedUnit?.let { unit ->
+            val params = unit.layoutParams as LinearLayout.LayoutParams
+            params.marginStart = if (singleLine) resources.getDimensionPixelSize(
+                R.dimen.network_speed_single_line_spacing) else 0
+            unit.layoutParams = params
+        }
+    }
+
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
+        if (!isStaticDrawableColor && (changed || layoutLeft != left)) {
+            layoutLeft = left
+            setIconTint(DarkIconDispatcher.getTint(ArrayList(tintArea), this, iconTint))
+        }
+    }
+
     override fun isIconBlocked(): Boolean {
-        return isBlocked && NetworkSpeedController.get().isSwitchOn() == false
+        return isBlocked
     }
 }

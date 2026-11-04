@@ -22,16 +22,18 @@ class NetworkSpeedIconState {
     private var mVisible: Boolean = false
     private var mSpeedText: Long = 0
     private var mSlot: String? = null
+    var singleLine: Boolean = false
 
     override fun equals(other: Any?): Boolean {
         if (other !is NetworkSpeedIconState) return false
         return mVisible == other.mVisible &&
                mSpeedText == other.mSpeedText &&
-               mSlot == other.mSlot
+               mSlot == other.mSlot &&
+               singleLine == other.singleLine
     }
 
     override fun hashCode(): Int {
-        return Objects.hash(mVisible, mSpeedText, mSlot)
+        return Objects.hash(mVisible, mSpeedText, mSlot, singleLine)
     }
 
     fun setSpeedText(speed: Long) {
@@ -46,6 +48,7 @@ class NetworkSpeedIconState {
         target.mVisible = this.mVisible
         target.mSpeedText = this.mSpeedText
         target.mSlot = this.mSlot
+        target.singleLine = this.singleLine
     }
 
     fun setVisible(visible: Boolean) {
@@ -69,6 +72,6 @@ class NetworkSpeedIconState {
     }
 
     override fun toString(): String {
-        return "NetworkSpeedIconState(slot: $mSlot, visible: $mVisible, speed: $mSpeedText)"
+        return "NetworkSpeedIconState(slot: $mSlot, visible: $mVisible, speed: $mSpeedText, singleLine: $singleLine)"
     }
 }
