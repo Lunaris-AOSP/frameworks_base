@@ -61,9 +61,15 @@ data class ClockElement(
     val textStroke: Boolean = false,
     val textStrokeWidth: Int = 2,
     val textStrokeColor: Int = Color.BLACK,
+    val timePart: ClockTimePart = ClockTimePart.FULL,
+    val hourFormat: ClockHourFormat = ClockHourFormat.SYSTEM,
 ) {
     val supportsAodOutline: Boolean
         get() = kind != ClockElementKind.IMAGE && kind != ClockElementKind.QUICKLOOK
+
+    val needsSecondTicks: Boolean
+        get() = kind == ClockElementKind.TIME &&
+            (timePart.isSecond || (timePart == ClockTimePart.FULL && format.contains('s')))
 
     fun resizeImage(width: Int? = null, height: Int? = null): ClockElement {
         if (!imageAspectLocked) return copy(imageWidth = (width ?: imageWidth).coerceIn(16, 360),
@@ -94,6 +100,7 @@ data class ClockElement(
         .put("aodOutlineWidth", aodOutlineWidth)
         .put("lockscreenOutline", lockscreenOutline).put("lockscreenOutlineWidth", lockscreenOutlineWidth)
         .put("textStroke", textStroke).put("textStrokeWidth", textStrokeWidth).put("textStrokeColor", textStrokeColor)
+        .put("timePart", timePart.name).put("hourFormat", hourFormat.name)
 
     companion object {
         const val MIN_POSITION = -4f
@@ -107,6 +114,14 @@ data class ClockElement(
                 else -> 0.45f
             },
             text = if (kind == ClockElementKind.TEXT) "Text" else "")
+
+        fun createTimeDigits(): List<ClockElement> = listOf(
+            create(ClockElementKind.TIME).copy(timePart = ClockTimePart.HOUR_TENS, x = 0.18f),
+            create(ClockElementKind.TIME).copy(timePart = ClockTimePart.HOUR_ONES, x = 0.34f),
+            create(ClockElementKind.TIME).copy(kind = ClockElementKind.TEXT, text = ":", x = 0.5f),
+            create(ClockElementKind.TIME).copy(timePart = ClockTimePart.MINUTE_TENS, x = 0.66f),
+            create(ClockElementKind.TIME).copy(timePart = ClockTimePart.MINUTE_ONES, x = 0.82f),
+        )
 
         fun validFormat(value: String): Boolean = value.length <= 80 &&
             runCatching { SimpleDateFormat(value, Locale.getDefault()) }.isSuccess
@@ -160,6 +175,10 @@ data class ClockElement(
                 textStroke = j.optBoolean("textStroke", false),
                 textStrokeWidth = j.optInt("textStrokeWidth", 2).coerceIn(1, 12),
                 textStrokeColor = j.optInt("textStrokeColor", Color.BLACK),
+                timePart = runCatching { ClockTimePart.valueOf(j.optString("timePart")) }
+                    .getOrDefault(ClockTimePart.FULL),
+                hourFormat = runCatching { ClockHourFormat.valueOf(j.optString("hourFormat")) }
+                    .getOrDefault(ClockHourFormat.SYSTEM),
             )
         }
     }

@@ -167,7 +167,7 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
                 (!screenInteractive && !appearance.dozing)) return
             refreshTime()
             val interval = if (!appearance.dozing && screenInteractive && animationsEnabled && design.elements.any {
-                it.visible && it.kind == ClockElementKind.TIME && it.format.contains('s')
+                it.visible && it.needsSecondTicks
             }) 1000L else 60000L
             main.postDelayed(this, interval - System.currentTimeMillis() % interval)
         }
@@ -334,12 +334,10 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
                 ClockElementKind.IMAGE, ClockElementKind.QUICKLOOK -> ""
                 ClockElementKind.TEXT -> element.text
                 ClockElementKind.WEATHER -> weather
-                ClockElementKind.TIME, ClockElementKind.DATE -> {
-                    val pattern = element.format.ifEmpty {
-                        if (element.kind == ClockElementKind.TIME) {
-                            if (DateFormat.is24HourFormat(context, userId)) "HH:mm" else "h:mm"
-                        } else DateFormat.getBestDateTimePattern(locale, "EEEEMMMMd")
-                    }
+                ClockElementKind.TIME -> ClockTime.format(element.timePart, element.hourFormat,
+                    element.format, now, locale, DateFormat.is24HourFormat(context, userId))
+                ClockElementKind.DATE -> {
+                    val pattern = element.format.ifEmpty { DateFormat.getBestDateTimePattern(locale, "EEEEMMMMd") }
                     runCatching { SimpleDateFormat(pattern, locale).format(now) }.getOrDefault("")
                 }
             }
