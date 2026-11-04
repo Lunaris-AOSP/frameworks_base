@@ -8,6 +8,7 @@ android_library {
         "axquicklook-client",
         "androidx.compose.material3_material3",
         "androidx.graphics_graphics-shapes",
+        "lottie",
     ],
 }
 

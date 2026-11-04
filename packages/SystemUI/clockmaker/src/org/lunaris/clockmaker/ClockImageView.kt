@@ -10,10 +10,12 @@ import android.graphics.Canvas
 import android.graphics.Path
 import android.graphics.Paint
 import android.graphics.drawable.AnimatedImageDrawable
+import android.graphics.drawable.Drawable
 import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.widget.ImageView
+import com.airbnb.lottie.LottieDrawable
 import java.util.concurrent.Future
 
 internal class ClockImageView(context: Context) : ImageView(context) {
@@ -66,7 +68,7 @@ internal class ClockImageView(context: Context) : ImageView(context) {
             val loaded = runCatching { ClockImages.load(context, user, id) }.getOrNull()
             main.post {
                 if (version != generation || !isAttachedToWindow) {
-                    (loaded as? AnimatedImageDrawable)?.stop()
+                    stopAnimation(loaded)
                     return@post
                 }
                 pending = null
@@ -78,10 +80,21 @@ internal class ClockImageView(context: Context) : ImageView(context) {
     }
 
     private fun updatePlayback() {
-        (drawable as? AnimatedImageDrawable)?.let {
-            if (playbackAllowed && aggregatedVisible && isAttachedToWindow && windowVisibility == VISIBLE) {
-                if (!it.isRunning) it.start()
-            } else if (it.isRunning) it.stop()
+        val play = playbackAllowed && aggregatedVisible && isAttachedToWindow && windowVisibility == VISIBLE
+        when (val animation = drawable) {
+            is AnimatedImageDrawable -> if (play) {
+                if (!animation.isRunning) animation.start()
+            } else if (animation.isRunning) animation.stop()
+            is LottieDrawable -> if (play) {
+                if (!animation.isAnimating) animation.resumeAnimation()
+            } else animation.pauseAnimation()
+        }
+    }
+
+    private fun stopAnimation(image: Drawable?) {
+        when (image) {
+            is AnimatedImageDrawable -> image.stop()
+            is LottieDrawable -> image.cancelAnimation()
         }
     }
 
@@ -89,8 +102,7 @@ internal class ClockImageView(context: Context) : ImageView(context) {
         generation++
         pending?.cancel(true)
         pending = null
-        val animation = drawable as? AnimatedImageDrawable
-        animation?.stop()
+        stopAnimation(drawable)
         setImageDrawable(null)
     }
 
