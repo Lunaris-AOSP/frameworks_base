@@ -241,18 +241,17 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
         val progress = value.coerceIn(0f, 1f)
         if (aodProgress == progress) return
         aodProgress = progress
-        updateAodOutline()
+        updateTextEffects()
     }
 
-    private fun updateAodOutline() {
+    private fun updateTextEffects() {
         design.elements.forEachIndexed { index, element ->
             val view = getChildAt(index) as? ClockOutlineTextView ?: return@forEachIndexed
             val progress = when {
-                !element.aodOutline -> 0f
                 !element.animateAodOutline || !appearance.aodAnimation -> if (appearance.dozing) 1f else 0f
                 else -> aodProgress
             }
-            view.setAodOutline(progress, element.aodOutlineWidth.coerceIn(1, 6) * width / 360f)
+            view.setTextEffects(element, width / 360f, progress)
         }
     }
 
@@ -309,7 +308,7 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
                 }
             }
         }
-        updateAodOutline()
+        updateTextEffects()
         requestLayout()
         invalidate()
     }
@@ -425,7 +424,7 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
             }
         }
         glass.commit()
-        updateAodOutline()
+        updateTextEffects()
     }
 
     override fun dispatchDraw(canvas: Canvas) {

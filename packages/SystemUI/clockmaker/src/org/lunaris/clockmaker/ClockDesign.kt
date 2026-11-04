@@ -56,6 +56,11 @@ data class ClockElement(
     val aodOutline: Boolean = false,
     val animateAodOutline: Boolean = true,
     val aodOutlineWidth: Int = 2,
+    val lockscreenOutline: Boolean = false,
+    val lockscreenOutlineWidth: Int = 2,
+    val textStroke: Boolean = false,
+    val textStrokeWidth: Int = 2,
+    val textStrokeColor: Int = Color.BLACK,
 ) {
     val supportsAodOutline: Boolean
         get() = kind != ClockElementKind.IMAGE && kind != ClockElementKind.QUICKLOOK
@@ -87,6 +92,8 @@ data class ClockElement(
         .put("glass", glass).put("blurIntensity", blurIntensity).put("blurLift", blurLift)
         .put("aodOutline", aodOutline).put("animateAodOutline", animateAodOutline)
         .put("aodOutlineWidth", aodOutlineWidth)
+        .put("lockscreenOutline", lockscreenOutline).put("lockscreenOutlineWidth", lockscreenOutlineWidth)
+        .put("textStroke", textStroke).put("textStrokeWidth", textStrokeWidth).put("textStrokeColor", textStrokeColor)
 
     companion object {
         const val MIN_POSITION = -4f
@@ -148,6 +155,11 @@ data class ClockElement(
                 aodOutline = j.optBoolean("aodOutline", false),
                 animateAodOutline = j.optBoolean("animateAodOutline", true),
                 aodOutlineWidth = j.optInt("aodOutlineWidth", 2).coerceIn(1, 6),
+                lockscreenOutline = j.optBoolean("lockscreenOutline", false),
+                lockscreenOutlineWidth = j.optInt("lockscreenOutlineWidth", 2).coerceIn(1, 6),
+                textStroke = j.optBoolean("textStroke", false),
+                textStrokeWidth = j.optInt("textStrokeWidth", 2).coerceIn(1, 12),
+                textStrokeColor = j.optInt("textStrokeColor", Color.BLACK),
             )
         }
     }
