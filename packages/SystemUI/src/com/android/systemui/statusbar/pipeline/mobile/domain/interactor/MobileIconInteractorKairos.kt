@@ -141,6 +141,9 @@ interface MobileIconInteractorKairos {
     /** Whether to show the 4G icon instead of LTE. */
     val shouldShowFourgIcon: State<Boolean>
 
+    /** 5G SA icon style: 0=default, 1=5G+, 2=5G */
+    val fiveGStyle: State<Int>
+
     /** True if stacked mobile icons should be disabled */
     val disableStackedMobileIcons: State<Boolean>
 }
@@ -391,6 +394,9 @@ class MobileIconInteractorKairosImpl(
     private val SHOW_FOURG_ICON: String =
             "system:" + Settings.System.SHOW_FOURG_ICON
 
+    private val FIVE_G_ICON_STYLE: String =
+            "system:" + Settings.System.FIVE_G_ICON_STYLE
+
     private final val DISABLE_STACKED_MOBILE_ICONS: String =
             "system:" + Settings.System.DISABLE_STACKED_MOBILE_ICONS
 
@@ -410,6 +416,24 @@ class MobileIconInteractorKairosImpl(
                 awaitClose { Dependency.get(TunerService::class.java).removeTunable(callback) }
             }
             .toState(initialValue = false)
+    }
+
+    override val fiveGStyle: State<Int> = buildState {
+        callbackFlow {
+                val callback =
+                    object : TunerService.Tunable {
+                        override fun onTuningChanged(key: String, newValue: String?) {
+                            when (key) {
+                                FIVE_G_ICON_STYLE ->
+                                    trySend(TunerService.parseInteger(newValue, 0))
+                            }
+                        }
+                    }
+                Dependency.get(TunerService::class.java).addTunable(callback, FIVE_G_ICON_STYLE)
+
+                awaitClose { Dependency.get(TunerService::class.java).removeTunable(callback) }
+            }
+            .toState(initialValue = 0)
     }
 
     private val _disableStackedMobileIcons: State<Boolean> = buildState {

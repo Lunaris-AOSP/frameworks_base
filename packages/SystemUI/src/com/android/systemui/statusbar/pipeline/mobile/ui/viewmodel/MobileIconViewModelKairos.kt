@@ -16,6 +16,7 @@
 
 package com.android.systemui.statusbar.pipeline.mobile.ui.viewmodel
 
+import com.android.settingslib.mobile.TelephonyIcons
 import com.android.systemui.Flags.statusBarStaticInoutIndicators
 import com.android.systemui.KairosBuilder
 import com.android.systemui.activated
@@ -265,18 +266,23 @@ private class CellularIconViewModelKairos(
             }
 
     override val networkTypeIcon: KairosState<Icon.Resource?> =
-        combine(iconInteractor.networkTypeIconGroup, showNetworkTypeIcon) {
+        combine(iconInteractor.networkTypeIconGroup, showNetworkTypeIcon, iconInteractor.fiveGStyle) {
             networkTypeIconGroup,
-            shouldShow ->
+            shouldShow,
+            fiveGStyle ->
             val desc =
                 if (networkTypeIconGroup.contentDescription != 0) {
-                    ContentDescription.Resource(networkTypeIconGroup.contentDescription)
+                    var contDesc: Int = networkTypeIconGroup.contentDescription
+                    contDesc = convertFiveG(contDesc, fiveGStyle)
+                    ContentDescription.Resource(contDesc)
                 } else {
                     null
                 }
             val icon =
                 if (networkTypeIconGroup.iconId != 0) {
-                    Icon.Resource(networkTypeIconGroup.iconId, desc)
+                    var contIcon: Int = networkTypeIconGroup.iconId
+                    contIcon = convertFiveG(contIcon, fiveGStyle)
+                    Icon.Resource(contIcon, desc)
                 } else {
                     null
                 }
@@ -285,6 +291,33 @@ private class CellularIconViewModelKairos(
                 else -> icon
             }
         }
+
+    private fun convertFiveG(res: Int, fiveGStyle: Int): Int {
+        if (fiveGStyle == 1) {
+            when (res) {
+                com.android.settingslib.R.string.data_connection_5g_sa -> {
+                    return com.android.settingslib.R.string.data_connection_5g_plus as Int
+                }
+                TelephonyIcons.ICON_5G_SA,
+                com.android.settingslib.R.drawable.ic_5g_sa_mobiledata,
+                com.android.settingslib.R.drawable.ic_5g_sa_mobiledata_updated -> {
+                    return TelephonyIcons.ICON_5G_PLUS as Int
+                }
+            }
+        } else if (fiveGStyle == 2) {
+            when (res) {
+                com.android.settingslib.R.string.data_connection_5g_sa -> {
+                    return com.android.settingslib.R.string.data_connection_5g as Int
+                }
+                TelephonyIcons.ICON_5G_SA,
+                com.android.settingslib.R.drawable.ic_5g_sa_mobiledata,
+                com.android.settingslib.R.drawable.ic_5g_sa_mobiledata_updated -> {
+                    return TelephonyIcons.ICON_5G as Int
+                }
+            }
+        }
+        return res
+    }
 
     override val networkTypeBackground: KairosState<Icon.Resource?> =
         iconInteractor.showSliceAttribution.map {

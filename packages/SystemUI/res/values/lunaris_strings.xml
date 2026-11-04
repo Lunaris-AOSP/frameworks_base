@@ -59,6 +59,12 @@
     <!-- 4G icon instead LTE -->
     <string name="fourg_icon_title">4G icon</string>
 
+    <!-- 5G SA icon -->
+    <string name="status_bar_fiveg_sa_icon_title">5G indicator</string>
+    <string name="status_bar_fiveg_sa_icon_default">Default (5G SA)</string>
+    <string name="status_bar_fiveg_sa_icon_plus">5G+</string>
+    <string name="status_bar_fiveg_sa_icon_only">5G</string>
+
     <!-- Weather -->
     <string name="weather_condition_clouds">Cloudy</string>
     <string name="weather_condition_rain">Rainy</string>

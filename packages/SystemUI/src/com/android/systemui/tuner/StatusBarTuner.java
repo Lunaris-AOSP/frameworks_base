@@ -68,6 +68,7 @@ public class StatusBarTuner extends SettingsBasePreferenceFragment {
                 "call_strength",
                 "roaming",
                 "system:show_fourg_icon",
+                "system:five_g_icon_style",
                 "status_bar_show_hd_calling",
                 "status_bar_show_vowifi"
         };

@@ -38,4 +38,17 @@
         <item>@string/screenrecord_size_1gb</item>
         <item>@string/screenrecord_size_15gb</item>
     </string-array>
+
+    <!-- 5G SA icon -->
+    <string-array name="status_bar_fiveg_sa_icon_entries" translatable="false">
+        <item>@string/status_bar_fiveg_sa_icon_default</item>
+        <item>@string/status_bar_fiveg_sa_icon_plus</item>
+        <item>@string/status_bar_fiveg_sa_icon_only</item>
+    </string-array>
+
+    <string-array name="status_bar_fiveg_sa_icon_values" translatable="false">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+    </string-array>
 </resources>

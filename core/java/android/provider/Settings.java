@@ -7282,6 +7282,15 @@ public final class Settings {
         public static final String SHOW_FOURG_ICON = "show_fourg_icon";
 
         /**
+         * 5G SA icon style:
+         * 0: Default (5G SA)
+         * 1: 5G+
+         * 2: 5G
+         * @hide
+         */
+        public static final String FIVE_G_ICON_STYLE = "five_g_icon_style";
+
+        /**
          * @hide
          */
         public static final String DISABLE_STACKED_MOBILE_ICONS = "disable_stacked_mobile_icons";

@@ -82,11 +82,14 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
             "system:" + Settings.System.DATA_DISABLED_ICON;
     private static final String SHOW_FOURG_ICON =
             "system:" + Settings.System.SHOW_FOURG_ICON;
+    private static final String FIVE_G_ICON_STYLE =
+            "system:" + Settings.System.FIVE_G_ICON_STYLE;
     private static final String DISABLE_STACKED_MOBILE_ICONS =
         "system:" + Settings.System.DISABLE_STACKED_MOBILE_ICONS;
 
     private boolean mDataDisabledIcon;
     private boolean mDisableStackedMobileIcons;
+    private int mFiveGStyle = 0;
 
     private MobileIconGroup mDefaultIcons;
     private Config mConfig;
@@ -179,6 +182,7 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
 
         Dependency.get(TunerService.class).addTunable(this, DATA_DISABLED_ICON);
         Dependency.get(TunerService.class).addTunable(this, SHOW_FOURG_ICON);
+        Dependency.get(TunerService.class).addTunable(this, FIVE_G_ICON_STYLE);
         Dependency.get(TunerService.class).addTunable(this, DISABLE_STACKED_MOBILE_ICONS);
     }
 
@@ -194,6 +198,10 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
                 mConfig = Config.readConfig(mContext);
                 setConfiguration(mConfig);
                 notifyListeners();
+                break;
+            case FIVE_G_ICON_STYLE:
+                mFiveGStyle = TunerService.parseInteger(newValue, 0);
+                updateTelephony();
                 break;
             case DISABLE_STACKED_MOBILE_ICONS:
                 mDisableStackedMobileIcons =
@@ -538,6 +546,13 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
             mCurrentState.iconGroup = mNetworkToIconLookup.get(iconKey);
         } else {
             mCurrentState.iconGroup = mDefaultIcons;
+        }
+        if (mCurrentState.iconGroup == TelephonyIcons.NR_5G_SA) {
+            if (mFiveGStyle == 1) {
+                mCurrentState.iconGroup = TelephonyIcons.NR_5G_PLUS;
+            } else if (mFiveGStyle == 2) {
+                mCurrentState.iconGroup = TelephonyIcons.NR_5G;
+            }
         }
         mCurrentState.dataConnected = mCurrentState.isDataConnected();
 

@@ -157,6 +157,14 @@
         android:title="@string/fourg_icon_title"
         sysui:defValue="false" />
 
+    <com.android.systemui.tuner.TunerDropDownPreference
+        android:icon="@drawable/ic_statusbar_fiveg"
+        android:key="system:five_g_icon_style"
+        android:title="@string/status_bar_fiveg_sa_icon_title"
+        android:summary="%s"
+        android:entries="@array/status_bar_fiveg_sa_icon_entries"
+        android:entryValues="@array/status_bar_fiveg_sa_icon_values" />
+
     <com.android.systemui.tuner.TunerSwitch
         android:icon="@drawable/ic_signal"
         android:key="system:disable_stacked_mobile_icons"

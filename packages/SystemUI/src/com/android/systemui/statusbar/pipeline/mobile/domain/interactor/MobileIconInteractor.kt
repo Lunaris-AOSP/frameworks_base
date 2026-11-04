@@ -143,6 +143,8 @@ interface MobileIconInteractor {
 
     val shouldShowFourgIcon: StateFlow<Boolean>
 
+    val fiveGStyle: StateFlow<Int>
+
     val disableStackedMobileIcons: Flow<Boolean>
 }
 
@@ -202,6 +204,9 @@ class MobileIconInteractorImpl(
     private final val SHOW_FOURG_ICON: String =
             "system:" + Settings.System.SHOW_FOURG_ICON;
 
+    private final val FIVE_G_ICON_STYLE: String =
+            "system:" + Settings.System.FIVE_G_ICON_STYLE;
+
     private final val DISABLE_STACKED_MOBILE_ICONS: String =
         "system:" + Settings.System.DISABLE_STACKED_MOBILE_ICONS
 
@@ -224,6 +229,27 @@ class MobileIconInteractorImpl(
                 scope,
                 started = SharingStarted.WhileSubscribed(),
                 true
+            )
+
+    override val fiveGStyle: StateFlow<Int> =
+        conflatedCallbackFlow {
+                val callback =
+                    object : TunerService.Tunable {
+                        override fun onTuningChanged(key: String, newValue: String?) {
+                            when (key) {
+                                FIVE_G_ICON_STYLE ->
+                                    trySend(TunerService.parseInteger(newValue, 0))
+                            }
+                        }
+                    }
+                Dependency.get(TunerService::class.java).addTunable(callback, FIVE_G_ICON_STYLE)
+
+                awaitClose { Dependency.get(TunerService::class.java).removeTunable(callback) }
+            }
+            .stateIn(
+                scope,
+                started = SharingStarted.WhileSubscribed(),
+                0
             )
 
     private val _disableStackedMobileIcons: StateFlow<Boolean> =
