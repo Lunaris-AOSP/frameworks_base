@@ -74,6 +74,13 @@ object ClockFonts {
         }
         return emptyList()
     }
+
+    fun openBundled(context: Context, family: String): java.io.InputStream {
+        require(family.startsWith("bundled:"))
+        val id = bundledResources(context).first { it.first == family.removePrefix("bundled:") }.second
+        return context.resources.openRawResource(id)
+    }
+
     internal val worker = Executors.newSingleThreadExecutor()
     private val cache = ConcurrentHashMap<String, Typeface>()
     private val generation = AtomicInteger()
