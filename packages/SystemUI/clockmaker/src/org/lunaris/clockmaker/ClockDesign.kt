@@ -53,7 +53,13 @@ data class ClockElement(
     val glass: Boolean = false,
     val blurIntensity: Int = ClockGlass.DEFAULT_INTENSITY,
     val blurLift: Int = ClockGlass.DEFAULT_LIFT,
+    val aodOutline: Boolean = false,
+    val animateAodOutline: Boolean = true,
+    val aodOutlineWidth: Int = 2,
 ) {
+    val supportsAodOutline: Boolean
+        get() = kind != ClockElementKind.IMAGE && kind != ClockElementKind.QUICKLOOK
+
     fun resizeImage(width: Int? = null, height: Int? = null): ClockElement {
         if (!imageAspectLocked) return copy(imageWidth = (width ?: imageWidth).coerceIn(16, 360),
             imageHeight = (height ?: imageHeight).coerceIn(16, 720))
@@ -79,6 +85,8 @@ data class ClockElement(
         .put("imageBorderWidth", imageBorderWidth).put("imageBorderColor", imageBorderColor)
         .put("quickLookDateFallback", quickLookDateFallback)
         .put("glass", glass).put("blurIntensity", blurIntensity).put("blurLift", blurLift)
+        .put("aodOutline", aodOutline).put("animateAodOutline", animateAodOutline)
+        .put("aodOutlineWidth", aodOutlineWidth)
 
     companion object {
         const val MIN_POSITION = -4f
@@ -137,6 +145,9 @@ data class ClockElement(
                 glass = j.optBoolean("glass"),
                 blurIntensity = j.optInt("blurIntensity", ClockGlass.DEFAULT_INTENSITY).coerceIn(0, 100),
                 blurLift = j.optInt("blurLift", ClockGlass.DEFAULT_LIFT).coerceIn(0, 100),
+                aodOutline = j.optBoolean("aodOutline", false),
+                animateAodOutline = j.optBoolean("animateAodOutline", true),
+                aodOutlineWidth = j.optInt("aodOutlineWidth", 2).coerceIn(1, 6),
             )
         }
     }
@@ -182,4 +193,5 @@ data class ClockDesignAppearance(
     val gradientRadius: Int = 100,
     val weather: Boolean = true,
     val dozing: Boolean = false,
+    val aodAnimation: Boolean = true,
 )

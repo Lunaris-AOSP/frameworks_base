@@ -110,6 +110,7 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
         private set
     var appearance = ClockDesignAppearance()
         private set
+    private var aodProgress = 0f
     var animationsEnabled = true
         set(value) {
             if (field == value) return
@@ -203,7 +204,7 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
             removeAllViews()
             value.elements.forEach { element ->
                 val child = if (element.kind == ClockElementKind.IMAGE) ClockImageView(context) else
-                    (if (element.kind == ClockElementKind.QUICKLOOK) ClockQuickLookView(context) else TextView(context)).apply {
+                    (if (element.kind == ClockElementKind.QUICKLOOK) ClockQuickLookView(context) else ClockOutlineTextView(context)).apply {
                     gravity = Gravity.CENTER
                     includeFontPadding = false
                     maxLines = 4
@@ -226,6 +227,26 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
         updateQuickLook()
         refreshTime()
         scheduleTick()
+    }
+
+    fun setAodProgress(value: Float) {
+        if (!value.isFinite()) return
+        val progress = value.coerceIn(0f, 1f)
+        if (aodProgress == progress) return
+        aodProgress = progress
+        updateAodOutline()
+    }
+
+    private fun updateAodOutline() {
+        design.elements.forEachIndexed { index, element ->
+            val view = getChildAt(index) as? ClockOutlineTextView ?: return@forEachIndexed
+            val progress = when {
+                !element.aodOutline -> 0f
+                !element.animateAodOutline || !appearance.aodAnimation -> if (appearance.dozing) 1f else 0f
+                else -> aodProgress
+            }
+            view.setAodOutline(progress, element.aodOutlineWidth.coerceIn(1, 6) * width / 360f)
+        }
     }
 
     fun setGlassPreview(background: ClockGlass?, coordinateRoot: View) {
@@ -281,6 +302,7 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
                 }
             }
         }
+        updateAodOutline()
         requestLayout()
         invalidate()
     }
@@ -396,6 +418,7 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
             }
         }
         glass.commit()
+        updateAodOutline()
     }
 
     override fun dispatchDraw(canvas: Canvas) {

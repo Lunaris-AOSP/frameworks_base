@@ -169,6 +169,10 @@ class ClockStyle @JvmOverloads constructor(
             if (isDozing == dozing) return
             applyDozing(dozing)
         }
+
+        override fun onDozeAmountChanged(linear: Float, eased: Float) {
+            (currentClockView as? ClockDesignView)?.setAodProgress(linear)
+        }
     }
 
     private val mediaDataListener = object : MediaSessionManager.MediaDataListener {
@@ -236,10 +240,12 @@ class ClockStyle @JvmOverloads constructor(
         }
 
         isDozing = statusBarStateController.isDozing
-        if (isDozing) {
+        if (isDozing || currentClockView is ClockDesignView) {
             applyClockAlpha()
             applyClockColors()
             applyClockShadow()
+        }
+        if (isDozing) {
             startBurnInProtection()
             startAodTick()
         }
@@ -341,6 +347,7 @@ class ClockStyle @JvmOverloads constructor(
             }
             CLOCK_AOD_ANIM_KEY -> {
                 aodAnimEnabled = TunerService.parseInteger(newValue, 1) != 0
+                if (currentClockView is ClockDesignView) applyClockColors()
             }
             CLOCK_ALBUM_ART_COLOR_KEY -> {
                 val wasEnabled = albumArtColorEnabled
@@ -747,9 +754,10 @@ class ClockStyle @JvmOverloads constructor(
 
     private fun applyClockColorsToViews() {
         (currentClockView as? ClockDesignView)?.let {
+            it.setAodProgress(statusBarStateController.dozeAmount)
             it.setAppearance(ClockDesignAppearance(resolveClockColor(), gradientEnabled,
                 gradientColorStart, gradientColorEnd, gradientAnchorY, gradientRadius,
-                makerWeather, isDozing))
+                makerWeather, isDozing, aodAnimation = aodAnimEnabled))
             return
         }
         if (isNoColorClock(clockStyle)) return
