@@ -456,11 +456,23 @@ constructor(
             initialValue = repository.tileStrokeStyle.value,
             source = repository.tileStrokeStyle,
         )
+    val tileStrokeWidth by
+        hydrator.hydratedStateOf(
+            traceName = "tileStrokeWidth",
+            initialValue = repository.tileStrokeWidth.value,
+            source = repository.tileStrokeWidth,
+        )
     val sliderStrokeStyle by
         hydrator.hydratedStateOf(
             traceName = "sliderStrokeStyle",
             initialValue = repository.sliderStrokeStyle.value,
             source = repository.sliderStrokeStyle,
+        )
+    val sliderStrokeWidth by
+        hydrator.hydratedStateOf(
+            traceName = "sliderStrokeWidth",
+            initialValue = repository.sliderStrokeWidth.value,
+            source = repository.sliderStrokeWidth,
         )
     val cosTileBackground by
         hydrator.hydratedStateOf(
@@ -759,7 +771,11 @@ constructor(
 
     fun setTileStrokeStyle(enabled: Boolean) = repository.setTileStrokeStyle(enabled)
 
+    fun setTileStrokeWidth(width: Int) = repository.setTileStrokeWidth(width)
+
     fun setSliderStrokeStyle(enabled: Boolean) = repository.setSliderStrokeStyle(enabled)
+
+    fun setSliderStrokeWidth(width: Int) = repository.setSliderStrokeWidth(width)
 
     fun setCosTileBackground(enabled: Boolean) = repository.setCosTileBackground(enabled)
 

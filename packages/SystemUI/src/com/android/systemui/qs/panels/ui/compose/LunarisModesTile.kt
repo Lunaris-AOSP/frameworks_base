@@ -167,7 +167,7 @@ private fun LunarisModeButton(
             Modifier.background(background).lunarisQsInsetBackground(
                 brush = gradient.tileBrush() ?: SolidColor(MaterialTheme.colorScheme.primary),
                 shape = shape,
-                insetWidth = LunarisQsTileStrokeWidth * LocalTileScale.current,
+                insetWidth = LocalLunarisQsTileStrokeWidth.current * LocalTileScale.current,
                 alpha = { fillAlpha.value },
             )
         } else {

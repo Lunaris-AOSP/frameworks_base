@@ -39,6 +39,7 @@ import com.android.systemui.qs.panels.shared.model.LunarisQsWidgetKey
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderKey
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsSpacing
+import com.android.systemui.qs.panels.shared.model.LunarisQsStrokeWidths
 import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolder
 import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolderController
 import com.android.systemui.user.data.repository.UserRepository
@@ -184,7 +185,11 @@ constructor(
     val mediaTileStatusGlow: StateFlow<Boolean> = boolSetting(MEDIA_TILE_STATUS_GLOW, false)
     val showSliderPercentage: StateFlow<Boolean> = boolSetting(SHOW_SLIDER_PERCENTAGE, false)
     val tileStrokeStyle: StateFlow<Boolean> = strokeStyleSetting(TILE_STROKE_STYLE)
+    val tileStrokeWidth: StateFlow<Int> =
+        strokeWidthSetting(TILE_STROKE_WIDTH, LunarisQsStrokeWidths.DEFAULT_TILE)
     val sliderStrokeStyle: StateFlow<Boolean> = strokeStyleSetting(SLIDER_STROKE_STYLE)
+    val sliderStrokeWidth: StateFlow<Int> =
+        strokeWidthSetting(SLIDER_STROKE_WIDTH, LunarisQsStrokeWidths.DEFAULT_SLIDER)
     val cosTileBackground: StateFlow<Boolean> = boolSetting(COS_TILE_BACKGROUND, false)
 
     val fullColorDualTargetTiles: StateFlow<Boolean> =
@@ -488,7 +493,13 @@ constructor(
 
     fun setTileStrokeStyle(enabled: Boolean) = putInt(TILE_STROKE_STYLE, enabled.toSetting())
 
+    fun setTileStrokeWidth(width: Int) =
+        putInt(TILE_STROKE_WIDTH, width.coerceIn(LunarisQsStrokeWidths.RANGE))
+
     fun setSliderStrokeStyle(enabled: Boolean) = putInt(SLIDER_STROKE_STYLE, enabled.toSetting())
+
+    fun setSliderStrokeWidth(width: Int) =
+        putInt(SLIDER_STROKE_WIDTH, width.coerceIn(LunarisQsStrokeWidths.RANGE))
 
     fun setCosTileBackground(enabled: Boolean) = putInt(COS_TILE_BACKGROUND, enabled.toSetting())
 
@@ -686,6 +697,18 @@ constructor(
                 applicationScope,
                 SharingStarted.Eagerly,
                 readStrokeStyle(key, userRepository.getSelectedUserInfo().id),
+            )
+
+    private fun strokeWidthSetting(key: String, default: Int): StateFlow<Int> =
+        intSetting(key, default)
+            .map { it.coerceIn(LunarisQsStrokeWidths.RANGE) }
+            .distinctUntilChanged()
+            .stateIn(
+                applicationScope,
+                SharingStarted.Eagerly,
+                secureSettings
+                    .getIntForUser(key, default, userRepository.getSelectedUserInfo().id)
+                    .coerceIn(LunarisQsStrokeWidths.RANGE),
             )
 
     // Keep the old shared value as a fallback until each stroke setting is changed independently.
@@ -939,7 +962,9 @@ constructor(
         const val SHOW_SLIDER_PERCENTAGE = "ax_qs_show_slider_percentage"
         private const val LEGACY_STROKE_STYLE = "ax_qs_stroke_style"
         private const val TILE_STROKE_STYLE = "ax_qs_tile_stroke_style"
+        private const val TILE_STROKE_WIDTH = "ax_qs_tile_stroke_width"
         private const val SLIDER_STROKE_STYLE = "ax_qs_slider_stroke_style"
+        private const val SLIDER_STROKE_WIDTH = "ax_qs_slider_stroke_width"
         private const val COS_TILE_BACKGROUND = QsCosTileBackground.SETTING
         private const val GRADIENT_ENABLED = "ax_qs_gradient_enabled"
         private const val GRADIENT_SLIDER_ONLY = "ax_qs_gradient_slider_only"

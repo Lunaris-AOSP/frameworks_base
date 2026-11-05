@@ -199,7 +199,9 @@ import com.android.systemui.qs.panels.ui.compose.LocalAxQsTileStyle
 import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsCosTileBackground
 import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsGradientSettings
 import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsSliderStrokeStyle
+import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsSliderStrokeWidth
 import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsTileStrokeStyle
+import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsTileStrokeWidth
 import com.android.systemui.qs.panels.ui.compose.LocalShowQsSliderPercentage
 import com.android.systemui.qs.panels.domain.interactor.EditTilesResetInteractor
 import com.android.systemui.qs.panels.ui.edit.AxQsEditUi
@@ -404,7 +406,9 @@ constructor(
                         LocalAxQsTileStyle provides axQsViewModel.tileStyle,
                         LocalLunarisQsGradientSettings provides axQsViewModel.gradientSettings,
                         LocalLunarisQsTileStrokeStyle provides axQsViewModel.tileStrokeStyle,
+                        LocalLunarisQsTileStrokeWidth provides axQsViewModel.tileStrokeWidth.dp,
                         LocalLunarisQsSliderStrokeStyle provides axQsViewModel.sliderStrokeStyle,
+                        LocalLunarisQsSliderStrokeWidth provides axQsViewModel.sliderStrokeWidth.dp,
                         LocalLunarisQsCosTileBackground provides axQsViewModel.cosTileBackground,
                         LocalShowQsSliderPercentage provides axQsViewModel.showSliderPercentage,
                         LocalRingerSliderViewModel provides ringerSliderViewModel,

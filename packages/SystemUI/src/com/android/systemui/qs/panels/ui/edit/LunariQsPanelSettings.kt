@@ -113,6 +113,7 @@ import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsMediaStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsSpacing
+import com.android.systemui.qs.panels.shared.model.LunarisQsStrokeWidths
 import com.android.systemui.qs.panels.ui.compose.AxTileDefaults
 import com.android.systemui.qs.panels.ui.compose.rememberLunarisQsGradient
 import com.android.systemui.qs.panels.ui.viewmodel.AxQsViewModel
@@ -335,12 +336,35 @@ fun LunariQsPanelSettings(
                         onCheckedChange = viewModel::setTileStrokeStyle,
                     )
                 }
+                item("tile_stroke_width") {
+                    SettingsSlider(
+                        title = stringResource(R.string.ax_qs_settings_tile_stroke_width),
+                        summary = stringResource(R.string.ax_qs_settings_tile_stroke_width_summary),
+                        value = viewModel.tileStrokeWidth,
+                        defaultValue = LunarisQsStrokeWidths.DEFAULT_TILE,
+                        range = LunarisQsStrokeWidths.RANGE,
+                        onValueChange = viewModel::setTileStrokeWidth,
+                        enabled = viewModel.tileStrokeStyle,
+                    )
+                }
                 item("slider_stroke_style") {
                     SettingsSwitch(
                         title = stringResource(R.string.ax_qs_settings_slider_stroke_style),
                         summary = stringResource(R.string.ax_qs_settings_slider_stroke_style_summary),
                         checked = viewModel.sliderStrokeStyle,
                         onCheckedChange = viewModel::setSliderStrokeStyle,
+                    )
+                }
+                item("slider_stroke_width") {
+                    SettingsSlider(
+                        title = stringResource(R.string.ax_qs_settings_slider_stroke_width),
+                        summary =
+                            stringResource(R.string.ax_qs_settings_slider_stroke_width_summary),
+                        value = viewModel.sliderStrokeWidth,
+                        defaultValue = LunarisQsStrokeWidths.DEFAULT_SLIDER,
+                        range = LunarisQsStrokeWidths.RANGE,
+                        onValueChange = viewModel::setSliderStrokeWidth,
+                        enabled = viewModel.sliderStrokeStyle,
                     )
                 }
                 item("cos_tile_background") {

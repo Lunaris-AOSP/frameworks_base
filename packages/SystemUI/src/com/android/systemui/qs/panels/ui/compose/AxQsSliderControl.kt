@@ -345,6 +345,7 @@ internal fun AxQsSlider(
     val sliderScale = sliderHeight / AxSliderTrackHeight
     if (sliderStyle.usesPlatformSlider) {
         val strokeStyle = LocalLunarisQsSliderStrokeStyle.current
+        val strokeWidth = LocalLunarisQsSliderStrokeWidth.current * sliderScale
         val flatFill =
             sliderStyle == LunarisQsSliderStyle.PILL_FLAT ||
                 sliderStyle == LunarisQsSliderStyle.ROUNDED_SQUARE_FLAT
@@ -392,8 +393,7 @@ internal fun AxQsSlider(
                             sliderScale,
                 sliderHeight = trackHeight,
                 trackCornerRadius = if (roundedSquare) AxQsControlCornerRadius else null,
-                indicatorInset =
-                    if (strokeStyle) LunarisQsSliderStrokeWidth * sliderScale else 0.dp,
+                indicatorInset = if (strokeStyle) strokeWidth else 0.dp,
                 indicatorBackground =
                     if (activeTrackBrush != null || strokeStyle || flatFill) {
                         { indicatorModifier, cornerRadius ->
@@ -411,7 +411,7 @@ internal fun AxQsSlider(
                                     indicatorModifier.lunarisQsInsetBackground(
                                         brush = activeTrackBrush ?: SolidColor(indicatorColor),
                                         shape = indicatorShape,
-                                        insetWidth = LunarisQsSliderStrokeWidth * sliderScale,
+                                        insetWidth = strokeWidth,
                                         alpha = { if (activeTrackBrush != null) gradientAlpha else 1f },
                                     )
                                 } else {

@@ -185,7 +185,7 @@ fun ContentScope.AxTile(
                     brush = rememberLunarisQsGradient().tileBrush()
                         ?: SolidColor(MaterialTheme.colorScheme.primary),
                     shape = tileShape,
-                    insetWidth = LunarisQsTileStrokeWidth * LocalTileScale.current,
+                    insetWidth = LocalLunarisQsTileStrokeWidth.current * LocalTileScale.current,
                     alpha = { fillAlpha.value },
                 )
             } else {

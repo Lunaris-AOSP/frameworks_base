@@ -28,11 +28,14 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.inset
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.android.systemui.qs.panels.shared.model.LunarisQsStrokeWidths
 
 internal val LocalLunarisQsTileStrokeStyle = staticCompositionLocalOf { false }
 internal val LocalLunarisQsSliderStrokeStyle = staticCompositionLocalOf { false }
-internal val LunarisQsTileStrokeWidth = 7.dp
-internal val LunarisQsSliderStrokeWidth = 4.dp
+internal val LocalLunarisQsTileStrokeWidth =
+    staticCompositionLocalOf { LunarisQsStrokeWidths.DEFAULT_TILE.dp }
+internal val LocalLunarisQsSliderStrokeWidth =
+    staticCompositionLocalOf { LunarisQsStrokeWidths.DEFAULT_SLIDER.dp }
 
 internal fun Modifier.lunarisQsInsetBackground(
     brush: Brush,

@@ -150,7 +150,7 @@ private fun AxQsButtonControl(
             Modifier.lunarisQsInsetBackground(
                 brush = gradient.tileBrush() ?: SolidColor(MaterialTheme.colorScheme.primary),
                 shape = CircleShape,
-                insetWidth = LunarisQsTileStrokeWidth * LocalTileScale.current,
+                insetWidth = LocalLunarisQsTileStrokeWidth.current * LocalTileScale.current,
                 alpha = { fillAlpha.value },
             )
         } else {

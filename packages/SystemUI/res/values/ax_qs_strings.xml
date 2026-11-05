@@ -24,8 +24,12 @@
     <string name="ax_qs_settings_dual_target_tile_style_summary">Extend the active tile color across the icon and label</string>
     <string name="ax_qs_settings_tile_stroke_style">Tile stroke</string>
     <string name="ax_qs_settings_tile_stroke_style_summary">Show a background rim around active tiles. Excludes folders.</string>
+    <string name="ax_qs_settings_tile_stroke_width">Tile stroke size</string>
+    <string name="ax_qs_settings_tile_stroke_width_summary">Width of the background rim around active tiles</string>
     <string name="ax_qs_settings_slider_stroke_style">Slider stroke</string>
     <string name="ax_qs_settings_slider_stroke_style_summary">Show a background rim around slider fills. Excludes Expressive sliders.</string>
+    <string name="ax_qs_settings_slider_stroke_width">Slider stroke size</string>
+    <string name="ax_qs_settings_slider_stroke_width_summary">Width of the background rim around slider fills</string>
     <string name="ax_qs_settings_shape_pill">Pill</string>
     <string name="ax_qs_settings_shape_rounded">Rounded square</string>
     <string name="ax_qs_settings_shape_dynamic">Dynamic (pill when active)</string>
