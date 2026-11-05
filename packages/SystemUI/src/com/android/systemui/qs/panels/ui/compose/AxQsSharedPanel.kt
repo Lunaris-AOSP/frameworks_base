@@ -61,6 +61,8 @@ internal fun <T> ContentScope.AxQsSharedPanel(
     circleCells: Boolean,
     showTileLabels: Boolean,
     showWeather: Boolean,
+    compactStyle: Boolean,
+    collapsedHeaderOffset: Int,
     scrollState: ScrollState,
     expansionProgress: () -> Float,
     isFullyVisible: () -> Boolean,
@@ -92,7 +94,7 @@ internal fun <T> ContentScope.AxQsSharedPanel(
             0f
         }
     }
-    var headerHeight by remember { mutableIntStateOf(0) }
+    var headerHeight by remember(compactStyle) { mutableIntStateOf(0) }
     val density = LocalDensity.current
     BoxWithConstraints(modifier.fillMaxSize()) {
         val tileHeight =
@@ -114,25 +116,27 @@ internal fun <T> ContentScope.AxQsSharedPanel(
                     sharedQsRowsHeight(collapsedTileRows, tileRowHeight.roundToPx(), spacingPx)
                 val sectionGap =
                     if (collapsedControlRows > 0 && collapsedTileRows > 0) spacingPx else 0
-                val headerGap =
-                    if (collapsedControlRows > 0 || collapsedTileRows > 0) spacingPx else 0
-                (headerHeight + controlsHeight + tilesHeight + sectionGap + headerGap).coerceAtMost(
-                    maxHeight.roundToPx()
+                (headerHeight + controlsHeight + tilesHeight + sectionGap).coerceAtMost(
+                    maxHeight.roundToPx() + collapsedHeaderOffset
                 )
             }
         LaunchedEffect(collapsedHeight, onCollapsedHeightChanged) {
             onCollapsedHeightChanged(collapsedHeight)
         }
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(spacing)) {
-            AxQsDateHeader(
-                toolbarViewModel = toolbarViewModel,
-                shadeHeaderViewModel = shadeHeaderViewModel,
-                showEdit = true,
-                showWeather = showWeather,
-                isFullyVisible = isFullyVisible,
-                editButtonProgress = { sharedQsRevealAlpha(expansionProgress()) },
-                modifier = Modifier.onSizeChanged { headerHeight = it.height },
-            )
+        Column(Modifier.fillMaxSize()) {
+            if (!compactStyle) {
+                AxQsDateHeader(
+                    toolbarViewModel = toolbarViewModel,
+                    shadeHeaderViewModel = shadeHeaderViewModel,
+                    showEdit = true,
+                    showWeather = showWeather,
+                    isFullyVisible = isFullyVisible,
+                    editButtonProgress = { sharedQsRevealAlpha(expansionProgress()) },
+                    modifier = Modifier.onSizeChanged { headerHeight = it.height },
+                    bottomSpacing =
+                        if (controlItems.isNotEmpty() || tileItems.isNotEmpty()) spacing else 0.dp,
+                )
+            }
             Column(
                 Modifier.weight(1f)
                     .fillMaxWidth()

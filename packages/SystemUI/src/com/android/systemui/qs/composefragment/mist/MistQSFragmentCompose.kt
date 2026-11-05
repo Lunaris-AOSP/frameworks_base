@@ -60,6 +60,7 @@ import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -155,11 +156,15 @@ import com.android.systemui.qs.panels.shared.model.QSFragmentComposeClippingTabl
 import com.android.systemui.qs.panels.shared.model.AxQsLayout
 import com.android.systemui.qs.panels.shared.model.AxQsPanelMode
 import com.android.systemui.qs.panels.ui.compose.AxQuickSettingsHeader
+import com.android.systemui.qs.panels.ui.compose.AxCompactHeaderDimensions
+import com.android.systemui.qs.panels.ui.compose.AxCompactQuickSettingsHeader
+import com.android.systemui.qs.panels.ui.compose.AxQsCompactFooter
 import com.android.systemui.qs.panels.ui.compose.EditMode
 import com.android.systemui.qs.panels.ui.compose.QuickQuickSettings
 import com.android.systemui.qs.shared.ui.QuickSettings.Elements
 import com.android.systemui.qs.ui.composable.QuickSettingsShade
 import com.android.systemui.qs.ui.composable.QuickSettingsShade.systemGestureExclusionInShade
+import com.android.systemui.qs.ui.composable.QuickSettingsTheme
 import com.android.systemui.res.R
 import com.android.systemui.shade.ShadeDisplayAware
 import com.android.systemui.shade.ShadeHeaderController
@@ -945,6 +950,12 @@ constructor(
     private fun ContentScope.QuickQuickSettingsElement(modifier: Modifier = Modifier) {
         val qqsPadding = viewModel.qqsHeaderHeight
         val bottomPadding = viewModel.qqsBottomPadding
+        val compactHeaderOffset =
+            if (useCompactQsStyle()) {
+                val currentPadding = quickSettingsContentTopPadding(viewModel.expansionState.progress)
+                val collapsedPadding = quickSettingsContentTopPadding()
+                with(LocalDensity.current) { currentPadding.roundToPx() - collapsedPadding.roundToPx() }
+            } else 0
         val squishiness by
             viewModel.quickQuickSettingsViewModel.squishinessViewModel.squishiness
                 .collectAsStateWithLifecycle()
@@ -1023,7 +1034,9 @@ constructor(
                                         viewModel.containerViewModel.brightnessSliderViewModel,
                                     volumeSliderViewModel = volumeSliderViewModel,
                                     scrollState = scrollState,
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier =
+                                        Modifier.fillMaxWidth()
+                                            .offset { IntOffset(0, compactHeaderOffset) },
                                 )
                             }
                         }
@@ -1041,9 +1054,19 @@ constructor(
     ) {
         val qsExtraPadding = dimensionResource(R.dimen.qs_panel_padding_top)
         val overlayShadeHeader = useOverlayShadeHeader()
-        val topPadding = if (overlayShadeHeader) quickSettingsContentTopPadding() else qsExtraPadding
-        val topPaddingPx = with(LocalDensity.current) { topPadding.roundToPx() }
+        val compactStyle = useCompactQsStyle()
+        val topPadding =
+            if (overlayShadeHeader) {
+                quickSettingsContentTopPadding(
+                    expansionProgress = if (sharedLayout) viewModel.expansionState.progress else 1f
+                )
+            } else qsExtraPadding
+        val collapsedTopPadding =
+            if (compactStyle) quickSettingsContentTopPadding() else topPadding
+        val topPaddingPx = with(LocalDensity.current) { collapsedTopPadding.roundToPx() }
+        val collapsedHeaderOffset = with(LocalDensity.current) { topPadding.roundToPx() } - topPaddingPx
         val bottomPadding = viewModel.qqsBottomPadding
+        val navigationBarPadding = WindowInsets.navigationBars.getBottom(LocalDensity.current)
         val onCollapsedHeightChanged: (Int) -> Unit = remember(topPaddingPx, bottomPadding) {
             { height -> viewModel.qqsHeight = topPaddingPx + height + bottomPadding }
         }
@@ -1075,7 +1098,7 @@ constructor(
                     Spacer(
                         modifier =
                             Modifier.requiredHeight(
-                                quickSettingsContentTopPadding()
+                                topPadding
                             )
                     )
                 } else {
@@ -1145,6 +1168,7 @@ constructor(
                                     sceneExpansionState.progress == 1f
                             },
                             onCollapsedHeightChanged = onCollapsedHeightChanged,
+                            collapsedHeaderOffset = collapsedHeaderOffset,
                             modifier =
                                 Modifier.fillMaxSize()
                                     .sysuiResTag(ResIdTags.quickSettingsPanel)
@@ -1152,8 +1176,28 @@ constructor(
                         )
                     }
                 }
+                if (compactStyle) {
+                    Element(Elements.FooterActions, Modifier.sysuiResTag(ResIdTags.qsFooterActions)) {
+                        QuickSettingsTheme {
+                            AxQsCompactFooter(
+                                viewModel = toolbarViewModel,
+                                sidePadding = axQsViewModel.spacing.sidePadding.dp,
+                                expansionProgress = { viewModel.expansionState.progress },
+                                isFullyVisible = {
+                                    viewModel.isQsFullyExpanded && !viewModel.isEditing &&
+                                        viewModel.isQsVisibleAndAnyShadeExpanded
+                                },
+                            )
+                        }
+                    }
+                }
             }
-            Spacer(Modifier.height { bottomContentPadding }.fillMaxWidth())
+            Spacer(
+                Modifier.height {
+                    if (compactStyle) maxOf(bottomContentPadding, navigationBarPadding)
+                    else bottomContentPadding
+                }.fillMaxWidth()
+            )
         }
     }
 
@@ -1191,6 +1235,7 @@ constructor(
                         initialLayout = panelSettingsLayout,
                         onBack = { showPanelSettings = false },
                         onDone = editModeViewModel::stopEditing,
+                        isSplitShade = viewModel.isInSplitShade,
                     )
                 } else {
                     AxQsEditUi(
@@ -1242,6 +1287,16 @@ constructor(
         isTransitioning: Boolean,
         modifier: Modifier = Modifier,
     ) {
+        if (useCompactQsStyle()) {
+            AxCompactQuickSettingsHeader(
+                viewModel = headerViewModel,
+                isTransitioning = isTransitioning,
+                expansionProgress = viewModel.expansionState.progress,
+                sidePadding = axQsViewModel.spacing.sidePadding.dp,
+                modifier = modifier.padding(top = quickSettingsHeaderTopPadding()),
+            )
+            return
+        }
         AxQuickSettingsHeader(
             viewModel = headerViewModel,
             carrierText = axQsViewModel.carrierText,
@@ -1270,7 +1325,12 @@ constructor(
     }
 
     @Composable
-    private fun quickSettingsContentTopPadding(): Dp {
+    private fun quickSettingsContentTopPadding(expansionProgress: Float = 0f): Dp {
+        if (useCompactQsStyle()) {
+            return quickSettingsHeaderTopPadding() +
+                AxCompactHeaderDimensions.height(expansionProgress) +
+                axQsViewModel.spacing.topPadding.dp
+        }
         val statusBarHeight =
             WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
         val density = LocalDensity.current
@@ -1284,6 +1344,8 @@ constructor(
     }
 
     private fun useOverlayShadeHeader() = true
+
+    private fun useCompactQsStyle() = axQsViewModel.useCompactStyle && !viewModel.isInSplitShade
 
     private fun registerDumpable() {
         val instanceId = instanceProvider.getNextId()

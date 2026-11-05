@@ -42,12 +42,18 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
@@ -64,6 +70,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.Layout
@@ -115,8 +122,121 @@ import com.android.systemui.statusbar.systemstatusicons.ui.compose.SystemStatusI
 import com.android.systemui.util.composable.kairos.ActivatedKairosSpec
 import com.android.systemui.util.composable.kairos.toComposeState
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 private val AxQuickSettingsHeaderContent = SceneKey("AxQuickSettingsHeader")
+
+@Composable
+fun AxCompactQuickSettingsHeader(
+    viewModel: ShadeHeaderViewModel,
+    isTransitioning: Boolean,
+    expansionProgress: Float,
+    sidePadding: Dp,
+    modifier: Modifier = Modifier,
+) {
+    val progress = expansionProgress.coerceIn(0f, 1f)
+    val textColor = ShadeHeader.Colors.textColor
+    val dateAlpha =
+        if (progress < 0.5f) (1f - progress / 0.3f).coerceIn(0f, 1f)
+        else ((progress - 0.7f) / 0.3f).coerceIn(0f, 1f)
+    Layout(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .height(AxCompactHeaderDimensions.height(progress))
+                .windowInsetsPadding(axCompactQsHorizontalInsets())
+                .padding(horizontal = sidePadding)
+                .sysuiResTag(ShadeHeader.TestTags.Root),
+        contents =
+            listOf(
+                {
+                    AxHeaderClock(
+                        onClick = viewModel::onClockClicked,
+                        textColor = textColor,
+                        textSize = 14f + 10f * progress,
+                    )
+                },
+                {
+                    AxQuickSettingsDate(
+                        viewModel = viewModel,
+                        textSize = 14f,
+                        modifier = Modifier.graphicsLayer { alpha = dateAlpha },
+                    )
+                },
+                {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (viewModel.isPrivacyChipVisible) {
+                            AxPrivacyChip(
+                                privacyList = viewModel.privacyItems,
+                                onClick = viewModel::onPrivacyChipClicked,
+                            )
+                        } else {
+                            AxStatusIcons(
+                                viewModel = viewModel,
+                                isTransitioning = isTransitioning,
+                                foregroundColor = textColor.toArgb(),
+                                backgroundColor = Color.Transparent.toArgb(),
+                                showMobileIcons = true,
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
+                            AxBatteryInfo(
+                                viewModel = viewModel,
+                                showIcon = true,
+                                useExpandedFormat = false,
+                                textColor = textColor,
+                                iconTint = textColor,
+                                iconBackgroundColor = Color.Transparent,
+                                onClick = viewModel::onBatteryClicked,
+                            )
+                        }
+                    }
+                },
+            ),
+    ) { measurables, constraints ->
+        val width = constraints.maxWidth
+        val height = constraints.maxHeight
+        val gap = 8.dp.roundToPx()
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val icons = measurables[2].single().measure(loose.copy(maxWidth = width / 2))
+        val startWidth = (width - icons.width - gap).coerceAtLeast(0)
+        val clock = measurables[0].single().measure(loose.copy(maxWidth = startWidth))
+        val dateX = if (progress < 0.5f) clock.width + gap else 0
+        val date =
+            measurables[1].single().measure(
+                loose.copy(maxWidth = (startWidth - dateX).coerceAtLeast(0))
+            )
+        val bottomRowHeight = maxOf(date.height, icons.height)
+        val bottomRowY = height - bottomRowHeight
+        fun rowY(childHeight: Int): Int =
+            (((height - childHeight) / 2f) * (1f - progress) +
+                (bottomRowY + (bottomRowHeight - childHeight) / 2f) * progress).roundToInt()
+        layout(width, height) {
+            clock.placeRelative(0, (((height - clock.height) / 2f) * (1f - progress)).roundToInt())
+            date.placeRelative(
+                dateX,
+                if (progress < 0.5f) (height - date.height) / 2
+                else bottomRowY + (bottomRowHeight - date.height) / 2,
+            )
+            icons.placeRelative(width - icons.width, rowY(icons.height))
+        }
+    }
+}
+
+object AxCompactHeaderDimensions {
+    @Composable
+    fun height(expansionProgress: Float): Dp = with(LocalDensity.current) {
+        val collapsed = maxOf(32.dp, 20.sp.toDp() + 8.dp)
+        val expanded = maxOf(56.dp, 28.sp.toDp() + 20.sp.toDp() + 8.dp)
+        collapsed + (expanded - collapsed) * expansionProgress.coerceIn(0f, 1f)
+    }
+}
+
+@Composable
+internal fun axCompactQsHorizontalInsets(): WindowInsets =
+    WindowInsets.displayCutout.union(WindowInsets.navigationBars).only(WindowInsetsSides.Horizontal)
 
 @Composable
 fun AxQuickSettingsHeader(
@@ -208,13 +328,14 @@ private fun AxStatusIcons(
     @ColorInt foregroundColor: Int,
     @ColorInt backgroundColor: Int,
     modifier: Modifier = Modifier,
+    showMobileIcons: Boolean = false,
 ) {
     if (SystemStatusIconsInCompose.isEnabled) {
         SystemStatusIcons(
             viewModelFactory = viewModel.systemStatusIconsViewModelFactory,
             tint = Color(foregroundColor),
             modifier = modifier,
-            showMobileIcons = false,
+            showMobileIcons = showMobileIcons,
         )
     } else {
         val statusIconContext = LocalStatusIconContext.current
@@ -240,7 +361,7 @@ private fun AxStatusIcons(
             isMicCameraIndicationEnabled = viewModel.isMicCameraIndicationEnabled,
             isPrivacyChipEnabled = viewModel.isPrivacyChipVisible,
             isLocationIndicationEnabled = viewModel.isLocationIndicationEnabled,
-            showMobileIcons = false,
+            showMobileIcons = showMobileIcons,
             modifier = modifier,
             content = movableContent,
         )
@@ -468,12 +589,17 @@ private fun AxCustomClockView(
 }
 
 @Composable
-fun AxQuickSettingsDate(viewModel: ShadeHeaderViewModel, modifier: Modifier = Modifier) {
+fun AxQuickSettingsDate(
+    viewModel: ShadeHeaderViewModel,
+    modifier: Modifier = Modifier,
+    textSize: Float = AX_DATE_TEXT_SIZE,
+) {
     val context = LocalContext.current
     AxHeaderDate(
         longerDateText = viewModel.longerDateText,
         shorterDateText = viewModel.shorterDateText,
         textColor = ShadeHeader.Colors.textColor,
+        textSize = textSize,
         modifier =
             modifier.clickable {
                 try {
@@ -491,7 +617,12 @@ fun AxQuickSettingsDate(viewModel: ShadeHeaderViewModel, modifier: Modifier = Mo
 }
 
 @Composable
-private fun AxHeaderClock(onClick: () -> Unit, textColor: Color, modifier: Modifier = Modifier) {
+private fun AxHeaderClock(
+    onClick: () -> Unit,
+    textColor: Color,
+    modifier: Modifier = Modifier,
+    textSize: Float = AX_CLOCK_TEXT_SIZE,
+) {
     val configuration = LocalConfiguration.current
     key(configuration.densityDpi, configuration.fontScale) {
         AndroidView(
@@ -512,7 +643,7 @@ private fun AxHeaderClock(onClick: () -> Unit, textColor: Color, modifier: Modif
                         textDirection = View.TEXT_DIRECTION_LOCALE
                         gravity = Gravity.START or Gravity.CENTER_VERTICAL
                         setTypeface(typeface, Typeface.NORMAL)
-                        setTextSize(TypedValue.COMPLEX_UNIT_SP, AX_CLOCK_TEXT_SIZE)
+                        setTextSize(TypedValue.COMPLEX_UNIT_SP, textSize)
                         setPaddingRelative(0, 0, clockEndPadding, 0)
                     }
             },
@@ -523,7 +654,7 @@ private fun AxHeaderClock(onClick: () -> Unit, textColor: Color, modifier: Modif
                     )
                 view.setTextColor(textColor.toArgb())
                 view.setTypeface(view.typeface, Typeface.NORMAL)
-                view.setTextSize(TypedValue.COMPLEX_UNIT_SP, AX_CLOCK_TEXT_SIZE)
+                view.setTextSize(TypedValue.COMPLEX_UNIT_SP, textSize)
                 view.setPaddingRelative(0, 0, clockEndPadding, 0)
             },
             modifier = modifier.wrapContentWidth().clickable(onClick = onClick),
@@ -537,10 +668,11 @@ private fun AxHeaderDate(
     shorterDateText: String,
     textColor: Color,
     modifier: Modifier = Modifier,
+    textSize: Float = AX_DATE_TEXT_SIZE,
 ) {
     val textStyle =
         MaterialTheme.typography.bodyLarge.copy(
-            fontSize = AX_DATE_TEXT_SIZE.sp,
+            fontSize = textSize.sp,
             platformStyle = PlatformTextStyle(includeFontPadding = true),
         )
     Layout(

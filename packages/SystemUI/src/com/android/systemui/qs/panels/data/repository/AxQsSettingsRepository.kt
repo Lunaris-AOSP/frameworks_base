@@ -164,6 +164,15 @@ constructor(
     val quickPanelOnLeft: StateFlow<Boolean> = boolSetting(QUICK_PANEL_ON_LEFT, false)
     val panelSwipeEnabled: StateFlow<Boolean> = boolSetting(PANEL_SWIPE_ENABLED, false)
     val sharedQsLayout: StateFlow<Boolean> = boolSetting(SHARED_QS_LAYOUT, false)
+    val compactStyle: StateFlow<Boolean> =
+        boolSetting(
+            COMPACT_STYLE,
+            default = false,
+            initialValue =
+                secureSettings.getIntForUser(
+                    COMPACT_STYLE, 0, userRepository.getSelectedUserInfo().id
+                ) != 0,
+        )
     val sharedQqsRows: StateFlow<Int> =
         intSetting(SHARED_QQS_ROWS, 2)
             .map { it.coerceIn(2, 4) }
@@ -477,6 +486,8 @@ constructor(
     fun setPanelSwipeEnabled(enabled: Boolean) = putInt(PANEL_SWIPE_ENABLED, enabled.toSetting())
 
     fun setSharedQsLayout(enabled: Boolean) = putInt(SHARED_QS_LAYOUT, enabled.toSetting())
+
+    fun setCompactStyle(enabled: Boolean) = putInt(COMPACT_STYLE, enabled.toSetting())
 
     fun setSharedQqsRows(rows: Int) = putInt(SHARED_QQS_ROWS, rows.coerceIn(2, 4))
 
@@ -943,6 +954,7 @@ constructor(
         const val QUICK_PANEL_ON_LEFT = "ax_qs_quick_panel_on_left"
         const val PANEL_SWIPE_ENABLED = "lunaris_qs_panel_swipe_enabled"
         const val SHARED_QS_LAYOUT = "lunaris_qs_shared_layout"
+        const val COMPACT_STYLE = "ax_qs_compact_style"
         const val SHARED_QQS_ROWS = "lunaris_qs_shared_qqs_rows"
         const val PORTRAIT_QQS_CONTROL_COLUMNS = "ax_qqs_control_columns"
         const val PORTRAIT_QQS_TILE_COLUMNS = "ax_qqs_tile_columns"

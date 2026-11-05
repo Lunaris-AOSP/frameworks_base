@@ -66,6 +66,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.dimensionResource
@@ -119,6 +120,7 @@ internal fun <T> ContentScope.AxQQS(
     editButtonProgress: () -> Float,
     separateMode: Boolean,
     showWeather: Boolean = true,
+    compactStyle: Boolean = false,
     modifier: Modifier = Modifier,
     controlContent: @Composable (AxQsGridItem<T>) -> Unit,
     tileContent: @Composable (AxQsGridItem<T>) -> Unit,
@@ -126,43 +128,49 @@ internal fun <T> ContentScope.AxQQS(
     val statusBarHeight =
         ShadeHeader.Dimensions.StatusBarHeight
     Column(
-        modifier = modifier.fillMaxWidth().heightIn(min = statusBarHeight),
-        verticalArrangement = Arrangement.spacedBy(spacing),
+        modifier = modifier.fillMaxWidth().heightIn(min = if (compactStyle) 0.dp else statusBarHeight),
     ) {
-        AxQsDateHeader(
-            toolbarViewModel = toolbarViewModel,
-            shadeHeaderViewModel = shadeHeaderViewModel,
-            showEdit = false,
-            showWeather = showWeather,
-            isFullyVisible = isFullyVisible,
-            editButtonProgress = editButtonProgress,
-        )
+        if (!compactStyle) {
+            AxQsDateHeader(
+                toolbarViewModel = toolbarViewModel,
+                shadeHeaderViewModel = shadeHeaderViewModel,
+                showEdit = false,
+                showWeather = showWeather,
+                isFullyVisible = isFullyVisible,
+                editButtonProgress = editButtonProgress,
+                bottomSpacing =
+                    if (!separateMode && (controlItems.isNotEmpty() || tileItems.isNotEmpty())) spacing
+                    else 0.dp,
+            )
+        }
         if (!separateMode) {
             val pagerState = rememberAxQsTilePagerState(tileItems, tileColumns, tileRows)
-            if (controlItems.isNotEmpty()) {
-                AxQsGrid(
-                    items = controlItems,
-                    columns = controlColumns,
-                    rowHeight = rowHeight,
-                    spacing = spacing,
-                    maxRows = controlRows,
-                    squareCells = circleCells,
-                    modifier = Modifier.fillMaxWidth(),
-                    content = controlContent,
-                )
-            }
-            if (tileItems.isNotEmpty()) {
-                AxQsTileGrid(
-                    items = tileItems,
-                    columns = tileColumns,
-                    rows = tileRows,
-                    spacing = spacing,
-                    showLabels = showTileLabels,
-                    circleCells = circleCells,
-                    pagerState = pagerState,
-                    modifier = Modifier.fillMaxWidth(),
-                    content = tileContent,
-                )
+            Column(verticalArrangement = Arrangement.spacedBy(spacing)) {
+                if (controlItems.isNotEmpty()) {
+                    AxQsGrid(
+                        items = controlItems,
+                        columns = controlColumns,
+                        rowHeight = rowHeight,
+                        spacing = spacing,
+                        maxRows = controlRows,
+                        squareCells = circleCells,
+                        modifier = Modifier.fillMaxWidth(),
+                        content = controlContent,
+                    )
+                }
+                if (tileItems.isNotEmpty()) {
+                    AxQsTileGrid(
+                        items = tileItems,
+                        columns = tileColumns,
+                        rows = tileRows,
+                        spacing = spacing,
+                        showLabels = showTileLabels,
+                        circleCells = circleCells,
+                        pagerState = pagerState,
+                        modifier = Modifier.fillMaxWidth(),
+                        content = tileContent,
+                    )
+                }
             }
         }
     }
@@ -187,6 +195,7 @@ internal fun <T> ContentScope.AxQS(
     circleCells: Boolean,
     showDate: Boolean = false,
     showWeather: Boolean = true,
+    compactStyle: Boolean = false,
     modifier: Modifier = Modifier,
     controlContent: @Composable (AxQsGridItem<T>) -> Unit,
     tileContent: @Composable (AxQsGridItem<T>) -> Unit,
@@ -195,17 +204,19 @@ internal fun <T> ContentScope.AxQS(
     val pagerState = rememberAxQsTilePagerState(tileItems, tileColumns, tileRows)
     Column(
         modifier = modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(spacing),
     ) {
-        AxQsDateHeader(
-            toolbarViewModel = toolbarViewModel,
-            shadeHeaderViewModel = shadeHeaderViewModel,
-            showEdit = true,
-            showDate = showDate,
-            showWeather = showWeather,
-            isFullyVisible = isFullyVisible,
-            editButtonProgress = editButtonProgress,
-        )
+        if (!compactStyle) {
+            AxQsDateHeader(
+                toolbarViewModel = toolbarViewModel,
+                shadeHeaderViewModel = shadeHeaderViewModel,
+                showEdit = true,
+                showDate = showDate,
+                showWeather = showWeather,
+                isFullyVisible = isFullyVisible,
+                editButtonProgress = editButtonProgress,
+                bottomSpacing = spacing,
+            )
+        }
         Column(
             modifier =
                 Modifier.weight(1f)
@@ -271,8 +282,19 @@ internal fun AxQsDateHeader(
     isFullyVisible: () -> Boolean,
     editButtonProgress: () -> Float,
     modifier: Modifier = Modifier,
+    showActions: Boolean = true,
+    bottomSpacing: Dp = 0.dp,
 ) {
-    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        modifier = modifier.fillMaxWidth().layout { measurable, constraints ->
+            val placeable = measurable.measure(constraints)
+            val gap = if (placeable.height > 0) bottomSpacing.roundToPx() else 0
+            layout(placeable.width, (placeable.height + gap).coerceAtMost(constraints.maxHeight)) {
+                placeable.placeRelative(0, 0)
+            }
+        },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Column(
             modifier = Modifier.weight(1f).padding(end = 8.dp),
             horizontalAlignment = Alignment.Start,
@@ -289,13 +311,15 @@ internal fun AxQsDateHeader(
                 AxQsWeather()
             }
         }
-        AxQsHeaderActions(
-            viewModel = toolbarViewModel,
-            isFullyVisible = isFullyVisible,
-            editButtonProgress = editButtonProgress,
-            showEdit = showEdit,
-            modifier = Modifier.offset(x = 2.dp),
-        )
+        if (showActions) {
+            AxQsHeaderActions(
+                viewModel = toolbarViewModel,
+                isFullyVisible = isFullyVisible,
+                editButtonProgress = editButtonProgress,
+                showEdit = showEdit,
+                modifier = Modifier.offset(x = 2.dp),
+            )
+        }
     }
 }
 

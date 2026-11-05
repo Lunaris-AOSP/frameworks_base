@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height as layoutHeight
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -92,6 +93,7 @@ internal fun ContentScope.AxQsMixedGrid(
     sharedLayout: Boolean = false,
     holdExpandedContent: () -> Boolean = { false },
     onCollapsedHeightChanged: (Int) -> Unit = {},
+    collapsedHeaderOffset: Int = 0,
 ) {
     val tiles = viewModel.containerViewModel.tileGridViewModel.tileViewModels
     val values = LinkedHashMap<String, AxQsGridValue>()
@@ -99,6 +101,7 @@ internal fun ContentScope.AxQsMixedGrid(
     AxQsControl.entries.forEach { control -> values[control.id] = AxQsGridValue.Control(control) }
 
     val splitShade = viewModel.isInSplitShade
+    val compactStyle = axQsViewModel.useCompactStyle && !splitShade
     LaunchedEffect(splitShade) {
         if (splitShade) {
             scrollState.scrollTo(0)
@@ -412,7 +415,10 @@ internal fun ContentScope.AxQsMixedGrid(
     }
 
     QuickSettingsTheme {
-        BoxWithConstraints(modifier) {
+        BoxWithConstraints(
+            if (compactStyle) modifier.windowInsetsPadding(axCompactQsHorizontalInsets())
+            else modifier
+        ) {
             val contentPadding = axQsViewModel.spacing.sidePadding.dp
             val gridWidth = (maxWidth - contentPadding * 2).coerceAtLeast(0.dp)
             val circleCells =
@@ -440,6 +446,8 @@ internal fun ContentScope.AxQsMixedGrid(
                         circleCells = circleCells,
                         showTileLabels = showTileLabels,
                         showWeather = showWeather,
+                        compactStyle = compactStyle,
+                        collapsedHeaderOffset = collapsedHeaderOffset,
                         scrollState = scrollState,
                         expansionProgress = { viewModel.expansionState.progress },
                         isFullyVisible = { viewModel.isQsFullyExpanded && !viewModel.isEditing },
@@ -468,6 +476,7 @@ internal fun ContentScope.AxQsMixedGrid(
                             tileRows = rows.tiles,
                             showTileLabels = showTileLabels,
                             showWeather = showWeather,
+                            compactStyle = compactStyle,
                             rowHeight = rowHeight,
                             spacing = spacing,
                             circleCells = circleCells,
@@ -521,6 +530,7 @@ internal fun ContentScope.AxQsMixedGrid(
                         tileRows = rows.tiles,
                         showTileLabels = showTileLabels,
                         showWeather = showWeather,
+                        compactStyle = compactStyle,
                         rowHeight = rowHeight,
                         spacing = spacing,
                         editButtonProgress = qsEntranceProgress,
@@ -546,6 +556,7 @@ internal fun ContentScope.AxQsMixedGrid(
                         tileRows = rows.tiles,
                         showTileLabels = showTileLabels,
                         showWeather = showWeather,
+                        compactStyle = compactStyle,
                         rowHeight = rowHeight,
                         spacing = spacing,
                         editButtonProgress = qsEntranceProgress,

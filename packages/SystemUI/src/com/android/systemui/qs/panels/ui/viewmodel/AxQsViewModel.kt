@@ -118,6 +118,17 @@ constructor(
     val useSharedQsLayout: Boolean
         get() = sharedQsLayout && panelMode == AxQsPanelMode.TOGETHER
 
+    private val compactStyle by
+        hydrator.hydratedStateOf(
+            traceName = "compactStyle",
+            initialValue = repository.compactStyle.value,
+            source = repository.compactStyle,
+        )
+    val useCompactStyle: Boolean
+        get() = compactStyle && panelMode == AxQsPanelMode.TOGETHER
+
+    fun setCompactStyle(enabled: Boolean) = repository.setCompactStyle(enabled)
+
     fun setSharedQsLayout(enabled: Boolean) = repository.setSharedQsLayout(enabled)
 
     fun setSharedQqsRows(rows: Int) = repository.setSharedQqsRows(rows)
@@ -390,7 +401,7 @@ constructor(
     val panelMode by
         hydrator.hydratedStateOf(
             traceName = "panelMode",
-            initialValue = AxQsPanelMode.TOGETHER,
+            initialValue = repository.panelMode.value,
             source = repository.panelMode,
         )
     val isQsBypassingShade by

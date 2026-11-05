@@ -127,6 +127,7 @@ fun LunariQsPanelSettings(
     onBack: () -> Unit,
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
+    isSplitShade: Boolean = false,
 ) {
     var selectedLayout by rememberSaveable(initialLayout) { mutableStateOf(initialLayout) }
     val layout =
@@ -209,13 +210,22 @@ fun LunariQsPanelSettings(
                 item("appearance") {
                     SettingsHeading(stringResource(R.string.ax_qs_settings_appearance))
                 }
+                item("compact_style") {
+                    SettingsSwitch(
+                        title = stringResource(R.string.ax_qs_settings_compact_style),
+                        summary = stringResource(R.string.ax_qs_settings_compact_style_summary),
+                        checked = viewModel.useCompactStyle && !isSplitShade,
+                        onCheckedChange = viewModel::setCompactStyle,
+                        enabled = !separate && !isSplitShade,
+                        position = SettingPosition.First,
+                    )
+                }
                 item("weather") {
                     SettingsSwitch(
                         title = stringResource(R.string.ax_qs_settings_weather),
                         summary = stringResource(R.string.ax_qs_settings_weather_summary),
                         checked = viewModel.showWeather,
                         onCheckedChange = viewModel::setShowWeather,
-                        position = SettingPosition.First,
                     )
                 }
                 item("percentages") {

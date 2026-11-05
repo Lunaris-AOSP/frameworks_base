@@ -4,6 +4,8 @@
     <string name="ax_qs_panel_settings">Panel settings</string>
     <string name="ax_qs_back_to_editor">Back to tile editor</string>
     <string name="ax_qs_settings_appearance">Appearance</string>
+    <string name="ax_qs_settings_compact_style">Compact header and footer</string>
+    <string name="ax_qs_settings_compact_style_summary">Use a smaller clock and date header, with active apps, settings, edit, user switch, and power controls at the bottom. Available when Split Quick Settings is off.</string>
     <string name="ax_qs_settings_behavior">Panel behavior</string>
     <string name="lunaris_qs_shared_layout">Shared QS layout</string>
     <string name="lunaris_qs_shared_layout_summary">In portrait, keep the top tiles in place and reveal more when expanding. Uses the Full QS layout when split panels are off.</string>
