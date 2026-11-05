@@ -173,7 +173,7 @@ constructor(
         composeView.setContent {
             Media(
                 viewModelFactory = mediaViewModelFactory,
-                presentationStyle = MediaPresentationStyle.Default,
+                presentationStyle = MediaPresentationStyle.Lockscreen,
                 behavior =
                     MediaUiBehavior(
                         carouselVisibility = MediaCarouselVisibility.WhenAnyCardIsActive,

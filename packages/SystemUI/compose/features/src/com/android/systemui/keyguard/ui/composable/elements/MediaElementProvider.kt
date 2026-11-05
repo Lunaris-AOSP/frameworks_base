@@ -71,7 +71,7 @@ constructor(
                 ) {
                     Media(
                         viewModelFactory = viewModel.mediaViewModelFactory,
-                        presentationStyle = MediaPresentationStyle.Default,
+                        presentationStyle = MediaPresentationStyle.Lockscreen,
                         behavior = viewModel.mediaUiBehavior,
                         onDismissed = viewModel::onSwipeToDismiss,
                     )

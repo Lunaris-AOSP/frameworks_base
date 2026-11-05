@@ -63,8 +63,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -391,6 +393,17 @@ private fun Card(
                         )
                     }
 
+                    scene(Media.Scenes.Lockscreen) {
+                        CardForeground(
+                            expandable = it,
+                            viewModel = viewModel,
+                            colorScheme = colorScheme,
+                            threeRows = true,
+                            fillHeight = false,
+                            compactSpacing = true,
+                        )
+                    }
+
                     scene(Media.Scenes.Large) {
                         CardForeground(
                             expandable = it,
@@ -459,6 +472,7 @@ private fun ContentScope.CardForeground(
     colorScheme: AnimatedColorScheme,
     threeRows: Boolean,
     fillHeight: Boolean,
+    compactSpacing: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     // Can't use a Crossfade composable because of the custom layout logic below. Animate the alpha
@@ -477,6 +491,7 @@ private fun ContentScope.CardForeground(
                 viewModel = viewModel,
                 threeRows = threeRows,
                 fillHeight = fillHeight,
+                compactSpacing = compactSpacing,
                 colorScheme = colorScheme,
                 modifier =
                     Modifier.layoutId(Media.LayoutId.CardForeground).graphicsLayer {
@@ -488,6 +503,7 @@ private fun ContentScope.CardForeground(
             CardGuts(
                 viewModel = viewModel.guts,
                 colorScheme = colorScheme,
+                compactSpacing = compactSpacing,
                 modifier =
                     Modifier.layoutId(Media.LayoutId.CardGuts).graphicsLayer {
                         compositingStrategy = CompositingStrategy.ModulateAlpha
@@ -525,6 +541,7 @@ private fun ContentScope.CardForegroundContent(
     threeRows: Boolean,
     fillHeight: Boolean,
     colorScheme: AnimatedColorScheme,
+    compactSpacing: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
 
@@ -544,7 +561,7 @@ private fun ContentScope.CardForegroundContent(
                 tint = colorScheme.primary,
                 modifier =
                     Modifier.align(Alignment.TopStart)
-                        .padding(top = 16.dp, start = 16.dp)
+                        .padding(top = if (compactSpacing) 12.dp else 16.dp, start = 16.dp)
                         .size(24.dp)
                         .clip(CircleShape),
             )
@@ -579,6 +596,7 @@ private fun ContentScope.CardForegroundContent(
                     rememberLastNonNull(viewModel.deviceSuggestionChip)?.let {
                         DeviceChip(
                             viewModel = it,
+                            compactSpacing = compactSpacing,
                             style =
                                 DeviceChipStyle(
                                     fillColor = Color.Transparent,
@@ -597,6 +615,7 @@ private fun ContentScope.CardForegroundContent(
 
                 DeviceChip(
                     viewModel = viewModel.outputSwitcherChip,
+                    compactSpacing = compactSpacing,
                     style =
                         DeviceChipStyle(
                             fillColor = colorScheme.primary,
@@ -657,7 +676,8 @@ private fun ContentScope.CardForegroundContent(
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 8.dp, bottom = 8.dp),
+                    modifier =
+                        Modifier.padding(top = if (compactSpacing) 0.dp else 8.dp, bottom = 8.dp),
                 ) {
                     Navigation(
                         viewModel = viewModel.navigation,
@@ -1134,6 +1154,7 @@ private fun SeekBarTrack(
 private fun CardGuts(
     viewModel: MediaCardGutsViewModel,
     colorScheme: AnimatedColorScheme,
+    compactSpacing: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -1157,7 +1178,11 @@ private fun CardGuts(
             modifier =
                 Modifier.align(Alignment.Center)
                     .fillMaxWidth()
-                    .padding(start = 16.dp, end = 32.dp, top = 16.dp),
+                    .padding(start = 16.dp, end = 32.dp, top = 16.dp)
+                    .then(
+                        if (compactSpacing) Modifier.verticalScroll(rememberScrollState())
+                        else Modifier
+                    ),
         ) {
             Text(
                 text = viewModel.text,
@@ -1242,6 +1267,7 @@ private fun ContentScope.Metadata(
 private fun DeviceChip(
     viewModel: MediaDeviceChipViewModel,
     style: DeviceChipStyle,
+    compactSpacing: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     // For accessibility reasons, the touch area for the chip needs to be at least 48dp in height.
@@ -1261,17 +1287,18 @@ private fun DeviceChip(
                 color = Color.Transparent,
                 shape = RoundedCornerShape(12.dp),
             ),
-        modifier = modifier.padding(top = 16.dp, bottom = 0.dp),
+        modifier = modifier.padding(top = if (compactSpacing) 0.dp else 16.dp),
         useModifierBasedImplementation = true,
     ) {
         Box(
+            contentAlignment = if (compactSpacing) Alignment.CenterStart else Alignment.TopStart,
             modifier =
                 Modifier.heightIn(min = 48.dp).clickable(
                     interactionSource = clickInteractionSource,
                     indication = null,
                 ) {
                     viewModel.onClick(it)
-                }
+                },
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -1530,6 +1557,7 @@ private fun RevealedContent(
 enum class MediaPresentationStyle {
     /** The "normal" 3-row carousel look. */
     Default,
+    Lockscreen,
     /** Similar to [Default] but with full height. Used in communal hub. */
     Large,
     /** Similar to [Default] but not as tall (2-row carousel look). */
@@ -1586,6 +1614,7 @@ object Media {
     object Scenes {
         /** The "normal" 3-row carousel look. */
         val Default = SceneKey("default")
+        val Lockscreen = SceneKey("lockscreen")
         /** Similar to [Default] but with full height. Used in communal hub. */
         val Large = SceneKey("large")
         /** Similar to [Default] but not as tall (2-row carousel look). */
@@ -1596,6 +1625,7 @@ object Media {
 
     /** Definitions of how scene changes are transition-animated. */
     val Transitions = transitions {
+        from(Scenes.Lockscreen, to = Scenes.Default) {}
         from(Scenes.Default, to = Scenes.Compact) {}
         from(Scenes.Default, to = Scenes.Large) {}
         from(Scenes.Default, to = Scenes.Compressed) { fade(Elements.SeekBarSlider) }
@@ -1637,6 +1667,7 @@ object Media {
 private fun MediaPresentationStyle.toScene(): SceneKey {
     return when (this) {
         MediaPresentationStyle.Default -> Media.Scenes.Default
+        MediaPresentationStyle.Lockscreen -> Media.Scenes.Lockscreen
         MediaPresentationStyle.Large -> Media.Scenes.Large
         MediaPresentationStyle.Compressed -> Media.Scenes.Compressed
         MediaPresentationStyle.Compact -> Media.Scenes.Compact
