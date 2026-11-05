@@ -39,10 +39,11 @@ constructor(
     private val _nowPlayingEvent = MutableStateFlow<IslandEvent.NowPlaying?>(null)
     val nowPlayingEvent: StateFlow<IslandEvent.NowPlaying?> = _nowPlayingEvent.asStateFlow()
 
-    private var listening = false
+    @Volatile private var listening = false
 
     private val callback = object : QuickLookClient.Callback {
         override fun onSportsUpdate(sports: List<SportsData>) {
+            if (!listening) return
             _sportsEvents.value = sports.mapIndexed { index, data ->
                 val status = parseGameStatus(data.status, data.statusDetail)
                 IslandEvent.Sports(
@@ -61,6 +62,7 @@ constructor(
         }
 
         override fun onNowPlayingUpdate(text: String, tapAction: PendingIntent?) {
+            if (!listening) return
             if (text.isBlank()) {
                 _nowPlayingEvent.value = null
                 return

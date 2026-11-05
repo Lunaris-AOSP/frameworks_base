@@ -63,23 +63,28 @@ constructor(
     }
     @Volatile private var activeMediaController: MediaController? = null
 
-    private val mediaControllerCallback =
-        object : MediaController.Callback() {
-            override fun onPlaybackStateChanged(state: PlaybackState?) {
-                if (state != null) {
-                    updatePosition(state)
-                }
-            }
+    private var mediaControllerCallback: MediaController.Callback? = null
 
-            override fun onAudioInfoChanged(info: MediaController.PlaybackInfo) {
-                _mediaEvent.update { event -> event?.copy(outputDeviceName = getOutputDeviceName()) }
-            }
+    private inner class SessionCallback : MediaController.Callback() {
+        private fun isCurrent(): Boolean = listening && mediaControllerCallback === this
 
-            override fun onSessionDestroyed() {
-                activeMediaController = null
-                onMediaSessionLost?.invoke()
+        override fun onPlaybackStateChanged(state: PlaybackState?) {
+            if (isCurrent() && state != null) {
+                updatePosition(state)
             }
         }
+
+        override fun onAudioInfoChanged(info: MediaController.PlaybackInfo) {
+            if (!isCurrent()) return
+            _mediaEvent.update { event -> event?.copy(outputDeviceName = getOutputDeviceName()) }
+        }
+
+        override fun onSessionDestroyed() {
+            if (!isCurrent()) return
+            unbindController()
+            onMediaSessionLost?.invoke()
+        }
+    }
 
     private val sessionChangedListener =
         SystemMediaSessionManager.OnActiveSessionsChangedListener { controllers ->
@@ -88,22 +93,25 @@ constructor(
 
     private val mediaSessionListener = object : MediaSessionManager.MediaDataListener {
         override fun onMediaColorsChanged(color: Int) {
+            if (!listening || sessionMediaColor == color) return
             sessionMediaColor = color
             _mediaEvent.update { event -> event?.copy(mediaColor = color) }
         }
 
         override fun onAlbumArtChanged(drawable: Drawable?) {
-            if (sessionAlbumArt === drawable) return
+            if (!listening || sessionAlbumArt === drawable) return
             sessionAlbumArt = drawable
             _mediaEvent.update { event -> event?.copy(albumArt = drawable) }
         }
 
         override fun onAppIconChanged(drawable: Drawable) {
+            if (!listening || sessionAppIcon === drawable) return
             sessionAppIcon = drawable
             _mediaEvent.update { event -> event?.copy(appIcon = drawable) }
         }
 
         override fun onMetadataChanged(track: String, artist: String) {
+            if (!listening) return
             _mediaEvent.update { event ->
                 if (event == null) return@update event
                 val normalizedTrack = track.takeUnless { it == "Unknown" } ?: event.track
@@ -118,15 +126,37 @@ constructor(
     }
 
     private fun bindController(controllers: List<MediaController>?) {
-        activeMediaController?.unregisterCallback(mediaControllerCallback)
-        activeMediaController = controllers?.firstOrNull()
-        activeMediaController?.registerCallback(mediaControllerCallback, mainHandler)
+        if (!listening) return
+        val controller = controllers?.firstOrNull()
+        if (controller?.sessionToken != activeMediaController?.sessionToken) {
+            unbindController()
+            activeMediaController = controller
+            if (controller != null) {
+                val callback = SessionCallback()
+                mediaControllerCallback = callback
+                controller.registerCallback(callback, mainHandler)
+            }
+        }
         activeMediaController?.playbackState?.let {
             updatePosition(it)
         }
 
         if (controllers.isNullOrEmpty() && _mediaEvent.value != null) {
             onMediaSessionLost?.invoke()
+        }
+    }
+
+    private fun unbindController() {
+        val controller = activeMediaController
+        val callback = mediaControllerCallback
+        activeMediaController = null
+        mediaControllerCallback = null
+        if (controller != null && callback != null) {
+            try {
+                controller.unregisterCallback(callback)
+            } catch (e: RuntimeException) {
+                Log.w(TAG, "Failed to unregister media controller", e)
+            }
         }
     }
 
@@ -152,6 +182,7 @@ constructor(
     private var cancelProgressPolling: Runnable? = null
 
     private fun tickProgress() {
+        if (!listening) return
         _mediaEvent.update { event ->
             if (event == null || !event.isPlaying || event.duration <= 0L) return@update event
             val now = SystemClock.elapsedRealtime()
@@ -165,7 +196,7 @@ constructor(
     }
 
     fun startProgressPolling() {
-        if (cancelProgressPolling != null) return
+        if (!listening || cancelProgressPolling != null) return
         cancelProgressPolling = backgroundExecutor.executeRepeatedly(
             ::tickProgress, 0L, POSITION_UPDATE_INTERVAL_MS,
         )
@@ -216,6 +247,7 @@ constructor(
                 metadata: MediaMetadata?,
                 @PlaybackState.State state: Int,
             ) {
+                if (!listening) return
                 val isPlaying = state == PlaybackState.STATE_PLAYING
                 val track =
                     metadata?.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
@@ -320,9 +352,8 @@ constructor(
         MediaSessionManager.get().removeListener(mediaSessionListener)
         try {
             systemMediaSessionManager.removeOnActiveSessionsChangedListener(sessionChangedListener)
-            activeMediaController?.unregisterCallback(mediaControllerCallback)
-            activeMediaController = null
         } catch (_: Exception) {}
+        unbindController()
         _mediaEvent.value = null
         activeMediaPackage = null
         sessionMediaColor = 0

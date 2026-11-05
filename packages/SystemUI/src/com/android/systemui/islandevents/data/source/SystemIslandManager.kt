@@ -21,10 +21,16 @@ import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.statusbar.pipeline.battery.domain.interactor.BatteryInteractor
 import com.android.systemui.statusbar.policy.BatteryController
 import java.io.File
+import java.io.IOException
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,6 +39,7 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -49,6 +56,7 @@ constructor(
     companion object {
         private const val TAG = "SystemIslandManager"
         private const val MAX_CLIPBOARD_HISTORY = 10
+        private const val MAX_CLIPBOARD_IMAGE_SIZE_PX = 1024
         private const val PREFS_NAME = "ax_dynamic_bar_prefs"
         private const val KEY_CLIPBOARD_STASH = "clipboard_stash"
         private const val CLIPBOARD_CACHE_DIR = "clipboard_cache"
@@ -94,10 +102,13 @@ constructor(
     }
 
     private var persistJob: Job? = null
+    private var clipboardImageJob: Job? = null
+    private val lastClipboardItemId = AtomicLong()
 
     private val ringerReceiver =
         object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, intent: Intent) {
+                if (!ringerListening) return
                 val mode = intent.getIntExtra(AudioManager.EXTRA_RINGER_MODE, -1)
                 if (mode < 0) return
                 if (lastRingerMode != -1 && lastRingerMode != mode) {
@@ -118,6 +129,8 @@ constructor(
 
     private val clipboardListener =
         ClipboardManager.OnPrimaryClipChangedListener {
+            if (!clipboardListening) return@OnPrimaryClipChangedListener
+            cancelClipboardImage()
             if (suppressNextClipEvent) {
                 suppressNextClipEvent = false
                 return@OnPrimaryClipChangedListener
@@ -127,7 +140,11 @@ constructor(
                     clipboardManager.primaryClip
                 } catch (_: Exception) {
                     null
-                } ?: return@OnPrimaryClipChangedListener
+                }
+            if (clip == null || clip.itemCount == 0) {
+                _clipboardEvent.value = null
+                return@OnPrimaryClipChangedListener
+            }
             val item = clip.getItemAt(0) ?: return@OnPrimaryClipChangedListener
             val desc = clip.description
 
@@ -154,14 +171,25 @@ constructor(
 
             val label = desc.label?.toString() ?: ""
             if (preview.isNotEmpty() || isImage || label.isNotEmpty()) {
-                val itemId = System.currentTimeMillis()
+                val itemId = lastClipboardItemId.updateAndGet {
+                    maxOf(System.currentTimeMillis(), it + 1L)
+                }
                 if (isImage && sourceUri != null) {
-                    applicationScope.launch(backgroundDispatcher) {
-                        val cachedUri = cacheClipboardImage(sourceUri, itemId)
-                        val (event, items) = buildClipboardEvent(
-                            itemId, preview, label, isUrl, true, cachedUri)
-                        _clipboardEvent.value = event
-                        mainHandler.post { onClipboardCopied?.invoke(event) }
+                    clipboardImageJob = applicationScope.launch(Dispatchers.Main.immediate) {
+                        var committed = false
+                        try {
+                            val cachedUri = withContext(backgroundDispatcher) {
+                                cacheClipboardImage(sourceUri, itemId)
+                            }
+                            if (!clipboardListening) return@launch
+                            val (event, _) = buildClipboardEvent(
+                                itemId, preview, label, isUrl, true, cachedUri)
+                            _clipboardEvent.value = event
+                            committed = true
+                            onClipboardCopied?.invoke(event)
+                        } finally {
+                            if (!committed) cleanupCachedImage(itemId)
+                        }
                     }
                 } else {
                     val (event, _) = buildClipboardEvent(
@@ -172,19 +200,43 @@ constructor(
             }
         }
 
-    private fun cacheClipboardImage(sourceUri: Uri, itemId: Long): Uri? {
+    private fun cancelClipboardImage() {
+        clipboardImageJob?.cancel()
+        clipboardImageJob = null
+    }
+
+    private suspend fun cacheClipboardImage(sourceUri: Uri, itemId: Long): Uri? {
+        val file = File(clipboardCacheDir, "clip_$itemId.webp")
         return try {
+            currentCoroutineContext().ensureActive()
             val source = ImageDecoder.createSource(context.contentResolver, sourceUri)
-            val bitmap = ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
-                decoder.setTargetSampleSize(2)
+            val bitmap = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                val largest = maxOf(info.size.width, info.size.height)
+                if (largest > MAX_CLIPBOARD_IMAGE_SIZE_PX) {
+                    val scale = MAX_CLIPBOARD_IMAGE_SIZE_PX.toFloat() / largest
+                    decoder.setTargetSize(
+                        (info.size.width * scale).toInt().coerceAtLeast(1),
+                        (info.size.height * scale).toInt().coerceAtLeast(1),
+                    )
+                }
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
             }
-            val file = File(clipboardCacheDir, "clip_$itemId.webp")
-            file.outputStream().use { out ->
-                bitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 85, out)
+            try {
+                currentCoroutineContext().ensureActive()
+                val compressed = file.outputStream().use { out ->
+                    bitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 85, out)
+                }
+                if (!compressed) throw IOException("Bitmap compression failed")
+                currentCoroutineContext().ensureActive()
+            } finally {
+                bitmap.recycle()
             }
-            bitmap.recycle()
             FileProvider.getUriForFile(context, FILE_PROVIDER_AUTHORITY, file)
+        } catch (e: CancellationException) {
+            file.delete()
+            throw e
         } catch (e: Exception) {
+            file.delete()
             Log.w(TAG, "Failed to cache clipboard image", e)
             null
         }
@@ -239,9 +291,9 @@ constructor(
         } catch (_: Exception) {}
     }
 
-    private var chargingListening = false
-    private var ringerListening = false
-    private var clipboardListening = false
+    @Volatile private var chargingListening = false
+    @Volatile private var ringerListening = false
+    @Volatile private var clipboardListening = false
 
     var persistWhilePluggedIn = false
 
@@ -274,6 +326,7 @@ constructor(
                     }
                     .distinctUntilChanged()
                     .collect { snap ->
+                        if (!chargingListening) return@collect
                         if (persistWhilePluggedIn) {
                             val previous = _chargingEvent.value
                             _chargingEvent.value = if (snap.plugged && snap.level != null) {
@@ -354,6 +407,8 @@ constructor(
     fun stopClipboard() {
         if (!clipboardListening) return
         clipboardListening = false
+        cancelClipboardImage()
+        suppressNextClipEvent = false
         clipboardManager.removePrimaryClipChangedListener(clipboardListener)
         _clipboardEvent.value = null
     }
@@ -367,7 +422,6 @@ constructor(
     }
 
     fun stopListening() {
-        if (!listening) return
         listening = false
         stopCharging()
         stopRinger()
@@ -401,6 +455,7 @@ constructor(
     }
 
     fun clearClipboard() {
+        cancelClipboardImage()
         _clipboardEvent.value = null
         synchronized(clipboardHistory) {
             clipboardHistory.forEach { cleanupCachedImage(it.id) }

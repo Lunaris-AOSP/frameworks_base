@@ -67,7 +67,16 @@ constructor(
             ) { bouncer, shadeFull, chip ->
                 !bouncer && shadeFull && chip
             }
-        combine(contextAndDoze, shadeAndBouncer) { a, b -> a && b }
+        val settingsAllowKeyguard = combine(
+            interactor.settings.isEnabled,
+            interactor.settings.isKeyguardEnabled,
+            interactor.settings.isKeyguardMusicPillEnabled,
+        ) { enabled, keyguardEnabled, musicPillEnabled ->
+            (enabled && keyguardEnabled) || musicPillEnabled
+        }
+        combine(contextAndDoze, shadeAndBouncer, settingsAllowKeyguard) { a, b, enabled ->
+            a && b && enabled
+        }
             .distinctUntilChanged()
             .stateIn(applicationScope, SharingStarted.Eagerly, false)
     }
@@ -85,13 +94,26 @@ constructor(
     }
 
     init {
+        canShow
+            .onEach { if (!it) collapse() }
+            .launchIn(applicationScope)
+
         interactor.isOnKeyguard
             .onEach { if (!it) collapse() }
             .launchIn(applicationScope)
     }
 
     fun expand() {
-        if (interactor.uiState.value.topEvent == null) return
+        val state = interactor.uiState.value
+        val settings = interactor.settings
+        val enabled = (settings.isEnabled.value && settings.isKeyguardEnabled.value) ||
+            settings.isKeyguardMusicPillEnabled.value
+        if (!enabled || !state.shouldShow || state.topEvent == null ||
+            !interactor.isOnKeyguard.value || interactor.isDozing.value ||
+            interactor.dozeAmount.value > 0f || interactor.qsExpansion.value > 0f ||
+            interactor.isPanelExpanded.value || interactor.isBouncerShowing.value ||
+            interactor.legacyShadeExpansion.value < 0.95f
+        ) return
         _intent.value = true
     }
 

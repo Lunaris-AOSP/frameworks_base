@@ -518,6 +518,7 @@ private fun MediaSeekBar(
                         }
                     },
                     modifier = Modifier.fillMaxWidth().height(seekBarHeight),
+                    onRelease = { bar -> bar.stopWaveAnimation() },
                 )
             } else {
                 AndroidView(
@@ -592,6 +593,12 @@ private fun MediaSeekBar(
                         layer?.alpha = alpha
                     },
                     modifier = Modifier.fillMaxWidth().height(seekBarHeight),
+                    onRelease = { bar ->
+                        ((bar.progressDrawable as? LayerDrawable)
+                            ?.findDrawableByLayerId(android.R.id.progress) as? SquigglyProgress)
+                            ?.animate = false
+                        bar.tag = null
+                    },
                 )
             }
         }
