@@ -2,6 +2,7 @@ package com.android.systemui.axdynamicbar.ui
 
 import android.content.Context
 import android.graphics.PixelFormat
+import android.util.Log
 import android.view.Gravity
 import android.view.WindowManager
 import androidx.compose.animation.AnimatedVisibility
@@ -61,6 +62,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -68,7 +70,8 @@ import kotlinx.coroutines.launch
 import android.view.WindowInsets
 import androidx.compose.ui.input.pointer.PointerEvent
 
-private const val EXIT_ANIM_DURATION = 300L
+private const val OVERLAY_HIDE_DELAY_MS = 400L
+private const val TAG = "AxDynamicBarExpanded"
 
 @SysUISingleton
 class AxDynamicBarExpandedPanel
@@ -80,44 +83,63 @@ constructor(
     @Main private val mainHandler: Handler,
     private val viewModel: AxDynamicBarChipViewModel,
 ) {
+    private data class OverlayState(
+        val needed: Boolean = false,
+        val expanded: Boolean = false,
+        val allowExitAnimation: Boolean = false,
+    )
+
+    private var initialized = false
+    @Volatile private var desiredState = OverlayState()
     private var overlayView: ComposeView? = null
     private var panelLifecycleOwner: PanelLifecycleOwner? = null
     private var hideOverlayJob: Job? = null
+    private var explicitFocusRequested = false
 
     fun init() {
+        if (initialized) return
+        initialized = true
         viewModel.interactor.onCollapseRequested = { viewModel.statusBarExpansion.collapse() }
         viewModel.interactor.onFocusableRequested = { focusable -> setOverlayFocusable(focusable) }
 
-        val needsOverlay =
-            combine(
-                viewModel.isExpanded,
-                viewModel.interactor.uiState.map { it.notificationAlert },
-                viewModel.isOnKeyguard,
-            ) { expanded, alert, onKeyguard ->
-                !onKeyguard && (expanded || alert != null)
-            }
-
-        needsOverlay
-            .onEach { needed ->
-                if (needed) {
+        combine(
+            viewModel.isExpanded,
+            viewModel.interactor.uiState.map { it.notificationAlert != null }.distinctUntilChanged(),
+            viewModel.isOnKeyguard,
+            viewModel.interactor.settings.isEnabled,
+        ) { expanded, hasAlert, onKeyguard, enabled ->
+            val allowed = enabled && !onKeyguard
+            OverlayState(
+                needed = allowed && (expanded || hasAlert),
+                expanded = allowed && expanded,
+                allowExitAnimation = allowed,
+            )
+        }
+            .distinctUntilChanged()
+            .onEach { state ->
+                desiredState = state
+                ensureMainThread {
+                    if (state != desiredState) return@ensureMainThread
                     hideOverlayJob?.cancel()
                     hideOverlayJob = null
-                    showOverlay()
-                } else {
-
-                    hideOverlayJob?.cancel()
-                    hideOverlayJob =
-                        applicationScope.launch {
-                            delay(400)
-                            hideOverlay()
+                    if (state.needed) {
+                        showOverlayInternal()
+                        applyWindowState()
+                    } else {
+                        explicitFocusRequested = false
+                        applyWindowState()
+                        if (!state.allowExitAnimation) {
+                            hideOverlayInternal()
+                        } else if (overlayView != null) {
+                            hideOverlayJob = applicationScope.launch {
+                                delay(OVERLAY_HIDE_DELAY_MS)
+                                ensureMainThread {
+                                    if (!desiredState.needed) hideOverlayInternal()
+                                }
+                            }
                         }
+                    }
                 }
-            }
-            .launchIn(applicationScope)
-
-        viewModel.isExpanded
-            .onEach { expanded ->
-                updateOverlay(expanded)
             }
             .launchIn(applicationScope)
     }
@@ -127,12 +149,8 @@ constructor(
         else mainHandler.post(action)
     }
 
-    private fun showOverlay() {
-        ensureMainThread { showOverlayInternal() }
-    }
-
     private fun showOverlayInternal() {
-        if (overlayView != null) return
+        if (overlayView != null || !desiredState.needed) return
 
         val lifecycleOwner = PanelLifecycleOwner()
         lifecycleOwner.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
@@ -167,73 +185,84 @@ constructor(
         val flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
             WindowManager.LayoutParams.FLAG_LAYOUT_INSET_DECOR or
-            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
             WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
 
-        val params =
-            WindowManager.LayoutParams(
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                WindowManager.LayoutParams.TYPE_STATUS_BAR_SUB_PANEL,
-                flags,
-                PixelFormat.TRANSLUCENT,
-            )
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_STATUS_BAR_SUB_PANEL,
+            flags,
+            PixelFormat.TRANSLUCENT,
+        )
         params.gravity = Gravity.TOP or Gravity.FILL_HORIZONTAL
-        params.title = "AxDynamicBarExpanded"
-        updateFocusFlags(params, viewModel.isExpanded.value)
+        params.title = TAG
+        updateFocusFlags(
+            params,
+            desiredState.expanded || explicitFocusRequested,
+            needsInputMethod = explicitFocusRequested,
+        )
 
-        windowManager.addView(view, params)
+        try {
+            windowManager.addView(view, params)
+        } catch (e: RuntimeException) {
+            view.setOnTouchListener(null)
+            lifecycleOwner.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
+            lifecycleOwner.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
+            lifecycleOwner.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
+            view.disposeComposition()
+            panelLifecycleOwner = null
+            explicitFocusRequested = false
+            Log.w(TAG, "Unable to add overlay", e)
+            return
+        }
         overlayView = view
     }
 
-    private fun hideOverlay() {
-        ensureMainThread { hideOverlayInternal() }
-    }
-
     private fun hideOverlayInternal() {
-        shrinkRunnable?.let { mainHandler.removeCallbacks(it) }
-        shrinkRunnable = null
-        overlayView?.let { view ->
-            panelLifecycleOwner?.apply {
-                handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
-                handleLifecycleEvent(Lifecycle.Event.ON_STOP)
-                handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
-            }
-            windowManager.removeViewImmediate(view)
-        }
+        val view = overlayView
+        val lifecycleOwner = panelLifecycleOwner
         overlayView = null
         panelLifecycleOwner = null
+        explicitFocusRequested = false
+        if (view == null) return
+        view.setOnTouchListener(null)
+        lifecycleOwner?.apply {
+            handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
+            handleLifecycleEvent(Lifecycle.Event.ON_STOP)
+            handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
+        }
+        try {
+            windowManager.removeViewImmediate(view)
+        } catch (_: IllegalArgumentException) {
+        } finally {
+            view.disposeComposition()
+        }
     }
 
-    private var shrinkRunnable: Runnable? = null
-
-    private fun updateOverlay(expanded: Boolean) = ensureMainThread {
-        shrinkRunnable?.let { mainHandler.removeCallbacks(it) }
-        shrinkRunnable = null
-        val view = overlayView ?: return@ensureMainThread
-        val params = view.layoutParams as? WindowManager.LayoutParams ?: return@ensureMainThread
-        updateFocusFlags(params, expanded)
-        if (expanded) {
-            params.height = WindowManager.LayoutParams.WRAP_CONTENT
+    private fun applyWindowState() {
+        val view = overlayView ?: return
+        val params = view.layoutParams as? WindowManager.LayoutParams ?: return
+        val oldFlags = params.flags
+        val needsInputMethod = desiredState.needed && explicitFocusRequested
+        updateFocusFlags(
+            params,
+            desiredState.needed && (desiredState.expanded || explicitFocusRequested),
+            needsInputMethod = needsInputMethod,
+        )
+        if (params.flags == oldFlags) return
+        try {
             windowManager.updateViewLayout(view, params)
-        } else {
-            windowManager.updateViewLayout(view, params)
-            val runnable = Runnable {
-                val v = overlayView ?: return@Runnable
-                val p = v.layoutParams as? WindowManager.LayoutParams ?: return@Runnable
-                p.height = WindowManager.LayoutParams.WRAP_CONTENT
-                windowManager.updateViewLayout(v, p)
-            }
-            shrinkRunnable = runnable
-            mainHandler.postDelayed(runnable, EXIT_ANIM_DURATION)
+        } catch (e: IllegalArgumentException) {
+            Log.w(TAG, "Unable to update overlay", e)
+            hideOverlayInternal()
         }
     }
 
     private fun setOverlayFocusable(focusable: Boolean) = ensureMainThread {
-        val view = overlayView ?: return@ensureMainThread
-        val params = view.layoutParams as? WindowManager.LayoutParams ?: return@ensureMainThread
-        updateFocusFlags(params, focusable, needsInputMethod = focusable)
-        windowManager.updateViewLayout(view, params)
+        val requested = focusable && desiredState.needed
+        if (explicitFocusRequested == requested) return@ensureMainThread
+        explicitFocusRequested = requested
+        applyWindowState()
     }
 
     private fun updateFocusFlags(
@@ -268,8 +297,10 @@ private fun OverlayContent(viewModel: AxDynamicBarChipViewModel, statusBarHeight
     val notifAlert = uiState.notificationAlert
     val compactNotifs by viewModel.interactor.settings.compactNotifications.collectAsStateWithLifecycle()
 
-    val lastAlert = remember { mutableStateOf<IslandEvent.Notification?>(null) }
-    if (notifAlert != null) lastAlert.value = notifAlert
+    val lastAlert = remember { mutableStateOf(notifAlert) }
+    LaunchedEffect(notifAlert) {
+        if (notifAlert != null) lastAlert.value = notifAlert
+    }
 
     val expandedVisible = remember { MutableTransitionState(false) }
     val showNotif = !isExpanded && notifAlert != null
@@ -283,9 +314,17 @@ private fun OverlayContent(viewModel: AxDynamicBarChipViewModel, statusBarHeight
         notifVisible.targetState = showNotif
     }
 
-    LaunchedEffect(chipState) {
-        val filtered = chipState?.allEvents?.filter { it !is IslandEvent.AospChip }
-        if (filtered.isNullOrEmpty() && isExpanded) {
+    LaunchedEffect(notifAlert, notifVisible.targetState, notifVisible.currentState, notifVisible.isIdle) {
+        if (notifAlert == null && !notifVisible.targetState && !notifVisible.currentState &&
+            notifVisible.isIdle
+        ) {
+            lastAlert.value = null
+        }
+    }
+
+    val hasExpandableEvents = chipState?.allEvents?.any { it !is IslandEvent.AospChip } == true
+    LaunchedEffect(hasExpandableEvents, isExpanded) {
+        if (!hasExpandableEvents && isExpanded) {
             viewModel.statusBarExpansion.collapse()
         }
     }

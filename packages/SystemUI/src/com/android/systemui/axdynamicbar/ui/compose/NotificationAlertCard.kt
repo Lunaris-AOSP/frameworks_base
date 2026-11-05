@@ -41,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -161,10 +162,13 @@ private suspend fun PointerInputScope.detectInteractionGesture(
             ev = awaitPointerEvent(PointerEventPass.Final)
         } while (!ev.changes.any { it.changedToDownIgnoreConsumed() })
         onStart()
-        do {
-            ev = awaitPointerEvent(PointerEventPass.Final)
-        } while (ev.changes.any { it.pressed })
-        onEnd()
+        try {
+            do {
+                ev = awaitPointerEvent(PointerEventPass.Final)
+            } while (ev.changes.any { it.pressed })
+        } finally {
+            onEnd()
+        }
     }
 }
 
@@ -176,6 +180,20 @@ fun NotificationAlertCard(
     onDismiss: () -> Unit,
     initiallyCompact: Boolean = false,
     modifier: Modifier = Modifier,
+) {
+    key(notification.sbn.key) {
+        NotificationAlertCardContent(notification, interactor, onDismiss, initiallyCompact, modifier)
+    }
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun NotificationAlertCardContent(
+    notification: IslandEvent.Notification,
+    interactor: IslandActions,
+    onDismiss: () -> Unit,
+    initiallyCompact: Boolean,
+    modifier: Modifier,
 ) {
     val extras = notification.sbn.notification?.extras
     val isCall = extras?.let {
@@ -202,8 +220,8 @@ fun NotificationAlertCard(
         transitions = alertCardTransitions,
     )
 
-    DisposableEffect(Unit) {
-        onDispose { interactor.onNotificationAlertInteractionEnd() }
+    DisposableEffect(interactor, notification.id) {
+        onDispose { interactor.onNotificationAlertInteractionEnd(notification.id) }
     }
 
     MagneticSwipeToDismiss(
@@ -216,10 +234,10 @@ fun NotificationAlertCard(
     ) {
         Column(
             modifier = Modifier.fillMaxWidth()
-                .pointerInput(Unit) {
+                .pointerInput(interactor, notification.id) {
                     detectInteractionGesture(
-                        onStart = interactor::onNotificationAlertInteractionStart,
-                        onEnd = interactor::onNotificationAlertInteractionEnd,
+                        onStart = { interactor.onNotificationAlertInteractionStart(notification.id) },
+                        onEnd = { interactor.onNotificationAlertInteractionEnd(notification.id) },
                     )
                 }
                 .clip(ShapeCard)
@@ -801,6 +819,10 @@ private fun ReplyField(
     var replyText by remember { mutableStateOf("") }
     val context = LocalContext.current
     val focusRequester = remember { FocusRequester() }
+
+    DisposableEffect(interactor) {
+        onDispose { interactor.onFocusableRequested?.invoke(false) }
+    }
 
     LaunchedEffect(Unit) {
         interactor.onFocusableRequested?.invoke(true)

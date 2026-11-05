@@ -9,9 +9,11 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -53,13 +55,14 @@ internal fun MagneticSwipeToDismiss(
     val density = LocalDensity.current
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
+    val latestOnDismiss = rememberUpdatedState(onDismiss)
     val viewConfig = LocalViewConfiguration.current
 
     val detachPx = with(density) { DETACH_THRESHOLD.toPx() }
     val dismissVelPx = with(density) { DISMISS_VELOCITY.toPx() }
 
-    val offsetX = remember { Animatable(0f) }
-    val offsetY = remember { Animatable(0f) }
+    var offsetX by remember { mutableFloatStateOf(0f) }
+    var offsetY by remember { mutableFloatStateOf(0f) }
     var detached by remember { mutableStateOf(false) }
     var dismissed by remember { mutableStateOf(false) }
 
@@ -67,7 +70,7 @@ internal fun MagneticSwipeToDismiss(
 
     if (dismissed) return
 
-    val absOff = maxOf(abs(offsetX.value), abs(offsetY.value))
+    val absOff = maxOf(abs(offsetX), abs(offsetY))
     val progress = (absOff / (detachPx * 4f)).coerceIn(0f, 1f)
     val contentAlpha = 1f - progress * 0.5f
 
@@ -78,124 +81,150 @@ internal fun MagneticSwipeToDismiss(
             modifier =
                 modifier
                     .graphicsLayer {
-                        translationX = offsetX.value
-                        translationY = offsetY.value
+                        translationX = offsetX
+                        translationY = offsetY
                         alpha = contentAlpha
                         scaleX = 1f - progress * 0.04f
                         scaleY = 1f - progress * 0.04f
-                        rotationZ = (offsetX.value / detachPx).coerceIn(-1f, 1f) * 2f
+                        rotationZ = (offsetX / detachPx).coerceIn(-1f, 1f) * 2f
                     }
-                    .pointerInput(allowUpDismiss) {
+                    .pointerInput(allowUpDismiss, detachPx, dismissVelPx, viewConfig.touchSlop) {
                         val touchSlop = viewConfig.touchSlop
+                        var settleJob: kotlinx.coroutines.Job? = null
 
-                        awaitEachGesture {
-                        
-                            val down: PointerInputChange
-                            while (true) {
-                                val event = awaitPointerEvent(PointerEventPass.Initial)
-                                val d = event.changes.firstOrNull {
-                                    it.changedToDownIgnoreConsumed()
+                        try {
+                            awaitEachGesture {
+
+                                val down: PointerInputChange
+                                while (true) {
+                                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                                    val d = event.changes.firstOrNull {
+                                        it.changedToDownIgnoreConsumed()
+                                    }
+                                    if (d != null) { down = d; break }
                                 }
-                                if (d != null) { down = d; break }
-                            }
-                        
-                            var axis = 0
-                            var velocity = 0f
-                            var prevTime = 0L
-                            detached = false
 
-                            while (true) {
-                                val event = awaitPointerEvent(PointerEventPass.Initial)
-                                val change = event.changes.firstOrNull() ?: break
+                                settleJob?.cancel()
+                                settleJob = null
+                                offsetX = 0f
+                                offsetY = 0f
+                                var axis = 0
+                                var velocity = 0f
+                                var prevTime = 0L
+                                detached = false
 
-                                if (!change.pressed) {
-                                
-                                    if (axis != 0) change.consume()
-                                    if (axis == 0) break 
+                                while (true) {
+                                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
 
-                                    val offset = if (axis == 2) offsetY else offsetX
-                                    val vel = velocity
-                                    val off = offset.value
-                                    scope.launch {
+                                    if (!change.pressed) {
+
+                                        if (axis != 0) change.consume()
+                                        if (axis == 0) break
+
+                                        val releaseAxis = axis
+                                        val vel = velocity
+                                        val off = if (releaseAxis == 2) offsetY else offsetX
+                                        val wasDetached = detached
                                         val shouldDismiss =
                                             abs(vel) >= dismissVelPx ||
-                                                (detached && abs(off) > detachPx * 0.5f)
-                                        if (shouldDismiss) {
-                                            val target = when (axis) {
-                                                2 -> -size.height * 1.5f 
-                                                else -> {
-                                                    val dir = if (abs(vel) > 100f) sign(vel) else sign(off)
-                                                    dir * size.width * 1.5f
+                                                (wasDetached && abs(off) > detachPx * 0.5f)
+                                        val destination =
+                                            if (shouldDismiss) {
+                                                if (releaseAxis == 2) {
+                                                    -size.height * 1.5f
+                                                } else {
+                                                    val direction =
+                                                        if (abs(vel) > 100f) sign(vel) else sign(off)
+                                                    direction * size.width * 1.5f
                                                 }
+                                            } else {
+                                                0f
                                             }
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            offset.animateTo(
-                                                target,
-                                                spring(dampingRatio = 1f, stiffness = FLING_STIFFNESS),
-                                            )
-                                            dismissed = true
-                                            onDismiss()
-                                        } else {
-                                            if (detached) {
+                                        settleJob = scope.launch {
+                                            if (shouldDismiss || wasDetached) {
                                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                             }
-                                            offset.animateTo(0f, spring(SNAP_DAMPING, SNAP_STIFFNESS))
-                                            detached = false
+                                            val animation = Animatable(off)
+                                            animation.animateTo(
+                                                targetValue = destination,
+                                                animationSpec =
+                                                    if (shouldDismiss) {
+                                                        spring(dampingRatio = 1f, stiffness = FLING_STIFFNESS)
+                                                    } else {
+                                                        spring(dampingRatio = SNAP_DAMPING, stiffness = SNAP_STIFFNESS)
+                                                    },
+                                            ) {
+                                                if (releaseAxis == 2) offsetY = value else offsetX = value
+                                            }
+                                            if (shouldDismiss) {
+                                                dismissed = true
+                                                latestOnDismiss.value()
+                                            } else {
+                                                detached = false
+                                            }
                                         }
+                                        break
                                     }
-                                    break
-                                }
 
-                                val dx = change.position.x - down.position.x
-                                val dy = change.position.y - down.position.y
+                                    val dx = change.position.x - down.position.x
+                                    val dy = change.position.y - down.position.y
 
-                                if (axis == 0) {
-                                    if (abs(dx) > touchSlop || abs(dy) > touchSlop) {
-                                        val wouldBeHorizontal = abs(dx) >= abs(dy)
-                                        if (wouldBeHorizontal && swipeLock.value) {
-                                            break
-                                        }
-                                        axis = if (wouldBeHorizontal) {
-                                            1 
-                                        } else if (allowUpDismiss && dy < 0) {
-                                            2 
+                                    if (axis == 0) {
+                                        if (abs(dx) > touchSlop || abs(dy) > touchSlop) {
+                                            val wouldBeHorizontal = abs(dx) >= abs(dy)
+                                            if (wouldBeHorizontal && swipeLock.value) {
+                                                break
+                                            }
+                                            axis = if (wouldBeHorizontal) {
+                                                1
+                                            } else if (allowUpDismiss && dy < 0) {
+                                                2
+                                            } else {
+                                                break
+                                            }
                                         } else {
-                                            break 
+                                            continue
                                         }
-                                    } else {
-                                        continue 
                                     }
-                                }
 
-                                change.consume()
+                                    change.consume()
 
-                                val delta = change.position - change.previousPosition
-                                val dragAmount = if (axis == 2) delta.y else delta.x
-                                val offset = if (axis == 2) offsetY else offsetX
+                                    val delta = change.position - change.previousPosition
+                                    val dragAmount = if (axis == 2) delta.y else delta.x
+                                    val currentOffset = if (axis == 2) offsetY else offsetX
 
-                                val now = change.uptimeMillis
-                                if (prevTime > 0L) {
-                                    val dt = (now - prevTime).coerceAtLeast(1) / 1000f
-                                    val instantVel = dragAmount / dt
-                                    velocity =
-                                        velocity * (1f - VELOCITY_SMOOTHING) +
-                                            instantVel * VELOCITY_SMOOTHING
-                                }
-                                prevTime = now
-
-                                if (!detached) {
-                                    val target = offset.value + dragAmount * MAGNETIC_PULL
-                                    if (abs(target) >= detachPx) {
-                                        detached = true
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        scope.launch { offset.snapTo(offset.value + dragAmount) }
-                                    } else {
-                                        scope.launch { offset.snapTo(target) }
+                                    val now = change.uptimeMillis
+                                    if (prevTime > 0L) {
+                                        val dt = (now - prevTime).coerceAtLeast(1) / 1000f
+                                        val instantVel = dragAmount / dt
+                                        velocity =
+                                            velocity * (1f - VELOCITY_SMOOTHING) +
+                                                instantVel * VELOCITY_SMOOTHING
                                     }
-                                } else {
-                                    scope.launch { offset.snapTo(offset.value + dragAmount) }
+                                    prevTime = now
+
+                                    val nextOffset =
+                                        if (detached) {
+                                            currentOffset + dragAmount
+                                        } else {
+                                            val pulledOffset = currentOffset + dragAmount * MAGNETIC_PULL
+                                            if (abs(pulledOffset) >= detachPx) {
+                                                detached = true
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                currentOffset + dragAmount
+                                            } else {
+                                                pulledOffset
+                                            }
+                                        }
+                                    if (axis == 2) offsetY = nextOffset else offsetX = nextOffset
                                 }
                             }
+                        } finally {
+                            settleJob?.cancel()
+                            offsetX = 0f
+                            offsetY = 0f
+                            detached = false
                         }
                     }
         ) {

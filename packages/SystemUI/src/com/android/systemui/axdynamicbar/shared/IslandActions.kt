@@ -51,7 +51,7 @@ interface IslandActions {
     fun killApp(taskId: Int)
     fun onNotificationInteraction(eventId: String)
     fun onNotificationInteractionEnd(eventId: String)
-    fun onNotificationAlertInteractionStart()
-    fun onNotificationAlertInteractionEnd()
+    fun onNotificationAlertInteractionStart(eventId: String)
+    fun onNotificationAlertInteractionEnd(eventId: String)
     fun launchNotificationDismissingKeyguard(event: IslandEvent.Notification)
 }

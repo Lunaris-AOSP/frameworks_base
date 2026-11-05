@@ -115,6 +115,10 @@ constructor(
         repository.system.onClipboardCopied = { scheduleAutoDismiss(it) }
 
         repository.notification.activeMediaPackageProvider = { repository.media.activeMediaPackage }
+        repository.notification.onNotificationPosted = repository.notification::coalesceNotification
+        repository.notification.onNotificationRemoved = { key ->
+            if (_uiState.value.notificationAlert?.sbn?.key == key) dismissNotificationAlert()
+        }
         repository.notification.onAlarmEvent = {
             scheduleAutoDismiss(it, if (it.isRinging) 30_000L else 5_000L)
         }
@@ -133,15 +137,8 @@ constructor(
 
         applicationScope.launch {
             repository.notification.notificationFlow.collect { notification ->
-                repository.notification.coalesceNotification(notification)
+                if (!repository.notification.isActiveNotification(notification)) return@collect
                 showNotificationAlert(notification)
-            }
-        }
-
-        applicationScope.launch {
-            repository.notification.notificationRemovedFlow.collect { key ->
-                val alert = _uiState.value.notificationAlert ?: return@collect
-                if (alert.sbn.key == key) dismissNotificationAlert()
             }
         }
 
@@ -442,18 +439,21 @@ constructor(
         scheduleAutoDismiss(event)
     }
 
-    override fun onNotificationAlertInteractionStart() {
+    override fun onNotificationAlertInteractionStart(eventId: String) {
+        if (_uiState.value.notificationAlert?.id != eventId) return
         notifAlertJob?.cancel()
         notifAlertJob = null
     }
 
-    override fun onNotificationAlertInteractionEnd() {
-        val current = _uiState.value
-        val alert = current.notificationAlert ?: return
-        if (alert.isActiveCall()) return
+    override fun onNotificationAlertInteractionEnd(eventId: String) {
+        val alert = _uiState.value.notificationAlert ?: return
+        if (alert.id != eventId) return
+        notifAlertJob?.cancel()
+        notifAlertJob = null
+        if (alert.isActiveCall() || alert.progress >= 0 || alert.isProgressIndeterminate) return
         notifAlertJob = applicationScope.launch {
             delay(NOTIF_ALERT_DURATION_MS)
-            dismissNotificationAlert()
+            if (_uiState.value.notificationAlert?.id == eventId) dismissNotificationAlert()
         }
     }
 
@@ -580,6 +580,7 @@ constructor(
     }
 
     private fun scheduleAutoDismiss(event: IslandEvent, delayOverride: Long? = null) {
+        if (!settings.isEnabled.value) return
         val ms = delayOverride ?: event.behavior.autoDismissMs ?: return
         val eventId = event.id
         autoDismissJobs[eventId]?.cancel()

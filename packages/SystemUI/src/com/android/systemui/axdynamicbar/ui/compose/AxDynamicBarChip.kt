@@ -138,7 +138,8 @@ fun AxDynamicBarChip(
         modifier = modifier
             .padding(start = 4.dp, end = 2.dp)
             .widthIn(min = 25.dp, max = 90.dp)
-            .pointerInput(viewModel) {
+            .pointerInput(viewModel, displayEvent?.id, isOnKeyguard, ignoreKeyguard,
+                touchSlop, longPressTimeoutMillis) {
                 awaitEachGesture {
                     val down = awaitFirstDown(pass = PointerEventPass.Initial)
 
@@ -151,7 +152,8 @@ fun AxDynamicBarChip(
 
                     while (true) {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
-                        val change = event.changes.firstOrNull() ?: break
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (change.isConsumed && !dragging && !longPressTriggered) break
                         val dx = change.position.x - startX
                         val dy = change.position.y - startY
                         if (currentDisplayEvent.value is IslandEvent.AppSwitch &&
@@ -165,6 +167,11 @@ fun AxDynamicBarChip(
                             viewModel.statusBarExpansion.expand()
                         }
                         if (!change.pressed) {
+                            if (!dragging && !longPressTriggered) {
+                                val release = awaitPointerEvent(PointerEventPass.Final)
+                                    .changes.firstOrNull { it.id == down.id }
+                                if (release == null || release.isConsumed) break
+                            }
                             if (dragging) {
                                 change.consume()
                                 if (totalDx > 0) viewModel.cyclePrev()
@@ -174,7 +181,7 @@ fun AxDynamicBarChip(
                                 if (!longPressTriggered && viewModel.chipTapClosesPanel(down.uptimeMillis)) {
                                     viewModel.statusBarExpansion.collapse()
                                 } else if (!longPressTriggered) {
-                                    val current = currentDisplayEvent.value
+                                    val current = currentDisplayEvent.value ?: break
                                     if (current is IslandEvent.AppSwitch) {
                                         viewModel.switchToPreviousApp(current)
                                     } else if (current is IslandEvent.AospChip) {

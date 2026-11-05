@@ -23,6 +23,7 @@ import com.android.systemui.util.ScrimUtils
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -127,8 +128,11 @@ constructor(
 
     private var accumulatedPauseMs: Long = 0L
 
-    val notificationFlow = MutableSharedFlow<IslandEvent.Notification>(extraBufferCapacity = 16)
-    val notificationRemovedFlow = MutableSharedFlow<String>(extraBufferCapacity = 16)
+    val notificationFlow = MutableSharedFlow<IslandEvent.Notification>(
+        extraBufferCapacity = 16,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    private val activeNotifications = mutableMapOf<String, StatusBarNotification>()
 
     var activeMediaPackageProvider: (() -> String?)? = null
 
@@ -138,6 +142,7 @@ constructor(
     var onTimerEvent: ((IslandEvent.Timer) -> Unit)? = null
     var onAlarmEvent: ((IslandEvent.Alarm) -> Unit)? = null
     var onNotificationPosted: ((IslandEvent.Notification) -> Unit)? = null
+    var onNotificationRemoved: ((String) -> Unit)? = null
 
     @Volatile private var listening = false
     @Volatile private var timerJob: Job? = null
@@ -149,7 +154,8 @@ constructor(
     private val scrimListener =
         object : ScrimUtils.ScrimEventListener {
             override fun onNotificationRemoved(sbn: StatusBarNotification) {
-                val pkg = sbn.packageName ?: return
+                if (!listening) return
+                activeNotifications.remove(sbn.key)
                 seenNotificationKeys.remove(sbn.key)
                 seenMessagingTimestamps.remove(sbn.key)
 
@@ -191,10 +197,11 @@ constructor(
                 _notificationEvents.value =
                     _notificationEvents.value.filter { it.sbn.key != sbn.key }
 
-                notificationRemovedFlow.tryEmit(sbn.key)
+                onNotificationRemoved?.invoke(sbn.key)
             }
 
             override fun onNotificationPosted(sbn: StatusBarNotification) {
+                if (!listening) return
                 if (!acceptNotification(sbn)) return
                 val pkg = sbn.packageName ?: return
                 val extras = sbn.notification?.extras ?: return
@@ -420,7 +427,7 @@ constructor(
                 val notif = sbn.notification
                 val isMessagingStyle =
                     notif != null && notif.isStyle(Notification.MessagingStyle::class.java)
-                val latestMessageTime: Long =
+                val lastMessage =
                     if (isMessagingStyle) {
                         val msgs =
                             notif?.extras?.getParcelableArray(
@@ -430,9 +437,10 @@ constructor(
                         if (msgs != null && msgs.isNotEmpty()) {
                             Notification.MessagingStyle.Message
                                 .getMessagesFromBundleArray(msgs)
-                                .maxOfOrNull { it.timestamp } ?: 0L
-                        } else 0L
-                    } else 0L
+                                .maxByOrNull { it.timestamp }
+                        } else null
+                    } else null
+                val latestMessageTime = lastMessage?.timestamp ?: 0L
 
                 val refreshVisible = updateVisibleNotifications &&
                     _notificationEvents.value.any { it.sbn.key == sbn.key }
@@ -500,20 +508,10 @@ constructor(
                     conversationTitle = notif.extras.getCharSequence(
                         Notification.EXTRA_CONVERSATION_TITLE
                     )?.toString()?.takeIf { it.isNotEmpty() }
-                    val messagesArray =
-                        notif.extras.getParcelableArray(
-                            Notification.EXTRA_MESSAGES,
-                            Parcelable::class.java,
-                        )
-                    if (messagesArray != null && messagesArray.isNotEmpty()) {
-                        val messages =
-                            Notification.MessagingStyle.Message.getMessagesFromBundleArray(
-                                messagesArray
-                            )
-                        val lastMessage = messages.maxByOrNull { it.timestamp }
-                        val sender = lastMessage?.senderPerson
+                    if (lastMessage != null) {
+                        val sender = lastMessage.senderPerson
                         senderName = sender?.name?.toString()
-                        latestMessageText = lastMessage?.text?.toString()
+                        latestMessageText = lastMessage.text?.toString()
                         senderIcon =
                             try {
                                 sender?.icon?.loadDrawable(context)
@@ -568,8 +566,9 @@ constructor(
                         groupKey = groupKey,
                         notificationImage = notificationImage,
                     )
-                applicationScope.launch { notificationFlow.emit(event) }
+                activeNotifications[sbn.key] = sbn
                 onNotificationPosted?.invoke(event)
+                notificationFlow.tryEmit(event)
             }
         }
 
@@ -583,6 +582,7 @@ constructor(
         if (!listening) return
         listening = false
         ScrimUtils.get().removeListener(scrimListener)
+        activeNotifications.clear()
         seenNotificationKeys.clear()
         seenMessagingTimestamps.clear()
         timerJob?.cancel()
@@ -615,11 +615,15 @@ constructor(
     }
 
     fun coalesceNotification(event: IslandEvent.Notification) {
+        if (!isActiveNotification(event)) return
         val current = _notificationEvents.value.toMutableList()
         current.removeAll { it.id == event.id }
         current.add(0, event)
         _notificationEvents.value = current
     }
+
+    fun isActiveNotification(event: IslandEvent.Notification): Boolean =
+        listening && activeNotifications[event.sbn.key] === event.sbn
 
     fun clearTimer() {
         _timerEvent.value = null
