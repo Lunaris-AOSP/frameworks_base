@@ -46,7 +46,7 @@ constructor(
     private val notificationStackScrollLayoutController:
         Lazy<NotificationStackScrollLayoutController>,
 ) {
-    private val panelMode = repository.panelMode
+    val panelMode = repository.panelMode
     private val quickPanelOnLeft = repository.quickPanelOnLeft
     val panelSwipeEnabled =
         combine(repository.panelSwipeEnabled, panelMode) { enabled, mode ->

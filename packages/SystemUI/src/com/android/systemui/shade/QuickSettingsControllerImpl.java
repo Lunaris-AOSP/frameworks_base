@@ -646,6 +646,9 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
     void init() {
         initNotificationStackScrollLayoutController();
         if (isMistQsEnabled()) {
+            mJavaAdapter.alwaysCollectFlow(mAxQsShadePolicy.get().getPanelMode(), mode -> {
+                updateQsState();
+            });
             mJavaAdapter.alwaysCollectFlow(mAxQsShadePolicy.get().getPanelSwipeEnabled(), enabled -> {
                 if (!enabled) cancelPanelSwipe();
             });
@@ -1201,6 +1204,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
             mQs.setInSplitShade(mSplitShadeEnabled || (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE));
             updateMinHeight();
         }
+        updateNotificationStackVisibility();
     }
 
     public android.view.ViewGroup getQsFrame() {
@@ -1321,9 +1325,15 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
             mShadeLog.logQsExpandImmediateChanged(expandImmediate);
             mShadeRepository.setLegacyExpandImmediate(expandImmediate);
         }
+        updateNotificationStackVisibility();
+    }
+
+    private void updateNotificationStackVisibility() {
         if (isMistQsEnabled()) {
+            boolean qsPanelOpen = mBarState == StatusBarState.SHADE
+                    && (getFullyExpanded() || (isMistSeparateShade() && getExpanded()));
             mNotificationStackScrollLayoutController.setQuickQsHidden(
-                    expandImmediate && !mSplitShadeEnabled);
+                    !mSplitShadeEnabled && (isExpandImmediate() || qsPanelOpen));
         }
     }
 
@@ -1371,6 +1381,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
     }
 
     void updateQsState() {
+        updateNotificationStackVisibility();
         if (mQs == null) return;
         boolean qsAllowed = !isLockscreenQsDisabled();
         mQs.setExpanded(qsAllowed && getExpanded());
@@ -1405,7 +1416,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
             if (mQs.getHeader() != null && mQs.getHeader().getVisibility() != qsVisibility) {
                 mQs.getHeader().setVisibility(qsVisibility);
             }
-            if (isMistSeparateShade()) {
+            if (isMistQsEnabled()) {
                 mNotificationStackScrollLayoutController.updateVisibility(true);
             } else if (mNotificationStackScrollLayoutController.getView() != null
                     && mNotificationStackScrollLayoutController.getView().getVisibility() != View.VISIBLE) {
@@ -1416,6 +1427,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
 
     /** update expanded state of QS */
     void updateExpansion() {
+        updateNotificationStackVisibility();
         if (mQs == null) return;
         final float squishiness;
         if ((isExpandImmediate() || getExpanded()) && !mSplitShadeEnabled) {
