@@ -167,16 +167,6 @@ fun SystemEventPopup(
                     )
                 }
             }
-            model.image?.let {
-                StatusBarIcon(
-                    it,
-                    tint = Color.Unspecified,
-                    modifier =
-                        Modifier.size(64.dp)
-                            .align(Alignment.CenterHorizontally)
-                            .clip(LunarisBarSquircle(12.dp)),
-                )
-            }
         }
         if (bluetooth && showBattery && model.bluetoothBatteries.isNotEmpty()) {
             LunarisBarBluetoothBatteries(model.bluetoothBatteries)

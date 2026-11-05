@@ -1151,12 +1151,6 @@ constructor(
                 ?.let { return BitmapDrawable(context.resources, it) }
         } catch (_: Exception) {}
 
-        if (!sbn.notification.isStyle(Notification.MessagingStyle::class.java)) {
-            try {
-                sbn.notification?.getLargeIcon()?.loadDrawable(context)?.let { return it }
-            } catch (_: Exception) {}
-        }
-
         return null
     }
 
