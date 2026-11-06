@@ -226,6 +226,20 @@ private fun LunarisBarChipContent(
     }
     val ownMedia = media != null && settings.enabled("media_mini_custom", false)
     val event = viewModel.popupContent as? PopupContentModel.SystemEvent
+    val bluetoothBatteryLevel =
+        event
+            ?.takeIf {
+                it.kind == SystemEventKind.Bluetooth &&
+                    settings.enabled("feature_bluetooth_show_battery", true)
+            }
+            ?.bluetoothBatteries
+            ?.filter { it.component != BluetoothBatteryComponent.Case && it.level in 0..100 }
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { batteries -> batteries.sumOf { it.level } / batteries.size }
+    val bluetoothBatteryText = bluetoothBatteryLevel?.let { "$it%" }
+    val progress =
+        if (event?.kind == SystemEventKind.Bluetooth) bluetoothBatteryLevel?.div(100f)
+        else event?.progress
     val recording = (viewModel.popupContent as? PopupContentModel.ScreenRecord)?.model
     val statusIconTint =
         when {
@@ -349,7 +363,12 @@ private fun LunarisBarChipContent(
                 )
                 .semantics {
                     contentDescription =
-                        viewModel.contentDescription ?: viewModel.chipText.orEmpty()
+                        if (event?.kind == SystemEventKind.Bluetooth)
+                            listOfNotNull(event.title, event.text, bluetoothBatteryText)
+                                .distinct()
+                                .filter { it.isNotBlank() }
+                                .joinToString(": ")
+                        else viewModel.contentDescription ?: viewModel.chipText.orEmpty()
                 },
     ) {
         Row(
@@ -528,10 +547,10 @@ private fun LunarisBarChipContent(
                     !companion &&
                         event != null &&
                         settings.integer("right_content", 0, 0, 3) == 2 &&
-                        event.progress != null
+                        progress != null
                 ) {
                     CircularProgressIndicator(
-                        progress = { event.progress.coerceIn(0f, 1f) },
+                        progress = { progress.coerceIn(0f, 1f) },
                         modifier = Modifier.size(24.dp),
                         color = if (ownRight) rightPalette.second else colors.miniContent,
                         strokeWidth = 3.dp,
@@ -551,14 +570,7 @@ private fun LunarisBarChipContent(
                             event?.kind ==
                                 com.android.systemui.statusbar.featurepods.popups.ui.model
                                     .SystemEventKind
-                                    .Bluetooth ->
-                                if (settings.enabled("feature_bluetooth_show_battery", true))
-                                    event.bluetoothBatteries
-                                        .filter { it.component != BluetoothBatteryComponent.Case }
-                                        .minOfOrNull { it.level }
-                                        ?.let { "$it%" }
-                                        ?: event.progress?.let { "${(it * 100).toInt()}%" }
-                                else null
+                                    .Bluetooth -> bluetoothBatteryText
                             event?.kind in
                                 listOf(
                                     com.android.systemui.statusbar.featurepods.popups.ui.model
