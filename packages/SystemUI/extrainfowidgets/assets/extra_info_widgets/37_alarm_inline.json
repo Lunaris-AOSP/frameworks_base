@@ -1,0 +1,67 @@
+{
+  "name": "Alarm inline",
+  "category": "inline",
+  "span": 4,
+  "layers": [
+    {
+      "id": "aicon",
+      "type": "ALARM_ICON",
+      "font": "",
+      "weight": 500,
+      "sleepWeight": 250,
+      "width": 100,
+      "height": 700,
+      "color": "#FFFFFF",
+      "change": "FADE",
+      "sleepStyle": "THIN"
+    },
+    {
+      "id": "alarm",
+      "type": "ALARM_TIME",
+      "font": "res:google_sans_flex?opsz=144",
+      "weight": 500,
+      "sleepWeight": 250,
+      "width": 100,
+      "height": 700,
+      "color": "#FFFFFF",
+      "change": "FADE",
+      "sleepStyle": "THIN"
+    }
+  ],
+  "large": {
+    "row": {
+      "gap": 0.0104,
+      "align": "CENTER",
+      "children": [
+        {
+          "layer": "aicon",
+          "size": 0.0574
+        },
+        {
+          "layer": "alarm",
+          "size": 0.0522
+        }
+      ]
+    },
+    "x": 0.5,
+    "anchor": "CENTER"
+  },
+  "small": {
+    "row": {
+      "gap": 0.0065,
+      "align": "CENTER",
+      "children": [
+        {
+          "layer": "aicon",
+          "size": 0.0356
+        },
+        {
+          "layer": "alarm",
+          "size": 0.0324
+        }
+      ]
+    },
+    "x": 0.0225,
+    "anchor": "START"
+  }
+}

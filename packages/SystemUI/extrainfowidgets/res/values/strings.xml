@@ -1,0 +1,11 @@
+<resources>
+    <string name="extra_info_no_alarm">No alarm</string>
+    <string name="extra_info_charged">Charged</string>
+    <string name="extra_info_charging">Charging</string>
+    <string name="extra_info_not_charging">Not charging</string>
+    <string name="extra_info_no_media">No media</string>
+    <string name="extra_info_no_events">No upcoming events</string>
+    <string name="extra_info_previous">Previous track</string>
+    <string name="extra_info_next">Next track</string>
+    <string name="extra_info_play_pause">Play or pause</string>
+</resources>

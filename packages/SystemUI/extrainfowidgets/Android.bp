@@ -1,0 +1,20 @@
+package {
+    default_applicable_licenses: ["LunarisExtraInfoWidgets_license"],
+}
+
+license {
+    name: "LunarisExtraInfoWidgets_license",
+    visibility: [":__subpackages__"],
+    license_kinds: ["SPDX-license-identifier-GPL-3.0", "SPDX-license-identifier-OFL-1.1", "SPDX-license-identifier-Apache-2.0"],
+    license_text: ["LICENSE", "NOTICE", "google-sans-flex-OFL.txt", "Apache-2.0.txt"],
+}
+
+android_library {
+    name: "LunarisExtraInfoWidgets",
+    srcs: ["src/**/*.kt"],
+    resource_dirs: ["res"],
+    asset_dirs: ["assets"],
+    manifest: "AndroidManifest.xml",
+    platform_apis: true,
+    static_libs: ["ax_blur"],
+}

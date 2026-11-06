@@ -1,0 +1,151 @@
+{
+  "name": "Battery big",
+  "category": "medium",
+  "span": 2,
+  "layers": [
+    {
+      "id": "bg",
+      "type": "CARD",
+      "color": "#E61C1C1E",
+      "effect": "SOLID",
+      "aspect": 2.1842,
+      "radius": 0.3,
+      "weight": 500,
+      "sleepWeight": 250,
+      "width": 100,
+      "height": 700,
+      "change": "FADE",
+      "sleepStyle": "HIDE"
+    },
+    {
+      "id": "level",
+      "type": "BATTERY_LEVEL",
+      "font": "res:google_sans_flex?opsz=144",
+      "weight": 300,
+      "sleepWeight": 250,
+      "width": 100,
+      "height": 700,
+      "color": "#FFFFFF",
+      "change": "FADE",
+      "sleepStyle": "THIN"
+    },
+    {
+      "id": "bicon",
+      "type": "BATTERY_ICON",
+      "font": "",
+      "weight": 500,
+      "sleepWeight": 250,
+      "width": 100,
+      "height": 700,
+      "color": "#FFFFFF",
+      "change": "FADE",
+      "sleepStyle": "THIN"
+    },
+    {
+      "id": "label",
+      "type": "TEXT",
+      "font": "res:google_sans_flex?opsz=144",
+      "weight": 700,
+      "sleepWeight": 250,
+      "width": 100,
+      "height": 700,
+      "color": "#A6FFFFFF",
+      "change": "FADE",
+      "sleepStyle": "THIN",
+      "format": "Battery",
+      "caps": true,
+      "tracking": 0.04
+    }
+  ],
+  "large": {
+    "stack": {
+      "width": 0.3735,
+      "height": 0.171,
+      "children": [
+        {
+          "layer": "bg",
+          "size": 0.3735,
+          "anchor": "CENTER"
+        },
+        {
+          "row": {
+            "gap": 0.0126,
+            "align": "CENTER",
+            "children": [
+              {
+                "layer": "level",
+                "size": 0.081
+              },
+              {
+                "column": {
+                  "gap": 0.0036,
+                  "align": "START",
+                  "children": [
+                    {
+                      "layer": "bicon",
+                      "size": 0.0324
+                    },
+                    {
+                      "layer": "label",
+                      "size": 0.0198
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "anchor": "START",
+          "x": 0.0234
+        }
+      ]
+    },
+    "x": 0.5,
+    "anchor": "CENTER"
+  },
+  "small": {
+    "stack": {
+      "width": 0.2316,
+      "height": 0.106,
+      "children": [
+        {
+          "layer": "bg",
+          "size": 0.2316,
+          "anchor": "CENTER"
+        },
+        {
+          "row": {
+            "gap": 0.0078,
+            "align": "CENTER",
+            "children": [
+              {
+                "layer": "level",
+                "size": 0.0502
+              },
+              {
+                "column": {
+                  "gap": 0.0022,
+                  "align": "START",
+                  "children": [
+                    {
+                      "layer": "bicon",
+                      "size": 0.0201
+                    },
+                    {
+                      "layer": "label",
+                      "size": 0.0123
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "anchor": "START",
+          "x": 0.0145
+        }
+      ]
+    },
+    "x": 0.0225,
+    "anchor": "START"
+  },
+  "id": 123
+}

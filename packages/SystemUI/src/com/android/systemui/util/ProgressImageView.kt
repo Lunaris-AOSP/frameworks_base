@@ -28,6 +28,7 @@ import android.media.AudioManager
 import android.os.BatteryManager
 import android.os.Handler
 import android.os.Looper
+import android.os.UserHandle
 import android.provider.Settings
 import android.util.AttributeSet
 import android.graphics.Color
@@ -72,6 +73,7 @@ class ProgressImageView @JvmOverloads constructor(
         override fun onDozingChanged(dozing: Boolean) {
             if (isDozing == dozing) return
             isDozing = dozing
+            applyWidgetAlpha()
             updateMemoryPolling()
             updateProgress()
         }
@@ -81,6 +83,7 @@ class ProgressImageView @JvmOverloads constructor(
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == Intent.ACTION_SCREEN_ON) {
                 isDozing = false
+                applyWidgetAlpha()
                 updateMemoryPolling()
                 updateProgress()
             }
@@ -193,6 +196,12 @@ class ProgressImageView @JvmOverloads constructor(
             Settings.System.getUriFor("lockscreen_widgets_custom_color"),
             false,
             colorSettingsObserver
+        )
+        context.contentResolver.registerContentObserver(
+            Settings.System.getUriFor("lockscreen_extra_info_widgets_enabled"),
+            false,
+            settingsObserver,
+            UserHandle.USER_ALL
         )
         colorMode = Settings.System.getString(
             context.contentResolver,
@@ -307,11 +316,26 @@ class ProgressImageView @JvmOverloads constructor(
         return ((currentVolume * 100) / maxVolume).coerceIn(0, 100)
     }
     
+    fun refreshSettings() {
+        widgetOpacity = Settings.System.getIntForUser(context.contentResolver,
+            "lockscreen_widgets_transparency", DEFAULT_OPACITY, UserHandle.USER_CURRENT).coerceIn(0, 100)
+        colorMode = Settings.System.getStringForUser(context.contentResolver,
+            "lockscreen_widgets_color_mode", UserHandle.USER_CURRENT) ?: COLOR_MODE_DEFAULT
+        customColor = Settings.System.getIntForUser(context.contentResolver,
+            "lockscreen_widgets_custom_color", Color.WHITE, UserHandle.USER_CURRENT)
+        applyWidgetAlpha()
+        updateVisibility()
+        updateProgress()
+    }
+
     private fun updateVisibility() {
-        val enabled = Settings.System.getInt(
+        val enabled = Settings.System.getIntForUser(
             context.contentResolver,
-            "lockscreen_info_widgets_enabled", 0
-        ) == 1
+            "lockscreen_info_widgets_enabled", 0, UserHandle.USER_CURRENT
+        ) == 1 && Settings.System.getIntForUser(
+            context.contentResolver,
+            "lockscreen_extra_info_widgets_enabled", 0, UserHandle.USER_CURRENT
+        ) == 0
         visibility = if (enabled) VISIBLE else GONE
         updateMemoryPolling()
     }

@@ -1,0 +1,89 @@
+{
+  "name": "Next event inline",
+  "category": "inline",
+  "span": 4,
+  "layers": [
+    {
+      "id": "eicon",
+      "type": "EVENT_ICON",
+      "font": "",
+      "weight": 500,
+      "sleepWeight": 250,
+      "width": 100,
+      "height": 700,
+      "color": "#FFFFFF",
+      "change": "FADE",
+      "sleepStyle": "THIN"
+    },
+    {
+      "id": "title",
+      "type": "EVENT_TITLE",
+      "font": "res:google_sans_flex?opsz=144",
+      "weight": 500,
+      "sleepWeight": 250,
+      "width": 100,
+      "height": 700,
+      "color": "#FFFFFF",
+      "change": "FADE",
+      "sleepStyle": "THIN",
+      "maxEms": 9
+    },
+    {
+      "id": "when",
+      "type": "EVENT_TIME",
+      "font": "res:google_sans_flex?opsz=144",
+      "weight": 500,
+      "sleepWeight": 250,
+      "width": 100,
+      "height": 700,
+      "color": "#A6FFFFFF",
+      "change": "FADE",
+      "sleepStyle": "THIN",
+      "maxEms": 7
+    }
+  ],
+  "large": {
+    "row": {
+      "gap": 0.0104,
+      "align": "CENTER",
+      "children": [
+        {
+          "layer": "eicon",
+          "size": 0.0574
+        },
+        {
+          "layer": "title",
+          "size": 0.0522
+        },
+        {
+          "layer": "when",
+          "size": 0.0522
+        }
+      ]
+    },
+    "x": 0.5,
+    "anchor": "CENTER"
+  },
+  "small": {
+    "row": {
+      "gap": 0.0065,
+      "align": "CENTER",
+      "children": [
+        {
+          "layer": "eicon",
+          "size": 0.0356
+        },
+        {
+          "layer": "title",
+          "size": 0.0324
+        },
+        {
+          "layer": "when",
+          "size": 0.0324
+        }
+      ]
+    },
+    "x": 0.0225,
+    "anchor": "START"
+  }
+}
