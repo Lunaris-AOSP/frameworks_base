@@ -27,6 +27,7 @@ import com.android.systemui.common.coroutine.ChannelExt.trySendWithFailureLoggin
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Main
+import com.android.systemui.settings.UserTracker
 import com.android.systemui.utils.coroutines.flow.conflatedCallbackFlow
 import com.android.systemui.window.data.repository.WindowRootViewBlurRepository.Companion.isDisableBlurSysPropSet
 import java.util.concurrent.Executor
@@ -37,8 +38,9 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 
 typealias BlurAppliedListener = Consumer<Int>
 
@@ -50,6 +52,12 @@ interface WindowRootViewBlurRepository {
 
     /** Is blur supported based on settings toggle and battery power saver mode. */
     val isBlurSupported: StateFlow<Boolean>
+
+    val isShadeBlurSupported: StateFlow<Boolean>
+        get() = isBlurSupported
+
+    val isShadeBlurEnabled: StateFlow<Boolean>
+        get() = DEFAULT_SHADE_BLUR_ENABLED
 
     /** Whether notification row translucency is enabled via user setting. */
     val isTranslucentSupported: StateFlow<Boolean>
@@ -63,6 +71,8 @@ interface WindowRootViewBlurRepository {
     val trackingShadeMotion: MutableStateFlow<Boolean>
 
     companion object {
+        private val DEFAULT_SHADE_BLUR_ENABLED = MutableStateFlow(true).asStateFlow()
+
         /**
          * Whether the `persist.sysui.disableBlur` is set, this is used to disable blur for tests.
          */
@@ -82,6 +92,7 @@ constructor(
     @Main private val executor: Executor,
     @Application private val scope: CoroutineScope,
     @Application private val context: Context,
+    private val userTracker: UserTracker,
 ) : WindowRootViewBlurRepository {
 
     override val trackingShadeMotion = MutableStateFlow(false)
@@ -106,6 +117,43 @@ constructor(
             } // stateIn because this is backed by a binder call.
             .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
+    override val isShadeBlurEnabled: StateFlow<Boolean> =
+        conflatedCallbackFlow {
+            val sendUpdate = {
+                trySendWithFailureLogging(
+                    isShadeBlurEnabledInSettings(),
+                    TAG,
+                    "unable to send shade blur state change",
+                )
+            }
+            val observer = object : ContentObserver(null) {
+                override fun onChange(selfChange: Boolean) = sendUpdate()
+            }
+            val userCallback = object : UserTracker.Callback {
+                override fun onUserChanged(newUser: Int, userContext: Context) {
+                    sendUpdate()
+                }
+            }
+            val resolver = context.contentResolver
+            resolver.registerContentObserver(
+                Settings.System.getUriFor(Settings.System.QS_BLUR_ENABLED),
+                false,
+                observer,
+                UserHandle.USER_ALL,
+            )
+            userTracker.addCallback(userCallback, executor)
+            sendUpdate()
+            awaitClose {
+                resolver.unregisterContentObserver(observer)
+                userTracker.removeCallback(userCallback)
+            }
+        }.stateIn(scope, SharingStarted.Eagerly, isShadeBlurEnabledInSettings())
+
+    override val isShadeBlurSupported: StateFlow<Boolean> =
+        combine(isShadeBlurEnabled, isBlurSupported) { settingEnabled, blurSupported ->
+            settingEnabled && blurSupported
+        }.stateIn(scope, SharingStarted.Eagerly, false)
+
     override val isTranslucentSupported: StateFlow<Boolean> =
         combine(
             conflatedCallbackFlow {
@@ -120,21 +168,30 @@ constructor(
                     object : ContentObserver(null) {
                         override fun onChange(selfChange: Boolean) = sendUpdate()
                     }
+                val userCallback = object : UserTracker.Callback {
+                    override fun onUserChanged(newUser: Int, userContext: Context) {
+                        sendUpdate()
+                    }
+                }
                 val resolver = context.contentResolver
                 resolver.registerContentObserver(
                     Settings.Secure.getUriFor(Settings.Secure.NOTIFICATION_ROW_TRANSPARENCY),
                     true,
                     observer,
+                    UserHandle.USER_ALL,
                 )
+                userTracker.addCallback(userCallback, executor)
                 sendUpdate()
-                awaitClose { resolver.unregisterContentObserver(observer) }
+                awaitClose {
+                    resolver.unregisterContentObserver(observer)
+                    userTracker.removeCallback(userCallback)
+                }
             },
-            isBlurSupported
+            isShadeBlurSupported
         ) { settingEnabled, blurSupported ->
             settingEnabled && blurSupported && isSystemBlurEnabled()
         }
-        .stateIn(scope, SharingStarted.WhileSubscribed(), 
-            isTranslucentEnabledInSettings() && isSystemBlurEnabled())
+        .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
     override val isLockscreenTranslucentSupported: StateFlow<Boolean> =
         combine(
@@ -170,12 +227,20 @@ constructor(
 
     override var blurAppliedListener: BlurAppliedListener? = null
 
+    private fun isShadeBlurEnabledInSettings(): Boolean =
+        Settings.System.getIntForUser(
+            context.contentResolver,
+            Settings.System.QS_BLUR_ENABLED,
+            1,
+            userTracker.userId,
+        ) != 0
+
     private fun isTranslucentEnabledInSettings(): Boolean =
         Settings.Secure.getIntForUser(
             context.contentResolver,
             Settings.Secure.NOTIFICATION_ROW_TRANSPARENCY,
             1,
-            UserHandle.USER_CURRENT,
+            userTracker.userId,
         ) == 1
 
     private fun isLockscreenTranslucentEnabledInSettings(): Boolean =

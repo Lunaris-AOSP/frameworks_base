@@ -39,6 +39,7 @@ import androidx.compose.foundation.overscroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -58,6 +59,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.window.core.layout.WindowSizeClass
+import com.android.axion.blur.LocalAxBlurEnabled
 import com.android.compose.animation.scene.ContentScope
 import com.android.compose.animation.scene.SceneKey
 import com.android.compose.animation.scene.SceneTransitionLayoutState
@@ -80,6 +82,7 @@ import com.android.systemui.lifecycle.ExclusiveActivatable
 import com.android.systemui.lifecycle.rememberViewModel
 import com.android.systemui.notifications.ui.composable.HeadsUpNotificationSpace
 import com.android.systemui.notifications.ui.composable.NotificationScrollingStack
+import com.android.systemui.qs.composefragment.LocalBlurEnabled
 import com.android.systemui.qs.composefragment.ui.GridAnchor
 import com.android.systemui.qs.footer.ui.compose.FooterActionsWithAnimatedVisibility
 import com.android.systemui.qs.panels.ui.compose.EditMode
@@ -158,18 +161,23 @@ constructor(
 
         LaunchedEffectWithLifecycle(key1 = Unit) { viewModel.detectShadeModeChanges() }
 
-        QuickSettingsScene(
-            notificationStackScrollView = notificationStackScrollView.get(),
-            viewModel = viewModel,
-            headerViewModel = viewModel.qsContainerViewModel.shadeHeaderViewModel,
-            notificationsPlaceholderViewModel = notificationsPlaceholderViewModel,
-            modifier =
-                modifier
-                    .graphicsLayer { alpha = contentAlpha }
-                    .thenIf(brightnessMirrorShowing) { Modifier.gesturesDisabled() },
-            shadeSession = shadeSession,
-            jankMonitor = jankMonitor,
-        )
+        CompositionLocalProvider(
+            LocalBlurEnabled provides viewModel.isTransparencyEnabled,
+            LocalAxBlurEnabled provides viewModel.isTransparencyEnabled,
+        ) {
+            QuickSettingsScene(
+                notificationStackScrollView = notificationStackScrollView.get(),
+                viewModel = viewModel,
+                headerViewModel = viewModel.qsContainerViewModel.shadeHeaderViewModel,
+                notificationsPlaceholderViewModel = notificationsPlaceholderViewModel,
+                modifier =
+                    modifier
+                        .graphicsLayer { alpha = contentAlpha }
+                        .thenIf(brightnessMirrorShowing) { Modifier.gesturesDisabled() },
+                shadeSession = shadeSession,
+                jankMonitor = jankMonitor,
+            )
+        }
     }
 
     companion object {

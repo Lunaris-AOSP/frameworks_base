@@ -99,7 +99,6 @@ import com.android.compose.animation.bounceable
 import com.android.compose.animation.rememberExpandableController
 import com.android.compose.animation.scene.ContentScope
 import com.android.compose.modifiers.thenIf
-import com.android.compose.theme.LocalAndroidColorScheme
 import com.android.mechanics.compose.modifier.verticalFadeContentReveal
 import com.android.mechanics.compose.modifier.verticalTactileSurfaceReveal
 import com.android.systemui.Flags
@@ -877,7 +876,7 @@ private object TileDefaults {
         } else {
             TileColors(
                 background = CustomColorScheme.current.qsTileColor,
-                iconBackground = LocalAndroidColorScheme.current.surfaceEffect2,
+                iconBackground = CustomColorScheme.current.surfaceEffect2,
                 label = MaterialTheme.colorScheme.onSurface,
                 secondaryLabel = MaterialTheme.colorScheme.onSurface,
                 icon = MaterialTheme.colorScheme.onSurface,

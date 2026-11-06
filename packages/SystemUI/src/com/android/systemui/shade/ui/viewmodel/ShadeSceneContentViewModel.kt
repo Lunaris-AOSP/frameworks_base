@@ -99,7 +99,7 @@ constructor(
             traceName = "isTransparencyEnabled",
             source =
                 if (Flags.notificationShadeBlur()) {
-                    windowRootViewBlurInteractor.isBlurCurrentlySupported
+                    windowRootViewBlurInteractor.isShadeBlurCurrentlySupported
                 } else {
                     MutableStateFlow(false)
                 },

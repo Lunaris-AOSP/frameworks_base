@@ -77,7 +77,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -111,6 +110,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.android.app.tracing.coroutines.launchTraced
+import com.android.axion.blur.LocalAxBlurEnabled
 import com.android.compose.animation.scene.ContentScope
 import com.android.compose.animation.scene.MutableSceneTransitionLayoutState
 import com.android.compose.animation.scene.SceneKey
@@ -223,7 +223,7 @@ import com.android.systemui.qs.tiles.ringer.LocalRingerSliderViewModel
 import com.android.systemui.qs.tiles.ringer.RingerSliderViewModel
 import com.android.systemui.volume.panel.component.volume.slider.ui.viewmodel.AudioStreamSliderViewModel
 
-val LocalBlurEnabled = staticCompositionLocalOf { false }
+val LocalBlurEnabled = com.android.systemui.qs.composefragment.LocalBlurEnabled
 
 @SuppressLint("ValidFragment")
 class MistQSFragmentCompose
@@ -375,7 +375,7 @@ constructor(
     @Composable
     private fun Content(modifier: Modifier = Modifier) {
         val isBlurCurrentlySupported by
-            windowRootViewBlurInteractor.isBlurCurrentlySupported.collectAsStateWithLifecycle()
+            windowRootViewBlurInteractor.isShadeBlurCurrentlySupported.collectAsStateWithLifecycle()
         val blurEnabled = notificationShadeBlur() && isBlurCurrentlySupported
         PlatformTheme(isDarkTheme = if (notificationShadeBlur()) isSystemInDarkTheme() else true) {
             ProvideShortcutHelperIndication(interactionsConfig = interactionsConfig()) {
@@ -408,6 +408,7 @@ constructor(
                 ) {
                     CompositionLocalProvider(
                         LocalBlurEnabled provides blurEnabled,
+                        LocalAxBlurEnabled provides blurEnabled,
                         LocalAxQsTileStyle provides axQsViewModel.tileStyle,
                         LocalLunarisQsGradientSettings provides axQsViewModel.gradientSettings,
                         LocalLunarisQsTileStrokeStyle provides axQsViewModel.tileStrokeStyle,

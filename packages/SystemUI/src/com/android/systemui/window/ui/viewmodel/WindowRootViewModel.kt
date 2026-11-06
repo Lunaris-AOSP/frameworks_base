@@ -127,8 +127,16 @@ constructor(
                         blurInteractor.isTrackingShadeMotion,
                         shadeInteractor.isUserInteracting,
                         shadeInteractor.isAnyExpanded,
-                    ) { keyguardShowing, isTrackingShadeMotion, userDraggingShade, anyExpanded ->
-                        keyguardShowing || isTrackingShadeMotion || userDraggingShade || anyExpanded
+                        blurInteractor.isShadeBlurCurrentlySupported,
+                    ) {
+                        keyguardShowing,
+                        isTrackingShadeMotion,
+                        userDraggingShade,
+                        anyExpanded,
+                        shadeBlurSupported ->
+                        keyguardShowing ||
+                            (shadeBlurSupported &&
+                                (isTrackingShadeMotion || userDraggingShade || anyExpanded))
                     }
                 } else {
                     flowOf(false)

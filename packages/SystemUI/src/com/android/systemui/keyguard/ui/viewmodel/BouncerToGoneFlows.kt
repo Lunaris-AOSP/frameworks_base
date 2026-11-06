@@ -184,6 +184,8 @@ constructor(
         leaveShadeOpen: Boolean,
     ): StartState {
         val isBlurCurrentlySupported = windowRootViewBlurInteractor.isBlurCurrentlySupported.value
+        val isShadeBlurCurrentlySupported =
+            windowRootViewBlurInteractor.isShadeBlurCurrentlySupported.value
         val defaultValue =
             StartState(
                 willRunDismissFromKeyguard = willRunDismissFromKeyguard,
@@ -193,12 +195,12 @@ constructor(
                 shadeBehindAlpha = 1.0f,
                 bouncerBehindAlpha = 1.0f,
             )
-        val shadeNotifAlpha = colorAlpha(notificationScrim(context, isBlurCurrentlySupported))
+        val shadeNotifAlpha = colorAlpha(notificationScrim(context, isShadeBlurCurrentlySupported))
         val shadeBehindAlpha =
             colorAlpha(
                 shadePanel(
                     context = context,
-                    blurSupported = isBlurCurrentlySupported,
+                    blurSupported = isShadeBlurCurrentlySupported,
                     withScrim = true,
                 )
             )

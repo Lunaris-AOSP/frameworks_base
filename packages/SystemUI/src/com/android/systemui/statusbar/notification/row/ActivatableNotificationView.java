@@ -478,7 +478,7 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
     }
 
     protected boolean usesCosTileBackground() {
-        return mCosTileBackgroundEnabled && !mOnKeyguard && !mIsDozing
+        return mIsBlurSupported && mCosTileBackgroundEnabled && !mOnKeyguard && !mIsDozing
                 && (mShadeExpanded || (!isHeadsUpState() && !isPinned()));
     }
 

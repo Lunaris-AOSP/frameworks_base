@@ -39,6 +39,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -63,6 +64,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.android.axion.blur.LocalAxBlurEnabled
 import com.android.compose.PlatformSliderDefaults
 import com.android.compose.animation.scene.ContentScope
 import com.android.compose.animation.scene.ElementKey
@@ -85,6 +87,7 @@ import com.android.systemui.media.remedia.ui.compose.Media
 import com.android.systemui.media.remedia.ui.compose.MediaPresentationStyle
 import com.android.systemui.notifications.ui.composable.SnoozeableHeadsUpNotificationSpace
 import com.android.systemui.notifications.ui.composable.headsUpTopInset
+import com.android.systemui.qs.composefragment.LocalBlurEnabled
 import com.android.systemui.qs.composefragment.ui.GridAnchor
 import com.android.systemui.qs.flags.QsDetailedView
 import com.android.systemui.qs.panels.ui.compose.EditMode
@@ -223,10 +226,15 @@ constructor(
                     }
                 },
             ) {
-                QuickSettingsContainer(
-                    contentViewModel = contentViewModel,
-                    containerViewModel = quickSettingsContainerViewModel,
-                )
+                CompositionLocalProvider(
+                    LocalBlurEnabled provides contentViewModel.isTransparencyEnabled,
+                    LocalAxBlurEnabled provides contentViewModel.isTransparencyEnabled,
+                ) {
+                    QuickSettingsContainer(
+                        contentViewModel = contentViewModel,
+                        containerViewModel = quickSettingsContainerViewModel,
+                    )
+                }
             }
             SnoozeableHeadsUpNotificationSpace(
                 useDrawBounds = {

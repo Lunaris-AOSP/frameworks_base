@@ -73,6 +73,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.android.systemui.common.shared.model.Icon as IconModel
 import com.android.systemui.common.ui.compose.Icon
 import com.android.systemui.qs.composefragment.cosStatusGlow
+import com.android.systemui.statusbar.featurepods.popups.ui.model.BluetoothBatteryComponent
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.SystemEventKind
@@ -546,6 +547,7 @@ private fun LunarisBarChipContent(
                                     .Bluetooth ->
                                 if (settings.enabled("feature_bluetooth_show_battery", true))
                                     event.bluetoothBatteries
+                                        .filter { it.component != BluetoothBatteryComponent.Case }
                                         .minOfOrNull { it.level }
                                         ?.let { "$it%" }
                                         ?: event.progress?.let { "${(it * 100).toInt()}%" }
