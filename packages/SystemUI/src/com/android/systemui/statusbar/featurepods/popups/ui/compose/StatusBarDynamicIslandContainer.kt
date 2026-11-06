@@ -16,14 +16,18 @@
 
 package com.android.systemui.statusbar.featurepods.popups.ui.compose
 
+import android.animation.ValueAnimator
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -38,6 +42,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -62,6 +67,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.android.internal.util.lunaris.LunarisBarSettings
+import com.android.systemui.statusbar.featurepods.popups.data.repository.LunarisBarTransitionState
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentModel
@@ -150,6 +156,9 @@ private fun LunarisBarContainer(
     var companionChipBounds by remember { mutableStateOf<Rect?>(null) }
     var popupOriginBounds by remember { mutableStateOf<Rect?>(null) }
     var lastDirection by remember { mutableIntStateOf(1) }
+    var squishTrigger by remember { mutableIntStateOf(0) }
+    var mediaArrival by remember { mutableStateOf(false) }
+    val squish = rememberLunarisBarMediaTransitionSquish(squishTrigger, settings)
 
     fun withIslandLaunch(chip: PopupChipModel.Shown): PopupChipModel.Shown {
         val content = chip.popupContent as? PopupContentModel.Media ?: return chip
@@ -158,16 +167,24 @@ private fun LunarisBarContainer(
             popupContent =
                 content.copy(
                     model =
-                        content.model.copy(openApp = {
-                            val bounds =
-                                if (chip.isPopupShown) popupOriginBounds
-                                else if (chip.chipId == selectedChipId || chips.size == 1) mainChipBounds
-                                else companionChipBounds
-                            val controller =
-                                lunarisBarLaunchController(view, bounds, settings.isReducedMotion)
-                            chip.hidePopup()
-                            launch(controller)
-                        })
+                        content.model.copy(
+                            openApp = {
+                                val bounds =
+                                    if (chip.isPopupShown) popupOriginBounds
+                                    else if (chip.chipId == selectedChipId || chips.size == 1)
+                                        mainChipBounds
+                                    else companionChipBounds
+                                val controller =
+                                    lunarisBarLaunchController(
+                                        view,
+                                        bounds,
+                                        settings.isReducedMotion,
+                                        onTransitionStart = { squishTrigger++ },
+                                    )
+                                chip.hidePopup()
+                                launch(controller)
+                            }
+                        )
                 )
         )
     }
@@ -178,6 +195,8 @@ private fun LunarisBarContainer(
         popupOriginBounds = null
         selectedChipId = null
         knownChipIds = emptyList()
+        mediaArrival = false
+        squishTrigger = 0
     }
 
     LaunchedEffect(chips) {
@@ -196,6 +215,21 @@ private fun LunarisBarContainer(
                 chips.any { it.chipId == selectedChipId } -> selectedChipId
                 else -> chips.firstOrNull()?.chipId
             }
+        if (currentChipIds != knownChipIds) {
+            val media = (mediaTransitionChip?.popupContent as? PopupContentModel.Media)?.model
+            val display = view.display
+            mediaArrival =
+                newestChipId == PopupChipId.MediaControl &&
+                    media != null &&
+                    display != null &&
+                    LunarisBarTransitionState.consumeTargetRequest(
+                        media.packageName,
+                        media.sourceUserId ?: -1,
+                        display.displayId,
+                        display.rotation,
+                    )
+            if (mediaArrival) squishTrigger++
+        }
         knownChipIds = currentChipIds
     }
 
@@ -226,12 +260,16 @@ private fun LunarisBarContainer(
 
     val switchScaleAnim = remember { Animatable(1f) }
     var switchInitialized by remember { mutableStateOf(false) }
-    LaunchedEffect(selectedChipId) {
+    LaunchedEffect(selectedChipId, settings.isReducedMotion) {
         if (!switchInitialized) {
             switchInitialized = true
             return@LaunchedEffect
         }
         if (settings.isReducedMotion) {
+            switchScaleAnim.snapTo(1f)
+            return@LaunchedEffect
+        }
+        if (selectedChipId == PopupChipId.MediaControl && mediaArrival) {
             switchScaleAnim.snapTo(1f)
             return@LaunchedEffect
         }
@@ -244,6 +282,7 @@ private fun LunarisBarContainer(
 
     fun selectRelative(direction: Int) {
         if (chips.size <= 1) return
+        mediaArrival = false
         lastDirection = if (direction >= 0) 1 else -1
         val newIndex = (selectedIndex + direction).mod(chips.size)
         val newChip = chips[newIndex]
@@ -257,6 +296,7 @@ private fun LunarisBarContainer(
         chips
             .firstOrNull { it.chipId == PopupChipId.Utility(id) }
             ?.let {
+                mediaArrival = false
                 selectedChipId = it.chipId
                 popupOriginBounds = mainChipBounds
                 it.showPopup()
@@ -319,7 +359,8 @@ private fun LunarisBarContainer(
         contentAlignment = Alignment.Center,
     ) {
         mediaTransitionChip?.let { media ->
-            val destinationCount = chips.size + if (chips.any { it.chipId == media.chipId }) 0 else 1
+            val destinationCount =
+                chips.size + if (chips.any { it.chipId == media.chipId }) 0 else 1
             val destinationCompanion =
                 settings.isCompanionEnabled && destinationCount >= COMPANION_MIN_TASKS
             LunarisBarPositionedContent(cutoutSpec, alignment, settings, hostLeft) {
@@ -362,8 +403,8 @@ private fun LunarisBarContainer(
             Row(
                 modifier =
                     Modifier.graphicsLayer {
-                        scaleX = switchScaleAnim.value
-                        scaleY = switchScaleAnim.value
+                        scaleX = switchScaleAnim.value * (1f + 0.12f * squish.value)
+                        scaleY = switchScaleAnim.value * (1f - 0.10f * squish.value)
                     },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -402,7 +443,26 @@ private fun LunarisBarContainer(
                             LunarisBarAlignment.CENTER -> Alignment.Center
                         },
                     transitionSpec = {
-                        if (targetState == initialState) {
+                        val isMediaTransition =
+                            targetState != initialState &&
+                                targetState == PopupChipId.MediaControl &&
+                                mediaArrival
+                        if (isMediaTransition) {
+                            val duration =
+                                if (settings.isReducedMotion) 0
+                                else (500 / settings.animationSpeed.coerceAtLeast(0.1f)).toInt()
+                            (scaleIn(
+                                    initialScale = 0.88f,
+                                    animationSpec = tween(duration, easing = FastOutSlowInEasing),
+                                ) + fadeIn(animationSpec = tween((duration * 0.75f).toInt())))
+                                .togetherWith(
+                                    scaleOut(
+                                        targetScale = 0.90f,
+                                        animationSpec =
+                                            tween(duration, easing = FastOutSlowInEasing),
+                                    ) + fadeOut(animationSpec = tween((duration * 0.5f).toInt()))
+                                )
+                        } else if (targetState == initialState) {
                             fadeIn(
                                 animationSpec =
                                     tween(
@@ -679,4 +739,40 @@ private fun LunarisBarPositionedContent(
             placeable.place((left - hostLeft).roundToInt(), settings.offsetY.dp.roundToPx())
         }
     }
+}
+
+@Composable
+private fun rememberLunarisBarMediaTransitionSquish(
+    trigger: Int,
+    settings: LunarisBarSettings,
+): State<Float> {
+    val squish = remember { Animatable(0f, visibilityThreshold = 0.005f) }
+    var lastTrigger by remember { mutableIntStateOf(0) }
+    val speed = settings.animationSpeed.coerceAtLeast(0.1f)
+    LaunchedEffect(trigger, settings.isReducedMotion, speed, settings.bounce) {
+        val shouldAnimate = trigger != 0 && trigger != lastTrigger
+        lastTrigger = trigger
+        if (!shouldAnimate || settings.isReducedMotion || !ValueAnimator.areAnimatorsEnabled()) {
+            squish.snapTo(0f)
+            return@LaunchedEffect
+        }
+        val rebound =
+            when (settings.bounce) {
+                0 -> 0f
+                2 -> -0.5f
+                else -> -1f / 3f
+            }
+        squish.animateTo(
+            targetValue = 0f,
+            animationSpec =
+                keyframes {
+                    durationMillis = (650 / speed).toInt()
+                    0f at 0 using FastOutSlowInEasing
+                    1f at (190 / speed).toInt() using FastOutSlowInEasing
+                    rebound at (400 / speed).toInt() using FastOutSlowInEasing
+                    0f at (650 / speed).toInt()
+                },
+        )
+    }
+    return squish.asState()
 }
