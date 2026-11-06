@@ -17,6 +17,7 @@
 package com.android.systemui.statusbar.featurepods.popups.ui.compose
 
 import android.animation.ValueAnimator
+import android.graphics.Rect as AndroidRect
 import android.view.View
 import android.view.ViewGroup
 import androidx.compose.runtime.Composable
@@ -41,7 +42,6 @@ import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentModel
 import java.util.UUID
 import kotlin.math.roundToInt
-import android.graphics.Rect as AndroidRect
 
 /** Measures the destination even while the player is foregrounded and its chip is hidden. */
 @Composable
@@ -85,8 +85,11 @@ internal fun LunarisBarMediaTarget(
         val packageName = media.packageName
         val userId = media.sourceUserId
         if (
-            view.isAttachedToWindow && display != null && destination != null &&
-                packageName != null && userId != null
+            view.isAttachedToWindow &&
+                display != null &&
+                destination != null &&
+                packageName != null &&
+                userId != null
         ) {
             LunarisBarTransitionState.update(
                 owner,
@@ -132,10 +135,14 @@ internal fun lunarisBarLaunchController(
     view: View,
     bounds: Rect?,
     reducedMotion: Boolean,
+    onTransitionStart: (() -> Unit)? = null,
 ): ActivityTransitionAnimator.Controller? {
     if (
-        reducedMotion || !ValueAnimator.areAnimatorsEnabled() || !view.isShown ||
-            bounds == null || bounds.isEmpty
+        reducedMotion ||
+            !ValueAnimator.areAnimatorsEnabled() ||
+            !view.isShown ||
+            bounds == null ||
+            bounds.isEmpty
     ) {
         return null
     }
@@ -147,6 +154,10 @@ internal fun lunarisBarLaunchController(
             if (ActivityTransitionAnimator.shellMigrationEnabled()) {
                 ActivityTransitionAnimator.TransitionCookie("LunarisBar_${UUID.randomUUID()}")
             } else null
+
+        override fun onTransitionAnimationStart(isExpandingFullyAbove: Boolean) {
+            onTransitionStart?.invoke()
+        }
 
         override fun createAnimatorState() =
             TransitionAnimator.State(

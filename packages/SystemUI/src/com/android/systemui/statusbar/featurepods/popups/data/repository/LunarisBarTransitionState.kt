@@ -17,6 +17,7 @@
 package com.android.systemui.statusbar.featurepods.popups.data.repository
 
 import android.graphics.Rect
+import android.os.SystemClock
 
 object LunarisBarTransitionState {
     private data class Target(
@@ -26,6 +27,7 @@ object LunarisBarTransitionState {
         val displayId: Int,
         val rotation: Int,
         val bounds: Rect,
+        val lastRequestUptime: Long? = null,
     )
 
     @Volatile private var targets: Map<Int, Target> = emptyMap()
@@ -43,9 +45,22 @@ object LunarisBarTransitionState {
             clear(owner)
             return
         }
+        val lastRequestUptime =
+            targets[displayId]
+                ?.takeIf { it.owner === owner && it.matches(packageName, userId, rotation) }
+                ?.lastRequestUptime
         targets =
             targets +
-                (displayId to Target(owner, packageName, userId, displayId, rotation, Rect(bounds)))
+                (displayId to
+                    Target(
+                        owner,
+                        packageName,
+                        userId,
+                        displayId,
+                        rotation,
+                        Rect(bounds),
+                        lastRequestUptime,
+                    ))
     }
 
     @Synchronized
@@ -54,16 +69,31 @@ object LunarisBarTransitionState {
     }
 
     @JvmStatic
+    @Synchronized
     fun getTarget(packageName: String?, userId: Int, displayId: Int, rotation: Int): Rect? {
         val current = targets[displayId] ?: return null
-        if (
-            current.packageName != packageName ||
-                current.userId != userId ||
-                current.displayId != displayId ||
-                current.rotation != rotation
-        ) {
+        if (!current.matches(packageName, userId, rotation)) {
             return null
         }
+        targets =
+            targets + (displayId to current.copy(lastRequestUptime = SystemClock.uptimeMillis()))
         return Rect(current.bounds)
     }
+
+    @Synchronized
+    fun consumeTargetRequest(
+        packageName: String?,
+        userId: Int,
+        displayId: Int,
+        rotation: Int,
+    ): Boolean {
+        val current = targets[displayId] ?: return false
+        if (!current.matches(packageName, userId, rotation)) return false
+        val requestedAt = current.lastRequestUptime ?: return false
+        targets = targets + (displayId to current.copy(lastRequestUptime = null))
+        return SystemClock.uptimeMillis() - requestedAt in 0L until 1500L
+    }
+
+    private fun Target.matches(packageName: String?, userId: Int, rotation: Int): Boolean =
+        this.packageName == packageName && this.userId == userId && this.rotation == rotation
 }
