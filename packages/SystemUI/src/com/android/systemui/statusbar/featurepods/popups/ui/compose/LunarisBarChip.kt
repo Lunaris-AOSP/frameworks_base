@@ -70,6 +70,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.android.internal.util.lunaris.LunarisBarSettings
 import com.android.systemui.common.shared.model.Icon as IconModel
 import com.android.systemui.common.ui.compose.Icon
 import com.android.systemui.qs.composefragment.cosStatusGlow
@@ -182,9 +183,15 @@ private fun LunarisBarChipContent(
         if (settings.isReducedMotion || measuring) appear.snapTo(1f)
         else appear.animateTo(1f, spring(dampingRatio = 0.68f, stiffness = 480f))
     }
+    val hideForPopup =
+        viewModel.isPopupShown ||
+            (!state.alternativeAnimation &&
+                settings.animationStyle == LunarisBarSettings.ANIMATION_STYLE_COLOR_OS &&
+                !settings.isReducedMotion &&
+                popupAttached)
     val collapse by
         animateFloatAsState(
-            if (viewModel.isPopupShown) 0f else 1f,
+            if (hideForPopup) 0f else 1f,
             tween(if (settings.isReducedMotion) 0 else (240 / settings.animationSpeed).toInt()),
             label = "lunarisbar_compact",
         )
@@ -311,7 +318,7 @@ private fun LunarisBarChipContent(
                     alpha =
                         if (legacy != null) 1f
                         else if (settings.enabled("mini_fade", true)) collapse
-                        else if (viewModel.isPopupShown) 0f else 1f
+                        else if (hideForPopup) 0f else 1f
                     scaleX = appear.value * (if (legacy != null) 1f else 0.78f + 0.22f * collapse)
                     scaleY = scaleX
                     transformOrigin =

@@ -45,6 +45,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.android.internal.util.lunaris.LunarisBarSettings
 import kotlin.math.roundToInt
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -79,6 +80,24 @@ internal fun LunarisBarPopupMotion(
         return
     }
     val settings = state.settings
+    if (
+        settings.animationStyle == LunarisBarSettings.ANIMATION_STYLE_COLOR_OS &&
+            !settings.isReducedMotion
+    ) {
+        ColorOsPopupMotion(
+            isVisible = isVisible,
+            chipBoundsInScreen = chipBoundsInScreen,
+            topInsetPx = topInsetPx,
+            onDismissRequest = onDismissRequest,
+            onHidden = onHidden,
+            fastEnter = fastEnter,
+            useRedesignedMediaBackground = useRedesignedMediaBackground,
+            allowOutsideInteraction = allowOutsideInteraction,
+            secondaryContent = secondaryContent,
+            content = content,
+        )
+        return
+    }
     val density = LocalDensity.current
     val view = LocalView.current
     val margin = with(density) { 12.dp.roundToPx() }
