@@ -16,8 +16,11 @@
 
 package com.android.systemui.statusbar.featurepods.popups.data.repository
 
+import android.animation.ValueAnimator
 import android.graphics.Rect
 import android.os.SystemClock
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 object LunarisBarTransitionState {
     private data class Target(
@@ -31,6 +34,8 @@ object LunarisBarTransitionState {
     )
 
     @Volatile private var targets: Map<Int, Target> = emptyMap()
+    private val _targetRequestVersion = MutableStateFlow(0L)
+    val targetRequestVersion = _targetRequestVersion.asStateFlow()
 
     @Synchronized
     fun update(
@@ -77,6 +82,7 @@ object LunarisBarTransitionState {
         }
         targets =
             targets + (displayId to current.copy(lastRequestUptime = SystemClock.uptimeMillis()))
+        _targetRequestVersion.value += 1L
         return Rect(current.bounds)
     }
 
@@ -91,7 +97,8 @@ object LunarisBarTransitionState {
         if (!current.matches(packageName, userId, rotation)) return false
         val requestedAt = current.lastRequestUptime ?: return false
         targets = targets + (displayId to current.copy(lastRequestUptime = null))
-        return SystemClock.uptimeMillis() - requestedAt in 0L until 1500L
+        val timeout = (1500L * ValueAnimator.getDurationScale().coerceAtLeast(1f)).toLong()
+        return SystemClock.uptimeMillis() - requestedAt in 0L until timeout
     }
 
     private fun Target.matches(packageName: String?, userId: Int, rotation: Int): Boolean =

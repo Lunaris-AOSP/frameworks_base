@@ -43,6 +43,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -159,6 +160,7 @@ private fun LunarisBarContainer(
     var squishTrigger by remember { mutableIntStateOf(0) }
     var mediaArrival by remember { mutableStateOf(false) }
     val squish = rememberLunarisBarMediaTransitionSquish(squishTrigger, settings)
+    val targetRequestVersion by LunarisBarTransitionState.targetRequestVersion.collectAsState()
 
     fun withIslandLaunch(chip: PopupChipModel.Shown): PopupChipModel.Shown {
         val content = chip.popupContent as? PopupContentModel.Media ?: return chip
@@ -199,7 +201,7 @@ private fun LunarisBarContainer(
         squishTrigger = 0
     }
 
-    LaunchedEffect(chips) {
+    LaunchedEffect(chips, mediaTransitionChip, targetRequestVersion) {
         val currentChipIds = chips.map { it.chipId }
         val newestChipId =
             if (knownChipIds.isEmpty()) {
@@ -215,20 +217,27 @@ private fun LunarisBarContainer(
                 chips.any { it.chipId == selectedChipId } -> selectedChipId
                 else -> chips.firstOrNull()?.chipId
             }
-        if (currentChipIds != knownChipIds) {
-            val media = (mediaTransitionChip?.popupContent as? PopupContentModel.Media)?.model
-            val display = view.display
-            mediaArrival =
-                newestChipId == PopupChipId.MediaControl &&
-                    media != null &&
-                    display != null &&
-                    LunarisBarTransitionState.consumeTargetRequest(
-                        media.packageName,
-                        media.sourceUserId ?: -1,
-                        display.displayId,
-                        display.rotation,
-                    )
-            if (mediaArrival) squishTrigger++
+        val media =
+            (chips.firstOrNull { it.chipId == PopupChipId.MediaControl }?.popupContent
+                    as? PopupContentModel.Media)
+                ?.model
+        val display = view.display
+        val hasMediaRequest =
+            mediaTransitionChip != null &&
+                media != null &&
+                display != null &&
+                LunarisBarTransitionState.consumeTargetRequest(
+                    media.packageName,
+                    media.sourceUserId ?: -1,
+                    display.displayId,
+                    display.rotation,
+                )
+        if (currentChipIds != knownChipIds || hasMediaRequest) {
+            mediaArrival = hasMediaRequest
+        }
+        if (hasMediaRequest) {
+            selectedChipId = PopupChipId.MediaControl
+            squishTrigger++
         }
         knownChipIds = currentChipIds
     }
@@ -260,7 +269,7 @@ private fun LunarisBarContainer(
 
     val switchScaleAnim = remember { Animatable(1f) }
     var switchInitialized by remember { mutableStateOf(false) }
-    LaunchedEffect(selectedChipId, settings.isReducedMotion) {
+    LaunchedEffect(selectedChipId, settings.isReducedMotion, mediaArrival) {
         if (!switchInitialized) {
             switchInitialized = true
             return@LaunchedEffect
