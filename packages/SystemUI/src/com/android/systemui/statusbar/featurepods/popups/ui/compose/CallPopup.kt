@@ -38,8 +38,12 @@ import androidx.compose.ui.res.stringResource
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.featurepods.popups.shared.model.PopupActionRole
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentModel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 internal fun CallPopup(model: PopupContentModel.SystemEvent, modifier: Modifier = Modifier) {
@@ -56,19 +60,20 @@ internal fun CallPopup(model: PopupContentModel.SystemEvent, modifier: Modifier 
 
     fun checkMute(): Boolean = audioManager?.isMicrophoneMute ?: false
 
-    var isSpeakerOn by remember(audioManager) { mutableStateOf(checkSpeaker()) }
-    var isMicrophoneMuted by remember(audioManager) { mutableStateOf(checkMute()) }
-
-    fun refreshAudioState() {
-        isSpeakerOn = checkSpeaker()
-        isMicrophoneMuted = checkMute()
-    }
+    val speakerState = remember(audioManager) { CallAudioToggleState() }
+    val muteState = remember(audioManager) { CallAudioToggleState() }
 
     DisposableEffect(context, audioManager) {
         val receiver =
             object : BroadcastReceiver() {
                 override fun onReceive(context: Context?, intent: Intent?) {
-                    refreshAudioState()
+                    when (intent?.action) {
+                        AudioManager.ACTION_SPEAKERPHONE_STATE_CHANGED,
+                        AudioManager.ACTION_HEADSET_PLUG ->
+                            speakerState.refresh(scope) { checkSpeaker() }
+                        AudioManager.ACTION_MICROPHONE_MUTE_CHANGED ->
+                            muteState.refresh(scope) { checkMute() }
+                    }
                 }
             }
         val filter =
@@ -80,12 +85,17 @@ internal fun CallPopup(model: PopupContentModel.SystemEvent, modifier: Modifier 
         context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
 
         val deviceListener =
-            AudioManager.OnCommunicationDeviceChangedListener { isSpeakerOn = checkSpeaker() }
+            AudioManager.OnCommunicationDeviceChangedListener { device ->
+                speakerState.update(device?.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
+            }
         audioManager?.addOnCommunicationDeviceChangedListener(context.mainExecutor, deviceListener)
         // Re-read after registration so an update during composition is not missed.
-        refreshAudioState()
+        speakerState.refresh(scope) { checkSpeaker() }
+        muteState.refresh(scope) { checkMute() }
 
         onDispose {
+            speakerState.cancelRefresh()
+            muteState.cancelRefresh()
             context.unregisterReceiver(receiver)
             audioManager?.removeOnCommunicationDeviceChangedListener(deviceListener)
         }
@@ -103,19 +113,15 @@ internal fun CallPopup(model: PopupContentModel.SystemEvent, modifier: Modifier 
             if (!isSpeaker && !isMute) {
                 action
             } else {
+                val state = if (isSpeaker) speakerState else muteState
                 action.copy(
-                    emphasized = if (isSpeaker) isSpeakerOn else isMicrophoneMuted,
+                    emphasized = state.isActive,
                     onClick = {
-                        if (isSpeaker) {
-                            isSpeakerOn = !isSpeakerOn
-                        } else {
-                            isMicrophoneMuted = !isMicrophoneMuted
-                        }
+                        state.update(!state.isActive)
                         action.onClick()
-                        scope.launch {
-                            // A rejected toggle may not send an audio-state change notification.
-                            delay(1_000L)
-                            refreshAudioState()
+                        // A rejected toggle may not send an audio-state change notification.
+                        state.refresh(scope, delayMillis = 1_000L) {
+                            if (isSpeaker) checkSpeaker() else checkMute()
                         }
                     },
                 )
@@ -141,5 +147,33 @@ internal fun CallPopup(model: PopupContentModel.SystemEvent, modifier: Modifier 
             },
             LocalLunarisBarColors.current.accent,
         )
+    }
+}
+
+/** Keeps each control's pending refresh independent and discards superseded reads. */
+private class CallAudioToggleState {
+    var isActive by mutableStateOf(false)
+        private set
+
+    private var refreshJob: Job? = null
+
+    fun update(active: Boolean) {
+        cancelRefresh()
+        isActive = active
+    }
+
+    fun refresh(scope: CoroutineScope, delayMillis: Long = 0L, readState: () -> Boolean) {
+        cancelRefresh()
+        refreshJob =
+            scope.launch {
+                delay(delayMillis)
+                // getCommunicationDevice can wait for route changes in the audio service.
+                isActive = withContext(Dispatchers.IO) { readState() }
+            }
+    }
+
+    fun cancelRefresh() {
+        refreshJob?.cancel()
+        refreshJob = null
     }
 }
