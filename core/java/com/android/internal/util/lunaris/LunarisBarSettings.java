@@ -42,6 +42,7 @@ public final class LunarisBarSettings {
             "status_bar_dynamic_island_alternative_media";
     public static final String ALTERNATIVE_FLASHLIGHT =
             "status_bar_dynamic_island_alternative_flashlight";
+    public static final int ANIMATION_STYLE_COLOR_OS = 2;
     public static final int MAX_CARDS = 24;
     public static final int WIDGET_HOST_ID = 0x4c424152;
     public static final String WIDGET_PICKER_ACTION =
@@ -207,7 +208,7 @@ public final class LunarisBarSettings {
     public boolean isFullWidth() { return integer("expanded_width", 1, 0, 1) == 0; }
     public int getCornerRadius() { return enabled("custom_radius", true) ? integer("corner_radius", 42, 0, 64) : 32; }
     public int getExpandedShape() { return integer("expanded_shape", 1, 0, 2); }
-    public int getAnimationStyle() { return integer("animation_style", 0, 0, 1); }
+    public int getAnimationStyle() { return integer("animation_style", 0, 0, ANIMATION_STYLE_COLOR_OS); }
     public float getAnimationSpeed() { return integer("animation_speed", 100, 50, 200) / 100f; }
     public int getBounce() { return integer("animation_bounce", 1, 0, 2); }
     public boolean isReducedMotion() { return enabled("reduce_motion", false); }
