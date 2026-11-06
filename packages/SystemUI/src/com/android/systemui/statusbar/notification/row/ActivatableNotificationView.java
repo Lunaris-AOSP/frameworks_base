@@ -768,6 +768,8 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
                 );
             }
         }
+
+        mBackgroundNormal.setClipBounds(getOutlineRect());
     }
 
     private boolean useNonLinearAnimation() {
@@ -902,6 +904,7 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
                 setContentAlpha(1.0f);
                 mAppearAnimationFraction = -1;
                 setOutlineRect(null);
+                mBackgroundNormal.setClipBounds(null);
             }
             invalidate();
         }
