@@ -1,0 +1,79 @@
+{
+  "name": "Wi-Fi",
+  "category": "controls",
+  "span": 1,
+  "layers": [
+    {
+      "id": "bg",
+      "type": "CARD",
+      "color": "#E61C1C1E",
+      "effect": "SOLID",
+      "aspect": 1.0,
+      "radius": 0.5,
+      "weight": 500,
+      "sleepWeight": 250,
+      "width": 100,
+      "height": 700,
+      "change": "FADE",
+      "sleepStyle": "HIDE",
+      "tile": "WIFI",
+      "activeColor": "accent1",
+      "activeTint": 0.45
+    },
+    {
+      "id": "tile",
+      "type": "TILE",
+      "font": "",
+      "weight": 500,
+      "sleepWeight": 250,
+      "width": 100,
+      "height": 700,
+      "color": "#FFFFFF",
+      "change": "SCALE",
+      "sleepStyle": "THIN",
+      "tile": "WIFI",
+      "activeColor": "#1C1C1E"
+    }
+  ],
+  "large": {
+    "stack": {
+      "width": 0.171,
+      "height": 0.171,
+      "children": [
+        {
+          "layer": "bg",
+          "size": 0.171,
+          "anchor": "CENTER"
+        },
+        {
+          "layer": "tile",
+          "size": 0.0675,
+          "anchor": "CENTER"
+        }
+      ]
+    },
+    "x": 0.5,
+    "anchor": "CENTER"
+  },
+  "small": {
+    "stack": {
+      "width": 0.106,
+      "height": 0.106,
+      "children": [
+        {
+          "layer": "bg",
+          "size": 0.106,
+          "anchor": "CENTER"
+        },
+        {
+          "layer": "tile",
+          "size": 0.0419,
+          "anchor": "CENTER"
+        }
+      ]
+    },
+    "x": 0.0225,
+    "anchor": "START"
+  },
+  "id": 104
+}

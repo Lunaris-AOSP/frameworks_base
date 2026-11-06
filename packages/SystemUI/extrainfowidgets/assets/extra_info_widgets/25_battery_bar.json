@@ -1,0 +1,173 @@
+{
+  "name": "Battery bar",
+  "category": "medium",
+  "span": 2,
+  "layers": [
+    {
+      "id": "bg",
+      "type": "CARD",
+      "color": "#E61C1C1E",
+      "effect": "SOLID",
+      "aspect": 2.1842,
+      "radius": 0.3,
+      "weight": 500,
+      "sleepWeight": 250,
+      "width": 100,
+      "height": 700,
+      "change": "FADE",
+      "sleepStyle": "HIDE"
+    },
+    {
+      "id": "bicon",
+      "type": "BATTERY_ICON",
+      "font": "",
+      "weight": 500,
+      "sleepWeight": 250,
+      "width": 100,
+      "height": 700,
+      "color": "#FFFFFF",
+      "change": "FADE",
+      "sleepStyle": "THIN"
+    },
+    {
+      "id": "label",
+      "type": "TEXT",
+      "font": "res:google_sans_flex?opsz=144",
+      "weight": 700,
+      "sleepWeight": 250,
+      "width": 100,
+      "height": 700,
+      "color": "#FFFFFF",
+      "change": "FADE",
+      "sleepStyle": "THIN",
+      "format": "Battery",
+      "caps": true,
+      "tracking": 0.04
+    },
+    {
+      "id": "level",
+      "type": "BATTERY_LEVEL",
+      "font": "res:google_sans_flex?opsz=144",
+      "weight": 500,
+      "sleepWeight": 250,
+      "width": 100,
+      "height": 700,
+      "color": "#FFFFFF",
+      "change": "FADE",
+      "sleepStyle": "THIN"
+    },
+    {
+      "id": "bar",
+      "type": "GAUGE",
+      "format": "battery",
+      "color": "#FFFFFF",
+      "aspect": 24.0,
+      "weight": 500,
+      "sleepWeight": 250,
+      "width": 100,
+      "height": 700,
+      "strokeWidth": 0.1,
+      "change": "FADE",
+      "sleepStyle": "THIN"
+    }
+  ],
+  "large": {
+    "stack": {
+      "width": 0.3735,
+      "height": 0.171,
+      "children": [
+        {
+          "layer": "bg",
+          "size": 0.3735,
+          "anchor": "CENTER"
+        },
+        {
+          "column": {
+            "gap": 0.009,
+            "align": "START",
+            "children": [
+              {
+                "row": {
+                  "gap": 0.0054,
+                  "align": "CENTER",
+                  "children": [
+                    {
+                      "layer": "bicon",
+                      "size": 0.027
+                    },
+                    {
+                      "layer": "label",
+                      "size": 0.0234
+                    }
+                  ]
+                }
+              },
+              {
+                "layer": "level",
+                "size": 0.0378
+              },
+              {
+                "layer": "bar",
+                "size": 0.324
+              }
+            ]
+          },
+          "anchor": "START",
+          "x": 0.0234
+        }
+      ]
+    },
+    "x": 0.5,
+    "anchor": "CENTER"
+  },
+  "small": {
+    "stack": {
+      "width": 0.2316,
+      "height": 0.106,
+      "children": [
+        {
+          "layer": "bg",
+          "size": 0.2316,
+          "anchor": "CENTER"
+        },
+        {
+          "column": {
+            "gap": 0.0056,
+            "align": "START",
+            "children": [
+              {
+                "row": {
+                  "gap": 0.0033,
+                  "align": "CENTER",
+                  "children": [
+                    {
+                      "layer": "bicon",
+                      "size": 0.0167
+                    },
+                    {
+                      "layer": "label",
+                      "size": 0.0145
+                    }
+                  ]
+                }
+              },
+              {
+                "layer": "level",
+                "size": 0.0234
+              },
+              {
+                "layer": "bar",
+                "size": 0.2009
+              }
+            ]
+          },
+          "anchor": "START",
+          "x": 0.0145
+        }
+      ]
+    },
+    "x": 0.0225,
+    "anchor": "START"
+  },
+  "id": 111
+}

@@ -1,0 +1,109 @@
+{
+  "name": "Glance inline",
+  "category": "inline",
+  "span": 4,
+  "layers": [
+    {
+      "id": "bicon",
+      "type": "BATTERY_ICON",
+      "font": "",
+      "weight": 500,
+      "sleepWeight": 250,
+      "width": 100,
+      "height": 700,
+      "color": "#FFFFFF",
+      "change": "FADE",
+      "sleepStyle": "THIN"
+    },
+    {
+      "id": "level",
+      "type": "BATTERY_LEVEL",
+      "font": "res:google_sans_flex?opsz=144",
+      "weight": 500,
+      "sleepWeight": 250,
+      "width": 100,
+      "height": 700,
+      "color": "#FFFFFF",
+      "change": "FADE",
+      "sleepStyle": "THIN"
+    },
+    {
+      "id": "walk",
+      "type": "TEXT",
+      "font": "res:symbols?FILL=1",
+      "weight": 500,
+      "sleepWeight": 250,
+      "width": 100,
+      "height": 700,
+      "color": "#A6FFFFFF",
+      "change": "FADE",
+      "sleepStyle": "THIN",
+      "format": ""
+    },
+    {
+      "id": "steps",
+      "type": "STEPS",
+      "font": "res:google_sans_flex?opsz=144",
+      "weight": 500,
+      "sleepWeight": 250,
+      "width": 100,
+      "height": 700,
+      "color": "#FFFFFF",
+      "change": "FADE",
+      "sleepStyle": "THIN"
+    }
+  ],
+  "large": {
+    "row": {
+      "gap": 0.0131,
+      "align": "CENTER",
+      "children": [
+        {
+          "layer": "bicon",
+          "size": 0.0574
+        },
+        {
+          "layer": "level",
+          "size": 0.0522
+        },
+        {
+          "layer": "walk",
+          "size": 0.0522
+        },
+        {
+          "layer": "steps",
+          "size": 0.0522
+        }
+      ]
+    },
+    "x": 0.5,
+    "anchor": "CENTER"
+  },
+  "small": {
+    "row": {
+      "gap": 0.0081,
+      "align": "CENTER",
+      "children": [
+        {
+          "layer": "bicon",
+          "size": 0.0356
+        },
+        {
+          "layer": "level",
+          "size": 0.0324
+        },
+        {
+          "layer": "walk",
+          "size": 0.0324
+        },
+        {
+          "layer": "steps",
+          "size": 0.0324
+        }
+      ]
+    },
+    "x": 0.0225,
+    "anchor": "START"
+  },
+  "id": 126
+}

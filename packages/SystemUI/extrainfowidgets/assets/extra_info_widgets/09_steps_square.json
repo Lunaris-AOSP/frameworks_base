@@ -1,0 +1,111 @@
+{
+  "name": "Steps square",
+  "category": "small",
+  "span": 1,
+  "layers": [
+    {
+      "id": "bg",
+      "type": "CARD",
+      "color": "#E61C1C1E",
+      "effect": "SOLID",
+      "aspect": 1.0,
+      "radius": 0.3,
+      "weight": 500,
+      "sleepWeight": 250,
+      "width": 100,
+      "height": 700,
+      "change": "FADE",
+      "sleepStyle": "HIDE"
+    },
+    {
+      "id": "walk",
+      "type": "TEXT",
+      "font": "res:symbols?FILL=1",
+      "weight": 500,
+      "sleepWeight": 250,
+      "width": 100,
+      "height": 700,
+      "color": "#FFFFFF",
+      "change": "FADE",
+      "sleepStyle": "THIN",
+      "format": ""
+    },
+    {
+      "id": "steps",
+      "type": "STEPS",
+      "font": "res:google_sans_flex?opsz=144",
+      "weight": 600,
+      "sleepWeight": 250,
+      "width": 100,
+      "height": 700,
+      "color": "#FFFFFF",
+      "change": "FADE",
+      "sleepStyle": "THIN"
+    }
+  ],
+  "large": {
+    "stack": {
+      "width": 0.171,
+      "height": 0.171,
+      "children": [
+        {
+          "layer": "bg",
+          "size": 0.171,
+          "anchor": "CENTER"
+        },
+        {
+          "column": {
+            "gap": 0.0036,
+            "align": "CENTER",
+            "children": [
+              {
+                "layer": "walk",
+                "size": 0.0414
+              },
+              {
+                "layer": "steps",
+                "size": 0.027
+              }
+            ]
+          },
+          "anchor": "CENTER"
+        }
+      ]
+    },
+    "x": 0.5,
+    "anchor": "CENTER"
+  },
+  "small": {
+    "stack": {
+      "width": 0.106,
+      "height": 0.106,
+      "children": [
+        {
+          "layer": "bg",
+          "size": 0.106,
+          "anchor": "CENTER"
+        },
+        {
+          "column": {
+            "gap": 0.0022,
+            "align": "CENTER",
+            "children": [
+              {
+                "layer": "walk",
+                "size": 0.0257
+              },
+              {
+                "layer": "steps",
+                "size": 0.0167
+              }
+            ]
+          },
+          "anchor": "CENTER"
+        }
+      ]
+    },
+    "x": 0.0225,
+    "anchor": "START"
+  },
+  "id": 121
+}

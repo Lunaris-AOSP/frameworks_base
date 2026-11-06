@@ -1,0 +1,10 @@
+The widget designs in assets/extra_info_widgets and the layout/glyph rendering
+in this module are derived from ClockMorph (XMorphClock), by DrDisagree:
+https://github.com/Mahmud0808/XMorphClock
+Distributed under the GNU General Public License version 3; see LICENSE.
+The JSON designs are preserved verbatim from the local clockmorph source.
+
+Google Sans Flex is Copyright 2015 The Google Sans Flex Authors, distributed under the
+SIL Open Font License 1.1; see google-sans-flex-OFL.txt.
+Material Symbols is Copyright 2026 Google LLC, distributed under Apache License 2.0.
+The fonts are bundled from ClockMorph and retain their embedded copyright metadata.

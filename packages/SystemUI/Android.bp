@@ -526,6 +526,7 @@ android_library {
         "lunaris_water_ripple",
         "LunarisClockMaker",
         "LunarisLockscreenWidgets",
+        "LunarisExtraInfoWidgets",
         "ax_blur",
         "SystemUI-res",
         "WifiTrackerLib",

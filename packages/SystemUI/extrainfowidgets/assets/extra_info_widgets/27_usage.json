@@ -1,0 +1,136 @@
+{
+  "name": "Usage",
+  "category": "medium",
+  "span": 2,
+  "layers": [
+    {
+      "id": "bg",
+      "type": "CARD",
+      "color": "#E61C1C1E",
+      "effect": "SOLID",
+      "aspect": 2.1842,
+      "radius": 0.3,
+      "weight": 500,
+      "sleepWeight": 250,
+      "width": 100,
+      "height": 700,
+      "change": "FADE",
+      "sleepStyle": "HIDE"
+    },
+    {
+      "id": "label",
+      "type": "TEXT",
+      "font": "res:google_sans_flex?opsz=144",
+      "weight": 700,
+      "sleepWeight": 250,
+      "width": 100,
+      "height": 700,
+      "color": "#FFFFFF",
+      "change": "FADE",
+      "sleepStyle": "THIN",
+      "format": "Mobile data",
+      "caps": true,
+      "tracking": 0.04
+    },
+    {
+      "id": "usage",
+      "type": "DATA_USAGE",
+      "font": "res:google_sans_flex?opsz=144",
+      "weight": 500,
+      "sleepWeight": 250,
+      "width": 100,
+      "height": 700,
+      "color": "#FFFFFF",
+      "change": "FADE",
+      "sleepStyle": "THIN"
+    },
+    {
+      "id": "hint",
+      "type": "TEXT",
+      "font": "res:google_sans_flex?opsz=144",
+      "weight": 500,
+      "sleepWeight": 250,
+      "width": 100,
+      "height": 700,
+      "color": "#A6FFFFFF",
+      "change": "FADE",
+      "sleepStyle": "THIN",
+      "format": "This month"
+    }
+  ],
+  "large": {
+    "stack": {
+      "width": 0.3735,
+      "height": 0.171,
+      "children": [
+        {
+          "layer": "bg",
+          "size": 0.3735,
+          "anchor": "CENTER"
+        },
+        {
+          "column": {
+            "gap": 0.0054,
+            "align": "START",
+            "children": [
+              {
+                "layer": "label",
+                "size": 0.0234
+              },
+              {
+                "layer": "usage",
+                "size": 0.0432
+              },
+              {
+                "layer": "hint",
+                "size": 0.0252
+              }
+            ]
+          },
+          "anchor": "START",
+          "x": 0.0234
+        }
+      ]
+    },
+    "x": 0.5,
+    "anchor": "CENTER"
+  },
+  "small": {
+    "stack": {
+      "width": 0.2316,
+      "height": 0.106,
+      "children": [
+        {
+          "layer": "bg",
+          "size": 0.2316,
+          "anchor": "CENTER"
+        },
+        {
+          "column": {
+            "gap": 0.0033,
+            "align": "START",
+            "children": [
+              {
+                "layer": "label",
+                "size": 0.0145
+              },
+              {
+                "layer": "usage",
+                "size": 0.0268
+              },
+              {
+                "layer": "hint",
+                "size": 0.0156
+              }
+            ]
+          },
+          "anchor": "START",
+          "x": 0.0145
+        }
+      ]
+    },
+    "x": 0.0225,
+    "anchor": "START"
+  },
+  "id": 113
+}
