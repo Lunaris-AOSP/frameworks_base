@@ -57,7 +57,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
@@ -538,9 +537,6 @@ private fun AxMediaCard(
                                         AxMediaLayout.OneUiCompact -> AxMediaArtworkScrim.CenterLit
                                         else -> AxMediaArtworkScrim.Default
                                     },
-                                modifier =
-                                    if (layout == AxMediaLayout.Notification) Modifier.blur(2.dp)
-                                    else Modifier,
                             )
                         }
                         AnimatedContent(
