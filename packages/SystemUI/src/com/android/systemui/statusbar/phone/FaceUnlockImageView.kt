@@ -34,9 +34,6 @@ import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.LinearInterpolator
 import android.view.animation.OvershootInterpolator
 
-import androidx.core.animation.doOnEnd
-import androidx.core.animation.doOnCancel
-
 import com.android.systemui.Dependency
 import com.android.systemui.plugins.statusbar.StatusBarStateController
 
@@ -50,6 +47,8 @@ class FaceUnlockImageView @JvmOverloads constructor(
         SCANNING, NOT_VERIFIED, SUCCESS, HIDDEN
     }
 
+    var visibilityListener: ((Boolean) -> Unit)? = null
+
     private val DELAY_HIDE_DURATION = 1500
     private var currentState: State = State.HIDDEN
     private var colorState: ColorStateList? = null
@@ -60,6 +59,7 @@ class FaceUnlockImageView @JvmOverloads constructor(
     private val failureShakeAnimation: ObjectAnimator = createShakeAnimation(10f)
     private val vibrator: Vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
     private val animations = listOf(failureShakeAnimation, dismissAnimation, scanningAnimation, successAnimation, startAnimation)
+    private var animationSet: AnimatorSet? = null
     private var mDozing = false
     private val statusBarStateController: StatusBarStateController = Dependency.get(StatusBarStateController::class.java)
 
@@ -72,7 +72,7 @@ class FaceUnlockImageView @JvmOverloads constructor(
             }
             mDozing = dozing
             if (mDozing) {
-                visibility = View.GONE
+                resetIcon()
             }
         }
     }
@@ -91,8 +91,15 @@ class FaceUnlockImageView @JvmOverloads constructor(
     }
 
     override fun onDetachedFromWindow() {
+        FaceUnlockProxy.INSTANCE().clearFaceUnlockView(this)
+        resetIcon()
         super.onDetachedFromWindow()
         statusBarStateController.removeCallback(statusBarStateListener)
+    }
+
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        visibilityListener?.invoke(this.visibility == View.VISIBLE)
     }
 
     fun updateColor() {
@@ -101,7 +108,12 @@ class FaceUnlockImageView @JvmOverloads constructor(
     }
 
     fun setState(state: State) {
-        if (currentState != state) {
+        if (mDozing || !isAttachedToWindow) {
+            resetIcon()
+            return
+        }
+        if (currentState != state || (state != State.HIDDEN && visibility != View.VISIBLE)) {
+            cancelAllAnimations()
             currentState = state
             updateFaceIconState()
             handleAnimationForState(state)
@@ -154,7 +166,24 @@ class FaceUnlockImageView @JvmOverloads constructor(
             duration = 500
             interpolator = AccelerateDecelerateInterpolator()
             if (!start) {
-                doOnEnd { visibility = View.GONE }
+                addListener(object : AnimatorListenerAdapter() {
+                    private var cancelled = false
+
+                    override fun onAnimationStart(animation: Animator) {
+                        cancelled = false
+                    }
+
+                    override fun onAnimationCancel(animation: Animator) {
+                        cancelled = true
+                    }
+
+                    override fun onAnimationEnd(animation: Animator) {
+                        if (!cancelled) {
+                            currentState = State.HIDDEN
+                            visibility = View.GONE
+                        }
+                    }
+                })
             }
         }
     }
@@ -170,7 +199,15 @@ class FaceUnlockImageView @JvmOverloads constructor(
     }
 
     private fun cancelAllAnimations() {
+        animationSet?.cancel()
+        animationSet = null
         animations.forEach { it.cancel() }
+    }
+
+    private fun resetIcon() {
+        cancelAllAnimations()
+        currentState = State.HIDDEN
+        visibility = View.GONE
     }
 
     private fun handleAnimationForState(state: State) {
@@ -178,8 +215,11 @@ class FaceUnlockImageView @JvmOverloads constructor(
             visibility = View.GONE
             return
         }
-        cancelAllAnimations()
-        if (state == State.SCANNING) {
+        if (state != State.HIDDEN) {
+            scaleX = 1f
+            scaleY = 1f
+            rotationY = 0f
+            translationX = 0f
             visibility = View.VISIBLE
         }
         when (state) {
@@ -197,15 +237,9 @@ class FaceUnlockImageView @JvmOverloads constructor(
     }
 
     private fun startAnimationChain(first: ObjectAnimator, next: ObjectAnimator) {
-        first.startWithEndAction { next.start() }
-    }
-
-    private fun ObjectAnimator.startWithEndAction(endAction: () -> Unit) {
-        addListener(object : AnimatorListenerAdapter() {
-            override fun onAnimationEnd(animation: Animator) {
-                endAction()
-            }
-        })
-        start()
+        animationSet = AnimatorSet().apply {
+            playSequentially(first, next)
+            start()
+        }
     }
 }

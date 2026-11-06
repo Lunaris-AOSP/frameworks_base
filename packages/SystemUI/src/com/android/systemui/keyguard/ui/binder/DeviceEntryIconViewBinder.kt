@@ -33,6 +33,7 @@ import com.android.systemui.Dependency
 import com.android.systemui.Flags
 import com.android.systemui.biometrics.UdfpsIconDrawable
 import com.android.systemui.common.ui.view.TouchHandlingView
+import com.android.systemui.keyguard.data.repository.LockscreenLockIconSettings
 import com.android.systemui.keyguard.ui.view.DeviceEntryIconView
 import com.android.systemui.keyguard.ui.viewmodel.DeviceEntryBackgroundViewModel
 import com.android.systemui.keyguard.ui.viewmodel.DeviceEntryForegroundViewModel
@@ -56,6 +57,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
@@ -65,7 +67,6 @@ import com.android.internal.util.lunaris.Utils
 
 object DeviceEntryIconViewBinder {
     private const val TAG = "DeviceEntryIconViewBinder"
-    private const val LOCKSCREEN_HIDE_LOCK_ICON = "lockscreen_hide_lock_icon"
 
     private final val UDFPS_ICON: String =
             "system:" + Settings.System.UDFPS_ICON
@@ -122,19 +123,8 @@ object DeviceEntryIconViewBinder {
         )
 
         val hideLockIcon =
-            callbackFlow<Boolean> {
-                    val tunerService = Dependency.get(TunerService::class.java)
-                    val callback =
-                        object : TunerService.Tunable {
-                            override fun onTuningChanged(key: String, newValue: String?) {
-                                if (key == LOCKSCREEN_HIDE_LOCK_ICON) {
-                                    trySend(TunerService.parseIntegerSwitch(newValue, false))
-                                }
-                            }
-                        }
-                    tunerService.addTunable(callback, LOCKSCREEN_HIDE_LOCK_ICON)
-                    awaitClose { tunerService.removeTunable(callback) }
-                }
+            LockscreenLockIconSettings.observe(Dependency.get(TunerService::class.java))
+                .map { it.hidden || it.onTop }
                 .distinctUntilChanged()
                 .shareIn(
                     tunerScope,

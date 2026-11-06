@@ -22,16 +22,20 @@ import android.view.ViewGroup
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
 import com.android.systemui.keyguard.shared.model.KeyguardSection
+import com.android.systemui.keyguard.ui.binder.KeyguardIndicationAreaTopBinder
 import com.android.systemui.keyguard.ui.view.KeyguardIndicationAreaTop
 import com.android.systemui.res.R
 import javax.inject.Inject
+import kotlinx.coroutines.DisposableHandle
 
 class DefaultIndicationAreaTopSection
 @Inject
 constructor(
     private val context: Context,
+    private val binder: KeyguardIndicationAreaTopBinder,
 ) : KeyguardSection() {
     private val indicationAreaViewId = R.id.keyguard_indication_area_top
+    private var disposableHandle: DisposableHandle? = null
 
     override fun addViews(constraintLayout: ConstraintLayout) {
         val view = KeyguardIndicationAreaTop(context, null)
@@ -39,6 +43,8 @@ constructor(
     }
 
     override fun bindData(constraintLayout: ConstraintLayout) {
+        disposableHandle?.dispose()
+        disposableHandle = binder.bind(constraintLayout.requireViewById(indicationAreaViewId))
     }
 
     override fun applyConstraints(constraintSet: ConstraintSet) {
@@ -68,6 +74,8 @@ constructor(
     }
 
     override fun removeViews(constraintLayout: ConstraintLayout) {
+        disposableHandle?.dispose()
+        disposableHandle = null
         constraintLayout.removeView(indicationAreaViewId)
     }
 }
