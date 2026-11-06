@@ -16,13 +16,13 @@
 package com.android.systemui.qs.panels.ui.compose.infinitegrid
 
 import android.content.Context
-import android.os.SystemProperties
 import android.os.UserHandle
 import android.provider.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import com.android.systemui.qs.composefragment.LocalBlurEnabled
 
 class CustomColorScheme(private val context: Context) {
     val qsTileColor: Color
@@ -37,29 +37,29 @@ class CustomColorScheme(private val context: Context) {
                         UserHandle.USER_CURRENT
                     ) == 1
                 }
-            val disableWindowBlurs = rememberObservedGlobalSetting(
-                key = Settings.Global.DISABLE_WINDOW_BLURS,
-                default = !blurEnabledByDefault,
-            ) { raw -> raw == 1 }
-            val blurEnabled = !disableWindowBlurs
-
-            val colorRes = if (blurEnabled) {
-                if (useAlternateColor)
-                    com.android.internal.R.color.surface_effect_2
-                else
-                    com.android.internal.R.color.surface_effect_1
-            } else {
-                com.android.internal.R.color.materialColorSurfaceBright
-            }
-
-            return Color(context.resources.getColor(colorRes, context.theme))
+            return if (useAlternateColor) surfaceEffect2 else surfaceEffect1
         }
+
+    val surfaceEffect1: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = surfaceColor(com.android.internal.R.color.surface_effect_1)
+
+    val surfaceEffect2: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = surfaceColor(com.android.internal.R.color.surface_effect_2)
+
+    @Composable
+    @ReadOnlyComposable
+    private fun surfaceColor(blurColor: Int): Color {
+        val colorRes =
+            if (LocalBlurEnabled.current) blurColor
+            else com.android.internal.R.color.materialColorSurfaceBright
+        return Color(context.resources.getColor(colorRes, context.theme))
+    }
 
     companion object {
-        private val blurEnabledByDefault: Boolean by lazy {
-            SystemProperties.getBoolean("ro.custom.blur.enable", false)
-        }
-
         val current: CustomColorScheme
             @Composable
             @ReadOnlyComposable

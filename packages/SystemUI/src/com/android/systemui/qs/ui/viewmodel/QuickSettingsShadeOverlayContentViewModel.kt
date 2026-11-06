@@ -115,10 +115,10 @@ constructor(
             traceName = "transparencyEnabled",
             initialValue =
                 Flags.notificationShadeBlur() &&
-                    windowRootViewBlurInteractor.isBlurCurrentlySupported.value,
+                    windowRootViewBlurInteractor.isShadeBlurCurrentlySupported.value,
             source =
                 if (Flags.notificationShadeBlur()) {
-                    windowRootViewBlurInteractor.isBlurCurrentlySupported
+                    windowRootViewBlurInteractor.isShadeBlurCurrentlySupported
                 } else {
                     flowOf(false)
                 },

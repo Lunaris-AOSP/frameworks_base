@@ -30,7 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.android.compose.theme.LocalAndroidColorScheme
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.CustomColorScheme
 import com.android.systemui.common.ui.compose.Icon
 import com.android.systemui.compose.modifiers.sysuiResTag
 import com.android.systemui.qs.panels.ui.compose.toolbar.TextFeedback.tag
@@ -46,7 +46,7 @@ fun TextFeedback(model: TextFeedbackViewModel, modifier: Modifier = Modifier) {
                 modifier
                     .tag()
                     .background(
-                        color = LocalAndroidColorScheme.current.surfaceEffect2,
+                        color = CustomColorScheme.current.surfaceEffect2,
                         shape = CircleShape,
                     )
                     .height(36.dp)

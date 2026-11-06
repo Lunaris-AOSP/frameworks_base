@@ -8145,6 +8145,12 @@ public final class Settings {
         public static final String QS_PANEL_STYLE = "qs_panel_style";
 
         /**
+         * Whether blur is enabled for Quick Settings and the notification shade.
+         * @hide
+         */
+        public static final String QS_BLUR_ENABLED = "qs_blur_enabled";
+
+        /**
          * Whether to hide label under tiles in classic QS panel style
          * @hide
          */

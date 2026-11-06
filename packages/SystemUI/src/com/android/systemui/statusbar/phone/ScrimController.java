@@ -190,6 +190,11 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
     private float mBouncerHiddenFraction = KeyguardBouncerConstants.EXPANSION_HIDDEN;
 
     private float getDefaultScrimAlpha(boolean ignoreCurrentState) {
+        if (!ignoreCurrentState && !isShadeBlurCurrentlySupported()
+                && (mState == ScrimState.UNLOCKED || mState == ScrimState.SHADE_LOCKED
+                        || (mState == ScrimState.KEYGUARD && mQsExpansion > 0))) {
+            return BUSY_SCRIM_ALPHA;
+        }
         float scrimAlpha = getShadeScrimAlpha();
         if (!Float.isNaN(scrimAlpha)
                 && (mState == ScrimState.UNLOCKED || mState == ScrimState.SHADE_LOCKED)) {
@@ -653,11 +658,22 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
                     mWindowRootViewBlurInteractor.get().isBlurCurrentlySupported(),
                     this::handleBlurSupportedChanged);
         }
+        if (Flags.notificationShadeBlur()) {
+            collectFlow(behindScrim,
+                    mWindowRootViewBlurInteractor.get().isShadeBlurCurrentlySupported(),
+                    supported -> handleBlurSupportedChanged(isBlurCurrentlySupported()));
+        }
     }
 
     private boolean isBlurCurrentlySupported() {
         return mWindowRootViewBlurInteractor.get()
                 .isBlurCurrentlySupported()
+                .getValue();
+    }
+
+    private boolean isShadeBlurCurrentlySupported() {
+        return mWindowRootViewBlurInteractor.get()
+                .isShadeBlurCurrentlySupported()
                 .getValue();
     }
 
@@ -694,6 +710,9 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
     }
 
     private float getNotificationShadeScrimAlpha() {
+        if (!isShadeBlurCurrentlySupported()) {
+            return Float.NaN;
+        }
         if (!mScrimAlphaSettingsCached) {
             refreshScrimAlphaSettingsCache();
         }
@@ -1225,7 +1244,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
                     mBehindAlpha = 1;
                     mNotificationsAlpha = behindFraction * getDefaultScrimAlpha();
                 } else {
-                    if (Flags.notificationShadeBlur() && isBlurCurrentlySupported()) {
+                    if (Flags.notificationShadeBlur() && isShadeBlurCurrentlySupported()) {
                         // TODO (b/390730594): match any spec for controlling alpha based on shade
                         //  expansion fraction.
                         float behindSetting = getShadeScrimAlpha();
@@ -1938,11 +1957,11 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
     }
 
     private int getNotificationsScrimColor() {
-        return ShadeColors.notificationScrim(mContext, isBlurCurrentlySupported(), true);
+        return ShadeColors.notificationScrim(mContext, isShadeBlurCurrentlySupported(), true);
     }
 
     private int getShadePanelColor() {
-        return ShadeColors.shadePanel(mContext, isBlurCurrentlySupported(), true, true);
+        return ShadeColors.shadePanel(mContext, isShadeBlurCurrentlySupported(), true, true);
     }
 
     private void onThemeChanged() {

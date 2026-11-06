@@ -95,6 +95,10 @@ constructor(
      */
     val isBlurCurrentlySupported: StateFlow<Boolean> = repository.isBlurSupported
 
+    val isShadeBlurCurrentlySupported: StateFlow<Boolean> = repository.isShadeBlurSupported
+
+    val isShadeBlurEnabled: StateFlow<Boolean> = repository.isShadeBlurEnabled
+
     /** Whether notification row translucency is enabled via user setting. */
     val isTranslucentSupported: StateFlow<Boolean> = repository.isTranslucentSupported
 

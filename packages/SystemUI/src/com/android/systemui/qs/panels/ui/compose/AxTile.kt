@@ -512,7 +512,12 @@ object AxTileColorsDefaults {
     fun inactiveDualTargetTileColors(): TileColors =
         TileColors(
             background = backgroundTileColors(),
-            iconBackground = AxTileDefaults.folderPreviewTileBackgroundColor(),
+            iconBackground =
+                if (LocalBlurEnabled.current) {
+                    AxTileDefaults.folderPreviewTileBackgroundColor()
+                } else {
+                    LocalAndroidColorScheme.current.surfaceEffect2
+                },
             label = MaterialTheme.colorScheme.onSurface,
             secondaryLabel = MaterialTheme.colorScheme.onSurface,
             icon = MaterialTheme.colorScheme.onSurface,

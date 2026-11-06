@@ -298,10 +298,14 @@ constructor(
 
     private fun computeBlurAndZoomOut(): Pair<Int, Float> {
         val combinedBlur =
-            max(
-                computeShadeBlurRadius(),
-                blurUtils.blurRadiusOfRatio(transitionToFullShadeProgress),
-            )
+            if (windowRootViewBlurInteractor.isShadeBlurEnabled.value) {
+                max(
+                    computeShadeBlurRadius(),
+                    blurUtils.blurRadiusOfRatio(transitionToFullShadeProgress),
+                )
+            } else {
+                0f
+            }
         var shadeRadius = max(combinedBlur, wakeAndUnlockBlurRadius)
 
         if (areBlursDisabledForAppLaunch || blursDisabledForUnlock) {
@@ -559,6 +563,13 @@ constructor(
     }
 
     private fun initBlurListeners() {
+        applicationScope.launch {
+            windowRootViewBlurInteractor.isShadeBlurEnabled.collect {
+                if (::root.isInitialized) {
+                    scheduleUpdate()
+                }
+            }
+        }
         if (!Flags.bouncerUiRevamp()) return
 
         windowRootViewBlurInteractor.registerBlurAppliedListener { appliedBlurRadius ->

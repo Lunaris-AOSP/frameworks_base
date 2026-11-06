@@ -162,7 +162,6 @@ import androidx.compose.ui.util.fastMap
 import com.android.compose.gesture.effect.rememberOffsetOverscrollEffectFactory
 import com.android.compose.modifiers.height
 import com.android.compose.modifiers.thenIf
-import com.android.compose.theme.LocalAndroidColorScheme
 import com.android.compose.ui.graphics.painter.rememberDrawablePainter
 import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.common.ui.compose.load
@@ -234,7 +233,7 @@ private fun EditModeTopBar(
     modifier: Modifier = Modifier,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
-    val surfaceEffect2 = LocalAndroidColorScheme.current.surfaceEffect2
+    val surfaceEffect2 = CustomColorScheme.current.surfaceEffect2
     TopAppBar(
         colors =
             TopAppBarDefaults.topAppBarColors(
@@ -1459,8 +1458,8 @@ private object EditModeTileDefaults {
     @Composable
     fun editTileColors(): TileColors =
         TileColors(
-            background = LocalAndroidColorScheme.current.surfaceEffect1,
-            iconBackground = LocalAndroidColorScheme.current.surfaceEffect2,
+            background = CustomColorScheme.current.surfaceEffect1,
+            iconBackground = CustomColorScheme.current.surfaceEffect2,
             label = MaterialTheme.colorScheme.onSurface,
             secondaryLabel = MaterialTheme.colorScheme.onSurface,
             icon = MaterialTheme.colorScheme.onSurface,

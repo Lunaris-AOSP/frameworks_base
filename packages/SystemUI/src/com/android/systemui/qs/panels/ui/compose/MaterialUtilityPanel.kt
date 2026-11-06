@@ -81,7 +81,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.android.compose.theme.LocalAndroidColorScheme
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CustomColorScheme
 import com.android.systemui.statusbar.connectivity.NetworkController
 import com.android.systemui.statusbar.connectivity.SignalCallback
@@ -351,7 +350,7 @@ private fun UtilityTile(
     var toggleCount by remember { mutableIntStateOf(0) }
 
     val bg = if (spec.on) MaterialTheme.colorScheme.primary
-            else LocalAndroidColorScheme.current.surfaceEffect2
+            else CustomColorScheme.current.surfaceEffect2
     val fg = if (spec.on) MaterialTheme.colorScheme.onPrimary
             else MaterialTheme.colorScheme.onSurfaceVariant
 

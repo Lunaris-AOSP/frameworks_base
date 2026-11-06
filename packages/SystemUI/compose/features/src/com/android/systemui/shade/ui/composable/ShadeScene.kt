@@ -38,6 +38,7 @@ import androidx.compose.foundation.overscroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -58,6 +59,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.android.axion.blur.LocalAxBlurEnabled
 import com.android.compose.animation.scene.ContentScope
 import com.android.compose.animation.scene.ElementKey
 import com.android.compose.animation.scene.LowestZIndexContentPicker
@@ -81,6 +83,7 @@ import com.android.systemui.lifecycle.rememberViewModel
 import com.android.systemui.media.remedia.ui.compose.Media
 import com.android.systemui.media.remedia.ui.compose.MediaPresentationStyle
 import com.android.systemui.notifications.ui.composable.NotificationScrollingStack
+import com.android.systemui.qs.composefragment.LocalBlurEnabled
 import com.android.systemui.qs.composefragment.ui.GridAnchor
 import com.android.systemui.qs.footer.ui.compose.FooterActionsWithAnimatedVisibility
 import com.android.systemui.qs.panels.ui.compose.EditMode
@@ -160,15 +163,20 @@ constructor(
             }
         val isShadeBlurred = viewModel.isShadeBlurred
         val shadeBlurRadius = with(LocalDensity.current) { viewModel.shadeBlurRadius.toDp() }
-        ShadeScene(
-            notificationStackScrollView.get(),
-            viewModel = viewModel,
-            headerViewModel = headerViewModel,
-            notificationsPlaceholderViewModel = notificationsPlaceholderViewModel,
-            jankMonitor = jankMonitor,
-            modifier = modifier.thenIf(isShadeBlurred) { Modifier.blur(shadeBlurRadius) },
-            shadeSession = shadeSession,
-        )
+        CompositionLocalProvider(
+            LocalBlurEnabled provides viewModel.isTransparencyEnabled,
+            LocalAxBlurEnabled provides viewModel.isTransparencyEnabled,
+        ) {
+            ShadeScene(
+                notificationStackScrollView.get(),
+                viewModel = viewModel,
+                headerViewModel = headerViewModel,
+                notificationsPlaceholderViewModel = notificationsPlaceholderViewModel,
+                jankMonitor = jankMonitor,
+                modifier = modifier.thenIf(isShadeBlurred) { Modifier.blur(shadeBlurRadius) },
+                shadeSession = shadeSession,
+            )
+        }
     }
 
     companion object {

@@ -127,7 +127,7 @@ constructor(
         }
     }
 
-    val isBlurSupported = windowRootViewBlurInteractor.isBlurCurrentlySupported
+    val isBlurSupported = windowRootViewBlurInteractor.isShadeBlurCurrentlySupported
 
     private val manageOrHistoryButtonText: Flow<Int> =
         notificationSettingsInteractor.isNotificationHistoryEnabled.map { shouldLaunchHistory ->

@@ -47,7 +47,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import com.android.compose.theme.LocalAndroidColorScheme
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
@@ -140,7 +139,7 @@ private fun Modifier.rippleAnimation(toggleCount: Int, toActive: Boolean): Modif
     }
 
     val rippleColor = if (toActive) MaterialTheme.colorScheme.primary
-                        else LocalAndroidColorScheme.current.surfaceEffect1
+                        else CustomColorScheme.current.surfaceEffect1
 
     return this.drawWithContent {
         drawContent()

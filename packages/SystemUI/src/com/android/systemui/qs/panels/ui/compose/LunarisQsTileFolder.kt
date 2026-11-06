@@ -63,6 +63,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.android.axion.blur.LocalAxBlurEnabled
 import com.android.compose.animation.Expandable
 import com.android.compose.animation.scene.ContentScope
 import com.android.systemui.animation.Expandable as SystemUiExpandable
@@ -128,6 +129,7 @@ internal fun ContentScope.LunarisQsTileFolder(
                             CompositionLocalProvider(
                                 LocalAxQsTileStyle provides (currentFolder.tileStyle ?: panelStyle),
                                 LocalBlurEnabled provides blurEnabled,
+                                LocalAxBlurEnabled provides blurEnabled,
                                 LocalLunarisQsGradientSettings provides gradientSettings,
                                 LocalLunarisQsTileStrokeStyle provides tileStrokeStyle,
                                 LocalLunarisQsTileStrokeWidth provides tileStrokeWidth,

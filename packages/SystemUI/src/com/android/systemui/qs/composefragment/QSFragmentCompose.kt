@@ -101,6 +101,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.android.app.tracing.coroutines.launchTraced
 import androidx.compose.runtime.staticCompositionLocalOf
+import com.android.axion.blur.LocalAxBlurEnabled
 import com.android.compose.animation.scene.ContentKey
 import com.android.compose.animation.scene.ContentScope
 import com.android.compose.animation.scene.ElementKey
@@ -301,7 +302,7 @@ constructor(
     @Composable
     private fun Content(modifier: Modifier = Modifier) {
         val isBlurCurrentlySupported by
-            windowRootViewBlurInteractor.isBlurCurrentlySupported.collectAsStateWithLifecycle()
+            windowRootViewBlurInteractor.isShadeBlurCurrentlySupported.collectAsStateWithLifecycle()
         val blurEnabled = notificationShadeBlur() && isBlurCurrentlySupported
         PlatformTheme(isDarkTheme = if (notificationShadeBlur()) isSystemInDarkTheme() else true) {
             ProvideShortcutHelperIndication(interactionsConfig = interactionsConfig()) {
@@ -334,6 +335,7 @@ constructor(
                 ) {
                     CompositionLocalProvider(
                         LocalBlurEnabled provides blurEnabled,
+                        LocalAxBlurEnabled provides blurEnabled,
                         LocalQsScrolling provides scrollState.isScrollInProgress,
                     ) {
                         CollapsableQuickSettingsSTL()

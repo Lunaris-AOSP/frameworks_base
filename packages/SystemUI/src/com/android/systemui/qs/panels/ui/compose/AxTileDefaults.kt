@@ -111,16 +111,18 @@ object AxTileDefaults {
     @ReadOnlyComposable
     fun backgroundColor(): Color {
         return when {
+            !LocalBlurEnabled.current -> MaterialTheme.colorScheme.surfaceBright
             LocalLunarisQsCosTileBackground.current -> LocalAndroidColorScheme.current.surfaceEffect2
-            LocalBlurEnabled.current -> LocalAndroidColorScheme.current.surfaceEffect1
-            else -> MaterialTheme.colorScheme.surfaceBright
+            else -> LocalAndroidColorScheme.current.surfaceEffect1
         }
     }
 
     @Composable
     @ReadOnlyComposable
     fun folderPreviewTileBackgroundColor(): Color {
-        return if (LocalLunarisQsCosTileBackground.current) {
+        return if (!LocalBlurEnabled.current) {
+            MaterialTheme.colorScheme.surfaceBright
+        } else if (LocalLunarisQsCosTileBackground.current) {
             LocalAndroidColorScheme.current.surfaceEffect1
         } else {
             LocalAndroidColorScheme.current.surfaceEffect2
