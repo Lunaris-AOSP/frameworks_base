@@ -133,7 +133,10 @@ constructor(
                 )
 
             LockscreenScopeImpl(this@Content, elementFactory, elementContext)
-                .LockscreenSceneLayout(viewModel)
+                .LockscreenSceneLayout(
+                    viewModel,
+                    topIndicationArea = { indicationAreaElementProvider.TopIndicationArea() },
+                )
         }
     }
 }

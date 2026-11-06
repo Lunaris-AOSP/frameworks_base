@@ -111,6 +111,7 @@ object LockIconAlignmentLines {
 @Composable
 fun LockscreenScope<ContentScope>.LockscreenSceneLayout(
     viewModel: LockscreenContentViewModel,
+    topIndicationArea: @Composable () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Layout(
@@ -121,6 +122,7 @@ fun LockscreenScope<ContentScope>.LockscreenSceneLayout(
             LockscreenElement(LockscreenElementKeys.AmbientIndicationArea)
             LockscreenElement(LockscreenElementKeys.Region.Lower)
             LockscreenElement(LockscreenElementKeys.SettingsMenu)
+            topIndicationArea()
         },
         // Hide the lock screen elements when an overlay is shown above.
         modifier =
@@ -128,19 +130,23 @@ fun LockscreenScope<ContentScope>.LockscreenSceneLayout(
                 Modifier.graphicsLayer { alpha = 0f }
             },
     ) { measurables, constraints ->
-        check(measurables.size == 6)
+        check(measurables.size == 7)
         val statusBarMeasurable = measurables[0]
         val upperRegionMeasurable = measurables[1]
         val lockIconMeasurable = measurables[2]
         val ambientIndicationMeasurable = measurables[3]
         val lowerRegionMeasurable = measurables[4]
         val settingsMenuMeasurable = measurables[5]
+        val topIndicationAreaMeasurable = measurables[6]
 
         val statusBarPlaceable =
             statusBarMeasurable.measure(constraints = Constraints.fixedWidth(constraints.maxWidth))
 
         val lockIconPlaceable =
             lockIconMeasurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
+
+        val topIndicationAreaPlaceable =
+            topIndicationAreaMeasurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
 
         // Height available between the bottom of the status bar and either the top of the UDFPS
         // icon (if one is showing) or the bottom of the screen, if no UDFPS icon is showing.
@@ -192,6 +198,10 @@ fun LockscreenScope<ContentScope>.LockscreenSceneLayout(
             if (!viewModel.isAodFpOnly) {
                 statusBarPlaceable.place(0, 0)
                 upperRegionPlaceable.placeRelative(0, statusBarPlaceable.measuredHeight)
+                topIndicationAreaPlaceable.placeRelative(
+                    (constraints.maxWidth - topIndicationAreaPlaceable.measuredWidth) / 2,
+                    statusBarPlaceable.measuredHeight,
+                )
             }
             lockIconPlaceable.place(lockIconBounds.left, lockIconBounds.top)
 

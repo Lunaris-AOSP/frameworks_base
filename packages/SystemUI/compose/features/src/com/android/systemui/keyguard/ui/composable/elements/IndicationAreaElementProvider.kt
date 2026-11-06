@@ -28,7 +28,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.android.compose.animation.scene.ElementContentScope
 import com.android.systemui.keyguard.ui.binder.KeyguardIndicationAreaBinder
+import com.android.systemui.keyguard.ui.binder.KeyguardIndicationAreaTopBinder
 import com.android.systemui.keyguard.ui.view.KeyguardIndicationArea
+import com.android.systemui.keyguard.ui.view.KeyguardIndicationAreaTop
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardIndicationAreaViewModel
 import com.android.systemui.plugins.keyguard.ui.composable.elements.LockscreenElement
 import com.android.systemui.plugins.keyguard.ui.composable.elements.LockscreenElementKeys
@@ -46,6 +48,7 @@ constructor(
     @ShadeDisplayAware private val context: Context,
     private val indicationAreaViewModel: KeyguardIndicationAreaViewModel,
     private val indicationController: KeyguardIndicationController,
+    private val topIndicationAreaBinder: KeyguardIndicationAreaTopBinder,
 ) : LockscreenElementProvider {
     override val elements: List<LockscreenElement> by lazy { listOf(IndicationAreaElement()) }
 
@@ -57,6 +60,21 @@ constructor(
         override fun LockscreenScope<ElementContentScope>.LockscreenElement() {
             IndicationArea()
         }
+    }
+
+    @Composable
+    fun TopIndicationArea(modifier: Modifier = Modifier) {
+        val (disposable, setDisposable) = remember { mutableStateOf<DisposableHandle?>(null) }
+
+        AndroidView(
+            factory = { context ->
+                KeyguardIndicationAreaTop(context, null).also {
+                    setDisposable(topIndicationAreaBinder.bind(it))
+                }
+            },
+            onRelease = { disposable?.dispose() },
+            modifier = modifier,
+        )
     }
 
     @Composable

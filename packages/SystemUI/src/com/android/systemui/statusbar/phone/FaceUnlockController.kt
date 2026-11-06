@@ -8,9 +8,18 @@ class FaceUnlockController private constructor() {
         faceUnlockImageView = view
     }
 
+    fun clearFaceUnlockView(view: FaceUnlockImageView) {
+        if (faceUnlockImageView === view) {
+            faceUnlockImageView = null
+        }
+    }
+
     fun setBouncerState(state: FaceUnlockImageView.State) {
-        faceUnlockImageView?.postDelayed({
-            faceUnlockImageView?.setState(state)
+        val view = faceUnlockImageView ?: return
+        view.postDelayed({
+            if (faceUnlockImageView === view && view.isAttachedToWindow) {
+                view.setState(state)
+            }
         }, 100)
     }
 

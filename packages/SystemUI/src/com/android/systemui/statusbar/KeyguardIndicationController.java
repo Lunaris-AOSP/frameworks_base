@@ -500,6 +500,12 @@ public class KeyguardIndicationController {
         }
     }
 
+    public void clearIndicationAreaTop(ViewGroup indicationAreaTop) {
+        if (mFaceIconView == indicationAreaTop.findViewById(R.id.face_unlock_icon)) {
+            mFaceIconView = null;
+        }
+    }
+
     public void setIndicationArea(ViewGroup indicationArea) {
         mIndicationArea = indicationArea;
         mTopIndicationView = indicationArea.findViewById(R.id.keyguard_indication_text);
