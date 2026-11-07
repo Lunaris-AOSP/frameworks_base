@@ -1,0 +1,32 @@
+{
+  "name": "Weather 1×1",
+  "category": "small",
+  "span": 1,
+  "layers": [
+    {
+      "id": "bg",
+      "type": "CARD",
+      "color": "#E61C1C1E",
+      "aspect": 1.0,
+      "radius": 0.5,
+      "sleepStyle": "HIDE"
+    },
+    {
+      "id": "weather",
+      "type": "WEATHER_ICON",
+      "color": "#FFFFFF",
+      "weight": 500,
+      "sleepWeight": 250
+    }
+  ],
+  "large": {
+    "stack": {
+      "width": 0.171,
+      "height": 0.171,
+      "children": [
+        { "layer": "bg", "size": 0.171, "anchor": "CENTER" },
+        { "layer": "weather", "size": 0.096, "anchor": "CENTER" }
+      ]
+    }
+  }
+}

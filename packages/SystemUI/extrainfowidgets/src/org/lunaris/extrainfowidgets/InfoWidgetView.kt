@@ -5,11 +5,14 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
@@ -43,6 +46,12 @@ class InfoWidgetView(context: Context, val widget: InfoWidget) : View(context) {
     var data: InfoData = InfoData()
         set(value) {
             if (field != value) {
+                if (field.weather?.icon !== value.weather?.icon) {
+                    weatherIcon =
+                        value.weather?.icon?.let {
+                            (it.constantState?.newDrawable(resources) ?: it).mutate()
+                        }
+                }
                 field = value
                 refresh()
             }
@@ -95,6 +104,16 @@ class InfoWidgetView(context: Context, val widget: InfoWidget) : View(context) {
     private val rippleMask = GradientDrawable().apply { setColor(Color.WHITE) }
     private val ripple = RippleDrawable(ColorStateList.valueOf(0x40FFFFFF), null, rippleMask)
     private val mediaPlaceholder = JSONObject().put("type", "MEDIA_ICON").put("weight", 500)
+    private var weatherIcon: Drawable? = null
+    private val weatherSampleIcon by lazy {
+        context.getDrawable(R.drawable.extra_info_weather_sunny)!!.mutate()
+    }
+    private val weatherUnavailableIcon by lazy {
+        context.getDrawable(R.drawable.extra_info_weather_unavailable)!!.mutate()
+    }
+    private val weatherDozeFilter by lazy {
+        ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(0f) })
+    }
 
     init {
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
@@ -167,7 +186,8 @@ class InfoWidgetView(context: Context, val widget: InfoWidget) : View(context) {
                         .filter {
                             it.optString("type") !in
                                 setOf("TEXT", "CARD", "GAUGE", "TILE", "MEDIA_ART") &&
-                                !it.optString("type").endsWith("_ICON")
+                                (!it.optString("type").endsWith("_ICON") ||
+                                    it.optString("type") == "WEATHER_ICON")
                         }
                         .map { text(it) })
                 .filter(String::isNotBlank)
@@ -221,7 +241,7 @@ class InfoWidgetView(context: Context, val widget: InfoWidget) : View(context) {
         if (node.has("layer")) {
             val layer = layers.getValue(node.getString("layer"))
             val size = node.getDouble("size").toFloat()
-            if (layer.optString("type") in setOf("CARD", "GAUGE", "MEDIA_ART")) {
+            if (layer.optString("type") in setOf("CARD", "GAUGE", "MEDIA_ART", "WEATHER_ICON")) {
                 return Frame(node, size, size / layer.optDouble("aspect", 1.0).toFloat())
             }
             prepare(layer, 1000f)
@@ -427,6 +447,25 @@ class InfoWidgetView(context: Context, val widget: InfoWidget) : View(context) {
                         )
                     else canvas.drawArc(box, 135f, 270f * progress, false, paint)
                 }
+            }
+            "WEATHER_ICON" -> {
+                val icon =
+                    weatherIcon?.takeUnless { it is ColorDrawable && Color.alpha(it.color) == 0 }
+                        ?: if (data.weather?.conditionCode == 32) weatherSampleIcon
+                        else weatherUnavailableIcon
+                val iconWidth = icon.intrinsicWidth.takeIf { it > 0 } ?: 1
+                val iconHeight = icon.intrinsicHeight.takeIf { it > 0 } ?: 1
+                val scale = min(box.width() / iconWidth, box.height() / iconHeight)
+                val halfWidth = iconWidth * scale / 2f
+                val halfHeight = iconHeight * scale / 2f
+                icon.setBounds(
+                    (box.centerX() - halfWidth).roundToInt(),
+                    (box.centerY() - halfHeight).roundToInt(),
+                    (box.centerX() + halfWidth).roundToInt(),
+                    (box.centerY() + halfHeight).roundToInt(),
+                )
+                icon.colorFilter = if (appearance.dozing) weatherDozeFilter else null
+                icon.draw(canvas)
             }
             "MEDIA_ART" -> {
                 canvas.save()

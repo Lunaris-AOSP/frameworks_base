@@ -3,9 +3,17 @@ package org.lunaris.extrainfowidgets
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.drawable.Drawable
 import android.text.format.DateFormat
 import android.text.format.Formatter
 import java.text.NumberFormat
+
+data class InfoWeather(
+    val temperature: String? = null,
+    val condition: String? = null,
+    val conditionCode: Int = -1,
+    val icon: Drawable? = null,
+)
 
 data class InfoData(
     val battery: Int? = null,
@@ -22,6 +30,7 @@ data class InfoData(
     val eventTitle: String? = null,
     val eventTime: String? = null,
     val tiles: Map<String, Int> = emptyMap(),
+    val weather: InfoWeather? = null,
 ) {
     fun tile(name: String) =
         if (name == "MEDIA") {
@@ -51,6 +60,10 @@ data class InfoData(
             "NOTIFICATION_COUNT" -> notifications?.toString() ?: "—"
             "EVENT_TITLE" -> eventTitle ?: context.getString(R.string.extra_info_no_events)
             "EVENT_TIME" -> eventTime.orEmpty()
+            "WEATHER_TEMPERATURE" -> weather?.temperature ?: "—"
+            "WEATHER_ICON" ->
+                if (weather == null) context.getString(R.string.extra_info_weather_unavailable)
+                else weather.condition.orEmpty()
             "BATTERY_ICON" -> {
                 val index = (((battery ?: 100).coerceIn(0, 100) * 7 + 50) / 100)
                 (if (charging) CHARGING else BATTERY)[index].toString()
@@ -122,6 +135,7 @@ data class InfoData(
                 eventTitle = "Next event",
                 eventTime = "10:30",
                 tiles = mapOf("WIFI" to 1, "BLUETOOTH" to 1, "MOBILE_DATA" to 1, "RINGER" to 1),
+                weather = InfoWeather(temperature = "23°C", condition = "Clear", conditionCode = 32),
             )
     }
 }
