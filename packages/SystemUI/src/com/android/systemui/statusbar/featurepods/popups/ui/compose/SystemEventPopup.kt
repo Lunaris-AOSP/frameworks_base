@@ -87,7 +87,7 @@ fun SystemEventPopup(
     onDismissNotification: () -> Unit = {},
 ) {
     if (model.kind == SystemEventKind.Call) {
-        CallPopup(model, modifier)
+        CallPopup(model, modifier, onDismissNotification)
         return
     }
     val colors = LocalLunarisBarColors.current
