@@ -8,6 +8,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.database.ContentObserver
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -25,9 +26,11 @@ import android.os.UserHandle
 import android.os.UserManager
 import android.provider.CalendarContract
 import android.text.format.DateFormat
+import com.android.internal.util.lunaris.OmniJawsClient
 import java.time.LocalDate
 import java.util.Calendar
 import org.lunaris.extrainfowidgets.InfoData
+import org.lunaris.extrainfowidgets.InfoWeather
 import org.lunaris.extrainfowidgets.InfoWidget
 
 internal class ExtraInfoDataSource(
@@ -81,6 +84,21 @@ internal class ExtraInfoDataSource(
                     layers.getJSONObject(it).optString("tile").startsWith("MEDIA")
                 }
             }
+    private val needsWeather = types.any { it.startsWith("WEATHER_") }
+    private var weatherObserved = false
+    private val weatherClient by lazy { OmniJawsClient() }
+    private val weatherUpdate = Runnable {
+        if (running) {
+            current = withWeather(current)
+            publish()
+        }
+    }
+    private val weatherObserver =
+        object : ContentObserver(main) {
+            override fun onChange(selfChange: Boolean) {
+                refreshWeather()
+            }
+        }
     private val sensorManager = context.getSystemService(SensorManager::class.java)
     private val prefs by lazy {
         context
@@ -115,6 +133,17 @@ internal class ExtraInfoDataSource(
         object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 if (!running) return
+                if (intent.action == Intent.ACTION_USER_UNLOCKED) {
+                    observeWeather()
+                    refreshWeather()
+                }
+                if (
+                    intent.action == OmniJawsClient.WEATHER_UPDATE ||
+                        intent.action == OmniJawsClient.WEATHER_ERROR
+                ) {
+                    refreshWeather()
+                    return
+                }
                 worker.post {
                     if (intent.action == Intent.ACTION_BATTERY_CHANGED) {
                         current = withBattery(current, intent)
@@ -152,8 +181,16 @@ internal class ExtraInfoDataSource(
                 addAction(Intent.ACTION_TIMEZONE_CHANGED)
                 addAction(Intent.ACTION_USER_UNLOCKED)
                 addAction(AlarmManager.ACTION_NEXT_ALARM_CLOCK_CHANGED)
+                if (needsWeather) {
+                    addAction(OmniJawsClient.WEATHER_UPDATE)
+                    addAction(OmniJawsClient.WEATHER_ERROR)
+                }
             }
         context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+        if (needsWeather) {
+            observeWeather()
+            refreshWeather()
+        }
         if ("STEPS" in types) {
             worker.post {
                 if (!running) return@post
@@ -186,8 +223,13 @@ internal class ExtraInfoDataSource(
     }
 
     fun setAwake(value: Boolean) {
+        val waking = value && !awake
         awake = value
         if (running) {
+            if (waking) {
+                observeWeather()
+                refreshWeather()
+            }
             worker.post {
                 worker.removeCallbacks(update)
                 if (running && awake) worker.post(update)
@@ -207,6 +249,10 @@ internal class ExtraInfoDataSource(
         if (!running) return
         running = false
         context.unregisterReceiver(receiver)
+        if (needsWeather) {
+            runCatching { context.contentResolver.unregisterContentObserver(weatherObserver) }
+            weatherObserved = false
+        }
         worker.removeCallbacksAndMessages(null)
         worker.post {
             runCatching { sensorManager?.unregisterListener(stepsListener) }
@@ -220,6 +266,61 @@ internal class ExtraInfoDataSource(
         val snapshot = current
         main.post { if (running) onData(snapshot) }
     }
+
+    private fun observeWeather() {
+        if (!running || !needsWeather || weatherObserved) return
+        weatherObserved =
+            runCatching {
+                    context.contentResolver.registerContentObserver(
+                        OmniJawsClient.WEATHER_URI,
+                        true,
+                        weatherObserver,
+                    )
+                    context.contentResolver.registerContentObserver(
+                        OmniJawsClient.SETTINGS_URI,
+                        true,
+                        weatherObserver,
+                    )
+                    true
+                }
+                .getOrElse {
+                    runCatching {
+                        context.contentResolver.unregisterContentObserver(weatherObserver)
+                    }
+                    false
+                }
+    }
+
+    private fun refreshWeather() {
+        if (!running || !needsWeather) return
+        worker.removeCallbacks(weatherUpdate)
+        worker.post(weatherUpdate)
+    }
+
+    private fun withWeather(base: InfoData): InfoData =
+        runCatching {
+                weatherClient.queryWeather(context)
+                val weather = weatherClient.weatherInfo
+                base.copy(
+                    weather =
+                        weather?.let {
+                            InfoWeather(
+                                temperature =
+                                    it.temp
+                                        ?.takeIf { value -> value.isNotBlank() && value != "-" }
+                                        ?.let { value -> "$value${it.tempUnits.orEmpty()}" },
+                                condition = it.condition,
+                                conditionCode = it.conditionCode,
+                                icon =
+                                    weatherClient.getWeatherConditionImage(
+                                        context,
+                                        it.conditionCode,
+                                    ),
+                            )
+                        }
+                )
+            }
+            .getOrElse { base.copy(weather = null) }
 
     private fun withBattery(base: InfoData, intent: Intent): InfoData {
         val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)

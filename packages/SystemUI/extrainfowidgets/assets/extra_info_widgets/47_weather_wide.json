@@ -1,0 +1,50 @@
+{
+  "name": "Weather 2×1",
+  "category": "medium",
+  "span": 2,
+  "layers": [
+    {
+      "id": "bg",
+      "type": "CARD",
+      "color": "#E61C1C1E",
+      "aspect": 2.1842,
+      "radius": 0.3,
+      "sleepStyle": "HIDE"
+    },
+    {
+      "id": "weather",
+      "type": "WEATHER_ICON",
+      "color": "#FFFFFF",
+      "weight": 500,
+      "sleepWeight": 250
+    },
+    {
+      "id": "temperature",
+      "type": "WEATHER_TEMPERATURE",
+      "color": "#FFFFFF",
+      "weight": 600,
+      "sleepWeight": 250,
+      "maxEms": 4
+    }
+  ],
+  "large": {
+    "stack": {
+      "width": 0.3735,
+      "height": 0.171,
+      "children": [
+        { "layer": "bg", "size": 0.3735, "anchor": "CENTER" },
+        {
+          "row": {
+            "gap": 0.02,
+            "align": "CENTER",
+            "children": [
+              { "layer": "weather", "size": 0.0864 },
+              { "layer": "temperature", "size": 0.05 }
+            ]
+          },
+          "anchor": "CENTER"
+        }
+      ]
+    }
+  }
+}
