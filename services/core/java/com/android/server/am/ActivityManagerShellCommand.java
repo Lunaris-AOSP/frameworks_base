@@ -1313,7 +1313,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
         } else if (op.equals("system")) {
             pw.println("Executing system compaction");
             synchronized (mInternal.mProcLock) {
-                mInternal.getCachedAppOptimizer().compactAllSystem();
+                mInternal.getCachedAppOptimizer().compactAllSystem(true);
             }
             pw.println("Finished system compaction");
         } else if (op.equals("native")) {

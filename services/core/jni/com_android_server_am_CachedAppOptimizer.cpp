@@ -47,6 +47,9 @@
 #include <utils/Trace.h>
 
 #include <algorithm>
+#include <array>
+#include <atomic>
+#include <cstdint>
 #include <optional>
 
 using android::base::StringPrintf;
@@ -83,9 +86,7 @@ namespace android {
 
 // Signal happening in separate thread that would bail out compaction
 // before starting next VMA batch
-static std::atomic<bool> cancelRunningCompaction;
-
-static bool inSystemCompaction = false;
+static std::atomic<uint64_t> compactionGeneration{0};
 
 // A VmaBatch represents a set of VMAs that can be processed
 // as VMAs are processed by client code it is expected that the
@@ -273,7 +274,7 @@ int madviseVmasFromBatch(unique_fd& pidfd, VmaBatch& batch, int madviseType,
 // If any VMA fails compaction due to -EINVAL it will be skipped and continue.
 // However, if it fails for any other reason, it will bail out and forward the error
 static int64_t compactMemory(const std::vector<Vma>& vmas, int pid, int madviseType,
-                             int totalVmas) {
+                             int totalVmas, uint64_t generation) {
     if (totalVmas == 0) {
         return 0;
     }
@@ -294,7 +295,7 @@ static int64_t compactMemory(const std::vector<Vma>& vmas, int pid, int madviseT
         uint64_t bytesProcessedInSend;
         ScopedTrace batchTrace(ATRACE_TAG, "VMA Batch");
         do {
-            if (CC_UNLIKELY(cancelRunningCompaction.load())) {
+            if (CC_UNLIKELY(compactionGeneration.load() != generation)) {
                 // There could be a significant delay between when a compaction
                 // is requested and when it is handled during this time our
                 // OOM adjust could have improved.
@@ -330,16 +331,12 @@ static int getAnonPageAdvice(const Vma& vma) {
     bool hasReadFlag = (vma.flags & PROT_READ) > 0;
     bool hasWriteFlag = (vma.flags & PROT_WRITE) > 0;
     bool hasExecuteFlag = (vma.flags & PROT_EXEC) > 0;
-    if ((hasReadFlag || hasWriteFlag) && !hasExecuteFlag) {
+    if ((hasReadFlag || hasWriteFlag) && !hasExecuteFlag && !vma.is_shared) {
         return MADV_PAGEOUT;
     }
     return -1;
 }
 static int getAnyPageAdvice(const Vma& vma) {
-    if (inSystemCompaction == true) {
-        return MADV_PAGEOUT;
-    }
-
     if (vma.inode == 0 && !vma.is_shared) {
         return MADV_PAGEOUT;
     }
@@ -357,8 +354,10 @@ static int getAnyPageAdvice(const Vma& vma) {
 //
 // Not thread safe. We reuse vectors so we assume this is called only
 // on one thread at most.
-static int64_t compactProcess(int pid, VmaToAdviseFunc vmaToAdviseFunc) {
-    cancelRunningCompaction.store(false);
+static int64_t compactProcess(int pid, VmaToAdviseFunc vmaToAdviseFunc, uint64_t generation) {
+    if (compactionGeneration.load() != generation) {
+        return ERROR_COMPACTION_CANCELLED;
+    }
     static std::string mapsBuffer;
     ATRACE_BEGIN("CollectVmas");
     ProcMemInfo meminfo(pid);
@@ -397,17 +396,16 @@ static int64_t compactProcess(int pid, VmaToAdviseFunc vmaToAdviseFunc) {
             coldVmaIndex);
 #endif
 
-    int64_t pageoutBytes = compactMemory(pageoutVmas, pid, MADV_PAGEOUT, pageoutVmaIndex);
+    int64_t pageoutBytes = compactMemory(pageoutVmas, pid, MADV_PAGEOUT,
+                                       pageoutVmaIndex, generation);
     if (pageoutBytes < 0) {
         // Error, just forward it.
-        cancelRunningCompaction.store(false);
         return pageoutBytes;
     }
 
-    int64_t coldBytes = compactMemory(coldVmas, pid, MADV_COLD, coldVmaIndex);
+    int64_t coldBytes = compactMemory(coldVmas, pid, MADV_COLD, coldVmaIndex, generation);
     if (coldBytes < 0) {
         // Error, just forward it.
-        cancelRunningCompaction.store(false);
         return coldBytes;
     }
 
@@ -415,7 +413,7 @@ static int64_t compactProcess(int pid, VmaToAdviseFunc vmaToAdviseFunc) {
 }
 
 // Compact process using process_madvise syscall
-static void compactProcess(int pid, int compactionFlags) {
+static void compactProcess(int pid, int compactionFlags, uint64_t generation) {
     if ((compactionFlags & (COMPACT_ACTION_ANON_FLAG | COMPACT_ACTION_FILE_FLAG)) == 0) return;
 
     bool compactAnon = compactionFlags & COMPACT_ACTION_ANON_FLAG;
@@ -433,7 +431,7 @@ static void compactProcess(int pid, int compactionFlags) {
         vmaToAdviseFunc = getFilePageAdvice;
     }
 
-    compactProcess(pid, vmaToAdviseFunc);
+    compactProcess(pid, vmaToAdviseFunc, generation);
 }
 
 static std::string profileFromCompactionFlags(int compactionFlags) {
@@ -464,11 +462,18 @@ static void compactMemcg(int uid, int pid, int compactionFlags) {
 // or potentially some mainline modules. The only process that should definitely
 // not be compacted is system_server, since compacting system_server around the
 // time of BOOT_COMPLETE could result in perceptible issues.
-static void com_android_server_am_CachedAppOptimizer_compactSystem(JNIEnv *, jobject) {
+static void com_android_server_am_CachedAppOptimizer_compactSystem(JNIEnv *, jobject,
+                                                                  jlong token) {
+    const uint64_t generation = static_cast<uint64_t>(token);
     std::unique_ptr<DIR, decltype(&closedir)> proc(opendir("/proc"), closedir);
+    if (!proc) {
+        return;
+    }
     struct dirent* current;
-    inSystemCompaction = true;
     while ((current = readdir(proc.get()))) {
+        if (compactionGeneration.load() != generation) {
+            return;
+        }
         if (current->d_type != DT_DIR) {
             continue;
         }
@@ -494,14 +499,20 @@ static void com_android_server_am_CachedAppOptimizer_compactSystem(JNIEnv *, job
 
         int pid = atoi(current->d_name);
 
+        if (compactionGeneration.load() != generation) {
+            return;
+        }
         compactMemcg(status_info.st_uid, pid, COMPACT_ACTION_ANON_FLAG | COMPACT_ACTION_FILE_FLAG);
     }
-    inSystemCompaction = false;
 }
 
 static void com_android_server_am_CachedAppOptimizer_cancelCompaction(JNIEnv*, jobject) {
-    cancelRunningCompaction.store(true);
+    compactionGeneration.fetch_add(1);
     ATRACE_INSTANT_FOR_TRACK(ATRACE_COMPACTION_TRACK, "Cancel compaction");
+}
+
+static jlong com_android_server_am_CachedAppOptimizer_getCompactionGeneration(JNIEnv*, jobject) {
+    return static_cast<jlong>(compactionGeneration.load());
 }
 
 static jlong com_android_server_am_CachedAppOptimizer_threadCpuTimeNs(JNIEnv*, jobject) {
@@ -515,6 +526,9 @@ static jdouble com_android_server_am_CachedAppOptimizer_getFreeSwapPercent(JNIEn
     int error = sysinfo(&memoryInfo);
     if(error == -1) {
         LOG(ERROR) << "Could not check free swap space";
+        return 0;
+    }
+    if (memoryInfo.totalswap == 0) {
         return 0;
     }
     return (double)memoryInfo.freeswap / (double)memoryInfo.totalswap;
@@ -532,19 +546,27 @@ static jlong com_android_server_am_CachedAppOptimizer_getMemoryFreedCompaction()
 
 static void com_android_server_am_CachedAppOptimizer_compactProcessWithMemcg(JNIEnv*, jobject,
                                                                              jint uid, jint pid,
-                                                                             jint compactionFlags) {
-    compactMemcg(uid, pid, compactionFlags);
+                                                                             jint compactionFlags,
+                                                                             jlong token) {
+    if (compactionGeneration.load() == static_cast<uint64_t>(token)) {
+        compactMemcg(uid, pid, compactionFlags);
+    }
+}
+
+static void com_android_server_am_CachedAppOptimizer_compactProcessWithGeneration(JNIEnv*, jobject,
+        jint pid, jint compactionFlags, jlong token) {
+    compactProcess(pid, compactionFlags, static_cast<uint64_t>(token));
 }
 
 static void com_android_server_am_CachedAppOptimizer_compactNativeProcess(JNIEnv*, jobject,
                                                                           jint pid,
                                                                           jint compactionFlags) {
-    compactProcess(pid, compactionFlags);
+    compactProcess(pid, compactionFlags, compactionGeneration.load());
 }
 
 static jboolean com_android_server_am_CachedAppOptimizer_compactionFlagsValidForMemcg(
         JNIEnv* env, jobject, jint compactionFlags) {
-    static std::array<std::optional<bool>, 3> valid;
+    static std::array<std::optional<bool>, 4> valid;
 
     if (compactionFlags >= valid.size() || compactionFlags < 0) {
         jniThrowException(env, "java/lang/IllegalArgumentException", "Invalid compaction flags");
@@ -575,10 +597,12 @@ static const JNINativeMethod sMethods[] = {
          (void*)com_android_server_am_CachedAppOptimizer_getUsedZramMemory},
         {"getMemoryFreedCompaction", "()J",
          (void*)com_android_server_am_CachedAppOptimizer_getMemoryFreedCompaction},
-        {"compactSystem", "()V", (void*)com_android_server_am_CachedAppOptimizer_compactSystem},
-        {"compactProcess", "(II)V",
-         (void*)com_android_server_am_CachedAppOptimizer_compactNativeProcess},
-        {"performNativeMemcgCompaction", "(III)V",
+        {"compactSystem", "(J)V", (void*)com_android_server_am_CachedAppOptimizer_compactSystem},
+        {"getCompactionGeneration", "()J",
+         (void*)com_android_server_am_CachedAppOptimizer_getCompactionGeneration},
+        {"compactProcess", "(IIJ)V",
+         (void*)com_android_server_am_CachedAppOptimizer_compactProcessWithGeneration},
+        {"performNativeMemcgCompaction", "(IIIJ)V",
          (void*)com_android_server_am_CachedAppOptimizer_compactProcessWithMemcg},
         {"compactNativeProcess", "(II)V",
          (void*)com_android_server_am_CachedAppOptimizer_compactNativeProcess},
