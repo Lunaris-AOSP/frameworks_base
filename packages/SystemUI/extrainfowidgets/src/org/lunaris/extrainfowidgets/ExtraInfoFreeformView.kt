@@ -48,7 +48,11 @@ class ExtraInfoFreeformView(context: Context) : ViewGroup(context) {
                             .filter { position -> catalog.any { it.id == position.id } }
                             .take(ExtraInfoFreeformLayout.MAX_WIDGETS)
                             .map {
-                                it.copy(x = coordinate(it.x, 0.5f), y = coordinate(it.y, 0.35f))
+                                it.copy(
+                                    x = coordinate(it.x, 0.5f),
+                                    y = coordinate(it.y, 0.35f),
+                                    scale = ExtraInfoFreeformLayout.clampScale(it.scale),
+                                )
                             }
                 )
             if (dragId != null) {
@@ -213,14 +217,17 @@ class ExtraInfoFreeformView(context: Context) : ViewGroup(context) {
                 (width - 32f * density).coerceAtLeast(0f) / (4 + 3 * GAP),
                 height.toFloat(),
             )
-        children().forEach { child ->
+        children().forEachIndexed { index, child ->
             val span = child.widget.span(4)
+            val aspect = span + GAP * (span - 1)
+            val scaledCell =
+                minOf(cell * selection.widgets[index].scale, width / aspect, height.toFloat())
             child.measure(
                 MeasureSpec.makeMeasureSpec(
-                    (cell * (span + GAP * (span - 1))).roundToInt(),
+                    (scaledCell * aspect).roundToInt(),
                     MeasureSpec.EXACTLY,
                 ),
-                MeasureSpec.makeMeasureSpec(cell.roundToInt(), MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(scaledCell.roundToInt(), MeasureSpec.EXACTLY),
             )
         }
     }
