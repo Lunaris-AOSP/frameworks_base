@@ -46,7 +46,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-internal fun CallPopup(model: PopupContentModel.SystemEvent, modifier: Modifier = Modifier) {
+internal fun CallPopup(
+    model: PopupContentModel.SystemEvent,
+    modifier: Modifier = Modifier,
+    onDismissNotification: () -> Unit = {},
+) {
     val status = model.prominentText ?: stringResource(R.string.dynamic_island_event_call)
     val context = LocalContext.current
     val audioManager = remember(context) { context.getSystemService(AudioManager::class.java) }
@@ -110,7 +114,18 @@ internal fun CallPopup(model: PopupContentModel.SystemEvent, modifier: Modifier 
             val isMute =
                 action.role == PopupActionRole.Default &&
                     action.label.contains("mute", ignoreCase = true)
-            if (!isSpeaker && !isMute) {
+            if (
+                action.role == PopupActionRole.AnswerCall ||
+                    action.role == PopupActionRole.EndCall ||
+                    action.role == PopupActionRole.OpenApp
+            ) {
+                action.copy(
+                    onClick = {
+                        action.onClick()
+                        onDismissNotification()
+                    }
+                )
+            } else if (!isSpeaker && !isMute) {
                 action
             } else {
                 val state = if (isSpeaker) speakerState else muteState

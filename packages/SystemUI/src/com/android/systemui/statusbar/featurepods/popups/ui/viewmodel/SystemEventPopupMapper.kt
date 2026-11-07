@@ -149,9 +149,12 @@ constructor(
         var timerPaused = false
         var indeterminate = false
         val actions = mutableListOf<PopupActionModel>()
+        fun send(intent: PendingIntent?, authenticationRequired: Boolean = false): (() -> Unit)? =
+            intent.toSendAction(context, activityStarter, authenticationRequired)
+
         fun notificationActions(items: List<IslandEvent.NotificationAction>) {
             items.forEach { item ->
-                item.action.actionIntent.toSendAction()?.let {
+                send(item.action.actionIntent, item.action.isAuthenticationRequired)?.let {
                     actions += PopupActionModel(item.label.toString(), it)
                 }
             }
@@ -348,12 +351,37 @@ constructor(
                         )
                     event.actions.forEach { item ->
                         val intent = item.action.actionIntent
-                        intent.toSendAction()?.let { onClick ->
+                        send(intent, item.action.isAuthenticationRequired)?.let { onClick ->
+                            val label = item.label.toString().trim()
+                            fun matches(vararg labels: String) =
+                                labels.any { label.equals(it, ignoreCase = true) }
+
                             val role =
-                                when (intent) {
-                                    answerIntent -> PopupActionRole.AnswerCall
-                                    declineIntent,
-                                    hangUpIntent -> PopupActionRole.EndCall
+                                when {
+                                    intent == answerIntent -> PopupActionRole.AnswerCall
+                                    intent == declineIntent || intent == hangUpIntent ->
+                                        PopupActionRole.EndCall
+                                    matches(
+                                        context.getString(R.string.lunaris_bar_answer),
+                                        "answer",
+                                        "accept",
+                                    ) -> PopupActionRole.AnswerCall
+                                    matches(
+                                        context.getString(R.string.lunaris_bar_end_call),
+                                        context.getString(
+                                            com.android.internal.R.string
+                                                .call_notification_decline_action
+                                        ),
+                                        context.getString(
+                                            com.android.internal.R.string
+                                                .call_notification_hang_up_action
+                                        ),
+                                        "decline",
+                                        "reject",
+                                        "hang up",
+                                        "end call",
+                                        "end",
+                                    ) -> PopupActionRole.EndCall
                                     else -> PopupActionRole.Default
                                 }
                             actions += PopupActionModel(item.label.toString(), onClick, role = role)
@@ -376,7 +404,7 @@ constructor(
                                 intent != null &&
                                     event.actions.none { it.action.actionIntent == intent }
                             ) {
-                                intent.toSendAction()?.let {
+                                send(intent)?.let {
                                     actions +=
                                         PopupActionModel(context.getString(label), it, role = role)
                                 }

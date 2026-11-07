@@ -16,7 +16,12 @@
 
 package com.android.systemui.statusbar.featurepods.popups.shared
 
+import android.app.ActivityManager
+import android.app.ActivityOptions
 import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.os.RemoteException
 import android.util.Log
 import com.android.systemui.ActivityIntentHelper
 import com.android.systemui.plugins.ActivityStarter
@@ -51,13 +56,42 @@ fun PendingIntent?.toActivityLaunchAction(
     }
 }
 
-fun PendingIntent?.toSendAction(): (() -> Unit)? {
+fun PendingIntent?.toSendAction(
+    context: Context? = null,
+    activityStarter: ActivityStarter? = null,
+    authenticationRequired: Boolean = false,
+): (() -> Unit)? {
     return this?.let { pendingIntent ->
         {
-            runCatching { pendingIntent.send() }
-                .onFailure {
-                    Log.w("DynamicIsland", "Unable to deliver pending intent action", it)
+            try {
+                ActivityManager.getService().resumeAppSwitches()
+            } catch (e: RemoteException) {
+                Log.w("DynamicIsland", "Unable to resume app switches", e)
+            }
+
+            try {
+                when {
+                    activityStarter != null && authenticationRequired ->
+                        activityStarter.startPendingIntentDismissingKeyguard(pendingIntent)
+                    activityStarter != null && pendingIntent.isActivity ->
+                        activityStarter.startPendingIntentMaybeDismissingKeyguard(
+                            pendingIntent,
+                            null,
+                            null,
+                        )
+                    else -> {
+                        val options =
+                            ActivityOptions.makeBasic().apply {
+                                pendingIntentBackgroundActivityStartMode =
+                                    ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS
+                                pendingIntentLaunchFlags = Intent.FLAG_ACTIVITY_NEW_TASK
+                            }
+                        pendingIntent.send(context, 0, null, null, null, null, options.toBundle())
+                    }
                 }
+            } catch (e: Exception) {
+                Log.w("DynamicIsland", "Unable to deliver pending intent action", e)
+            }
         }
     }
 }
