@@ -41,6 +41,7 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.ImageView
 import androidx.annotation.VisibleForTesting
+import com.android.axion.blur.AxWindowBlurSource
 import com.android.internal.graphics.ColorUtils
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Background
@@ -132,10 +133,12 @@ class MediaViewController @VisibleForTesting internal constructor(
 
         override fun onAttachedToWindow() {
             super.onAttachedToWindow()
+            updateBlurSource()
             coroutineScope.launch { updateFramedAlbum() }
         }
 
         override fun onDetachedFromWindow() {
+            clearBlurSource()
             stopMotionArt()
             super.onDetachedFromWindow()
         }
@@ -165,8 +168,10 @@ class MediaViewController @VisibleForTesting internal constructor(
         set(visible) {
             if (field == visible) return
             field = visible
+            updateBlurSource()
             scrimUtils.setMediaArtVisible(visible)
         }
+    private var blurSourceRoot: View? = null
     private var dismissingKeyguard = false
     private var artworkRequestId = 0L
     
@@ -449,6 +454,7 @@ class MediaViewController @VisibleForTesting internal constructor(
         cancelScrimAnim()
         setupMediaFilter()
         updateFramedAlbum()
+        updateBlurSource()
         mediaScrim.animate()
             .alpha(targetAlpha)
             .setDuration(300)
@@ -730,6 +736,22 @@ class MediaViewController @VisibleForTesting internal constructor(
         scrimState = STATE_SCRIM_HIDDEN
         isAlbumArtVisible = false
         dismissingKeyguard = false
+    }
+
+    private fun updateBlurSource() {
+        if (!isAlbumArtVisible || !mediaScrim.isAttachedToWindow) {
+            clearBlurSource()
+            return
+        }
+        val root = mediaScrim.rootView
+        if (blurSourceRoot !== root) clearBlurSource()
+        blurSourceRoot = root
+        AxWindowBlurSource.setSource(root, mediaScrim)
+    }
+
+    private fun clearBlurSource() {
+        blurSourceRoot?.let { AxWindowBlurSource.setSource(it, null) }
+        blurSourceRoot = null
     }
 
     fun cleanupResources(animate: Boolean) {

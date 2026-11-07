@@ -48,7 +48,6 @@ import com.android.systemui.common.ui.drawable.CosTileBorderDrawable;
 import com.android.systemui.res.R;
 import com.android.systemui.statusbar.notification.shared.NotificationAddXOnHoverToDismiss;
 import com.android.systemui.util.DrawableDumpKt;
-import com.android.systemui.util.ScrimUtils;
 
 import java.io.PrintWriter;
 import java.util.Arrays;
@@ -90,15 +89,6 @@ public class NotificationBackgroundView extends View implements Dumpable,
     private final int concaveR = 22;
     private boolean mAxBlurEnabled;
     private int mAxBlurOverlayColor;
-    private final GradientDrawable mMediaArtBackground = new GradientDrawable();
-    private boolean mMediaArtVisible;
-    private final ScrimUtils.ScrimEventListener mScrimListener =
-            new ScrimUtils.ScrimEventListener() {
-                @Override
-                public void onMediaArtVisibilityChanged(boolean visible) {
-                    setMediaArtVisible(visible);
-                }
-            };
 
     // True only if the dismiss button is visible.
     private boolean mDrawDismissButtonCutout = false;
@@ -148,15 +138,11 @@ public class NotificationBackgroundView extends View implements Dumpable,
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         updateAxBlurOverlayColor();
-        ScrimUtils scrimUtils = ScrimUtils.get(getContext());
-        scrimUtils.addListener(mScrimListener);
-        setMediaArtVisible(scrimUtils.isMediaArtVisible());
         mAxBlurRenderer.onAttachedToWindow();
     }
 
     @Override
     protected void onDetachedFromWindow() {
-        ScrimUtils.get().removeListener(mScrimListener);
         mAxBlurRenderer.onDetachedFromWindow();
         super.onDetachedFromWindow();
     }
@@ -352,15 +338,6 @@ public class NotificationBackgroundView extends View implements Dumpable,
         }
 
         mBackground.setBounds(bounds);
-        if (mMediaArtVisible) {
-            // Keep the same translucent tint over media art without sampling the wallpaper.
-            mMediaArtBackground.setBounds(bounds);
-            mMediaArtBackground.setCornerRadii(cornerRadii);
-            mMediaArtBackground.setColor(mAxBlurOverlayColor);
-            mMediaArtBackground.setAlpha(mBackground.getAlpha());
-            mMediaArtBackground.draw(canvas);
-            return true;
-        }
         return mAxBlurRenderer.draw(
                 canvas,
                 key,
@@ -441,16 +418,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
             return;
         }
         mAxBlurEnabled = enabled;
-        mAxBlurRenderer.setEnabled(enabled && !mMediaArtVisible);
-        invalidate();
-    }
-
-    private void setMediaArtVisible(boolean visible) {
-        if (mMediaArtVisible == visible) {
-            return;
-        }
-        mMediaArtVisible = visible;
-        mAxBlurRenderer.setEnabled(mAxBlurEnabled && !visible);
+        mAxBlurRenderer.setEnabled(enabled);
         invalidate();
     }
 
