@@ -1,14 +1,18 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.android.systemui.lockscreen
 
+import android.app.ActivityManager
 import android.app.AlarmManager
 import android.app.usage.NetworkStatsManager
 import android.content.BroadcastReceiver
+import android.content.ContentResolver
 import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.database.ContentObserver
+import android.graphics.Bitmap
+import android.graphics.ImageDecoder
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -18,15 +22,20 @@ import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.net.ConnectivityManager
+import android.net.Uri
 import android.os.BatteryManager
 import android.os.Handler
+import android.os.HandlerExecutor
 import android.os.HandlerThread
 import android.os.Looper
+import android.os.SystemClock
 import android.os.UserHandle
 import android.os.UserManager
 import android.provider.CalendarContract
 import android.text.format.DateFormat
+import android.view.KeyEvent
 import com.android.internal.util.lunaris.OmniJawsClient
+import com.android.systemui.media.NotificationMediaManager
 import java.time.LocalDate
 import java.util.Calendar
 import org.lunaris.extrainfowidgets.InfoData
@@ -47,25 +56,49 @@ internal class ExtraInfoDataSource(
     private var stepsAvailable = false
     private var current = InfoData()
     private var observedMedia: MediaController? = null
+    private val mediaSessions = context.getSystemService(MediaSessionManager::class.java)
+
+    private data class ArtworkKey(
+        val mediaId: String?,
+        val title: String?,
+        val artist: String?,
+        val album: String?,
+        val uris: List<Uri>,
+    )
+
+    private var artworkKey: ArtworkKey? = null
+    private var artwork: Bitmap? = null
     private val mediaCallback =
         object : MediaController.Callback() {
             override fun onMetadataChanged(metadata: MediaMetadata?) {
+                if (!running || !awake) return
+                clearArtwork()
                 current = withMetadata(current, metadata)
                 publish()
                 refresh()
             }
 
             override fun onPlaybackStateChanged(state: PlaybackState?) {
-                current = current.copy(playing = state?.state == PlaybackState.STATE_PLAYING)
+                if (!running || !awake) return
+                val isPlaying =
+                    state?.let { NotificationMediaManager.isPlayingState(it.state) } ?: false
+                current = withMetadata(current, observedMedia?.metadata).copy(playing = isPlaying)
                 publish()
                 refresh()
             }
 
             override fun onSessionDestroyed() {
+                observedMedia?.unregisterCallback(this)
+                observedMedia = null
+                clearArtwork()
                 current = withMetadata(current, null).copy(playing = false)
                 publish()
                 refresh()
             }
+        }
+    private val sessionsListener =
+        MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
+            updateMediaController(controllers.orEmpty())
         }
     private var slowUpdate = 0L
     private val types =
@@ -145,6 +178,7 @@ internal class ExtraInfoDataSource(
                     return
                 }
                 worker.post {
+                    if (intent.action == Intent.ACTION_USER_UNLOCKED) clearArtwork()
                     if (intent.action == Intent.ACTION_BATTERY_CHANGED) {
                         current = withBattery(current, intent)
                         publish()
@@ -219,6 +253,16 @@ internal class ExtraInfoDataSource(
                     )
             }
         }
+        if (needsMedia) {
+            runCatching {
+                mediaSessions?.addOnActiveSessionsChangedListener(
+                    null,
+                    UserHandle.of(userId),
+                    HandlerExecutor(worker),
+                    sessionsListener,
+                )
+            }
+        }
         refresh()
     }
 
@@ -232,6 +276,7 @@ internal class ExtraInfoDataSource(
             }
             worker.post {
                 worker.removeCallbacks(update)
+                if (waking) clearArtwork()
                 if (running && awake) worker.post(update)
             }
         }
@@ -253,11 +298,15 @@ internal class ExtraInfoDataSource(
             runCatching { context.contentResolver.unregisterContentObserver(weatherObserver) }
             weatherObserved = false
         }
+        if (needsMedia) {
+            runCatching { mediaSessions?.removeOnActiveSessionsChangedListener(sessionsListener) }
+        }
         worker.removeCallbacksAndMessages(null)
         worker.post {
             runCatching { sensorManager?.unregisterListener(stepsListener) }
             runCatching { observedMedia?.unregisterCallback(mediaCallback) }
             observedMedia = null
+            clearArtwork()
             thread.quitSafely()
         }
     }
@@ -343,13 +392,106 @@ internal class ExtraInfoDataSource(
         )
     }
 
+    private fun extractTitle(metadata: MediaMetadata?): String? =
+        metadata?.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE)?.takeIf { it.isNotBlank() }
+            ?: metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf { it.isNotBlank() }
+            ?: metadata?.description?.title?.toString()?.takeIf { it.isNotBlank() }
+
+    private fun extractArtist(metadata: MediaMetadata?): String? =
+        metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)?.takeIf { it.isNotBlank() }
+            ?: metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)?.takeIf {
+                it.isNotBlank()
+            }
+            ?: metadata?.getString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE)?.takeIf {
+                it.isNotBlank()
+            }
+            ?: metadata?.description?.subtitle?.toString()?.takeIf { it.isNotBlank() }
+            ?: metadata?.getString(MediaMetadata.METADATA_KEY_AUTHOR)?.takeIf { it.isNotBlank() }
+            ?: metadata?.getString(MediaMetadata.METADATA_KEY_COMPOSER)?.takeIf { it.isNotBlank() }
+
+    private fun extractArt(metadata: MediaMetadata?): Bitmap? {
+        if (metadata == null) {
+            clearArtwork()
+            return null
+        }
+        val direct =
+            sequenceOf(
+                    metadata.getBitmap(MediaMetadata.METADATA_KEY_ART),
+                    metadata.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART),
+                    metadata.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON),
+                    metadata.description?.iconBitmap,
+                )
+                .filterNotNull()
+                .firstOrNull { !it.isRecycled }
+        if (direct != null) {
+            clearArtwork()
+            return direct
+        }
+
+        val uris =
+            listOfNotNull(
+                    metadata.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI),
+                    metadata.getString(MediaMetadata.METADATA_KEY_ART_URI),
+                    metadata.getString(MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI),
+                    metadata.description?.iconUri?.toString(),
+                )
+                .filter { it.isNotBlank() }
+                .mapNotNull { runCatching { Uri.parse(it) }.getOrNull() }
+                .distinct()
+        val key =
+            ArtworkKey(
+                metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_ID),
+                extractTitle(metadata),
+                extractArtist(metadata),
+                metadata.getString(MediaMetadata.METADATA_KEY_ALBUM),
+                uris,
+            )
+        if (key != artworkKey || artwork == null || artwork?.isRecycled == true) {
+            artworkKey = key
+            artwork = uris.firstNotNullOfOrNull(::loadBitmapFromUri)
+        }
+        return artwork
+    }
+
+    private fun clearArtwork() {
+        artworkKey = null
+        artwork = null
+    }
+
+    private fun loadBitmapFromUri(uri: Uri): Bitmap? =
+        runCatching {
+                if (
+                    uri.scheme in
+                        listOf(
+                            ContentResolver.SCHEME_CONTENT,
+                            ContentResolver.SCHEME_ANDROID_RESOURCE,
+                            ContentResolver.SCHEME_FILE,
+                        )
+                ) {
+                    ImageDecoder.decodeBitmap(
+                        ImageDecoder.createSource(context.contentResolver, uri)
+                    ) { decoder, info, _ ->
+                        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                        val maxDim = 512
+                        val width = info.size.width
+                        val height = info.size.height
+                        if (width > maxDim || height > maxDim) {
+                            val scale = maxDim.toFloat() / maxOf(width, height)
+                            decoder.setTargetSize(
+                                (width * scale).toInt().coerceAtLeast(1),
+                                (height * scale).toInt().coerceAtLeast(1),
+                            )
+                        }
+                    }
+                } else null
+            }
+            .getOrNull()
+
     private fun withMetadata(base: InfoData, metadata: MediaMetadata?): InfoData =
         base.copy(
-            mediaTitle = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE),
-            mediaArtist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST),
-            art =
-                metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART)
-                    ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART),
+            mediaTitle = extractTitle(metadata),
+            mediaArtist = extractArtist(metadata),
+            art = extractArt(metadata),
         )
 
     private fun read(): InfoData {
@@ -364,9 +506,10 @@ internal class ExtraInfoDataSource(
         if (types.any { it.startsWith("ALARM_") }) next = withAlarm(next)
         if (needsMedia) {
             val controller = mediaController()
-            next =
-                withMetadata(next, controller?.metadata)
-                    .copy(playing = controller?.playbackState?.state == PlaybackState.STATE_PLAYING)
+            val isPlaying =
+                controller?.playbackState?.let { NotificationMediaManager.isPlayingState(it.state) }
+                    ?: false
+            next = withMetadata(next, controller?.metadata).copy(playing = isPlaying)
         }
         val now = System.currentTimeMillis()
         if (now - slowUpdate >= 60_000 || now < slowUpdate) {
@@ -454,40 +597,118 @@ internal class ExtraInfoDataSource(
             }
             .getOrNull()
 
-    private fun mediaController(): MediaController? {
+    private fun updateMediaController(controllers: List<MediaController>? = null) {
+        if (!running || !awake) return
+        val controller = mediaController(controllers)
+        val isPlaying =
+            controller?.playbackState?.let { NotificationMediaManager.isPlayingState(it.state) }
+                ?: false
+        current = withMetadata(current, controller?.metadata).copy(playing = isPlaying)
+        publish()
+    }
+
+    private fun mediaController(providedSessions: List<MediaController>? = null): MediaController? {
         val selected =
             runCatching {
                     val sessions =
-                        context
-                            .getSystemService(MediaSessionManager::class.java)
-                            .getActiveSessionsForUser(null, UserHandle.of(userId))
-                    sessions.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
+                        providedSessions
+                            ?: mediaSessions
+                                ?.getActiveSessionsForUser(null, UserHandle.of(userId))
+                                .orEmpty()
+
+                    sessions.firstOrNull {
+                        val s = it.playbackState?.state ?: 0
+                        NotificationMediaManager.isPlayingState(s)
+                    }
+                        ?: sessions.firstOrNull {
+                            it.playbackState?.state == PlaybackState.STATE_PAUSED
+                        }
                         ?: sessions.firstOrNull()
                 }
                 .getOrNull()
+
         if (selected?.sessionToken != observedMedia?.sessionToken) {
             observedMedia?.unregisterCallback(mediaCallback)
             observedMedia = selected
+            clearArtwork()
             selected?.registerCallback(mediaCallback, worker)
         }
         return observedMedia
     }
 
     fun mediaAction(action: String) {
-        if (!running) return
+        if (!running || !awake) return
         worker.post {
             runCatching {
-                val controller = mediaController() ?: return@runCatching
-                when (action) {
-                    "MEDIA_PREVIOUS" -> controller.transportControls.skipToPrevious()
-                    "MEDIA_NEXT" -> controller.transportControls.skipToNext()
-                    "MEDIA" ->
-                        if (controller.playbackState?.state == PlaybackState.STATE_PLAYING)
-                            controller.transportControls.pause()
-                        else controller.transportControls.play()
+                if (!running || !awake || ActivityManager.getCurrentUser() != userId) {
+                    return@runCatching
+                }
+                val controller = mediaController()
+                val state = controller?.playbackState
+                val isPlaying =
+                    state?.let { NotificationMediaManager.isPlayingState(it.state) } ?: false
+                val keyCode =
+                    when (action) {
+                        "MEDIA_PREVIOUS" -> KeyEvent.KEYCODE_MEDIA_PREVIOUS
+                        "MEDIA_NEXT" -> KeyEvent.KEYCODE_MEDIA_NEXT
+                        "MEDIA" ->
+                            when {
+                                state == null -> KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+                                isPlaying -> KeyEvent.KEYCODE_MEDIA_PAUSE
+                                else -> KeyEvent.KEYCODE_MEDIA_PLAY
+                            }
+                        else -> return@runCatching
+                    }
+                val supportedAction =
+                    when (keyCode) {
+                        KeyEvent.KEYCODE_MEDIA_PREVIOUS -> PlaybackState.ACTION_SKIP_TO_PREVIOUS
+                        KeyEvent.KEYCODE_MEDIA_NEXT -> PlaybackState.ACTION_SKIP_TO_NEXT
+                        KeyEvent.KEYCODE_MEDIA_PAUSE ->
+                            PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_PLAY_PAUSE
+                        else -> PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PLAY_PAUSE
+                    }
+                val handled =
+                    controller != null &&
+                        ((state?.actions ?: 0L) and supportedAction) != 0L &&
+                        runCatching {
+                                when (keyCode) {
+                                    KeyEvent.KEYCODE_MEDIA_PREVIOUS ->
+                                        controller.transportControls.skipToPrevious()
+                                    KeyEvent.KEYCODE_MEDIA_NEXT ->
+                                        controller.transportControls.skipToNext()
+                                    KeyEvent.KEYCODE_MEDIA_PAUSE ->
+                                        controller.transportControls.pause()
+                                    else -> controller.transportControls.play()
+                                }
+                            }
+                            .isSuccess
+                if (!handled) {
+                    dispatchMediaKey(controller, keyCode)
                 }
             }
             refresh()
+        }
+    }
+
+    private fun dispatchMediaKey(controller: MediaController?, keyCode: Int) {
+        runCatching {
+            if (!running || !awake || ActivityManager.getCurrentUser() != userId) return
+            val sessions = mediaSessions ?: return
+            val now = SystemClock.uptimeMillis()
+            val down = KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0)
+            val up = KeyEvent.changeAction(down, KeyEvent.ACTION_UP)
+            if (
+                controller != null &&
+                    sessions.dispatchMediaKeyEventToSessionAsSystemService(
+                        down,
+                        controller.sessionToken,
+                    )
+            ) {
+                sessions.dispatchMediaKeyEventToSessionAsSystemService(up, controller.sessionToken)
+            } else {
+                sessions.dispatchMediaKeyEventAsSystemService(down)
+                sessions.dispatchMediaKeyEventAsSystemService(up)
+            }
         }
     }
 }

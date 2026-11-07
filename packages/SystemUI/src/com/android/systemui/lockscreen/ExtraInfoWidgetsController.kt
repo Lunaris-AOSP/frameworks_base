@@ -369,9 +369,6 @@ constructor(
                     notifications = count,
                     eventTitle = data.eventTitle.takeIf { private },
                     eventTime = data.eventTime.takeIf { private },
-                    mediaTitle = data.mediaTitle.takeIf { private },
-                    mediaArtist = data.mediaArtist.takeIf { private },
-                    art = data.art.takeIf { private },
                 )
             extra.data = snapshot
             freeform.data = snapshot

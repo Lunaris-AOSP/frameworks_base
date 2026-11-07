@@ -24,31 +24,29 @@ class MediaSessionManager private constructor() {
 
     interface MediaDataListener {
         fun onPlaybackStateChanged(state: Int) {}
+
         fun onAlbumArtChanged(drawable: Drawable?) {}
+
         fun onAppIconChanged(drawable: Drawable) {}
+
         fun onMediaColorsChanged(color: Int) {}
+
         fun onMetadataChanged(track: String, artist: String) {}
     }
 
     private val listenerManager = WeakListenerManager<MediaDataListener>()
 
-    @Volatile
-    private var currentPlaybackState: Int = PlaybackState.STATE_NONE
+    @Volatile private var currentPlaybackState: Int = PlaybackState.STATE_NONE
 
-    @Volatile
-    private var currentAlbumArt: Drawable? = null
+    @Volatile private var currentAlbumArt: Drawable? = null
 
-    @Volatile
-    private var currentAppIcon: Drawable? = null
+    @Volatile private var currentAppIcon: Drawable? = null
 
-    @Volatile
-    private var currentMediaColor: Int? = null
+    @Volatile private var currentMediaColor: Int? = null
 
-    @Volatile
-    var trackTitle: String = "Unknown"
+    @Volatile var trackTitle: String = "Unknown"
 
-    @Volatile
-    var artist: String = "Unknown"
+    @Volatile var artist: String = "Unknown"
 
     val isMediaPlaying: Boolean
         get() = currentPlaybackState == PlaybackState.STATE_PLAYING
@@ -93,8 +91,29 @@ class MediaSessionManager private constructor() {
     }
 
     fun onMetadataChanged(metadata: MediaMetadata?) {
-        val newTitle = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE) ?: "Unknown"
-        val newArtist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST) ?: "Unknown"
+        val newTitle =
+            metadata?.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE)?.takeIf {
+                it.isNotBlank()
+            }
+                ?: metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf { it.isNotBlank() }
+                ?: metadata?.description?.title?.toString()?.takeIf { it.isNotBlank() }
+                ?: "Unknown"
+        val newArtist =
+            metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)?.takeIf { it.isNotBlank() }
+                ?: metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)?.takeIf {
+                    it.isNotBlank()
+                }
+                ?: metadata?.getString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE)?.takeIf {
+                    it.isNotBlank()
+                }
+                ?: metadata?.description?.subtitle?.toString()?.takeIf { it.isNotBlank() }
+                ?: metadata?.getString(MediaMetadata.METADATA_KEY_AUTHOR)?.takeIf {
+                    it.isNotBlank()
+                }
+                ?: metadata?.getString(MediaMetadata.METADATA_KEY_COMPOSER)?.takeIf {
+                    it.isNotBlank()
+                }
+                ?: "Unknown"
 
         if (trackTitle != newTitle || artist != newArtist) {
             trackTitle = newTitle
@@ -104,13 +123,11 @@ class MediaSessionManager private constructor() {
     }
 
     companion object {
-        @Volatile
-        private var INSTANCE: MediaSessionManager? = null
+        @Volatile private var INSTANCE: MediaSessionManager? = null
 
         fun get(): MediaSessionManager {
-            return INSTANCE ?: synchronized(this) {
-                INSTANCE ?: MediaSessionManager().also { INSTANCE = it }
-            }
+            return INSTANCE
+                ?: synchronized(this) { INSTANCE ?: MediaSessionManager().also { INSTANCE = it } }
         }
     }
 }
