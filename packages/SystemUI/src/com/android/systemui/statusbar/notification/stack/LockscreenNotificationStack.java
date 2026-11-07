@@ -159,10 +159,20 @@ class LockscreenNotificationStack {
             return;
         }
 
+        NotificationShelf shelf = ambientState.getShelf();
+        ExpandableViewState shelfState = shelf != null ? shelf.getViewState() : null;
+        final boolean wasShowingShelf = shelfState != null && !shelfState.hidden;
         boolean hasExpandedGroup = false;
         for (ExpandableView child : algorithmState.visibleChildren) {
             ExpandableViewState state = child.getViewState();
-            if (state.gone || state.hidden || state.inShelf || state.getAlpha() == 0f) {
+            final boolean includeShelfRow = mEnabled && state.inShelf
+                    && child instanceof ExpandableNotificationRow;
+            if (!includeShelfRow && wasShowingShelf
+                    && state.getYTranslation() >= shelfState.getYTranslation()) {
+                state.setAlpha(0f);
+            }
+            if (state.gone || ((state.hidden || state.inShelf) && !includeShelfRow)
+                    || state.getAlpha() == 0f) {
                 continue;
             }
             if (!(child instanceof ExpandableNotificationRow row)) {
@@ -186,9 +196,12 @@ class LockscreenNotificationStack {
         if (mRows.size() < 2) {
             mExpanded = false;
         }
-        NotificationShelf shelf = ambientState.getShelf();
-        ExpandableViewState shelfState = shelf != null ? shelf.getViewState() : null;
-        final boolean showShelf = shelfState != null && !shelfState.hidden;
+        final boolean collapsed = mEnabled && !mExpanded && mRows.size() > 1
+                && !mRows.get(0).getViewState().inShelf;
+        if (!collapsed) {
+            mRows.removeIf(row -> row.getViewState().hidden || row.getViewState().inShelf);
+        }
+        final boolean showShelf = wasShowingShelf && !collapsed;
         if (mRows.isEmpty()) {
             if (mBottomAnchored && showShelf) {
                 final float naturalBottom = shelfState.getYTranslation() + shelfState.height;
@@ -204,7 +217,7 @@ class LockscreenNotificationStack {
         final float listTop = firstState.getYTranslation();
         final float listBottom = lastState.getYTranslation() + lastState.height;
         final int height = firstState.height;
-        final float naturalBottom = showShelf
+        final float naturalBottom = wasShowingShelf
                 ? shelfState.getYTranslation() + shelfState.height : listBottom;
 
         float bottom = calculateBottom(naturalBottom);
@@ -219,7 +232,6 @@ class LockscreenNotificationStack {
             return;
         }
 
-        final boolean collapsed = mEnabled && !mExpanded && mRows.size() > 1;
         final int peekingCards = Math.min(mRows.size() - 1, VISIBLE_CARDS - 1);
         final float peek = peekingCards == 0 ? 0f
                 : Math.min(mPeek, (cardsBottom - listTop - height) / peekingCards);
@@ -249,6 +261,11 @@ class LockscreenNotificationStack {
             if (!collapsed) {
                 continue;
             }
+            if (state.inShelf) {
+                state.setAlpha(state.getAlpha() * amount);
+            }
+            state.inShelf = false;
+            state.hidden = false;
             state.height = Math.round(MathUtils.lerp(state.height, height, amount));
             state.setScaleX(MathUtils.lerp(1f, 1f - depth * SCALE_STEP, amount));
             state.lockscreenStackScaleApplied = true;
@@ -271,6 +288,10 @@ class LockscreenNotificationStack {
             }
         }
 
+        if (collapsed && wasShowingShelf) {
+            shelfState.setAlpha(shelfState.getAlpha() * (1f - amount));
+            shelfState.hidden = amount == 1f;
+        }
         updateShelf(algorithmState, shelfState, showShelf, naturalBottom, bottom, amount);
     }
 
