@@ -160,6 +160,7 @@ public class StackScrollAlgorithm {
         updateShelfIconContainerState(ambientState);
         updateAlphaState(algorithmState, ambientState);
         mLockscreenNotificationStack.apply(algorithmState, ambientState);
+        hideNotificationsBelowShelf(algorithmState, ambientState);
         getNotificationChildrenStates(algorithmState);
     }
 
@@ -230,7 +231,13 @@ public class StackScrollAlgorithm {
                 final float fractionToShade = ambientState.getFractionToShade();
                 viewState.setAlpha(ShadeInterpolation.getContentAlpha(fractionToShade));
             }
+        }
+    }
 
+    private void hideNotificationsBelowShelf(StackScrollAlgorithmState algorithmState,
+            AmbientState ambientState) {
+        for (ExpandableView view : algorithmState.visibleChildren) {
+            final ViewState viewState = view.getViewState();
             NotificationShelf shelf = ambientState.getShelf();
             if (shelf != null) {
                 final ViewState shelfState = shelf.getViewState();
