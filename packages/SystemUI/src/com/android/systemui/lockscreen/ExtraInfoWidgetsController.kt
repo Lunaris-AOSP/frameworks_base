@@ -30,6 +30,8 @@ import com.android.systemui.statusbar.policy.HotspotController
 import com.android.systemui.util.ProgressImageView
 import javax.inject.Inject
 import org.lunaris.extrainfowidgets.ExtraInfoCatalog
+import org.lunaris.extrainfowidgets.ExtraInfoFreeformLayout
+import org.lunaris.extrainfowidgets.ExtraInfoFreeformView
 import org.lunaris.extrainfowidgets.ExtraInfoGridView
 import org.lunaris.extrainfowidgets.ExtraInfoLayout
 import org.lunaris.extrainfowidgets.InfoAppearance
@@ -48,9 +50,11 @@ constructor(
     private val hotspot: HotspotController,
     private val network: NetworkController,
 ) {
-    fun createView(context: Context): View = Container(context)
+    fun createView(context: Context, freeform: ExtraInfoFreeformView): View =
+        Container(context, freeform)
 
-    private inner class Container(context: Context) : FrameLayout(context) {
+    private inner class Container(context: Context, private val freeform: ExtraInfoFreeformView) :
+        FrameLayout(context) {
         private val main = Handler(Looper.getMainLooper())
         private val legacy =
             LayoutInflater.from(context).inflate(R.layout.keyguard_info_widgets, this, false)
@@ -60,6 +64,7 @@ constructor(
         private var sourceKey: String? = null
         private var data = InfoData()
         private var enabled = false
+        private var independent = false
         private var attached = false
         private var switchingUser = false
         private var tileKinds = emptySet<String>()
@@ -79,6 +84,8 @@ constructor(
                     sourceKey = null
                     data = InfoData()
                     extra.data = data
+                    freeform.data = data
+                    freeform.contentVisible = false
                     visibility = GONE
                 }
 
@@ -144,11 +151,14 @@ constructor(
                 },
             )
             extra.onAction = ::performAction
+            freeform.contentVisible = false
         }
 
         override fun onAttachedToWindow() {
             super.onAttachedToWindow()
             attached = true
+            freeform.onAction = ::performAction
+            freeform.onVisibilityChanged = { if (attached) updateAwake() }
             switchingUser = users.isUserSwitching
             KEYS.forEach {
                 context.contentResolver.registerContentObserver(
@@ -168,6 +178,9 @@ constructor(
 
         override fun onDetachedFromWindow() {
             attached = false
+            freeform.contentVisible = false
+            freeform.onAction = null
+            freeform.onVisibilityChanged = null
             source?.stop()
             source = null
             sourceKey = null
@@ -195,9 +208,18 @@ constructor(
         private fun updateSettings() {
             if (!attached || switchingUser) return
             enabled = integer(ExtraInfoLayout.ENABLED, 0) == 1
+            independent = integer(ExtraInfoFreeformLayout.MODE, 0) == 1
             val oldEnabled = integer("lockscreen_info_widgets_enabled", 0) == 1
             val layout = ExtraInfoLayout.parse(string(ExtraInfoLayout.LAYOUT), catalog)
-            val selected = catalog.filter { it.id in layout.rows.flatten() }
+            val floating =
+                ExtraInfoFreeformLayout.parse(
+                    string(ExtraInfoFreeformLayout.LAYOUT),
+                    catalog,
+                    layout,
+                )
+            val selectedIds =
+                if (independent) floating.widgets.map { it.id } else layout.rows.flatten()
+            val selected = catalog.filter { it.id in selectedIds }
             val layers =
                 selected.flatMap { widget ->
                     val array = widget.design.getJSONArray("layers")
@@ -210,6 +232,7 @@ constructor(
                     .toSet()
             showsNotifications = layers.any { it.optString("type").startsWith("NOTIFICATION_") }
             extra.selection = layout
+            freeform.selection = if (enabled && independent) floating else ExtraInfoFreeformLayout()
             extra.appearance =
                 InfoAppearance(
                     string("lockscreen_widgets_color_mode") ?: "default",
@@ -218,6 +241,7 @@ constructor(
                     integer(ExtraInfoLayout.BLUR, 0) == 1,
                     status.isDozing,
                 )
+            freeform.appearance = extra.appearance
             listOf(
                     R.id.battery_progress,
                     R.id.memory_progress,
@@ -226,14 +250,14 @@ constructor(
                 )
                 .forEach { legacy.findViewById<ProgressImageView>(it)?.refreshSettings() }
             legacy.visibility = if (oldEnabled && !enabled) VISIBLE else GONE
-            extra.visibility = if (enabled) VISIBLE else GONE
+            extra.visibility = if (enabled && !independent) VISIBLE else GONE
             visibility =
-                if ((enabled && layout.rows.any { it.isNotEmpty() }) || (!enabled && oldEnabled))
+                if ((enabled && !independent && selected.isNotEmpty()) || (!enabled && oldEnabled))
                     VISIBLE
                 else GONE
             val key =
-                if (enabled && layout.rows.any { it.isNotEmpty() })
-                    "${users.userId}:${layout.encode()}"
+                if (enabled && selected.isNotEmpty())
+                    "${users.userId}:${selectedIds.sorted().joinToString()}"
                 else null
             if (sourceKey != key) {
                 source?.stop()
@@ -261,10 +285,22 @@ constructor(
         }
 
         private fun updateAwake() {
-            source?.setAwake(isShown && status.state == StatusBarState.KEYGUARD && !status.isDozing)
+            source?.setAwake(
+                (if (independent) freeform.isShown else isShown) &&
+                    status.state == StatusBarState.KEYGUARD &&
+                    !status.isDozing
+            )
         }
 
         private fun render() {
+            freeform.contentVisible =
+                attached &&
+                    enabled &&
+                    independent &&
+                    !switchingUser &&
+                    !users.isUserSwitching &&
+                    freeform.selection.widgets.isNotEmpty() &&
+                    (status.state == StatusBarState.KEYGUARD || status.isDozing)
             if (!attached || !enabled || switchingUser || users.isUserSwitching) return
             val user = users.userId
             val userContext = users.userContext
@@ -327,7 +363,7 @@ constructor(
             val private =
                 !privacy.isLockscreenPublicMode(user) ||
                     privacy.userAllowsPrivateNotificationsInPublic(user)
-            extra.data =
+            val snapshot =
                 data.copy(
                     tiles = tiles,
                     notifications = count,
@@ -337,6 +373,8 @@ constructor(
                     mediaArtist = data.mediaArtist.takeIf { private },
                     art = data.art.takeIf { private },
                 )
+            extra.data = snapshot
+            freeform.data = snapshot
         }
 
         private fun performAction(action: String) {
@@ -423,6 +461,8 @@ constructor(
                 ExtraInfoLayout.ENABLED,
                 ExtraInfoLayout.LAYOUT,
                 ExtraInfoLayout.BLUR,
+                ExtraInfoFreeformLayout.MODE,
+                ExtraInfoFreeformLayout.LAYOUT,
                 "lockscreen_info_widgets_enabled",
                 "lockscreen_widgets_color_mode",
                 "lockscreen_widgets_custom_color",

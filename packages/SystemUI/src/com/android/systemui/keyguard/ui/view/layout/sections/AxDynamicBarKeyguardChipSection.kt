@@ -25,6 +25,7 @@ import com.android.systemui.statusbar.KeyguardIndicationController
 import com.android.systemui.util.ScrimUtils
 import com.android.systemui.util.WallpaperDepthUtils
 import javax.inject.Inject
+import org.lunaris.extrainfowidgets.ExtraInfoFreeformView
 import kotlinx.coroutines.DisposableHandle
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
@@ -175,6 +176,9 @@ constructor(
         TransitionManager.endTransitions(constraintLayout)
         constraintLayout.requireViewById<View>(dismissViewId).visibility =
             if (expanded) View.VISIBLE else View.GONE
+        if (!expanded && !viewModel.keyguardExpansion.canShow.value) {
+            setIndependentWidgetsSuppressed(constraintLayout, false)
+        }
         if (expanded) {
             setHiddenViewsVisibility(constraintLayout, View.INVISIBLE)
             applyExpandedLp(composeView)
@@ -193,7 +197,13 @@ constructor(
     private fun hiddenTargets(constraintLayout: ConstraintLayout): List<View> =
         HIDDEN_VIEW_IDS.mapNotNull { constraintLayout.rootView.findViewById<View>(it) }
 
+    private fun setIndependentWidgetsSuppressed(constraintLayout: ConstraintLayout, suppressed: Boolean) {
+        constraintLayout.findViewById<ExtraInfoFreeformView>(R.id.keyguard_independent_info_widgets)
+            ?.suppressed = suppressed
+    }
+
     private fun setHiddenViewsVisibility(constraintLayout: ConstraintLayout, visibility: Int) {
+        setIndependentWidgetsSuppressed(constraintLayout, visibility != View.VISIBLE)
         hiddenTargets(constraintLayout).forEach { v ->
             v.animate().cancel()
             if (visibility == View.VISIBLE) {
@@ -221,6 +231,7 @@ constructor(
     }
 
     private fun enforceHidden(constraintLayout: ConstraintLayout) {
+        setIndependentWidgetsSuppressed(constraintLayout, true)
         hiddenTargets(constraintLayout).forEach { v ->
             if (v.visibility != View.INVISIBLE) v.visibility = View.INVISIBLE
         }
@@ -381,6 +392,7 @@ constructor(
         bindHandle?.dispose()
         bindHandle = null
         indicationController.setSuppressIndication(false)
+        setIndependentWidgetsSuppressed(constraintLayout, false)
         constraintLayout.removeView(dismissViewId)
         constraintLayout.removeView(chipViewId)
     }

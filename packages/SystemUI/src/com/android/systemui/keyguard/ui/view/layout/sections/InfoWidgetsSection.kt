@@ -25,6 +25,7 @@ import com.android.systemui.keyguard.shared.model.KeyguardSection
 import com.android.systemui.res.R
 import com.android.systemui.lockscreen.ExtraInfoWidgetsController
 import javax.inject.Inject
+import org.lunaris.extrainfowidgets.ExtraInfoFreeformView
 
 class InfoWidgetsSection
 @Inject
@@ -34,6 +35,7 @@ constructor(
 ) : KeyguardSection() {
     
     private var infoWidgetsView: View? = null
+    private var freeformView: ExtraInfoFreeformView? = null
     
     override fun addViews(constraintLayout: ConstraintLayout) {
         
@@ -41,7 +43,16 @@ constructor(
             (existingView.parent as? ViewGroup)?.removeView(existingView)
         }
         
-        infoWidgetsView = infoWidgetsController.createView(context).apply {
+        constraintLayout.findViewById<View>(R.id.keyguard_independent_info_widgets)?.let {
+            constraintLayout.removeView(it)
+        }
+        val overlay = ExtraInfoFreeformView(context).apply {
+            id = R.id.keyguard_independent_info_widgets
+            contentVisible = false
+        }
+        freeformView = overlay
+        constraintLayout.addView(overlay)
+        infoWidgetsView = infoWidgetsController.createView(context, overlay).apply {
             id = R.id.keyguard_info_widgets
             layoutParams = ConstraintLayout.LayoutParams(
                 ConstraintLayout.LayoutParams.MATCH_PARENT,
@@ -59,6 +70,15 @@ constructor(
     override fun applyConstraints(constraintSet: ConstraintSet) {
         
         constraintSet.apply {
+            val overlayId = R.id.keyguard_independent_info_widgets
+            connect(overlayId, ConstraintSet.LEFT, ConstraintSet.PARENT_ID, ConstraintSet.LEFT)
+            connect(overlayId, ConstraintSet.RIGHT, ConstraintSet.PARENT_ID, ConstraintSet.RIGHT)
+            connect(overlayId, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP)
+            connect(overlayId, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.BOTTOM)
+            constrainWidth(overlayId, ConstraintSet.MATCH_CONSTRAINT)
+            constrainHeight(overlayId, ConstraintSet.MATCH_CONSTRAINT)
+            setVisibilityMode(overlayId, ConstraintSet.VISIBILITY_MODE_IGNORE)
+            setElevation(overlayId, 2f)
             // Info widgets positioning - below WEATHER (3rd in hierarchy)
             connect(R.id.keyguard_info_widgets, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START)
             connect(R.id.keyguard_info_widgets, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
@@ -133,5 +153,7 @@ constructor(
             (view.parent as? ViewGroup)?.removeView(view)
         }
         infoWidgetsView = null
+        freeformView?.let { (it.parent as? ViewGroup)?.removeView(it) }
+        freeformView = null
     }
 }
