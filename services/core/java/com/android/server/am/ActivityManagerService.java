@@ -326,6 +326,7 @@ import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayManagerInternal;
 import android.net.Uri;
 import android.os.AppZygote;
+import android.os.BatteryManager;
 import android.os.BatteryStats;
 import android.os.Binder;
 import android.os.BinderProxy;
@@ -1089,6 +1090,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         @Override
         public void onIntentStarted(@NonNull Intent intent, long timestampNanos) {
+            mCachedAppOptimizer.onActivityLaunch();
             synchronized (this) {
                 mProcessList.getAppStartInfoTracker()
                         .onActivityIntentStarted(intent, timestampNanos);
@@ -1121,6 +1123,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         @Override
         public void onActivityLaunchFinished(long id, ComponentName name, long timestampNanos,
                 int launchMode) {
+            mCachedAppOptimizer.onActivityLaunch();
             mProcessList.getAppStartInfoTracker().onActivityLaunchFinished(id, name,
                     timestampNanos, launchMode);
         }
@@ -2582,9 +2585,10 @@ public class ActivityManagerService extends IActivityManager.Stub
         try {
             Process.setThreadGroupAndCpuset(BackgroundThread.get().getThreadId(),
                     Process.THREAD_GROUP_SYSTEM);
-            Process.setThreadGroupAndCpuset(
-                    mCachedAppOptimizer.mCachedAppOptimizerThread.getThreadId(),
-                    Process.THREAD_GROUP_BACKGROUND);
+            final int optimizerTid = mCachedAppOptimizer.mCachedAppOptimizerThread.getThreadId();
+            if (optimizerTid > 0) {
+                Process.setThreadGroupAndCpuset(optimizerTid, Process.THREAD_GROUP_BACKGROUND);
+            }
         } catch (Exception e) {
             Slog.w(TAG, "Setting background thread cpuset failed");
         }
@@ -20317,73 +20321,151 @@ public class ActivityManagerService extends IActivityManager.Stub
     @Override
     public void releaseMemory(int minAdj, int maxKillCount,
                               boolean includeUIProcesses, boolean skipCamera) {
-        if (minAdj <= 0) return;
-
-        final int currentUser = mUserController.getCurrentUserId();
-        final ArrayList<ProcessRecord> victims = new ArrayList<>();
-
+        if (checkCallingPermission(Manifest.permission.FORCE_STOP_PACKAGES)
+                != PackageManager.PERMISSION_GRANTED) {
+            throw new SecurityException("Requires permission "
+                    + Manifest.permission.FORCE_STOP_PACKAGES);
+        }
+        if (minAdj < ProcessList.CACHED_APP_MIN_ADJ
+                || minAdj > ProcessList.CACHED_APP_MAX_ADJ || maxKillCount <= 0) {
+            throw new IllegalArgumentException(
+                    "Reclaim requires cached processes and a positive limit");
+        }
         synchronized (this) {
-            synchronized (mProcLock) {
-                mProcessList.forEachLruProcessesLOSP(false, proc -> {
-                    if (proc == null || proc.getThread() == null) return;
-
-                    final int setAdj = proc.getSetAdj();
-                    final int state = proc.getSetProcState();
-
-                    // Exclusions
-                    if (proc.isPersistent()) return;
-                    if (proc.userId != currentUser) return;
-                    if (state <= ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND) return;
-                    if (state == ActivityManager.PROCESS_STATE_HOME) return;
-                    if (!includeUIProcesses && proc.hasActivities()) return;
-
-                    if (setAdj >= minAdj) victims.add(proc);
-                });
+            if (mMemoryReclaimRequest != null) {
+                mHandler.removeCallbacks(mMemoryReclaimRequest);
             }
+            mMemoryReclaimRequest = new MemoryReclaimRequest(mUserController.getCurrentUserId(),
+                    minAdj, Math.min(maxKillCount, 25), includeUIProcesses, skipCamera);
+            mHandler.post(mMemoryReclaimRequest);
+        }
+    }
+
+    @GuardedBy("this")
+    private MemoryReclaimRequest mMemoryReclaimRequest;
+
+    private boolean isScreenOnMemoryReclaimAllowed(int userId) {
+        return Settings.System.getIntForUser(mContext.getContentResolver(),
+                Settings.System.SCREEN_ON_MEMORY_RECLAIM, 0, userId) == 1
+                && !isMemoryReclaimBatteryLow();
+    }
+
+    boolean isMemoryReclaimBatteryLow() {
+        final BatteryManager battery = mContext.getSystemService(BatteryManager.class);
+        final int capacity = battery == null ? -1
+                : battery.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
+        return capacity >= 0 && capacity <= mContext.getResources().getInteger(
+                com.android.internal.R.integer.config_lowBatteryReclaimSkipThreshold);
+    }
+
+    private final class MemoryReclaimRequest implements Runnable {
+        private static final long KILL_INTERVAL_MS = 100;
+        private static final long MAX_DURATION_MS = 10_000;
+        private final int mUserId;
+        private final int mMinAdj;
+        private final boolean mIncludeUIProcesses;
+        private final boolean mSkipCamera;
+        private final long mDeadlineUptime = SystemClock.uptimeMillis() + MAX_DURATION_MS;
+        private int mRemaining;
+
+        MemoryReclaimRequest(int userId, int minAdj, int maxKillCount,
+                boolean includeUIProcesses, boolean skipCamera) {
+            mUserId = userId;
+            mMinAdj = minAdj;
+            mRemaining = maxKillCount;
+            mIncludeUIProcesses = includeUIProcesses;
+            mSkipCamera = skipCamera;
         }
 
-        victims.sort((a, b) -> Integer.compare(b.getSetAdj(), a.getSetAdj()));
-
-        int killed = 0;
-        for (ProcessRecord proc : victims) {
-            if (killed >= maxKillCount) break;
-            final String reason = "screen-on memory reclaim";
-            mHandler.post(() -> {
-                synchronized (ActivityManagerService.this) {
-                    proc.killLocked(reason,
+        @Override
+        public void run() {
+            synchronized (ActivityManagerService.this) {
+                if (mMemoryReclaimRequest != this) {
+                    return;
+                }
+                if (mWakefulness.get() != PowerManagerInternal.WAKEFULNESS_AWAKE
+                        || mUserId != mUserController.getCurrentUserId()
+                        || SystemClock.uptimeMillis() >= mDeadlineUptime) {
+                    mMemoryReclaimRequest = null;
+                    return;
+                }
+                final long delay = mCachedAppOptimizer.getAppLaunchDelayMillis();
+                if (delay > 0) {
+                    mHandler.postDelayed(this, delay);
+                    return;
+                }
+            }
+            final boolean allowed = isScreenOnMemoryReclaimAllowed(mUserId);
+            final ActivityManager.MemoryInfo memory = new ActivityManager.MemoryInfo();
+            if (allowed) {
+                mProcessList.getMemoryInfo(memory);
+            }
+            synchronized (ActivityManagerService.this) {
+                if (mMemoryReclaimRequest != this) {
+                    return;
+                }
+                if (!allowed || !memory.lowMemory
+                        || mWakefulness.get() != PowerManagerInternal.WAKEFULNESS_AWAKE
+                        || mUserId != mUserController.getCurrentUserId()
+                        || SystemClock.uptimeMillis() >= mDeadlineUptime) {
+                    mMemoryReclaimRequest = null;
+                    return;
+                }
+                synchronized (mProcLock) {
+                    final long delay = mCachedAppOptimizer.getAppLaunchDelayMillis();
+                    if (delay > 0) {
+                        mHandler.postDelayed(this, delay);
+                        return;
+                    }
+                    final ProcessRecord[] victim = new ProcessRecord[1];
+                    mProcessList.forEachLruProcessesLOSP(false, proc -> {
+                        if (proc.getThread() == null || proc.getPid() <= 0
+                                || proc.isKilled() || proc.isKilledByAm() || proc.isPersistent()
+                                || proc.userId != mUserId
+                                || proc.getSetAdj() < mMinAdj || proc.getCurAdj() < mMinAdj
+                                || proc.getSetAdj() > ProcessList.CACHED_APP_MAX_ADJ
+                                || proc.getCurAdj() > ProcessList.CACHED_APP_MAX_ADJ
+                                || proc.getSetProcState()
+                                        < ActivityManager.PROCESS_STATE_CACHED_ACTIVITY
+                                || proc.getCurProcState()
+                                        < ActivityManager.PROCESS_STATE_CACHED_ACTIVITY
+                                || proc.getSetProcState()
+                                        == ActivityManager.PROCESS_STATE_NONEXISTENT
+                                || proc.getCurProcState()
+                                        == ActivityManager.PROCESS_STATE_NONEXISTENT
+                                || proc.isInterestingToUserLocked()
+                                || (!mIncludeUIProcesses && proc.hasActivities())
+                                || (mSkipCamera && isCameraActiveForUid(proc.uid))) {
+                            return;
+                        }
+                        if (victim[0] == null || proc.getSetAdj() > victim[0].getSetAdj()) {
+                            victim[0] = proc;
+                        }
+                    });
+                    if (victim[0] == null) {
+                        mMemoryReclaimRequest = null;
+                        return;
+                    }
+                    victim[0].killLocked("screen-on memory reclaim",
                             ApplicationExitInfo.REASON_OTHER,
                             ApplicationExitInfo.SUBREASON_MEMORY_PRESSURE, true);
                 }
-            });
-            killed++;
+                if (--mRemaining > 0) {
+                    mHandler.postDelayed(this, KILL_INTERVAL_MS);
+                } else {
+                    mMemoryReclaimRequest = null;
+                }
+            }
         }
     }
 
     @Override
     public void compactAllSystem() {
-        mHandler.post(() -> {
-            synchronized (mProcLock) {
-                mCachedAppOptimizer.compactAllSystem();
-            }
-        });
-    }
-
-    public class ProcessComparator implements Comparator<ProcessToKill> {
-        @Override
-        public int compare(ProcessToKill p1, ProcessToKill p2) {
-            return Integer.compare(p2.adj, p1.adj);
+        if (checkCallingPermission(Manifest.permission.SET_ACTIVITY_WATCHER)
+                != PackageManager.PERMISSION_GRANTED) {
+            throw new SecurityException("Requires permission "
+                    + Manifest.permission.SET_ACTIVITY_WATCHER);
         }
-    }
-
-    public static final class ProcessToKill {
-        public int adj;
-        public String name; 
-        public int pid;
-
-        public ProcessToKill(int pid, int adj, String name) {
-            this.pid = pid;
-            this.adj = adj;
-            this.name = name;
-        }
+        mCachedAppOptimizer.compactAllSystem();
     }
 }

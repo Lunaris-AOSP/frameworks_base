@@ -436,10 +436,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             "com.android.server.policy.PhoneWindowManager.ACTION_TORCH_OFF";
 
     private static final long MEMORY_RELEASE_INTERVAL_MS = 5 * 60 * 1000L; // 5 minutes
-    private long lastMemoryReleaseTime = 0L;
+    private long mLastMemoryReleaseRealtime;
 
-    private static final long GC_INTERVAL_MS = 5 * 60 * 1000L; // 5 minutes
-    private long lastGcTime = 0L;
+    private static final long SYSTEM_COMPACTION_INTERVAL_MS = 5 * 60 * 1000L;
+    private long mLastSystemCompactionRealtime;
+    private volatile boolean mMemoryReclaimScreenAwake;
 
     /**
      * Keyguard stuff
@@ -872,7 +873,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private ThreeFingersSwipeListener mThreeFingersSwipe;
     private boolean mThreeFingersSwipeHasAction;
 
-    private boolean mScreenOnReclaim;
+    private volatile boolean mScreenOnReclaim;
 
     private PocketManager mPocketManager;
     private PocketLock mPocketLock;
@@ -3757,7 +3758,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     UserHandle.USER_CURRENT) != 0;
 
             mScreenOnReclaim = Settings.System.getIntForUser(resolver,
-                    Settings.System.SCREEN_ON_MEMORY_RECLAIM, 1, UserHandle.USER_CURRENT) == 1;
+                    Settings.System.SCREEN_ON_MEMORY_RECLAIM, 0, mCurrentUserId) == 1;
+            if (!mScreenOnReclaim) {
+                mHandler.removeCallbacks(mMemoryOpt);
+            }
 
             kidsModeEnabled = Settings.Secure.getIntForUser(resolver,
                     Settings.Secure.NAV_BAR_KIDS_MODE, 0, UserHandle.USER_CURRENT) == 1;
@@ -6497,6 +6501,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mPocketManager.onInteractiveChanged(false);
         }
 
+        mMemoryReclaimScreenAwake = false;
         mHandler.removeCallbacks(mMemoryOpt);
     }
 
@@ -6541,8 +6546,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mPowerButtonLaunchGestureTriggeredDuringGoingToSleep = false;
         mPowerButtonLaunchGestureTriggered = false;
 
-        // make sure we do garbage collection at screen off but delay it to avoid black wallpaper
-        mHandler.postDelayed(mSystemServerGcOpt, 5000);
+        mHandler.removeCallbacks(mSystemCompaction);
+        mHandler.postDelayed(mSystemCompaction, 5000);
     }
 
     // Called on the PowerManager's Notifier thread.
@@ -6561,13 +6566,13 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
         EventLogTags.writeScreenToggled(1);
 
+        mMemoryReclaimScreenAwake = true;
+        mHandler.removeCallbacks(mMemoryOpt);
         if (mScreenOnReclaim) {
-            mHandler.removeCallbacks(mMemoryOpt);
             mHandler.postDelayed(mMemoryOpt, 1250 /* allowance time */);
         }
 
-        // remove pending system server gc for frequent screen state changes
-        mHandler.removeCallbacks(mSystemServerGcOpt);
+        mHandler.removeCallbacks(mSystemCompaction);
 
         mIsGoingToSleep = false;
         setPendingWakingUpGroup(displayGroupId);
@@ -6624,19 +6629,19 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
     };
 
-    private final Runnable mSystemServerGcOpt = new Runnable() {
+    private final Runnable mSystemCompaction = new Runnable() {
         @Override
         public void run() {
-            if (isBatteryLow()) {
-                Slog.d(TAG, "Skipping system_server compaction: battery low");
+            if (mMemoryReclaimScreenAwake || isBatteryLow()) {
                 return;
             }
-            long currentTime = System.currentTimeMillis();
-            if (lastGcTime == 0L || currentTime - lastGcTime > GC_INTERVAL_MS) {
+            final long now = SystemClock.elapsedRealtime();
+            if (mLastSystemCompactionRealtime == 0
+                    || now - mLastSystemCompactionRealtime >= SYSTEM_COMPACTION_INTERVAL_MS) {
                 try {
                     mActivityManagerService.compactAllSystem();
-                    lastGcTime = currentTime;
-                    Slog.d(TAG, "Performing garbage collection for system_server");
+                    mLastSystemCompactionRealtime = now;
+                    Slog.d(TAG, "Requested system compaction");
                 } catch (RemoteException e) {
                     Slog.w(TAG, "compactAllSystem failed", e);
                 }
@@ -7703,6 +7708,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     @Override
     public void setCurrentUserLw(int newUserId) {
         mCurrentUserId = newUserId;
+        mScreenOnReclaim = false;
+        mHandler.removeCallbacks(mMemoryOpt);
+        updateSettings(mHandler);
         if (mKeyguardDelegate != null) {
             mKeyguardDelegate.setCurrentUser(newUserId);
         }
@@ -8361,23 +8369,24 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     private boolean isBatteryLow() {
-        BatteryManager bm = mContext.getSystemService(BatteryManager.class);
-        return bm != null && bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) <=
-                mContext.getResources().getInteger(
-                        com.android.internal.R.integer.config_lowBatteryReclaimSkipThreshold);
+        final BatteryManager bm = mContext.getSystemService(BatteryManager.class);
+        final int capacity = bm == null ? -1
+                : bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
+        return capacity >= 0 && capacity <= mContext.getResources().getInteger(
+                com.android.internal.R.integer.config_lowBatteryReclaimSkipThreshold);
     }
 
     private void releaseMemoryAtScreenOn() {
-        long currentTime = System.currentTimeMillis();
-        if (isBatteryLow()) {
-            Slog.d(TAG, "Skipping screen-on memory reclaim: battery low");
+        if (!mScreenOnReclaim || !mMemoryReclaimScreenAwake || isBatteryLow()) {
             return;
         }
-        if (lastMemoryReleaseTime == 0L || currentTime - lastMemoryReleaseTime > MEMORY_RELEASE_INTERVAL_MS) {
+        final long now = SystemClock.elapsedRealtime();
+        if (mLastMemoryReleaseRealtime == 0
+                || now - mLastMemoryReleaseRealtime >= MEMORY_RELEASE_INTERVAL_MS) {
             try {
-                mActivityManagerService.releaseMemory(900, 25, false, false);
-                lastMemoryReleaseTime = currentTime;
-                Slog.d(TAG, "Performing screen-on memory reclaim.");
+                mActivityManagerService.releaseMemory(900, 25, false, true);
+                mLastMemoryReleaseRealtime = now;
+                Slog.d(TAG, "Requested screen-on memory reclaim");
             } catch (RemoteException e) {
                 Slog.w(TAG, "releaseMemory failed", e);
             }

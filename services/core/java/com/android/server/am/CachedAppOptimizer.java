@@ -326,6 +326,14 @@ public class CachedAppOptimizer {
         void performCompaction(CompactProfile action, int pid) throws IOException; // deprecated
         void performMemcgCompaction(CompactProfile action, int uid, int pid) throws IOException;
         void performNativeCompaction(CompactProfile action, int pid) throws IOException;
+        default void performCompaction(CompactProfile action, int uid, int pid,
+                boolean useMemcg, long generation) throws IOException {
+            if (useMemcg) {
+                performMemcgCompaction(action, uid, pid);
+            } else {
+                performCompaction(action, pid);
+            }
+        }
     }
 
     // This indicates the compaction we want to perform
@@ -383,6 +391,9 @@ public class CachedAppOptimizer {
     @GuardedBy("mProcLock")
     private final ArrayList<ProcessRecord> mPendingCompactionProcesses =
             new ArrayList<ProcessRecord>();
+
+    @GuardedBy("mProcLock")
+    private ProcessRecord mCompactingProcess;
 
     @GuardedBy("mProcLock")
     private final SparseArray<ProcessRecord> mFrozenProcesses =
@@ -498,11 +509,15 @@ public class CachedAppOptimizer {
     private volatile boolean mUseCompaction = DEFAULT_USE_COMPACTION;
 
     private static final long APP_SWITCH_COMPACT_DELAY_MS = 10_000;
+    private static final int APP_SWITCH_COMPACT_MAX_RETRIES = 3;
+    private static final long LOAD_CHECK_INTERVAL_MS = 1_000;
 
     private static final long COMPACT_LAUNCH_DEFER_DURATION_MS = 1_500;
 
     private volatile long mLastAppLaunchUptime = 0;
     private volatile boolean mIsAwake = true;
+    private long mLastLoadCheckUptime = -1;
+    private boolean mLastLoadWasHigh;
 
     private volatile boolean mUseFreezer = false; // set to DEFAULT in init()
     @GuardedBy("this")
@@ -567,7 +582,7 @@ public class CachedAppOptimizer {
         mAm = am;
         mProcLock = am.mProcLock;
         mCachedAppOptimizerThread = new ServiceThread("CachedAppOptimizerThread",
-            Process.THREAD_GROUP_BACKGROUND, true);
+            Process.THREAD_PRIORITY_DEFAULT, true);
         mProcStateThrottle = new HashSet<>();
         mProcessDependencies = processDependencies;
         mTestCallback = callback;
@@ -701,14 +716,14 @@ public class CachedAppOptimizer {
     @GuardedBy("mProcLock")
     boolean compactApp(
             ProcessRecord app, CompactProfile compactProfile, CompactSource source, boolean force) {
-        app.mOptRecord.setReqCompactSource(source);
-        app.mOptRecord.setReqCompactProfile(compactProfile);
-
-        if(compactProfile == null || compactProfile.equals(CompactProfile.NONE)) {
+        if (!mUseCompaction || mCompactionHandler == null
+                || compactProfile == null || compactProfile == CompactProfile.NONE) {
             return false;
         }
-        if (mCompactionHandler == null) {
-            return false;
+        app.mOptRecord.setReqCompactSource(source);
+        app.mOptRecord.setReqCompactProfile(compactProfile);
+        if (force) {
+            app.mOptRecord.setForceCompact(true);
         }
         final String processName = (app.processName != null ? app.processName : "");
         mCompactStatsManager.logCompactionRequested(source, compactProfile, processName);
@@ -723,7 +738,7 @@ public class CachedAppOptimizer {
             app.mOptRecord.setForceCompact(force);
             mPendingCompactionProcesses.add(app);
             mCompactionHandler.sendMessage(mCompactionHandler.obtainMessage(
-                    COMPACT_PROCESS_MSG, app.getCurAdj(), app.getSetProcState()));
+                    COMPACT_PROCESS_MSG, app.getCurAdj(), app.getSetProcState(), app));
             return true;
         }
 
@@ -745,18 +760,27 @@ public class CachedAppOptimizer {
     }
 
     void compactAllSystem() {
-        if (useCompaction()) {
+        compactAllSystem(false);
+    }
+
+    void compactAllSystem(boolean force) {
+        synchronized (mProcLock) {
+            if (!mUseCompaction || mCompactionHandler == null || (!force && mIsAwake)) {
+                return;
+            }
             if (DEBUG_COMPACTION) {
                 Slog.d(TAG_AM, "compactAllSystem");
             }
             Trace.instantForTrack(
                     Trace.TRACE_TAG_ACTIVITY_MANAGER, ATRACE_COMPACTION_TRACK, "compactAllSystem");
+            mCompactionHandler.removeMessages(COMPACT_SYSTEM_MSG);
             mCompactionHandler.sendMessage(mCompactionHandler.obtainMessage(
-                                              COMPACT_SYSTEM_MSG));
+                    COMPACT_SYSTEM_MSG, force ? 1 : 0, 0));
         }
     }
 
-    private native void compactSystem();
+    private native void compactSystem(long generation);
+    private static native long getCompactionGeneration();
 
     /**
      * Compacts a process or app
@@ -764,8 +788,9 @@ public class CachedAppOptimizer {
      * @param compactionFlags selects the compaction type as defined by COMPACT_ACTION_{TYPE}_FLAG
      *         constants
      */
-    private static native void compactProcess(int pid, int compactionFlags);
-    private static native void performNativeMemcgCompaction(int uid, int pid, int compactionFlags);
+    private static native void compactProcess(int pid, int compactionFlags, long generation);
+    private static native void performNativeMemcgCompaction(
+            int uid, int pid, int compactionFlags, long generation);
     private static native void compactNativeProcess(int pid, int compactionFlags);
     private static native boolean compactionFlagsValidForMemcg(int compactionFlags);
 
@@ -808,9 +833,13 @@ public class CachedAppOptimizer {
 
             mCompactionHandler = new MemCompactionHandler();
             mCompactStatsManager = CompactionStatsManager.getInstance();
-        }
-        Process.setThreadGroupAndCpuset(mCachedAppOptimizerThread.getThreadId(),
+            Process.setThreadGroupAndCpuset(mCachedAppOptimizerThread.getThreadId(),
                     Process.THREAD_GROUP_BACKGROUND);
+        } else if (!mUseCompaction && mCompactionHandler != null) {
+            cancelCompaction();
+            mCompactionHandler.removeMessages(COMPACT_SYSTEM_MSG);
+            mCompactionHandler.removeMessages(COMPACT_APP_SWITCH_MSG);
+        }
     }
 
     /**
@@ -1411,6 +1440,11 @@ public class CachedAppOptimizer {
     void onCleanupApplicationRecordLocked(ProcessRecord app) {
         final ProcessCachedOptimizerRecord opt = app.mOptRecord;
         opt.setLastCompactRss(null);
+        opt.setLastCompactTime(0);
+        opt.setLastCompactProfile(CompactProfile.NONE);
+        if (mCompactionHandler != null) {
+            cancelCompactionForProcess(app, CancelCompactReason.OOM_IMPROVEMENT);
+        }
         if (mUseFreezer) {
             if (opt.isPendingFreeze()) {
                 // Remove pending DO_FREEZE message
@@ -1433,40 +1467,44 @@ public class CachedAppOptimizer {
     }
 
     void onWakefulnessChanged(int wakefulness) {
-        mIsAwake = wakefulness == PowerManagerInternal.WAKEFULNESS_AWAKE;
-        if(wakefulness == PowerManagerInternal.WAKEFULNESS_AWAKE) {
-            if (useCompaction()) {
-                // Remove any pending compaction we may have scheduled to happen while screen was
-                // off
+        synchronized (mProcLock) {
+            mIsAwake = wakefulness == PowerManagerInternal.WAKEFULNESS_AWAKE;
+            if (mIsAwake && mCompactionHandler != null) {
+                mLastAppLaunchUptime = SystemClock.uptimeMillis();
                 cancelAllCompactions(CancelCompactReason.SCREEN_ON);
-                mCompactionHandler.removeMessages(COMPACT_APP_SWITCH_MSG);
+                mCompactionHandler.removeMessages(COMPACT_SYSTEM_MSG);
             }
         }
     }
 
     void cancelAllCompactions(CancelCompactReason reason) {
         synchronized (mProcLock) {
-            while(!mPendingCompactionProcesses.isEmpty()) {
-                if (DEBUG_COMPACTION) {
-                    Slog.e(TAG_AM,
-                            "Cancel pending compaction as system is awake for process="
-                                    + mPendingCompactionProcesses.get(0).processName);
-                }
-                cancelCompactionForProcess(mPendingCompactionProcesses.get(0), reason);
+            for (ProcessRecord app : mPendingCompactionProcesses) {
+                app.mOptRecord.setHasPendingCompact(false);
+                app.mOptRecord.setForceCompact(false);
+                mCompactStatsManager.logCompactionCancelled(reason);
             }
             mPendingCompactionProcesses.clear();
+            if (mCompactionHandler != null) {
+                mCompactionHandler.removeMessages(COMPACT_PROCESS_MSG);
+                mCompactionHandler.removeMessages(COMPACT_APP_SWITCH_MSG);
+                cancelCompaction();
+            }
         }
     }
 
     @GuardedBy("mProcLock")
     void cancelCompactionForProcess(ProcessRecord app, CancelCompactReason cancelReason) {
         boolean cancelled = false;
+        mCompactionHandler.removeMessages(COMPACT_PROCESS_MSG, app);
+        mCompactionHandler.removeMessages(COMPACT_APP_SWITCH_MSG, app);
         if (mPendingCompactionProcesses.contains(app)) {
             app.mOptRecord.setHasPendingCompact(false);
+            app.mOptRecord.setForceCompact(false);
             mPendingCompactionProcesses.remove(app);
             cancelled = true;
         }
-        if (DefaultProcessDependencies.mPidCompacting == app.mPid) {
+        if (mCompactingProcess == app || DefaultProcessDependencies.mPidCompacting == app.mPid) {
             cancelCompaction();
             cancelled = true;
         }
@@ -1474,9 +1512,8 @@ public class CachedAppOptimizer {
             mCompactStatsManager.logCompactionCancelled(cancelReason);
             if (DEBUG_COMPACTION) {
                 Slog.d(TAG_AM,
-                        "Cancelled pending or running compactions for process: " +
-                                app.processName != null ? app.processName : "" +
-                                " reason: " + cancelReason.name());
+                        "Cancelled pending or running compactions for process: "
+                                + app.processName + " reason: " + cancelReason.name());
             }
         }
     }
@@ -1488,11 +1525,11 @@ public class CachedAppOptimizer {
             // if the process moved out of cached state
             if (newAdj < oldAdj && newAdj < ProcessList.CACHED_APP_MIN_ADJ) {
                 cancelCompactionForProcess(app, CancelCompactReason.OOM_IMPROVEMENT);
-                mCompactionHandler.removeMessages(COMPACT_APP_SWITCH_MSG, app);
             }
 
             if (newAdj >= ProcessList.CACHED_APP_MIN_ADJ
                     && oldAdj < ProcessList.CACHED_APP_MIN_ADJ) {
+                mCompactionHandler.removeMessages(COMPACT_APP_SWITCH_MSG, app);
                 mCompactionHandler.sendMessageDelayed(
                         mCompactionHandler.obtainMessage(COMPACT_APP_SWITCH_MSG, app),
                         APP_SWITCH_COMPACT_DELAY_MS);
@@ -1500,9 +1537,24 @@ public class CachedAppOptimizer {
 
             if (newAdj <= ProcessList.FOREGROUND_APP_ADJ
                     && oldAdj > ProcessList.FOREGROUND_APP_ADJ) {
-                mLastAppLaunchUptime = SystemClock.uptimeMillis();
+                onActivityLaunch();
             }
         }
+    }
+
+    void onActivityLaunch() {
+        synchronized (mProcLock) {
+            mLastAppLaunchUptime = SystemClock.uptimeMillis();
+            if (mCompactionHandler != null) {
+                cancelCompaction();
+            }
+        }
+    }
+
+    long getAppLaunchDelayMillis() {
+        final long lastLaunch = mLastAppLaunchUptime;
+        return lastLaunch == 0 ? 0 : Math.max(0,
+                lastLaunch + COMPACT_LAUNCH_DEFER_DURATION_MS - SystemClock.uptimeMillis());
     }
 
     /**
@@ -1536,11 +1588,12 @@ public class CachedAppOptimizer {
      * features enabled and swap usage.
      */
     CompactProfile resolveCompactionProfile(CompactProfile profile) {
-        if (profile == CompactProfile.FULL) {
+        if (profile == CompactProfile.FULL || profile == CompactProfile.ANON) {
             double swapFreePercent = getFreeSwapPercent();
             // Downgrade compaction under swap memory pressure
             if (swapFreePercent < COMPACT_DOWNGRADE_FREE_SWAP_THRESHOLD) {
-                profile = CompactProfile.SOME;
+                profile = profile == CompactProfile.FULL
+                        ? CompactProfile.SOME : CompactProfile.NONE;
                 mCompactStatsManager.logCompactionDowngrade();
                 if (DEBUG_COMPACTION) {
                     Slog.d(TAG_AM,
@@ -1572,15 +1625,21 @@ public class CachedAppOptimizer {
     }
 
     private boolean isSystemUnderHighLoad() {
+        final long now = SystemClock.uptimeMillis();
+        if (mLastLoadCheckUptime >= 0 && now - mLastLoadCheckUptime < LOAD_CHECK_INTERVAL_MS) {
+            return mLastLoadWasHigh;
+        }
+        mLastLoadCheckUptime = now;
         try {
             String loadStr = new String(
                     Files.readAllBytes(Paths.get("/proc/loadavg")));
             double oneMinLoad = Double.parseDouble(loadStr.split(" ")[0]);
             int numCpus = Runtime.getRuntime().availableProcessors();
-            return (oneMinLoad / numCpus) > 0.8;
+            mLastLoadWasHigh = (oneMinLoad / numCpus) > 0.8;
         } catch (Exception e) {
-            return false;
+            mLastLoadWasHigh = false;
         }
+        return mLastLoadWasHigh;
     }
 
     private static int getCompactionFlags(CompactProfile profile) {
@@ -1751,6 +1810,18 @@ public class CachedAppOptimizer {
 
         @Override
         public void handleMessage(Message msg) {
+            try {
+                handleCompactionMessage(msg);
+            } finally {
+                if (msg.what == COMPACT_PROCESS_MSG) {
+                    synchronized (mProcLock) {
+                        mCompactingProcess = null;
+                    }
+                }
+            }
+        }
+
+        private void handleCompactionMessage(Message msg) {
             switch (msg.what) {
                 case COMPACT_PROCESS_MSG: {
                     long start = SystemClock.uptimeMillis();
@@ -1768,16 +1839,31 @@ public class CachedAppOptimizer {
                     CompactSource compactSource;
                     CompactProfile requestedProfile;
                     int oomAdjReason;
+                    final long generation;
                     synchronized (mProcLock) {
-                        if (mPendingCompactionProcesses.isEmpty()) {
-                            if (DEBUG_COMPACTION) {
-                                Slog.d(TAG_AM, "No processes pending compaction, bail out");
-                            }
+                        proc = (ProcessRecord) msg.obj;
+                        if (!mPendingCompactionProcesses.contains(proc)) {
                             return;
                         }
-                        proc = mPendingCompactionProcesses.remove(0);
                         opt = proc.mOptRecord;
                         forceCompaction = opt.isForceCompact();
+                        if (!mUseCompaction || (!forceCompaction
+                                && opt.getReqCompactSource() == CompactSource.APP
+                                && (proc.getCurAdj() < ProcessList.CACHED_APP_MIN_ADJ
+                                        || proc.getSetAdj() < ProcessList.CACHED_APP_MIN_ADJ
+                                        || proc.isKilled() || proc.isKilledByAm()))) {
+                            cancelCompactionForProcess(proc, CancelCompactReason.OOM_IMPROVEMENT);
+                            return;
+                        }
+                        final long deferUntil = mLastAppLaunchUptime
+                                + COMPACT_LAUNCH_DEFER_DURATION_MS;
+                        if (!forceCompaction && mLastAppLaunchUptime > 0 && start < deferUntil) {
+                            mCompactionHandler.sendMessageAtTime(Message.obtain(msg), deferUntil);
+                            return;
+                        }
+                        mPendingCompactionProcesses.remove(proc);
+                        mCompactingProcess = proc;
+                        generation = getCompactionGeneration();
                         opt.setForceCompact(false); // since this is a one-shot operation
                         uid = proc.uid;
                         pid = proc.getPid();
@@ -1804,13 +1890,6 @@ public class CachedAppOptimizer {
                     }
 
                     if (!forceCompaction) {
-                        if (start - mLastAppLaunchUptime < COMPACT_LAUNCH_DEFER_DURATION_MS) {
-                            if (DEBUG_COMPACTION) {
-                                Slog.d(TAG_AM, "Skipping compaction for " + name
-                                        + ": app launch in progress");
-                            }
-                            return;
-                        }
                         if (shouldOomAdjThrottleCompaction(proc)) {
                             mCompactStatsManager.logCompactionThrottled(
                                     CompactionStatsManager.COMPACT_THROTTLE_REASON_OOM_ADJ,
@@ -1847,6 +1926,9 @@ public class CachedAppOptimizer {
 
                     CompactProfile resolvedProfile =
                             resolveCompactionProfile(requestedProfile);
+                    if (getCompactionGeneration() != generation) {
+                        return;
+                    }
                     if (resolvedProfile == CompactProfile.NONE) {
                         // No point on issuing compaction call as we don't want to compact.
                         if (DEBUG_COMPACTION) {
@@ -1864,11 +1946,12 @@ public class CachedAppOptimizer {
                         long zramUsedKbBefore = getUsedZramMemory();
                         long startCpuTime = threadCpuTimeNs();
 
-                        if (Flags.useMemcgForCompaction() &&
-                                profileValidForMemcg(resolvedProfile)) {
-                            mProcessDependencies.performMemcgCompaction(resolvedProfile, uid, pid);
-                        } else {
-                            mProcessDependencies.performCompaction(resolvedProfile, pid);
+                        mProcessDependencies.performCompaction(resolvedProfile, uid, pid,
+                                Flags.useMemcgForCompaction()
+                                        && profileValidForMemcg(resolvedProfile),
+                                generation);
+                        if (getCompactionGeneration() != generation || !mUseCompaction) {
+                            return;
                         }
 
                         long endCpuTime = threadCpuTimeNs();
@@ -1881,7 +1964,7 @@ public class CachedAppOptimizer {
                         long deltaFileRss = rssAfter[RSS_FILE_INDEX] - rssBefore[RSS_FILE_INDEX];
                         long deltaAnonRss = rssAfter[RSS_ANON_INDEX] - rssBefore[RSS_ANON_INDEX];
                         long deltaSwapRss = rssAfter[RSS_SWAP_INDEX] - rssBefore[RSS_SWAP_INDEX];
-                        switch (opt.getReqCompactProfile()) {
+                        switch (requestedProfile) {
                             case SOME:
                                 mCompactStatsManager.logSomeCompactionPerformed(compactSource,
                                     name);
@@ -1916,11 +1999,13 @@ public class CachedAppOptimizer {
                                 lastCompactTime, newOomAdj, procState, zramUsedKbBefore,
                                 zramUsedKbBefore - zramUsedKbAfter);
                         synchronized (mProcLock) {
-                            opt.setLastCompactTime(end);
-                            opt.setLastCompactProfile(requestedProfile);
-                            if (proc.getPid() == pid && (resolvedProfile == CompactProfile.FULL
-                                    || resolvedProfile == CompactProfile.ANON)) {
-                                opt.setLastCompactRss(rssAfter);
+                            if (proc.getPid() == pid && !proc.isKilled() && !proc.isKilledByAm()) {
+                                opt.setLastCompactTime(end);
+                                opt.setLastCompactProfile(requestedProfile);
+                                if (resolvedProfile == CompactProfile.FULL
+                                        || resolvedProfile == CompactProfile.ANON) {
+                                    opt.setLastCompactRss(rssAfter);
+                                }
                             }
                         }
                     } catch (Exception e) {
@@ -1934,9 +2019,17 @@ public class CachedAppOptimizer {
                     break;
                 }
                 case COMPACT_SYSTEM_MSG: {
+                    final long generation = getCompactionGeneration();
+                    if (!mUseCompaction || (msg.arg1 == 0
+                            && (mIsAwake || getAppLaunchDelayMillis() > 0
+                                    || mAm.isMemoryReclaimBatteryLow() || isSystemUnderHighLoad()
+                                    || getFreeSwapPercent()
+                                            < COMPACT_DOWNGRADE_FREE_SWAP_THRESHOLD))) {
+                        break;
+                    }
                     Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "compactSystem");
                     long memFreedBefore = getMemoryFreedCompaction();
-                    compactSystem();
+                    compactSystem(generation);
                     long memFreedAfter = getMemoryFreedCompaction();
                     long memFreed = memFreedAfter - memFreedBefore;
                     mCompactStatsManager.logSystemCompactionPerformed(memFreed);
@@ -1963,16 +2056,27 @@ public class CachedAppOptimizer {
                     break;
                 }
                 case COMPACT_APP_SWITCH_MSG: {
-                    ProcessRecord proc = (ProcessRecord) msg.obj;
-                    if (isSystemUnderHighLoad()) {
-                        if (DEBUG_COMPACTION) {
-                            Slog.d(TAG_AM, "Skipping app-switch compaction for "
-                                    + proc.processName + " due to high CPU load");
-                        }
+                    if (!mUseCompaction) {
                         break;
                     }
+                    ProcessRecord proc = (ProcessRecord) msg.obj;
+                    final boolean highLoad = isSystemUnderHighLoad();
                     synchronized (mProcLock) {
-                        if (proc.getCurAdj() >= ProcessList.CACHED_APP_MIN_ADJ) {
+                        if (!mUseCompaction || proc.getPid() <= 0 || proc.getThread() == null
+                                || proc.isKilled() || proc.isKilledByAm()
+                                || proc.getCurAdj() < ProcessList.CACHED_APP_MIN_ADJ
+                                || proc.getSetAdj() < ProcessList.CACHED_APP_MIN_ADJ) {
+                            break;
+                        }
+                        if (highLoad) {
+                            if (msg.arg1 < APP_SWITCH_COMPACT_MAX_RETRIES) {
+                                final Message retry = Message.obtain(msg);
+                                retry.arg1++;
+                                mCompactionHandler.removeMessages(COMPACT_APP_SWITCH_MSG, proc);
+                                mCompactionHandler.sendMessageDelayed(retry,
+                                        APP_SWITCH_COMPACT_DELAY_MS << msg.arg1);
+                            }
+                        } else {
                             compactApp(proc, CompactProfile.ANON, CompactSource.APP, false);
                         }
                     }
@@ -2327,24 +2431,29 @@ public class CachedAppOptimizer {
         // Compact process.
         @Override
         public void performCompaction(CompactProfile profile, int pid) throws IOException {
-            mPidCompacting = pid;
-            if (profile == CompactProfile.FULL) {
-                compactProcess(pid, COMPACT_ACTION_FILE_FLAG | COMPACT_ACTION_ANON_FLAG);
-            } else if (profile == CompactProfile.SOME) {
-                compactProcess(pid, COMPACT_ACTION_FILE_FLAG);
-            } else if (profile == CompactProfile.ANON) {
-                compactProcess(pid, COMPACT_ACTION_ANON_FLAG);
-            }
-            mPidCompacting = -1;
+            performCompaction(profile, 0, pid, false, getCompactionGeneration());
         }
 
         @Override
         public void performMemcgCompaction(CompactProfile profile, int uid, int pid)
                 throws IOException {
+            performCompaction(profile, uid, pid, true, getCompactionGeneration());
+        }
+
+        @Override
+        public void performCompaction(CompactProfile profile, int uid, int pid,
+                boolean useMemcg, long generation) throws IOException {
             int compactionFlags = getCompactionFlags(profile);
             mPidCompacting = pid;
-            performNativeMemcgCompaction(uid, pid, compactionFlags);
-            mPidCompacting = -1;
+            try {
+                if (useMemcg) {
+                    performNativeMemcgCompaction(uid, pid, compactionFlags, generation);
+                } else {
+                    compactProcess(pid, compactionFlags, generation);
+                }
+            } finally {
+                mPidCompacting = -1;
+            }
         }
 
         // Compaction normally requires the UID to identify the correct cgroup path for the process
@@ -2362,8 +2471,11 @@ public class CachedAppOptimizer {
                 throws IOException {
             int compactionFlags = getCompactionFlags(profile);
             mPidCompacting = pid;
-            compactNativeProcess(pid, compactionFlags);
-            mPidCompacting = -1;
+            try {
+                compactNativeProcess(pid, compactionFlags);
+            } finally {
+                mPidCompacting = -1;
+            }
         }
     }
 
