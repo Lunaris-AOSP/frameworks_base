@@ -21,7 +21,10 @@ import android.view.ViewTreeObserver
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
@@ -31,9 +34,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.setFrom
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.findRootCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.node.CompositionLocalConsumerModifierNode
 import androidx.compose.ui.node.DrawModifierNode
 import androidx.compose.ui.node.GlobalPositionAwareModifierNode
@@ -68,6 +74,9 @@ internal fun Modifier.islandBlur(
     val blur = remember(view) { AxBlurBackgroundRenderer(view) }
     val radiusPx = with(LocalDensity.current) { cornerRadius.toPx() }
     val tintArgb = AxBlurSurfaceDefaults.tintColor(fallbackColor).toArgb()
+    var sourceCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val sourceMatrix = remember { androidx.compose.ui.graphics.Matrix() }
+    val sourceAndroidMatrix = remember { android.graphics.Matrix() }
 
     DisposableEffect(blur) {
         blur.onAttachedToWindow()
@@ -77,9 +86,17 @@ internal fun Modifier.islandBlur(
         blur.setEnabled(enabled)
     }
 
-    return islandBlurFrameTracking(enabled).drawWithContent {
+    val trackedModifier = islandBlurFrameTracking(enabled)
+        .onGloballyPositioned { sourceCoordinates = it }
+    return trackedModifier.drawWithContent {
         var drewBlur = false
         if (enabled && size.width > 0 && size.height > 0) {
+            sourceCoordinates?.takeIf { it.isAttached }?.let {
+                sourceMatrix.reset()
+                it.transformFrom(it.findRootCoordinates(), sourceMatrix)
+                sourceAndroidMatrix.setFrom(sourceMatrix)
+                blur.setSourceToLocalTransform(sourceAndroidMatrix, it.size.width, it.size.height)
+            }
             drawIntoCanvas { canvas ->
                 drewBlur =
                     blur.draw(

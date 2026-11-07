@@ -20,28 +20,17 @@ import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
-import android.graphics.drawable.GradientDrawable;
 import android.view.View;
 
 import com.android.axion.blur.AxBlurBackgroundRenderer;
 import com.android.axion.blur.AxBlurColors;
 import com.android.axion.blur.model.AxBackdropBlurSettingsSpec;
-import com.android.systemui.util.ScrimUtils;
 
 public class BundleHeaderBlurView extends View {
     private final AxBlurBackgroundRenderer mBlurRenderer;
     private final Object mBlurKey = new Object();
     private boolean mBlurEnabled;
     private int mOverlayColor;
-    private final GradientDrawable mMediaArtBackground = new GradientDrawable();
-    private boolean mMediaArtVisible;
-    private final ScrimUtils.ScrimEventListener mScrimListener =
-            new ScrimUtils.ScrimEventListener() {
-                @Override
-                public void onMediaArtVisibilityChanged(boolean visible) {
-                    setMediaArtVisible(visible);
-                }
-            };
     private boolean mLastBlurActive;
     private Runnable mOnBlurStateChanged;
 
@@ -73,15 +62,11 @@ public class BundleHeaderBlurView extends View {
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         updateColors();
-        ScrimUtils scrimUtils = ScrimUtils.get(getContext());
-        scrimUtils.addListener(mScrimListener);
-        setMediaArtVisible(scrimUtils.isMediaArtVisible());
         mBlurRenderer.onAttachedToWindow();
     }
 
     @Override
     protected void onDetachedFromWindow() {
-        ScrimUtils.get().removeListener(mScrimListener);
         mBlurRenderer.onDetachedFromWindow();
         mOnBlurStateChanged = null;
         super.onDetachedFromWindow();
@@ -104,9 +89,8 @@ public class BundleHeaderBlurView extends View {
         return mBlurRenderer.verifyDrawable(who) || super.verifyDrawable(who);
     }
 
-    /** Whether this view supplies the header background, including translucency over media art. */
     public boolean isBackgroundActive() {
-        return mBlurEnabled && (mMediaArtVisible || mBlurRenderer.isCrossWindowBlurActive());
+        return mBlurEnabled && mBlurRenderer.isCrossWindowBlurActive();
     }
 
     public void setAxBlurEnabled(boolean enabled) {
@@ -114,19 +98,10 @@ public class BundleHeaderBlurView extends View {
             return;
         }
         mBlurEnabled = enabled;
-        mBlurRenderer.setEnabled(enabled && !mMediaArtVisible);
+        mBlurRenderer.setEnabled(enabled);
         if (!enabled) {
             mBlurRenderer.clear();
         }
-        invalidate();
-    }
-
-    private void setMediaArtVisible(boolean visible) {
-        if (mMediaArtVisible == visible) {
-            return;
-        }
-        mMediaArtVisible = visible;
-        mBlurRenderer.setEnabled(mBlurEnabled && !visible);
         invalidate();
     }
 
@@ -140,13 +115,6 @@ public class BundleHeaderBlurView extends View {
             return;
         }
         float cornerRadius = Math.min(getWidth(), getHeight()) * 0.5f;
-        if (mMediaArtVisible) {
-            mMediaArtBackground.setBounds(0, 0, getWidth(), getHeight());
-            mMediaArtBackground.setCornerRadius(cornerRadius);
-            mMediaArtBackground.setColor(mOverlayColor);
-            mMediaArtBackground.draw(canvas);
-            return;
-        }
         mBlurRenderer.draw(
                 canvas,
                 mBlurKey,
