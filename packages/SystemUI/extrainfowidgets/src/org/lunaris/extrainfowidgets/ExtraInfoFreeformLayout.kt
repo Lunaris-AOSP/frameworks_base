@@ -19,7 +19,12 @@ package org.lunaris.extrainfowidgets
 import org.json.JSONArray
 import org.json.JSONObject
 
-data class InfoWidgetPosition(val id: String, val x: Float, val y: Float)
+data class InfoWidgetPosition(
+    val id: String,
+    val x: Float,
+    val y: Float,
+    val scale: Float = ExtraInfoFreeformLayout.DEFAULT_SCALE,
+)
 
 data class ExtraInfoFreeformLayout(val widgets: List<InfoWidgetPosition> = emptyList()) {
     fun encode(): String =
@@ -33,6 +38,7 @@ data class ExtraInfoFreeformLayout(val widgets: List<InfoWidgetPosition> = empty
                                 .put("id", it.id)
                                 .put("x", coordinate(it.x, 0.5f))
                                 .put("y", coordinate(it.y, 0.5f))
+                                .put("scale", clampScale(it.scale))
                         )
                     }
                 },
@@ -55,6 +61,9 @@ data class ExtraInfoFreeformLayout(val widgets: List<InfoWidgetPosition> = empty
                 }
         )
 
+    fun resize(id: String, scale: Float) =
+        copy(widgets = widgets.map { if (it.id == id) it.copy(scale = clampScale(scale)) else it })
+
     fun bringToFront(id: String): ExtraInfoFreeformLayout {
         val widget = widgets.firstOrNull { it.id == id } ?: return this
         return copy(widgets = widgets.filterNot { it.id == id } + widget)
@@ -64,6 +73,12 @@ data class ExtraInfoFreeformLayout(val widgets: List<InfoWidgetPosition> = empty
         const val MODE = "lockscreen_extra_info_widgets_independent"
         const val LAYOUT = "lockscreen_extra_info_widgets_freeform_layout"
         const val MAX_WIDGETS = 5
+        const val DEFAULT_SCALE = 1f
+        const val MIN_SCALE = 0.5f
+        const val MAX_SCALE = 2f
+
+        fun clampScale(value: Float) =
+            if (value.isFinite()) value.coerceIn(MIN_SCALE, MAX_SCALE) else DEFAULT_SCALE
 
         private fun coordinate(value: Float, fallback: Float) =
             if (value.isFinite()) value.coerceIn(0f, 1f) else fallback
@@ -104,6 +119,7 @@ data class ExtraInfoFreeformLayout(val widgets: List<InfoWidgetPosition> = empty
                             id,
                             coordinate(entry.optDouble("x", 0.5).toFloat(), 0.5f),
                             coordinate(entry.optDouble("y", 0.35).toFloat(), 0.35f),
+                            clampScale(entry.optDouble("scale", DEFAULT_SCALE.toDouble()).toFloat()),
                         )
                     )
                     if (size == MAX_WIDGETS) break
