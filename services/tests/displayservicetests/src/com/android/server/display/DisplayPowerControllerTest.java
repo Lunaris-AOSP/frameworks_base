@@ -2759,7 +2759,7 @@ public final class DisplayPowerControllerTest {
         }
 
         @Override
-        DisplayPowerState getDisplayPowerState(DisplayBlanker blanker, ColorFade colorFade,
+        DisplayPowerState getDisplayPowerState(DisplayBlanker blanker, ScreenStateAnimator colorFade,
                 int displayId, int displayState) {
             return mDisplayPowerState;
         }
