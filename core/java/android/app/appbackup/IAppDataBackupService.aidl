@@ -21,6 +21,7 @@ import android.app.appbackup.BackupRecord;
 import android.app.appbackup.BackupResult;
 import android.app.appbackup.IBackupProgressCallback;
 import android.app.appbackup.IRestoreProgressCallback;
+import android.os.ParcelFileDescriptor;
 
 /**
  * @hide
@@ -55,4 +56,8 @@ interface IAppDataBackupService {
     boolean isEncryptionAvailable(int userId);
 
     String verifyBackup(String backupId, String backupDir, int userId, String passphrase);
+
+    BackupResult importSwiftBackup(in String[] names, in List<ParcelFileDescriptor> files);
+
+    BackupResult exportSwiftBackup(String backupId, in ParcelFileDescriptor destination);
 }
