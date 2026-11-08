@@ -69,6 +69,7 @@ public class RestoreEngine {
     private final ActivityManager mAm;
     private final Installer mInstaller;
     private volatile boolean mCancelled = false;
+    private volatile SystemDataEngine mSystemDataEngine;
 
     public RestoreEngine(@NonNull Context context, @NonNull Installer installer) {
         mContext = context;
@@ -77,12 +78,23 @@ public class RestoreEngine {
         mInstaller = installer;
     }
 
-    public void cancel() { mCancelled = true; }
+    public void cancel() {
+        mCancelled = true;
+        SystemDataEngine engine = mSystemDataEngine;
+        if (engine != null) engine.cancel();
+    }
 
     @NonNull
     public BackupResult restorePackage(@NonNull BackupRecord record, int userId,
             @Nullable char[] passphrase) {
-        mCancelled = false;
+        if (record.isSystemData()) {
+            SystemDataEngine engine = new SystemDataEngine(mContext, mInstaller, userId);
+            mSystemDataEngine = engine;
+            if (mCancelled) engine.cancel();
+            try { return engine.restore(record, passphrase); }
+            finally { mSystemDataEngine = null; }
+        }
+        if (mCancelled) return BackupResult.cancelled();
         final String packageName = record.getPackageName();
         final String archiveId = record.getId();
 
