@@ -25,6 +25,7 @@ int register_android_server_ConsumerIrService(JNIEnv* env);
 int register_android_server_app_GameManagerService(JNIEnv* env);
 int register_android_server_connectivity_Vpn(JNIEnv* env);
 int register_android_server_tv_TvUinputBridge(JNIEnv* env);
+int register_android_server_appbackup_SwiftBackupNative(JNIEnv* env);
 
 namespace {
 
@@ -47,7 +48,12 @@ void registerVpn(JNIEnv* env, jclass) {
     register_android_server_connectivity_Vpn(env);
 }
 
+void registerSwiftBackupNative(JNIEnv* env, jclass) {
+    register_android_server_appbackup_SwiftBackupNative(env);
+}
+
 static const JNINativeMethod sJniRegistrarMethods[] = {
+        {"registerSwiftBackupNative", "()V", (void*)registerSwiftBackupNative},
         {"registerConsumerIrService", "()V", (void*)registerConsumerIrService},
         {"registerGameManagerService", "()V", (void*)registerGameManagerService},
         {"registerTvUinputBridge", "()V", (void*)registerTvUinputBridge},
