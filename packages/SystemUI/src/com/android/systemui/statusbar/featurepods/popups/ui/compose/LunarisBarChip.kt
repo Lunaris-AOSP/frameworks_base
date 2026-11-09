@@ -30,9 +30,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
@@ -51,7 +49,6 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
@@ -60,6 +57,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -371,7 +369,10 @@ private fun LunarisBarChipContent(
                         else viewModel.contentDescription ?: viewModel.chipText.orEmpty()
                 },
     ) {
-        Row(
+        LunarisBarChipRow(
+            centerCamera = !companion && !resting && alignment == LunarisBarAlignment.CENTER,
+            spacing = 5.dp * scale,
+            companion = companion,
             modifier =
                 Modifier.graphicsLayer {
                         if (legacy != null) {
@@ -384,7 +385,7 @@ private fun LunarisBarChipContent(
                         if (companion) Modifier.fillMaxSize()
                         else Modifier.defaultMinSize(minHeight = dimensions)
                     )
-                    .widthIn(max = 240.dp * widthScale + if (sideCamera) cameraGap else 0.dp)
+                    .widthIn(max = 240.dp * widthScale + cameraGap)
                     .combinedClickable(
                         onClick = {
                             perform(
@@ -414,9 +415,6 @@ private fun LunarisBarChipContent(
                         top = if (companion) 0.dp else 3.dp * scale,
                         bottom = if (companion) 0.dp else 3.dp * scale,
                     ),
-            horizontalArrangement =
-                if (companion) Arrangement.Center else Arrangement.spacedBy(5.dp * scale),
-            verticalAlignment = Alignment.CenterVertically,
         ) {
             if (resting) {
                 Spacer(
@@ -480,7 +478,7 @@ private fun LunarisBarChipContent(
                     )
                 }
                 if (!companion && alignment == LunarisBarAlignment.CENTER) {
-                    Spacer(Modifier.width(cameraGap))
+                    Spacer(Modifier.layoutId(LunarisBarCameraGap).width(cameraGap))
                 }
                 if (!companion && media != null && settings.enabled("media_mini", true)) {
                     val appIcon = media.appIcon

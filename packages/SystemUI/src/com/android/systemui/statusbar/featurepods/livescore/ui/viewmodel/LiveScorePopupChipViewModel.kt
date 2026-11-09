@@ -22,9 +22,11 @@ import com.android.systemui.ActivityIntentHelper
 import com.android.systemui.common.shared.model.ContentDescription
 import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.dagger.qualifiers.Application
+import com.android.systemui.islandevents.shared.isSportsNotification
 import com.android.systemui.lifecycle.ExclusiveActivatable
 import com.android.systemui.lifecycle.Hydrator
 import com.android.systemui.plugins.ActivityStarter
+import com.android.systemui.res.R
 import com.android.systemui.statusbar.NotificationLockscreenUserManager
 import com.android.systemui.statusbar.featurepods.livescore.shared.model.LiveScoreChipModel
 import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.LIVE_SCORES
@@ -98,6 +100,7 @@ constructor(
             chipId = PopupChipId.LiveScore,
             sourcePackageName = model.sourcePackageName,
             sourceUserId = model.sourceUserId,
+            sourceNotificationKey = model.key,
             icons =
                 listOfNotNull(
                     model.icon?.let {
@@ -117,7 +120,8 @@ constructor(
     private fun buildCollapsedText(model: LiveScoreChipModel): String {
         val title = model.title?.takeUnless { it.isBlank() } ?: model.appName
         val score = model.score.takeUnless { it.isBlank() }
-        return listOfNotNull(score, title.takeUnless { it.isBlank() }).joinToString(" • ")
+        return listOfNotNull(score, title.takeUnless { it.isBlank() || it == score })
+            .joinToString(" • ")
     }
 
     @AssistedFactory
@@ -127,6 +131,9 @@ constructor(
 }
 
 private fun ActiveNotificationModel.isLiveScoreCandidate(): Boolean {
+    if (isGroupSummary || isRowDismissed || !isSportsNotification(packageName, groupKey)) {
+        return false
+    }
     val content = promotedContent?.privateVersion ?: return false
     if (callType != com.android.systemui.statusbar.notification.shared.CallType.None) {
         return false
@@ -150,7 +157,9 @@ private fun ActiveNotificationModel.toLiveScoreModel(
         sourcePackageName = packageName,
         sourceUserId = android.os.UserHandle.getUserId(uid),
         key = key,
-        icon = statusBarIcon?.loadDrawable(context)?.let { Icon.Loaded(it, contentDescription) },
+        icon =
+            statusBarIcon?.loadDrawable(context)?.let { Icon.Loaded(it, contentDescription) }
+                ?: Icon.Resource(R.drawable.ic_trophy, contentDescription),
         appName = appName,
         title = content.title?.toString(),
         score = content.shortCriticalText.orEmpty(),

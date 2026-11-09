@@ -18,6 +18,7 @@ import android.widget.Chronometer
 import android.widget.FrameLayout
 import com.android.systemui.islandevents.model.IslandEvent
 import com.android.systemui.islandevents.model.RecordingState
+import com.android.systemui.islandevents.shared.isSportsNotification
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.util.ScrimUtils
 import javax.inject.Inject
@@ -42,27 +43,6 @@ constructor(
 
         private val CLOCK_PACKAGES = setOf("com.google.android.deskclock", "com.android.deskclock")
         private val ALARM_PACKAGES = setOf("com.google.android.deskclock", "com.android.deskclock")
-
-        private const val GOOGLE_PACKAGE = "com.google.android.googlequicksearchbox"
-        private val SPORTS_PACKAGES = setOf(
-            "com.espn.score_center",
-            "com.fivemobile.thescore",
-            "com.yahoo.mobile.client.android.sportacular",
-            "com.sofascore.app",
-            "com.fotmob",
-            "com.foxsports.android",
-            "com.cbs.sports.android",
-            "com.bleacherreport.android.teamstream",
-            "com.nbaimd.gametime.nba2011",
-            "com.nfl.fantasy.core",
-            "com.mlb.atbat",
-            "com.nhl.gc1112.free",
-            "livescore.livesportsmedia.com",
-            "com.flashscore.en",
-            "com.365scores.android",
-            "lunosoftware.sportsalerts",
-            "com.onefootball.brasil",
-        )
 
         private val SCORE_PATTERN =
             Regex("""(.+?)\s+(\d+)\s*[-–—:]\s*(\d+)\s+(.+)""")
@@ -205,6 +185,15 @@ constructor(
                 if (!acceptNotification(sbn)) return
                 val pkg = sbn.packageName ?: return
                 val extras = sbn.notification?.extras ?: return
+
+                if (sbn.isOngoing) {
+                    activeNotifications.remove(sbn.key)
+                    seenNotificationKeys.remove(sbn.key)
+                    seenMessagingTimestamps.remove(sbn.key)
+                    _notificationEvents.value = _notificationEvents.value.filter {
+                        it.sbn.key != sbn.key
+                    }
+                }
 
                 if (pkg in CLOCK_PACKAGES) {
                     val channelId = sbn.notification?.channelId?.lowercase() ?: ""
@@ -376,16 +365,22 @@ constructor(
 
                 if (pkg in SUPPRESSED_PACKAGES) return
 
-                if ("sports" !in disabledTypes) {
-                    if (pkg == GOOGLE_PACKAGE) {
-                        val groupKey = sbn.groupKey ?: ""
-                        val isSportsGroup = groupKey.contains("::sports", ignoreCase = true)
-                        if (isSportsGroup && handleSportsScore(sbn, extras, forceCapture = true)) return
-                    }
-                    if (pkg in SPORTS_PACKAGES && handleSportsScore(sbn, extras, forceCapture = true)) return
+                if (sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
+
+                if (
+                    "sports" !in disabledTypes &&
+                        isSportsNotification(pkg, sbn.groupKey) &&
+                        handleSportsScore(sbn, extras, forceCapture = true)
+                ) {
+                    clearPromotedOngoing(sbn.key)
+                    return
                 }
 
-                if (sbn.isOngoing && isPromotable(sbn, extras)) {
+                if (
+                    sbn.isOngoing &&
+                        (sbn.notification.category == Notification.CATEGORY_NAVIGATION ||
+                            isPromotable(sbn, extras))
+                ) {
                     if ("promoted_ongoing" !in disabledTypes) handlePromotedOngoing(sbn, extras, pkg)
                     return
                 }
@@ -414,8 +409,6 @@ constructor(
                 if (category == Notification.CATEGORY_SERVICE && !hasProgress) return
                 if (sbn.packageName == activeMediaPackageProvider?.invoke()) return
 
-                val notifFlags = sbn.notification?.flags ?: 0
-                if (notifFlags and Notification.FLAG_GROUP_SUMMARY != 0) return
                 val groupKey = if (sbn.isGroup) sbn.groupKey else null
 
                 val title = extras.getString("android.title")
@@ -956,12 +949,13 @@ constructor(
     private fun handlePromotedOngoing(sbn: StatusBarNotification, extras: Bundle, pkg: String) {
         val shortCritical =
             try {
-                sbn.notification?.shortCriticalText?.toString() ?: ""
+                sbn.notification?.shortCriticalText?.toString()
+                    ?: extras.getCharSequence("android.shortCriticalText")?.toString().orEmpty()
             } catch (_: Exception) {
-                extras.getString("android.shortCriticalText") ?: ""
+                extras.getCharSequence("android.shortCriticalText")?.toString().orEmpty()
             }
-        val title = extras.getString("android.title") ?: ""
-        val text = extras.getString("android.text") ?: ""
+        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
+        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
         val appName = resolveAppName(pkg)
         val icon = loadNotificationIcon(sbn, pkg)
 
@@ -1099,9 +1093,10 @@ constructor(
         var statusDetail = ""
         if (score1.isNotEmpty()) {
             val shortCritical = try {
-                sbn.notification?.shortCriticalText?.toString() ?: ""
+                sbn.notification?.shortCriticalText?.toString()
+                    ?: extras.getCharSequence("android.shortCriticalText")?.toString().orEmpty()
             } catch (_: Exception) {
-                extras.getString("android.shortCriticalText") ?: ""
+                extras.getCharSequence("android.shortCriticalText")?.toString().orEmpty()
             }
             statusDetail = shortCritical
                 .replace(score1, "").replace(score2, "")

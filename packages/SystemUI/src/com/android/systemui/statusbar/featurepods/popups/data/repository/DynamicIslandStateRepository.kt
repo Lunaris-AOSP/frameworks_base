@@ -31,6 +31,7 @@ data class DynamicIslandState(
     val canShowCalls: Boolean = false,
     val callNotificationKeys: Set<String> = emptySet(),
     val isScreenRecordingShown: Boolean = false,
+    val notificationKeys: Set<String> = emptySet(),
 )
 
 @SysUISingleton

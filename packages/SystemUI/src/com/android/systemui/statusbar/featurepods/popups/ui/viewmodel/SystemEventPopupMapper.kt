@@ -131,6 +131,19 @@ constructor(
         notificationCount: Int = 1,
         chargingDetails: List<ChargingDetailModel> = emptyList(),
     ): PopupChipModel.Shown? {
+        val ongoing =
+            (event as? IslandEvent.PromotedOngoing)?.let {
+                ongoingActivityContent(
+                    shortText = it.shortText,
+                    title = it.title,
+                    text = it.text,
+                    appName = it.appName,
+                    progress = it.progress.takeIf { progress -> progress >= 0f },
+                    indeterminate = it.isIndeterminate,
+                    navigation =
+                        it.sbn.notification.category == android.app.Notification.CATEGORY_NAVIGATION,
+                )
+            }
         val kind =
             when (event) {
                 is IslandEvent.Charging -> SystemEventKind.Charging
@@ -452,13 +465,17 @@ constructor(
                 is IslandEvent.PromotedOngoing -> {
                     iconRes = R.drawable.dynamic_island_notification
                     appName = event.appName
-                    chipDrawable = loadAppIcon(event.sbn)?.drawable
-                    indeterminate = event.isIndeterminate
+                    val navigation =
+                        event.sbn.notification.category ==
+                            android.app.Notification.CATEGORY_NAVIGATION
+                    chipDrawable = if (navigation) event.appIcon else loadAppIcon(event.sbn)?.drawable
+                    indeterminate = !navigation && event.isIndeterminate
                     icon = event.appIcon
                     notificationActions(event.actions)
                     open(event.sbn.notification.contentIntent)
-                    progress = event.progress.takeIf { it >= 0f }
-                    event.title.ifBlank { event.appName } to event.text
+                    progress = event.progress.takeIf { !navigation && it >= 0f }
+                    prominentText = ongoing?.prominentText
+                    checkNotNull(ongoing).title to ongoing.text
                 }
                 is IslandEvent.Timer -> {
                     icon = event.appIcon
@@ -522,6 +539,13 @@ constructor(
                 ?.callStartTimeMs
         return PopupChipModel.Shown(
             chipId = PopupChipId.SystemEvent(event.id),
+            sourceNotificationKey =
+                when (event) {
+                    is IslandEvent.Call -> event.sbn.key
+                    is IslandEvent.Notification -> event.sbn.key
+                    is IslandEvent.PromotedOngoing -> event.sbn.key
+                    else -> null
+                },
             sourcePackageName =
                 when (event) {
                     is IslandEvent.Call -> event.sbn.packageName
@@ -568,9 +592,7 @@ constructor(
                             progress != null -> "${(progress.coerceIn(0f, 1f) * 100).toInt()}%"
                             else -> notificationCount.toString()
                         }
-                    is IslandEvent.PromotedOngoing ->
-                        if (indeterminate) null
-                        else progress?.let { "${(it.coerceIn(0f, 1f) * 100).toInt()}%" }
+                    is IslandEvent.PromotedOngoing -> ongoing?.chipText
                     is IslandEvent.Bluetooth -> null
                     is IslandEvent.Hotspot -> event.numDevices.toString()
                     else -> title
