@@ -16,6 +16,7 @@
 
 package com.android.systemui.qs.panels.ui.compose
 
+import android.view.MotionEvent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.animateBounds
 import androidx.compose.foundation.layout.Box
@@ -31,13 +32,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.pointer.motionEventSpy
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LookaheadScope
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.android.compose.modifiers.padding
 import com.android.systemui.qs.panels.shared.model.AxQsGridItem
@@ -311,6 +317,9 @@ fun axQsVisibleTileRows(
     return ((itemCount + columns - 1) / columns).coerceAtMost(maxRows.coerceAtLeast(1))
 }
 
+internal val LocalQsTilePagerGestureStart = staticCompositionLocalOf<((Boolean) -> Unit)?> { null }
+
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun <T> AxQsTileGrid(
     items: List<AxQsGridItem<T>>,
@@ -327,6 +336,8 @@ fun <T> AxQsTileGrid(
     content: @Composable (AxQsGridItem<T>) -> Unit,
     label: @Composable (AxQsGridItem<T>) -> Unit = {},
 ) {
+    val onTilePagerGestureStart = LocalQsTilePagerGestureStart.current
+    val layoutDirection = LocalLayoutDirection.current
     val pages = remember(items, columns, rows) { items.chunked(columns * rows) }
     val pageCount = pages.size.coerceAtLeast(1)
     LaunchedEffect(pageCount) {
@@ -351,7 +362,18 @@ fun <T> AxQsTileGrid(
             modifier =
                 Modifier.fillMaxWidth()
                     .height(pageHeight)
-                    .padding(horizontal = { -pagerPadding.roundToPx() }),
+                    .padding(horizontal = { -pagerPadding.roundToPx() })
+                    .motionEventSpy { event ->
+                        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                            onTilePagerGestureStart?.invoke(
+                                pagerState.currentPage == 0 &&
+                                    !pagerState.canScrollBackward &&
+                                    !pagerState.isScrollInProgress &&
+                                    (layoutDirection == LayoutDirection.Ltr ||
+                                        !pagerState.canScrollForward)
+                            )
+                        }
+                    },
             contentPadding = PaddingValues(horizontal = pagerPadding),
             beyondViewportPageCount = 1,
             pageSpacing = pagerPadding,
