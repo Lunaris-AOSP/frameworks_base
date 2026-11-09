@@ -27,6 +27,7 @@ import static android.app.UiModeManager.MODE_ATTENTION_THEME_OVERLAY_NIGHT;
 import static android.app.UiModeManager.MODE_ATTENTION_THEME_OVERLAY_OFF;
 import static android.app.UiModeManager.MODE_NIGHT_AUTO;
 import static android.app.UiModeManager.MODE_NIGHT_CUSTOM;
+import static android.app.UiModeManager.MODE_NIGHT_CUSTOM_TYPE_AMBIENT;
 import static android.app.UiModeManager.MODE_NIGHT_CUSTOM_TYPE_BEDTIME;
 import static android.app.UiModeManager.MODE_NIGHT_CUSTOM_TYPE_SCHEDULE;
 import static android.app.UiModeManager.MODE_NIGHT_CUSTOM_TYPE_UNKNOWN;
@@ -145,7 +146,8 @@ final class UiModeManagerService extends SystemService {
     private static final String SYSTEM_PROPERTY_DEVICE_THEME = "persist.sys.theme";
     @VisibleForTesting
     public static final Set<Integer> SUPPORTED_NIGHT_MODE_CUSTOM_TYPES = new ArraySet(
-            new Integer[]{MODE_NIGHT_CUSTOM_TYPE_SCHEDULE, MODE_NIGHT_CUSTOM_TYPE_BEDTIME});
+            new Integer[]{MODE_NIGHT_CUSTOM_TYPE_SCHEDULE, MODE_NIGHT_CUSTOM_TYPE_BEDTIME,
+                    MODE_NIGHT_CUSTOM_TYPE_AMBIENT});
 
     /**
      * Approximate maximum number of User Ids (accounts) we expect to exist on the device, used for
@@ -188,6 +190,8 @@ final class UiModeManagerService extends SystemService {
     private final LocalTime DEFAULT_CUSTOM_NIGHT_END_TIME = LocalTime.of(6, 0);
     private LocalTime mCustomAutoNightModeStartMilliseconds = DEFAULT_CUSTOM_NIGHT_START_TIME;
     private LocalTime mCustomAutoNightModeEndMilliseconds = DEFAULT_CUSTOM_NIGHT_END_TIME;
+    @GuardedBy("mLock")
+    private boolean mCustomAlarmScheduled;
 
     private Map<Integer, String> mCarModePackagePriority = new HashMap<>();
     private boolean mCarModeEnabled = false;
@@ -205,6 +209,10 @@ final class UiModeManagerService extends SystemService {
     private boolean mWatch;
     private boolean mVrHeadset;
     private boolean mComputedNightMode;
+    @GuardedBy("mLock")
+    private boolean mAmbientNightMode;
+    @GuardedBy("mLock")
+    private AmbientLightModeController mAmbientLightModeController;
     private boolean mLastBedtimeRequestedNightMode = false;
     private int mCarModeEnableFlags;
     private boolean mSetupWizardComplete;
@@ -404,6 +412,7 @@ final class UiModeManagerService extends SystemService {
 
     private final AlarmManager.OnAlarmListener mCustomTimeListener = () -> {
         synchronized (mLock) {
+            mCustomAlarmScheduled = false;
             updateCustomTimeLocked();
         }
     };
@@ -432,7 +441,7 @@ final class UiModeManagerService extends SystemService {
                     // update night mode
                     Context context = getContext();
                     updateNightModeFromSettingsLocked(context, context.getResources(),
-                            UserHandle.getCallingUserId());
+                            mCurrentUser);
                     updateLocked(0, 0);
                 }
             }
@@ -575,11 +584,18 @@ final class UiModeManagerService extends SystemService {
 
     @Override
     public void onUserSwitching(@Nullable TargetUser from, @NonNull TargetUser to) {
-        mCurrentUser = to.getUserIdentifier();
-        if (mNightMode.get() == MODE_NIGHT_AUTO) persistComputedNightMode(from.getUserIdentifier());
-        getContext().getContentResolver().unregisterContentObserver(mSetupWizardObserver);
-        verifySetupWizardCompleted();
         synchronized (mLock) {
+            if (mAmbientLightModeController != null) {
+                mAmbientLightModeController.setEnabled(false);
+            }
+            unregisterDeviceInactiveListenerLocked();
+            cancelCustomAlarm();
+            if ((mNightMode.get() == MODE_NIGHT_AUTO || isAmbientNightMode()) && from != null) {
+                persistComputedNightMode(from.getUserIdentifier());
+            }
+            mCurrentUser = to.getUserIdentifier();
+            getContext().getContentResolver().unregisterContentObserver(mSetupWizardObserver);
+            verifySetupWizardCompleted();
             updateNightModeFromSettingsLocked(getContext(), getContext().getResources(),
                     to.getUserIdentifier());
             updateLocked(0, 0);
@@ -594,6 +610,8 @@ final class UiModeManagerService extends SystemService {
                 mSystemReady = true;
                 mKeyguardManager = context.getSystemService(KeyguardManager.class);
                 mPowerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+                mAmbientLightModeController = new AmbientLightModeController(
+                        context, mHandler, mLock, this::onAmbientLightChanged);
                 mWakeLock = mPowerManager.newWakeLock(PowerManager.FULL_WAKE_LOCK, TAG);
                 mWindowManager = LocalServices.getService(WindowManagerInternal.class);
                 mActivityTaskManager = LocalServices.getService(ActivityTaskManagerInternal.class);
@@ -688,15 +706,18 @@ final class UiModeManagerService extends SystemService {
     private final BroadcastReceiver mOnShutdown = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            if (mNightMode.get() == MODE_NIGHT_AUTO) {
-                persistComputedNightMode(mCurrentUser);
+            synchronized (mLock) {
+                if (mNightMode.get() == MODE_NIGHT_AUTO || isAmbientNightMode()) {
+                    persistComputedNightMode(mCurrentUser);
+                }
             }
         }
     };
 
     private void persistComputedNightMode(int userId) {
+        final boolean night = isAmbientNightMode() ? mAmbientNightMode : mComputedNightMode;
         Secure.putIntForUser(getContext().getContentResolver(),
-                Secure.UI_NIGHT_MODE_LAST_COMPUTED, mComputedNightMode ? 1 : 0,
+                Secure.UI_NIGHT_MODE_LAST_COMPUTED, night ? 1 : 0,
                 userId);
     }
 
@@ -704,13 +725,14 @@ final class UiModeManagerService extends SystemService {
         @Override
         public void onReceive(Context context, Intent intent) {
             List<String> settings = Arrays.asList(
-                    Secure.UI_NIGHT_MODE, Secure.DARK_THEME_CUSTOM_START_TIME,
+                    Secure.UI_NIGHT_MODE, Secure.UI_NIGHT_MODE_CUSTOM_TYPE,
+                    Secure.DARK_THEME_CUSTOM_START_TIME,
                     Secure.DARK_THEME_CUSTOM_END_TIME);
             if (settings.contains(intent.getExtras().getCharSequence(Intent.EXTRA_SETTING_NAME))) {
                 synchronized (mLock) {
                     updateNightModeFromSettingsLocked(context, context.getResources(),
-                            UserHandle.getCallingUserId());
-                    updateConfigurationLocked();
+                            mCurrentUser);
+                    updateLocked(0, 0);
                 }
             }
         }
@@ -746,7 +768,7 @@ final class UiModeManagerService extends SystemService {
     // Records whether setup wizard has happened or not and adds an observer for this user if not.
     private void verifySetupWizardCompleted() {
         final Context context = getContext();
-        final int userId = UserHandle.getCallingUserId();
+        final int userId = mCurrentUser;
         if (!setupWizardCompleteForCurrentUser()) {
             mSetupWizardComplete = false;
             context.getContentResolver().registerContentObserver(
@@ -759,11 +781,12 @@ final class UiModeManagerService extends SystemService {
 
     private boolean setupWizardCompleteForCurrentUser() {
         return Secure.getIntForUser(getContext().getContentResolver(),
-                Secure.USER_SETUP_COMPLETE, 0, UserHandle.getCallingUserId()) == 1;
+                Secure.USER_SETUP_COMPLETE, 0, mCurrentUser) == 1;
     }
 
     private void updateCustomTimeLocked() {
-        if (mNightMode.get() != MODE_NIGHT_CUSTOM) return;
+        if (mNightMode.get() != MODE_NIGHT_CUSTOM
+                || mNightModeCustomType != MODE_NIGHT_CUSTOM_TYPE_SCHEDULE) return;
         if (shouldApplyAutomaticChangesImmediately()) {
             updateLocked(0, 0);
         } else {
@@ -789,7 +812,12 @@ final class UiModeManagerService extends SystemService {
                             com.android.internal.R.integer.config_defaultNightMode), userId));
             mNightModeCustomType = Secure.getIntForUser(context.getContentResolver(),
                     Secure.UI_NIGHT_MODE_CUSTOM_TYPE, MODE_NIGHT_CUSTOM_TYPE_UNKNOWN, userId);
-                    mOverrideNightModeOn = Secure.getIntForUser(context.getContentResolver(),
+            if (mNightMode.get() == MODE_NIGHT_CUSTOM
+                    && !SUPPORTED_NIGHT_MODE_CUSTOM_TYPES.contains(mNightModeCustomType)) {
+                mNightModeCustomType = MODE_NIGHT_CUSTOM_TYPE_SCHEDULE;
+            }
+            mOverrideNightModeUser = userId;
+            mOverrideNightModeOn = Secure.getIntForUser(context.getContentResolver(),
                     Secure.UI_NIGHT_MODE_OVERRIDE_ON, 0, userId) != 0;
             mOverrideNightModeOff = Secure.getIntForUser(context.getContentResolver(),
                     Secure.UI_NIGHT_MODE_OVERRIDE_OFF, 0, userId) != 0;
@@ -801,10 +829,11 @@ final class UiModeManagerService extends SystemService {
                     Secure.getLongForUser(context.getContentResolver(),
                             Secure.DARK_THEME_CUSTOM_END_TIME,
                             DEFAULT_CUSTOM_NIGHT_END_TIME.toNanoOfDay() / 1000L, userId) * 1000);
-            if (mNightMode.get() == MODE_NIGHT_AUTO) {
+            if (mNightMode.get() == MODE_NIGHT_AUTO || isAmbientNightMode()) {
                 mComputedNightMode = Secure.getIntForUser(context.getContentResolver(),
                         Secure.UI_NIGHT_MODE_LAST_COMPUTED, 0, userId) != 0;
             }
+            mAmbientNightMode = mComputedNightMode;
         }
     }
 
@@ -826,7 +855,9 @@ final class UiModeManagerService extends SystemService {
     }
 
     private void cancelCustomAlarm() {
+        if (!mCustomAlarmScheduled) return;
         mAlarmManager.cancel(mCustomTimeListener);
+        mCustomAlarmScheduled = false;
     }
 
     private void unregisterDeviceInactiveListenerLocked() {
@@ -1041,7 +1072,16 @@ final class UiModeManagerService extends SystemService {
             final long ident = Binder.clearCallingIdentity();
             try {
                 synchronized (mLock) {
+                    if (customModeType == MODE_NIGHT_CUSTOM_TYPE_AMBIENT
+                            && (mAmbientLightModeController == null
+                            || !mAmbientLightModeController.isAvailable())) {
+                        throw new IllegalArgumentException("Ambient night mode needs a light sensor");
+                    }
                     if (mNightMode.get() != mode || mNightModeCustomType != customModeType) {
+                        if (mAmbientLightModeController != null) {
+                            mAmbientLightModeController.setEnabled(false);
+                        }
+                        mAmbientNightMode = mComputedNightMode;
                         if (mNightMode.get() == MODE_NIGHT_AUTO
                                 || mNightMode.get() == MODE_NIGHT_CUSTOM) {
                             unregisterDeviceInactiveListenerLocked();
@@ -1053,9 +1093,11 @@ final class UiModeManagerService extends SystemService {
                         mNightMode.set(mode);
                         resetNightModeOverrideLocked();
                         persistNightMode(user);
+                        if (isAmbientNightMode()) persistComputedNightMode(user);
                         // on screen off will update configuration instead
                         if ((mNightMode.get() != MODE_NIGHT_AUTO
                                 && mNightMode.get() != MODE_NIGHT_CUSTOM)
+                                || isAmbientNightMode()
                                 || shouldApplyAutomaticChangesImmediately()) {
                             unregisterDeviceInactiveListenerLocked();
                             updateLocked(0, 0);
@@ -1230,6 +1272,9 @@ final class UiModeManagerService extends SystemService {
                     }
 
                     if (isUserInteraction) {
+                        if (isAmbientNightMode() && mAmbientLightModeController != null) {
+                            mAmbientLightModeController.cancelPendingChange();
+                        }
                         // deactivates AttentionMode if user toggles DarkTheme
                         mAttentionModeThemeOverlay = MODE_ATTENTION_THEME_OVERLAY_OFF;
                     }
@@ -1837,7 +1882,8 @@ final class UiModeManagerService extends SystemService {
 
     private void onCustomTimeUpdated(int user) {
         persistNightMode(user);
-        if (mNightMode.get() != MODE_NIGHT_CUSTOM) return;
+        if (mNightMode.get() != MODE_NIGHT_CUSTOM
+                || mNightModeCustomType != MODE_NIGHT_CUSTOM_TYPE_SCHEDULE) return;
 
         synchronized (mLock) {
             resetNightModeOverrideLocked();
@@ -2071,6 +2117,12 @@ final class UiModeManagerService extends SystemService {
     }
 
     private void updateConfigurationLocked() {
+        if (isAmbientNightMode() && mAmbientLightModeController != null
+                && !mAmbientLightModeController.isAvailable()) {
+            mNightMode.set(mComputedNightMode ? MODE_NIGHT_YES : MODE_NIGHT_NO);
+            mNightModeCustomType = MODE_NIGHT_CUSTOM_TYPE_UNKNOWN;
+            persistNightMode(mCurrentUser);
+        }
         int uiMode = mDefaultUiModeType;
         if (mUiModeLocked) {
             // no-op, keeps default one
@@ -2107,14 +2159,25 @@ final class UiModeManagerService extends SystemService {
         if (mNightMode.get() == MODE_NIGHT_CUSTOM) {
             if (mNightModeCustomType == MODE_NIGHT_CUSTOM_TYPE_BEDTIME) {
                 updateComputedNightModeLocked(mLastBedtimeRequestedNightMode);
+            } else if (isAmbientNightMode()) {
+                updateComputedNightModeLocked(mAmbientNightMode);
             } else {
                 registerTimeChangeEvent();
                 final boolean activate = computeCustomNightMode();
                 updateComputedNightModeLocked(activate);
                 scheduleNextCustomTimeListener();
             }
-        } else {
+        }
+        if (mNightMode.get() != MODE_NIGHT_CUSTOM
+                || mNightModeCustomType != MODE_NIGHT_CUSTOM_TYPE_SCHEDULE) {
             unregisterTimeChangeEvent();
+            cancelCustomAlarm();
+        }
+
+        if (mAmbientLightModeController != null) {
+            mAmbientLightModeController.setEnabled(isAmbientNightMode() && mSystemReady
+                    && mSetupWizardComplete && !mPowerSave
+                    && !mCar && !mCarModeEnabled);
         }
 
         updateForceInvertStates();
@@ -2147,6 +2210,25 @@ final class UiModeManagerService extends SystemService {
      */
     private boolean isPowerSaveNightModeOverrideNeeded() {
         return mPowerSave && !mCarModeEnabled && !mCar;
+    }
+
+    @GuardedBy("mLock")
+    private boolean isAmbientNightMode() {
+        return mNightMode.get() == MODE_NIGHT_CUSTOM
+                && mNightModeCustomType == MODE_NIGHT_CUSTOM_TYPE_AMBIENT;
+    }
+
+    private void onAmbientLightChanged(float lux) {
+        synchronized (mLock) {
+            if (!isAmbientNightMode() || mPowerSave || mCar || mCarModeEnabled) return;
+            final boolean night = AmbientLightModeController.isNight(lux, mAmbientNightMode);
+            if (mAmbientNightMode == night) return;
+            mAmbientNightMode = night;
+            resetNightModeOverrideLocked();
+            unregisterDeviceInactiveListenerLocked();
+            updateLocked(0, 0);
+            persistComputedNightMode(mCurrentUser);
+        }
     }
 
     @UiModeManager.NightMode
@@ -2194,6 +2276,7 @@ final class UiModeManagerService extends SystemService {
                 : getDateTimeAfter(mCustomAutoNightModeStartMilliseconds, now);
         final long millis = next.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
         mAlarmManager.setExact(AlarmManager.RTC, millis, TAG, mCustomTimeListener, null);
+        mCustomAlarmScheduled = true;
     }
 
     private LocalDateTime getDateTimeAfter(LocalTime localTime, LocalDateTime compareTime) {
@@ -2509,6 +2592,7 @@ final class UiModeManagerService extends SystemService {
         public static final String NIGHT_MODE_STR_AUTO = "auto";
         public static final String NIGHT_MODE_STR_CUSTOM_SCHEDULE = "custom_schedule";
         public static final String NIGHT_MODE_STR_CUSTOM_BEDTIME = "custom_bedtime";
+        public static final String NIGHT_MODE_STR_CUSTOM_AMBIENT = "custom_ambient";
         public static final String NIGHT_MODE_STR_UNKNOWN = "unknown";
         private final IUiModeManager mInterface;
 
@@ -2522,7 +2606,7 @@ final class UiModeManagerService extends SystemService {
             pw.println("UiModeManager service (uimode) commands:");
             pw.println("  help");
             pw.println("    Print this help text.");
-            pw.println("  night [yes|no|auto|custom_schedule|custom_bedtime]");
+            pw.println("  night [yes|no|auto|custom_schedule|custom_bedtime|custom_ambient]");
             pw.println("    Set or read night mode.");
             pw.println("  car [yes|no]");
             pw.println("    Set or read car mode.");
@@ -2604,7 +2688,8 @@ final class UiModeManagerService extends SystemService {
                 err.println("Error: mode must be '" + NIGHT_MODE_STR_YES + "', '"
                         + NIGHT_MODE_STR_NO + "', or '" + NIGHT_MODE_STR_AUTO
                         +  "', or '" + NIGHT_MODE_STR_CUSTOM_SCHEDULE + "', or '"
-                        + NIGHT_MODE_STR_CUSTOM_BEDTIME + "'");
+                        + NIGHT_MODE_STR_CUSTOM_BEDTIME + "', or '"
+                        + NIGHT_MODE_STR_CUSTOM_AMBIENT + "'");
                 return -1;
             }
         }
@@ -2632,6 +2717,9 @@ final class UiModeManagerService extends SystemService {
                     if (customType == UiModeManager.MODE_NIGHT_CUSTOM_TYPE_BEDTIME) {
                         return NIGHT_MODE_STR_CUSTOM_BEDTIME;
                     }
+                    if (customType == MODE_NIGHT_CUSTOM_TYPE_AMBIENT) {
+                        return NIGHT_MODE_STR_CUSTOM_AMBIENT;
+                    }
                 default:
                     return NIGHT_MODE_STR_UNKNOWN;
             }
@@ -2647,6 +2735,7 @@ final class UiModeManagerService extends SystemService {
                     return UiModeManager.MODE_NIGHT_AUTO;
                 case NIGHT_MODE_STR_CUSTOM_SCHEDULE:
                 case NIGHT_MODE_STR_CUSTOM_BEDTIME:
+                case NIGHT_MODE_STR_CUSTOM_AMBIENT:
                     return UiModeManager.MODE_NIGHT_CUSTOM;
                 default:
                     return -1;
@@ -2655,6 +2744,8 @@ final class UiModeManagerService extends SystemService {
 
         private static int strToNightModeCustomType(String customTypeStr) {
             switch (customTypeStr) {
+                case NIGHT_MODE_STR_CUSTOM_AMBIENT:
+                    return MODE_NIGHT_CUSTOM_TYPE_AMBIENT;
                 case NIGHT_MODE_STR_CUSTOM_BEDTIME:
                     return UiModeManager.MODE_NIGHT_CUSTOM_TYPE_BEDTIME;
                 case NIGHT_MODE_STR_CUSTOM_SCHEDULE:

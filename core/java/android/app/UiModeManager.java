@@ -348,6 +348,7 @@ public class UiModeManager {
     @IntDef(prefix = { "MODE_NIGHT_CUSTOM_TYPE_" }, value = {
             MODE_NIGHT_CUSTOM_TYPE_SCHEDULE,
             MODE_NIGHT_CUSTOM_TYPE_BEDTIME,
+            MODE_NIGHT_CUSTOM_TYPE_AMBIENT,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface NightModeCustomType {}
@@ -360,6 +361,7 @@ public class UiModeManager {
             MODE_NIGHT_CUSTOM_TYPE_UNKNOWN,
             MODE_NIGHT_CUSTOM_TYPE_SCHEDULE,
             MODE_NIGHT_CUSTOM_TYPE_BEDTIME,
+            MODE_NIGHT_CUSTOM_TYPE_AMBIENT,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface NightModeCustomReturnType {}
@@ -390,6 +392,13 @@ public class UiModeManager {
      */
     @SystemApi
     public static final int MODE_NIGHT_CUSTOM_TYPE_BEDTIME = 1;
+
+    /**
+     * A granular type for {@link #MODE_NIGHT_CUSTOM} based on ambient light while the screen is on.
+     * Requires a light sensor and is never selected by default.
+     * @hide
+     */
+    public static final int MODE_NIGHT_CUSTOM_TYPE_AMBIENT = 2;
 
     /** @hide */
     @IntDef(prefix = {"Force_Invert_Type_"}, value = {
