@@ -105,6 +105,7 @@ sealed interface PopupContentModel {
         val image: Icon? = null,
         val bluetoothBatteries: List<BluetoothBatteryModel> = emptyList(),
         val chargingDetails: List<ChargingDetailModel> = emptyList(),
+        val appIcon: Icon? = null,
     ) : PopupContentModel
 
     data object None : PopupContentModel

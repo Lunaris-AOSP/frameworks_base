@@ -23,6 +23,10 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.runtime.Composable
@@ -32,9 +36,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import com.android.systemui.common.ui.compose.Icon as StatusBarIcon
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.featurepods.popups.shared.model.PopupActionRole
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentModel
@@ -52,6 +61,16 @@ internal fun CallPopup(
     onDismissNotification: () -> Unit = {},
 ) {
     val status = model.prominentText ?: stringResource(R.string.dynamic_island_event_call)
+    val callStatus = model.callStartTimeMs?.let { rememberCallDurationText(it) } ?: status
+    val subtitle =
+        listOfNotNull(
+                callStatus,
+                model.text.takeIf {
+                    it.isNotBlank() && it != model.title && it != status && it != callStatus
+                },
+            )
+            .joinToString(" · ")
+    val settings = LocalLunarisBarState.current.settings
     val context = LocalContext.current
     val audioManager = remember(context) { context.getSystemService(AudioManager::class.java) }
     val scope = rememberCoroutineScope()
@@ -144,14 +163,30 @@ internal fun CallPopup(
         }
 
     LunarisBarCard(modifier) {
-        LunarisBarCardHeader(
-            title = model.title,
-            subtitle = model.text.takeIf { it.isNotBlank() && it != model.title } ?: status,
-            icon = model.icon,
-            glyph = Icons.Default.Person,
-            appName = model.appName,
-        )
-        LunarisBarCardValue(model.callStartTimeMs?.let { rememberCallDurationText(it) } ?: status)
+        Box(Modifier.fillMaxWidth()) {
+            Box(Modifier.padding(end = if (model.appIcon != null) 36.dp else 0.dp)) {
+                LunarisBarCardHeader(
+                    title = model.title,
+                    subtitle = subtitle,
+                    icon = model.icon,
+                    glyph = Icons.Default.Person,
+                    appName = model.appName,
+                    compact = true,
+                )
+            }
+            model.appIcon?.let {
+                StatusBarIcon(
+                    it,
+                    modifier =
+                        Modifier.align(Alignment.TopEnd)
+                            .size(28.dp)
+                            .clip(
+                                lunarisBarIconShape(settings.integer("card_icon_shape", 2, 0, 31))
+                            ),
+                    tint = Color.Unspecified,
+                )
+            }
+        }
         PopupActionChips(
             actions.sortedBy {
                 when (it.role) {

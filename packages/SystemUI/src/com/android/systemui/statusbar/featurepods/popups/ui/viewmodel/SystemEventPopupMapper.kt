@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import android.media.AudioManager
 import android.os.BatteryManager
@@ -11,6 +12,7 @@ import android.os.UserHandle
 import android.service.notification.StatusBarNotification
 import com.android.settingslib.fuelgauge.BatteryStatus
 import com.android.systemui.ActivityIntentHelper
+import com.android.systemui.common.shared.model.ContentDescription
 import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.islandevents.model.IslandEvent
@@ -43,13 +45,22 @@ constructor(
     private val lockscreenUserManager: NotificationLockscreenUserManager,
     private val keyguardStateController: KeyguardStateController,
 ) {
-    private fun loadAppIcon(sbn: StatusBarNotification): Drawable? =
+    private fun loadAppIcon(sbn: StatusBarNotification): Icon.Loaded? =
         try {
             val appContext =
                 if (sbn.user == UserHandle.ALL) context
                 else context.createContextAsUser(sbn.user, 0)
-            appContext.packageManager.getApplicationIcon(sbn.packageName)
-        } catch (_: android.content.pm.PackageManager.NameNotFoundException) {
+            val packageManager = appContext.packageManager
+            val appInfo =
+                packageManager.getApplicationInfo(
+                    sbn.packageName,
+                    PackageManager.GET_SHARED_LIBRARY_FILES,
+                )
+            Icon.Loaded(
+                packageManager.getApplicationIcon(appInfo),
+                ContentDescription.Loaded(packageManager.getApplicationLabel(appInfo).toString()),
+            )
+        } catch (_: PackageManager.NameNotFoundException) {
             null
         }
 
@@ -141,6 +152,7 @@ constructor(
         var appName: String? = null
         var pulse = false
         var image: Icon? = null
+        var appIcon: Icon? = null
         var icon: Drawable? = null
         var chipDrawable: Drawable? = null
         var iconRes = android.R.drawable.ic_dialog_info
@@ -321,6 +333,11 @@ constructor(
                     ) to ""
                 }
                 is IslandEvent.Call -> {
+                    appIcon =
+                        loadAppIcon(event.sbn)
+                            ?: event.appIcon?.let {
+                                Icon.Loaded(it, ContentDescription.Loaded(event.sbn.packageName))
+                            }
                     icon = event.callerPhoto ?: event.appIcon
                     iconRes = android.R.drawable.sym_action_call
                     prominentText =
@@ -421,7 +438,7 @@ constructor(
                 }
                 is IslandEvent.Notification -> {
                     appName = event.appName
-                    chipDrawable = loadAppIcon(event.sbn)
+                    chipDrawable = loadAppIcon(event.sbn)?.drawable
                     iconRes = R.drawable.dynamic_island_notification
                     image = event.notificationImage?.let { Icon.Loaded(it, null) }
                     indeterminate = event.isProgressIndeterminate
@@ -435,7 +452,7 @@ constructor(
                 is IslandEvent.PromotedOngoing -> {
                     iconRes = R.drawable.dynamic_island_notification
                     appName = event.appName
-                    chipDrawable = loadAppIcon(event.sbn)
+                    chipDrawable = loadAppIcon(event.sbn)?.drawable
                     indeterminate = event.isIndeterminate
                     icon = event.appIcon
                     notificationActions(event.actions)
@@ -593,6 +610,7 @@ constructor(
                         if (event is IslandEvent.RingerMode) Icon.Resource(iconRes, null)
                         else icon?.let { Icon.Loaded(it, null) },
                     appName = appName,
+                    appIcon = appIcon,
                     prominentText = prominentText.takeIf { bluetoothBatteries.isEmpty() },
                     pulse = pulse,
                     image = image,
