@@ -166,7 +166,9 @@ constructor(
                             transitionManager = bundle.call.transitionManager,
                         )
                     } else bundle.call,
-                    notifs = bundle.notifs.filterNot { it.key in island.callNotificationKeys },
+                    notifs = bundle.notifs.filterNot {
+                        it.key in island.callNotificationKeys || it.key in island.notificationKeys
+                    },
                 )
             }
             // Some of the chips could have timers in them and we don't want the start time for

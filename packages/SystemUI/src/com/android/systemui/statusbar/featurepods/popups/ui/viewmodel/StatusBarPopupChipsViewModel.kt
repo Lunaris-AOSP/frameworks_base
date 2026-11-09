@@ -232,6 +232,7 @@ constructor(
                         .toSet(),
                 isScreenRecordingShown =
                     visiblePopupChips.any { it.chipId == PopupChipId.ScreenRecord },
+                notificationKeys = visiblePopupChips.mapNotNull { it.sourceNotificationKey }.toSet(),
             )
 
     private fun hiddenByForeground(chip: PopupChipModel.Shown): Boolean {
@@ -276,12 +277,19 @@ constructor(
                 )
             }
 
-        val activeChips =
-            (systemEventChips.chips +
-                    candidateChips.filterIsInstance<PopupChipModel.Shown>().filterNot {
-                        it.chipId == PopupChipId.MediaControl && mediaHiddenAfterPause
-                    })
+        val visibleCandidates =
+            candidateChips
+                .filterIsInstance<PopupChipModel.Shown>()
+                .filterNot { it.chipId == PopupChipId.MediaControl && mediaHiddenAfterPause }
                 .filterNot(::hiddenByForeground)
+        val candidateNotificationKeys =
+            visibleCandidates.mapNotNull { it.sourceNotificationKey }.toSet()
+        val activeChips =
+            (systemEventChips.chips.filterNot {
+                    it.sourceNotificationKey in candidateNotificationKeys
+                } + visibleCandidates)
+                .filterNot(::hiddenByForeground)
+                .distinctBy { it.sourceNotificationKey ?: it.chipId }
         val settings =
             lunarisBarState.settings.forScreen(
                 lunarisBarState.screenWidth,
@@ -442,7 +450,9 @@ constructor(
                             }
                         requests.forEach { consumedRequests[it.chipId] = it.autoPopupRequest!! }
                         requests
-                            .firstOrNull { !hiddenByForeground(it) }
+                            .firstOrNull { request ->
+                                visiblePopupChips.any { it.chipId == request.chipId }
+                            }
                             ?.let { chip ->
                                 showPopup(chip.chipId)
                                 chip.onAutoPopupShown()
