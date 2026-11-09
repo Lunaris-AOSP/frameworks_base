@@ -160,6 +160,7 @@ import com.android.systemui.qs.panels.ui.compose.AxCompactHeaderDimensions
 import com.android.systemui.qs.panels.ui.compose.AxCompactQuickSettingsHeader
 import com.android.systemui.qs.panels.ui.compose.AxQsCompactFooter
 import com.android.systemui.qs.panels.ui.compose.EditMode
+import com.android.systemui.qs.panels.ui.compose.LocalQsTilePagerGestureStart
 import com.android.systemui.qs.panels.ui.compose.QuickQuickSettings
 import com.android.systemui.qs.shared.ui.QuickSettings.Elements
 import com.android.systemui.qs.ui.composable.QuickSettingsShade
@@ -419,6 +420,12 @@ constructor(
                         LocalShowQsSliderPercentage provides axQsViewModel.showSliderPercentage,
                         LocalRingerSliderViewModel provides ringerSliderViewModel,
                         LocalLunarisFlashlightSliderViewModel provides flashlightSliderViewModel,
+                        LocalQsTilePagerGestureStart provides
+                            { canSwipeToNotifications ->
+                                containerView
+                                    ?.tilePanelSwipeGesture
+                                    ?.onTilePagerDown(canSwipeToNotifications)
+                            },
                     ) {
                         WithStatusIconContext(tintedIconManagerFactory) {
                             CollapsableQuickSettingsSTL()
@@ -1664,6 +1671,29 @@ private class FrameLayoutTouchPassthrough(
     var downY = 0f
     var downX = 0f
     var preventingIntercept = false
+
+    val tilePanelSwipeGesture = QsTilePanelSwipeGesture(touchSlop.toFloat())
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> tilePanelSwipeGesture.onDown(event.x, event.y)
+            MotionEvent.ACTION_MOVE -> tilePanelSwipeGesture.onMove(event.x, event.y)
+            MotionEvent.ACTION_POINTER_DOWN -> tilePanelSwipeGesture.reset()
+        }
+        val handled = super.dispatchTouchEvent(event)
+        if (event.actionMasked == MotionEvent.ACTION_MOVE && allowPanelSwipe()) {
+            tilePanelSwipeGesture.disallowParentIntercept?.let { disallowIntercept ->
+                parent?.requestDisallowInterceptTouchEvent(disallowIntercept)
+            }
+        }
+        if (
+            event.actionMasked == MotionEvent.ACTION_UP ||
+                event.actionMasked == MotionEvent.ACTION_CANCEL
+        ) {
+            tilePanelSwipeGesture.reset()
+        }
+        return handled
+    }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         val action = event.actionMasked
