@@ -30,7 +30,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -40,6 +39,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.android.compose.animation.scene.ContentScope
 import com.android.compose.gesture.gesturesDisabled
+import com.android.systemui.qs.composefragment.ui.axQsEntrance as axQsPanelEntrance
 import com.android.systemui.qs.panels.shared.model.AxQsGridItem
 import com.android.systemui.qs.panels.ui.viewmodel.toolbar.ToolbarViewModel
 import com.android.systemui.shade.ui.viewmodel.ShadeHeaderViewModel
@@ -269,15 +269,7 @@ private fun AxQsSharedItem(
     }
 }
 
-internal fun Modifier.axSharedQsEntrance(progress: () -> Float): Modifier = graphicsLayer {
-    val entrance = progress().coerceIn(0f, 1f)
-    alpha = (entrance / 0.35f).coerceIn(0f, 1f)
-    val scale = 0.92f + 0.08f * entrance
-    scaleX = scale
-    scaleY = scale
-    transformOrigin = TransformOrigin(0.5f, 0f)
-    translationY = -(1f - entrance) * 180f
-}
+internal fun Modifier.axSharedQsEntrance(progress: () -> Float): Modifier = axQsPanelEntrance(progress)
 
 private fun sharedQsRowsHeight(rows: Int, rowHeight: Int, spacing: Int): Int =
     if (rows == 0) 0 else rowHeight * rows + spacing * (rows - 1)

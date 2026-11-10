@@ -477,6 +477,8 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
                         mPanelSwipeInProgress = true;
                         mNotificationStackScrollLayoutController.getView()
                                 .setPanelSwipeInProgress(true);
+                        mNotificationStackScrollLayoutController.getView()
+                                .setPanelSwipeProgress(progress, mQsFrame.getWidth());
                         mPanelViewControllerLazy.get().onPanelSwipeStarted();
                         if (mQsVelocityTracker != null) {
                             mQsVelocityTracker.recycle();
@@ -516,6 +518,8 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
                         mQs.setPanelSwipeProgress(progress);
                         mNotificationStackScrollLayoutController.getView().setTranslationX(
                                 -mQsFrame.getWidth() * progress);
+                        mNotificationStackScrollLayoutController.getView()
+                                .setPanelSwipeProgress(progress, mQsFrame.getWidth());
                     }
 
                     @Override

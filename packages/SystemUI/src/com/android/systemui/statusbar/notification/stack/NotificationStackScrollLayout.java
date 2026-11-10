@@ -98,6 +98,7 @@ import com.android.systemui.Dumpable;
 import com.android.systemui.ExpandHelper;
 import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.flags.Flags;
+import com.android.systemui.qs.LunarisQsMotion;
 import com.android.systemui.qs.flags.QSComposeFragment;
 import com.android.systemui.res.R;
 import com.android.systemui.scene.shared.flag.SceneContainerFlag;
@@ -310,6 +311,9 @@ public class NotificationStackScrollLayout
     private boolean mIsExpansionChanging;
     private boolean mPanelTracking;
     private boolean mPanelSwipeInProgress;
+    private float mPanelSwipeProgress = -1f;
+    private boolean mPanelSwipeFromQs;
+    private int mPanelSwipeWidth;
     private boolean mExpandingNotification;
     private boolean mExpandedInThisMotion;
     private boolean mShouldShowShelfOnly;
@@ -6059,7 +6063,19 @@ public class NotificationStackScrollLayout
         if (inProgress) {
             mAnimateNextTopPaddingChange = false;
             mTopPaddingNeedsAnimation = false;
+        } else {
+            mPanelSwipeProgress = -1f;
+            invalidate();
         }
+    }
+
+    public void setPanelSwipeProgress(float progress, int width) {
+        if (mPanelSwipeProgress < 0f) {
+            mPanelSwipeFromQs = progress >= 0.5f;
+        }
+        mPanelSwipeProgress = progress;
+        mPanelSwipeWidth = width;
+        invalidate();
     }
 
     public void setShouldShowShelfOnly(boolean shouldShowShelfOnly) {
@@ -7327,14 +7343,32 @@ public class NotificationStackScrollLayout
 
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
+        float swipeAlpha = mPanelSwipeInProgress && mPanelSwipeProgress >= 0f
+                ? 1f - LunarisQsMotion.panelSwipeAlpha(mPanelSwipeProgress) : 1f;
+        float swipeOverflow = mPanelSwipeWidth * 0.25f;
+        int saveCount = swipeAlpha < 1f
+                ? canvas.saveLayerAlpha(-swipeOverflow, 0f,
+                        canvas.getWidth() + swipeOverflow, canvas.getHeight(),
+                        Math.round(255f * swipeAlpha)) : -1;
+        try {
+            dispatchDrawContent(canvas);
+        } finally {
+            if (saveCount >= 0) canvas.restoreToCount(saveCount);
+        }
+    }
+
+    private void dispatchDrawContent(Canvas canvas) {
         AxAmbientStateEx axAmbientStateEx = Dependency.get(AxAmbientStateEx.class);
         axAmbientStateEx.setSkipDrawNotificationRowCount(0);
         if (mBlurEffect != null) {
             spewLog("Applying blur RenderEffect to NotificationStackScrollLayout");
             // reuse the cached RenderNode to blur
-            mBlurNode.setPosition(0, 0, canvas.getWidth(), canvas.getHeight());
+            int swipeOverflow = mPanelSwipeInProgress ? (int) Math.ceil(mPanelSwipeWidth * 0.25f) : 0;
+            mBlurNode.setPosition(-swipeOverflow, 0,
+                    canvas.getWidth() + swipeOverflow, canvas.getHeight());
             mBlurNode.setRenderEffect(mBlurEffect);
             Canvas blurCanvas = mBlurNode.beginRecording();
+            blurCanvas.translate(swipeOverflow, 0f);
             // draw all the children (except HUNs) on the blurred canvas
             super.dispatchDraw(blurCanvas);
             mBlurNode.endRecording();
@@ -7350,7 +7384,12 @@ public class NotificationStackScrollLayout
                 // TODO(b/388469101) draw these children in z-order
                 ExpandableView child = getChildAtIndex(i);
                 if (shouldSkipBlurForChild(child)) {
-                    super.drawChild(canvas, child, getDrawingTime());
+                    int saveCountForSwipe = preparePanelSwipeCanvas(canvas, child);
+                    try {
+                        super.drawChild(canvas, child, getDrawingTime());
+                    } finally {
+                        if (saveCountForSwipe >= 0) canvas.restoreToCount(saveCountForSwipe);
+                    }
                 }
             }
         } else {
@@ -7364,6 +7403,16 @@ public class NotificationStackScrollLayout
     }
 
     private void applyClipToCanvas(Canvas canvas) {
+        if (mPanelSwipeInProgress) {
+            if (mShouldUseRoundedRectClipping) {
+                canvas.clipRect(
+                        mRoundedRectClippingLeft - mPanelSwipeWidth,
+                        mRoundedRectClippingTop + mRoundedRectClippingYTranslation,
+                        mRoundedRectClippingRight + mPanelSwipeWidth,
+                        mRoundedRectClippingBottom + mRoundedRectClippingYTranslation);
+            }
+            return;
+        }
         if (mShouldUseRoundedRectClipping) {
             // clip by the positive path if it is defined
             canvas.clipPath(mRoundedClipPath);
@@ -7376,12 +7425,24 @@ public class NotificationStackScrollLayout
 
     @Override
     protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
+        final int swipeSaveCount = preparePanelSwipeCanvas(canvas, child);
         final int saveCount = mMotoCompactAnimator.prepareCanvas(canvas, child);
         try {
             return drawChildWithStackClipping(canvas, child, drawingTime);
         } finally {
             if (saveCount >= 0) canvas.restoreToCount(saveCount);
+            if (swipeSaveCount >= 0) canvas.restoreToCount(swipeSaveCount);
         }
+    }
+
+    private int preparePanelSwipeCanvas(Canvas canvas, View child) {
+        if (!mPanelSwipeInProgress || mPanelSwipeProgress < 0f) return -1;
+        float depth = (getTop() + child.getY()) / Math.max(1f, getRootView().getHeight());
+        float translation = LunarisQsMotion.panelRowOffset(
+                mPanelSwipeProgress, mPanelSwipeFromQs, depth, mPanelSwipeWidth);
+        int saveCount = canvas.save();
+        canvas.translate(translation, 0f);
+        return saveCount;
     }
 
     private boolean drawChildWithStackClipping(Canvas canvas, View child, long drawingTime) {

@@ -19,6 +19,7 @@ package com.android.systemui.qs.panels.ui.compose
 import android.view.MotionEvent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.animateBounds
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -30,12 +31,16 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.pointer.motionEventSpy
 import androidx.compose.ui.layout.Layout
@@ -63,6 +68,7 @@ fun <T> AxQsGrid(
     minimumRows: Int = 0,
     animateItemBounds: Boolean = false,
     staticItemId: String? = null,
+    motionRowOffset: Int = 0,
     onItemBounds: (String, Rect) -> Unit = { _, _ -> },
     onCells: ((List<AxQsGridCell>) -> Unit)? = null,
     content: @Composable (AxQsGridItem<T>) -> Unit,
@@ -71,6 +77,7 @@ fun <T> AxQsGrid(
     val itemSnapshot = items.toList()
     val placements =
         remember(itemSnapshot, columns, maxRows) { packItems(itemSnapshot, columns, maxRows) }
+    val elementMotion = LocalLunarisQsElementMotion.current
     LookaheadScope {
         val lookaheadScope = this
         Layout(
@@ -83,7 +90,10 @@ fun <T> AxQsGrid(
                             } else {
                                 Modifier
                             }
-                        Box(itemModifier.fillMaxSize()) { content(placement.item) }
+                        Box(
+                            itemModifier.fillMaxSize()
+                                .lunarisQsElementMotion(elementMotion, motionRowOffset + placement.row)
+                        ) { content(placement.item) }
                     }
                 }
             },
@@ -331,13 +341,29 @@ fun <T> AxQsTileGrid(
     pagerState: PagerState,
     modifier: Modifier = Modifier,
     userScrollEnabled: Boolean = true,
+    motionRowOffset: Int? = null,
     itemWrapper: @Composable (Int, Int, @Composable () -> Unit) -> Unit =
         { _, _, content -> content() },
     content: @Composable (AxQsGridItem<T>) -> Unit,
     label: @Composable (AxQsGridItem<T>) -> Unit = {},
 ) {
     val onTilePagerGestureStart = LocalQsTilePagerGestureStart.current
+    val elementMotion = LocalLunarisQsElementMotion.current
     val layoutDirection = LocalLayoutDirection.current
+    val swipeOverflow = qsPanelSwipeOverflow()
+    val panelSwiping = swipeOverflow > 0.dp
+    var pagerInterruptedByPanelSwipe by remember(pagerState) { mutableStateOf(false) }
+    LaunchedEffect(pagerState, panelSwiping) {
+        if (panelSwiping) {
+            pagerInterruptedByPanelSwipe = true
+            pagerState.stopScroll()
+        } else if (pagerInterruptedByPanelSwipe) {
+            pagerInterruptedByPanelSwipe = false
+            if (!pagerState.isScrollInProgress && pagerState.currentPageOffsetFraction != 0f) {
+                pagerState.animateScrollToPage(pagerState.currentPage)
+            }
+        }
+    }
     val pages = remember(items, columns, rows) { items.chunked(columns * rows) }
     val pageCount = pages.size.coerceAtLeast(1)
     LaunchedEffect(pageCount) {
@@ -356,7 +382,7 @@ fun <T> AxQsTileGrid(
             } else {
                 itemHeight * rows + spacing * (rows - 1)
             }
-        val pagerPadding = spacing
+        val pagerPadding = spacing + swipeOverflow
         HorizontalPager(
             state = pagerState,
             modifier =
@@ -376,9 +402,9 @@ fun <T> AxQsTileGrid(
                     },
             contentPadding = PaddingValues(horizontal = pagerPadding),
             beyondViewportPageCount = 1,
-            pageSpacing = pagerPadding,
+            pageSpacing = spacing,
             verticalAlignment = Alignment.Top,
-            userScrollEnabled = userScrollEnabled,
+            userScrollEnabled = userScrollEnabled && !panelSwiping,
             overscrollEffect = null,
         ) { page ->
             val pageItems = pages.getOrNull(page).orEmpty()
@@ -389,7 +415,10 @@ fun <T> AxQsTileGrid(
                 columns = columns,
                 rowHeight = itemHeight,
                 spacing = spacing,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().drawWithContent {
+                    if (!panelSwiping || page == pagerState.currentPage) drawContent()
+                },
+                motionRowOffset = motionRowOffset ?: elementMotion?.controlRows ?: 0,
             ) { item ->
                 itemWrapper(page, itemIndices.getValue(item.id)) {
                     Column(

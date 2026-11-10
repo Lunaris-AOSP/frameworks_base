@@ -86,6 +86,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.android.compose.animation.Expandable
 import com.android.compose.animation.scene.ContentScope
 import com.android.compose.gesture.gesturesDisabled
+import com.android.compose.modifiers.padding as dynamicPadding
 import com.android.systemui.animation.Expandable as SystemUiExpandable
 import com.android.systemui.common.ui.compose.Icon as SystemUiIcon
 import com.android.systemui.common.ui.compose.PagerDots
@@ -202,6 +203,7 @@ internal fun <T> ContentScope.AxQS(
     tileLabel: @Composable (AxQsGridItem<T>) -> Unit,
 ) {
     val pagerState = rememberAxQsTilePagerState(tileItems, tileColumns, tileRows)
+    val swipeOverflow = qsPanelSwipeOverflow()
     Column(
         modifier = modifier.fillMaxSize(),
     ) {
@@ -221,11 +223,12 @@ internal fun <T> ContentScope.AxQS(
             modifier =
                 Modifier.weight(1f)
                     .fillMaxWidth()
+                    .dynamicPadding(horizontal = { -swipeOverflow.roundToPx() })
                     .clipScrollableContainer(Orientation.Vertical)
                     .verticalScroll(scrollState, overscrollEffect = null),
         ) {
             Column(
-                modifier = Modifier.element(AxQsGridContent),
+                modifier = Modifier.padding(horizontal = swipeOverflow).element(AxQsGridContent),
                 verticalArrangement = Arrangement.spacedBy(spacing),
             ) {
                 if (controlItems.isNotEmpty()) {

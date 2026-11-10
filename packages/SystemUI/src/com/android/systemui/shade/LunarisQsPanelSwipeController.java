@@ -23,7 +23,7 @@ import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.ViewConfiguration;
 
-import com.android.app.animation.Interpolators;
+import com.android.systemui.qs.LunarisQsMotion;
 
 final class LunarisQsPanelSwipeController {
     interface Callback {
@@ -46,11 +46,12 @@ final class LunarisQsPanelSwipeController {
     private boolean mActive;
     private boolean mConsumeUntilUp;
     private boolean mOriginalQs;
-    private boolean mDownDuringAnimation;
+    private boolean mSettlingToQs;
     private long mDownTime = -1;
     private long mSlopEventTime = -1;
     private float mDownX;
     private float mDownY;
+    private float mTouchDownX;
     private float mStartProgress;
     private float mProgress;
     private int mWidth;
@@ -73,28 +74,27 @@ final class LunarisQsPanelSwipeController {
                     resetTouch();
                     return false;
                 }
-                mDownDuringAnimation = mActive;
+                boolean catchingAnimation = mActive;
+                stopAnimator();
                 if (!mActive) {
                     mOriginalQs = mCallback.isShowingQs();
+                    mSettlingToQs = mOriginalQs;
                     mProgress = mOriginalQs ? 1f : 0f;
                 }
                 mWidth = mCallback.width();
                 mDownX = event.getRawX();
                 mDownY = event.getRawY();
+                mTouchDownX = mDownX;
                 mStartProgress = mProgress;
                 mSlopEventTime = -1;
                 recycleVelocityTracker();
                 mVelocityTracker = VelocityTracker.obtain();
                 mVelocityTracker.addMovement(event);
-                mDragging = false;
+                mDragging = catchingAnimation;
                 break;
             case MotionEvent.ACTION_MOVE:
                 if (mDragging || mConsumeUntilUp) return true;
                 if (!mCandidate) return false;
-                if (mDownDuringAnimation && !mActive) {
-                    mOriginalQs = mCallback.isShowingQs();
-                    mProgress = mOriginalQs ? 1f : 0f;
-                }
                 float dx = event.getRawX() - mDownX;
                 float dy = event.getRawY() - mDownY;
                 mVelocityTracker.addMovement(event);
@@ -110,16 +110,11 @@ final class LunarisQsPanelSwipeController {
                     }
                     if (mSlopEventTime < 0) mSlopEventTime = event.getEventTime();
                     if (event.getEventTime() > mSlopEventTime) {
-                        boolean catchingAnimation = mActive;
                         stopAnimator();
-                        if (mDownDuringAnimation) {
-                            mStartProgress = mProgress;
-                            mDownX = event.getRawX();
-                            mDownDuringAnimation = false;
-                        }
+                        mDownX += Math.copySign(mTouchSlop, dx);
                         mActive = true;
                         mDragging = true;
-                        if (!catchingAnimation) mCallback.onStarted(mProgress);
+                        mCallback.onStarted(mProgress);
                         if (mActive) updateProgress(event);
                     }
                 }
@@ -159,10 +154,11 @@ final class LunarisQsPanelSwipeController {
                 if (!mActive) return true;
                 mVelocityTracker.computeCurrentVelocity(1000, mMaxFlingVelocity);
                 float velocity = mVelocityTracker.getXVelocity();
-                boolean moved = Math.abs(event.getRawX() - mDownX) > mTouchSlop;
-                boolean showQs = moved && Math.abs(velocity) >= mMinFlingVelocity
-                        ? velocity < 0f : mProgress >= 0.5f;
-                settle(showQs);
+                boolean moved = Math.abs(event.getRawX() - mTouchDownX) > mTouchSlop;
+                boolean showQs = !moved ? mSettlingToQs
+                        : Math.abs(velocity) >= mMinFlingVelocity
+                                ? velocity < 0f : mProgress >= 0.5f;
+                settle(showQs, -velocity / mWidth);
                 break;
             case MotionEvent.ACTION_POINTER_DOWN:
                 mConsumeUntilUp = true;
@@ -192,17 +188,25 @@ final class LunarisQsPanelSwipeController {
     }
 
     private void settle(boolean showQs) {
+        settle(showQs, 0f);
+    }
+
+    private void settle(boolean showQs, float velocity) {
         resetTouch();
         stopAnimator();
+        mSettlingToQs = showQs;
         float target = showQs ? 1f : 0f;
         if (mProgress == target) {
             finish(showQs);
             return;
         }
         mAnimator = ValueAnimator.ofFloat(mProgress, target);
-        mAnimator.setDuration(Math.max(120, Math.min(320,
-                Math.round(320 * Math.abs(target - mProgress)))));
-        mAnimator.setInterpolator(Interpolators.FAST_OUT_SLOW_IN);
+        float distance = target - mProgress;
+        long duration = LunarisQsMotion.settleDuration(distance, velocity);
+        float initialSlope = velocity * duration / (1000f * distance);
+        mAnimator.setDuration(duration);
+        mAnimator.setInterpolator(
+                fraction -> LunarisQsMotion.settleInterpolation(fraction, initialSlope));
         mAnimator.addUpdateListener(animation -> {
             mProgress = (float) animation.getAnimatedValue();
             mCallback.onProgress(mProgress);
@@ -238,7 +242,6 @@ final class LunarisQsPanelSwipeController {
     private void resetTouch() {
         mCandidate = false;
         mDragging = false;
-        mDownDuringAnimation = false;
         recycleVelocityTracker();
     }
 

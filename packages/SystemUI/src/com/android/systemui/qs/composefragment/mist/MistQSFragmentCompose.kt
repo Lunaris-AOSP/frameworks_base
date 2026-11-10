@@ -279,6 +279,7 @@ constructor(
     private var overlayHeaderContentHeightPx by mutableIntStateOf(0)
     private var sharedLayoutActive by mutableStateOf(false)
     private var currentPanelSwipeProgress by mutableFloatStateOf(-1f)
+    private var panelSwipeFromQs by mutableStateOf(false)
     private var lastQsExpansion = 0f
     private val isSeparateShade: Boolean
         get() =
@@ -736,6 +737,9 @@ constructor(
     }
 
     override fun setPanelSwipeProgress(progress: Float) {
+        if (progress >= 0f && currentPanelSwipeProgress < 0f) {
+            panelSwipeFromQs = progress >= 0.5f
+        }
         if (progress >= 0f && progress != currentPanelSwipeProgress) {
             cancelTileDialogExitAnimations()
         }
@@ -1190,6 +1194,8 @@ constructor(
                             },
                             onCollapsedHeightChanged = onCollapsedHeightChanged,
                             collapsedHeaderOffset = collapsedHeaderOffset,
+                            panelSwipeProgress = { currentPanelSwipeProgress },
+                            panelSwipeFromQs = { panelSwipeFromQs },
                             modifier =
                                 Modifier.fillMaxSize()
                                     .sysuiResTag(ResIdTags.quickSettingsPanel)

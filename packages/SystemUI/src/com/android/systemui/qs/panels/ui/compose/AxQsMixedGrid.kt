@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -41,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -75,6 +77,7 @@ import com.android.systemui.qs.panels.ui.viewmodel.toolbar.ToolbarViewModel
 import com.android.systemui.qs.tiles.ringer.RingerSliderTileContent
 import com.android.systemui.qs.ui.composable.QuickSettingsTheme
 import com.android.systemui.res.R
+import com.android.systemui.statusbar.StatusBarState
 import com.android.systemui.volume.panel.component.volume.slider.ui.viewmodel.AudioStreamSliderViewModel
 
 @Composable
@@ -94,6 +97,8 @@ internal fun ContentScope.AxQsMixedGrid(
     holdExpandedContent: () -> Boolean = { false },
     onCollapsedHeightChanged: (Int) -> Unit = {},
     collapsedHeaderOffset: Int = 0,
+    panelSwipeProgress: () -> Float = { -1f },
+    panelSwipeFromQs: () -> Boolean = { false },
 ) {
     val tiles = viewModel.containerViewModel.tileGridViewModel.tileViewModels
     val values = LinkedHashMap<String, AxQsGridValue>()
@@ -239,8 +244,7 @@ internal fun ContentScope.AxQsMixedGrid(
     val collapsedControlRows =
         if (sharedLayout) axQsCollapsedControlRows(fittedControlItems, axQsViewModel.sharedQqsRows)
         else 0
-    val controlRowCount =
-        if (sharedLayout) axQsGridRowCount(fittedControlItems, controlColumns, rows.controls) else 0
+    val controlRowCount = axQsGridRowCount(fittedControlItems, controlColumns, rows.controls)
     val collapsedTileRows =
         if (sharedLayout) (axQsViewModel.sharedQqsRows - controlRowCount).coerceIn(0, rows.tiles)
         else 0
@@ -268,7 +272,7 @@ internal fun ContentScope.AxQsMixedGrid(
     val rowHeight = AxTileDefaults.TileHeight * LocalTileScale.current
     val spacing = axQsViewModel.spacing.tileGap.dp * LocalTileScale.current
     val qsEntranceProgress = {
-        if (holdExpandedContent()) 1f
+        if (holdExpandedContent() || panelSwipeProgress() >= 0f) 1f
         else
             ((viewModel.expansionState.progress - QS_ENTRANCE_START) / (1f - QS_ENTRANCE_START))
                 .coerceIn(0f, 1f)
@@ -415,82 +419,157 @@ internal fun ContentScope.AxQsMixedGrid(
         (item.value as? AxQsGridValue.Tile)?.let { AxTileGridLabel(it.viewModel) }
     }
 
-    QuickSettingsTheme {
-        BoxWithConstraints(
-            if (compactStyle || landscapeLayout) {
-                modifier.windowInsetsPadding(axCompactQsHorizontalInsets())
-            } else modifier
-        ) {
-            val contentPadding = axQsViewModel.spacing.sidePadding.dp
-            val gridWidth = (maxWidth - contentPadding * 2).coerceAtLeast(0.dp)
-            val circleCells =
-                useAxQsCircleCells(
-                    gridWidth = gridWidth,
-                    tileColumns = tileColumns,
-                    spacing = spacing,
-                    allowCircles = allowCircleCells,
-                )
-            when {
-                landscapeLayout ->
-                    AxQsLandscapePanel(
-                        toolbarViewModel = toolbarViewModel,
-                        shadeHeaderViewModel = viewModel.containerViewModel.shadeHeaderViewModel,
-                        controlItems = fittedControlItems,
-                        tileItems = tileItems,
-                        controlColumns = controlColumns,
-                        controlRows = rows.controls,
+    val panelView = LocalView.current
+    val elementMotion = remember(
+        viewModel, axQsViewModel, panelView, controlRowCount, rows.tiles,
+        panelSwipeProgress, panelSwipeFromQs,
+    ) {
+        LunarisQsElementMotion(
+            expansion = {
+                if (axQsViewModel.panelMode == AxQsPanelMode.SEPARATE &&
+                    !viewModel.isInSplitShade &&
+                    viewModel.statusBarState == StatusBarState.SHADE
+                ) viewModel.panelExpansionFraction
+                else viewModel.quickQuickSettingsViewModel.squishinessViewModel.squishiness.value
+            },
+            swipeProgress = panelSwipeProgress,
+            swipeFromQs = panelSwipeFromQs,
+            panelWidth = { panelView.width.toFloat() },
+            controlRows = controlRowCount,
+            tileRows = rows.tiles,
+        )
+    }
+    CompositionLocalProvider(LocalLunarisQsElementMotion provides elementMotion) {
+        QuickSettingsTheme {
+            BoxWithConstraints(
+                if (compactStyle || landscapeLayout) {
+                    modifier.windowInsetsPadding(axCompactQsHorizontalInsets())
+                } else modifier
+            ) {
+                val contentPadding = axQsViewModel.spacing.sidePadding.dp
+                val gridWidth = (maxWidth - contentPadding * 2).coerceAtLeast(0.dp)
+                val circleCells =
+                    useAxQsCircleCells(
+                        gridWidth = gridWidth,
                         tileColumns = tileColumns,
-                        maxTileRows = tileRowLimit,
-                        showTileLabels = showTileLabels,
-                        showWeather = showWeather,
                         spacing = spacing,
-                        scrollState = scrollState,
-                        isFullyVisible = { viewModel.isQsFullyExpanded && !viewModel.isEditing },
-                        editButtonProgress = qsEntranceProgress,
-                        modifier = Modifier.fillMaxSize().padding(horizontal = contentPadding),
-                        controlContent = controlContent,
-                        tileContent = tileContent,
-                        tileLabel = tileLabel,
+                        allowCircles = allowCircleCells,
                     )
-                sharedLayout ->
-                    AxQsSharedPanel(
-                        toolbarViewModel = toolbarViewModel,
-                        shadeHeaderViewModel = viewModel.containerViewModel.shadeHeaderViewModel,
-                        controlItems = fittedControlItems,
-                        tileItems = tileItems,
-                        controlColumns = controlColumns,
-                        controlRows = controlRowCount,
-                        tileColumns = tileColumns,
-                        tileRows = rows.tiles,
-                        collapsedControlRows = collapsedControlRows,
-                        collapsedTileRows = collapsedTileRows,
-                        rowHeight = rowHeight,
-                        spacing = spacing,
-                        circleCells = circleCells,
-                        showTileLabels = showTileLabels,
-                        showWeather = showWeather,
-                        compactStyle = compactStyle,
-                        collapsedHeaderOffset = collapsedHeaderOffset,
-                        scrollState = scrollState,
-                        expansionProgress = { viewModel.expansionState.progress },
-                        isFullyVisible = { viewModel.isQsFullyExpanded && !viewModel.isEditing },
-                        onCollapsedHeightChanged = onCollapsedHeightChanged,
-                        modifier = Modifier.fillMaxSize().padding(horizontal = contentPadding),
-                        controlContent = controlContent,
-                        tileContent = tileContent,
-                        tileLabel = tileLabel,
-                    )
-                qqs && splitShade -> Unit
-                qqs ->
-                    Column(
-                        Modifier.fillMaxWidth().graphicsLayer {
-                            alpha = if (qqsHideBypass) 0f else 1f
-                        }
-                    ) {
-                        AxQQS(
+                when {
+                    landscapeLayout ->
+                        AxQsLandscapePanel(
                             toolbarViewModel = toolbarViewModel,
-                            shadeHeaderViewModel =
-                                viewModel.containerViewModel.shadeHeaderViewModel,
+                            shadeHeaderViewModel = viewModel.containerViewModel.shadeHeaderViewModel,
+                            controlItems = fittedControlItems,
+                            tileItems = tileItems,
+                            controlColumns = controlColumns,
+                            controlRows = rows.controls,
+                            tileColumns = tileColumns,
+                            maxTileRows = tileRowLimit,
+                            showTileLabels = showTileLabels,
+                            showWeather = showWeather,
+                            spacing = spacing,
+                            scrollState = scrollState,
+                            isFullyVisible = { viewModel.isQsFullyExpanded && !viewModel.isEditing },
+                            editButtonProgress = qsEntranceProgress,
+                            modifier = Modifier.fillMaxSize().padding(horizontal = contentPadding),
+                            controlContent = controlContent,
+                            tileContent = tileContent,
+                            tileLabel = tileLabel,
+                        )
+                    sharedLayout ->
+                        AxQsSharedPanel(
+                            toolbarViewModel = toolbarViewModel,
+                            shadeHeaderViewModel = viewModel.containerViewModel.shadeHeaderViewModel,
+                            controlItems = fittedControlItems,
+                            tileItems = tileItems,
+                            controlColumns = controlColumns,
+                            controlRows = controlRowCount,
+                            tileColumns = tileColumns,
+                            tileRows = rows.tiles,
+                            collapsedControlRows = collapsedControlRows,
+                            collapsedTileRows = collapsedTileRows,
+                            rowHeight = rowHeight,
+                            spacing = spacing,
+                            circleCells = circleCells,
+                            showTileLabels = showTileLabels,
+                            showWeather = showWeather,
+                            compactStyle = compactStyle,
+                            collapsedHeaderOffset = collapsedHeaderOffset,
+                            scrollState = scrollState,
+                            expansionProgress = { viewModel.expansionState.progress },
+                            isFullyVisible = { viewModel.isQsFullyExpanded && !viewModel.isEditing },
+                            onCollapsedHeightChanged = onCollapsedHeightChanged,
+                            modifier = Modifier.fillMaxSize().padding(horizontal = contentPadding),
+                            controlContent = controlContent,
+                            tileContent = tileContent,
+                            tileLabel = tileLabel,
+                        )
+                    qqs && splitShade -> Unit
+                    qqs ->
+                        Column(
+                            Modifier.fillMaxWidth().graphicsLayer {
+                                alpha = if (qqsHideBypass) 0f else 1f
+                            }
+                        ) {
+                            AxQQS(
+                                toolbarViewModel = toolbarViewModel,
+                                shadeHeaderViewModel =
+                                    viewModel.containerViewModel.shadeHeaderViewModel,
+                                controlItems = fittedControlItems,
+                                tileItems = tileItems,
+                                controlColumns = controlColumns,
+                                controlRows = rows.controls,
+                                tileColumns = tileColumns,
+                                tileRows = rows.tiles,
+                                showTileLabels = showTileLabels,
+                                showWeather = showWeather,
+                                compactStyle = compactStyle,
+                                rowHeight = rowHeight,
+                                spacing = spacing,
+                                circleCells = circleCells,
+                                isFullyVisible = {
+                                    viewModel.isQsVisibleAndAnyShadeExpanded && !viewModel.isEditing
+                                },
+                                editButtonProgress = qsEntranceProgress,
+                                separateMode = separateQqs,
+                                modifier =
+                                    Modifier.fillMaxWidth()
+                                        .padding(horizontal = contentPadding),
+                                controlContent = controlContent,
+                                tileContent = tileContent,
+                            )
+                            if (
+                                separateQqs &&
+                                    axQsViewModel.showNotificationMedia &&
+                                    mediaViewModel.hasVisibleSessions(AxMediaSurface.SEPARATE_QQS)
+                            ) {
+                                Spacer(Modifier.layoutHeight(spacing))
+                                Box(
+                                    Modifier.fillMaxWidth()
+                                        .padding(
+                                            horizontal = dimensionResource(R.dimen.qs_horizontal_margin)
+                                        )
+                                        .layoutHeight(notificationMediaHeight()),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    AxMediaPanel(
+                                        viewModel = mediaViewModel,
+                                        span = AxQsSpan(controlColumns, 2),
+                                        mediaViewModelFactory = viewModel.mediaViewModelFactory,
+                                        modifier = Modifier.fillMaxSize(),
+                                        surface = AxMediaSurface.SEPARATE_QQS,
+                                        motionArtVisible = contentVisible,
+                                        motionArtPlaying = contentPlaying,
+                                    )
+                                }
+                            }
+                        }
+                    splitShade ->
+                        AxQS(
+                            toolbarViewModel = toolbarViewModel,
+                            shadeHeaderViewModel = viewModel.containerViewModel.shadeHeaderViewModel,
+                            isFullyVisible = { viewModel.isQsFullyExpanded && !viewModel.isEditing },
                             controlItems = fittedControlItems,
                             tileItems = tileItems,
                             controlColumns = controlColumns,
@@ -502,94 +581,41 @@ internal fun ContentScope.AxQsMixedGrid(
                             compactStyle = compactStyle,
                             rowHeight = rowHeight,
                             spacing = spacing,
-                            circleCells = circleCells,
-                            isFullyVisible = {
-                                viewModel.isQsVisibleAndAnyShadeExpanded && !viewModel.isEditing
-                            },
                             editButtonProgress = qsEntranceProgress,
-                            separateMode = separateQqs,
+                            scrollState = scrollState,
+                            circleCells = circleCells,
                             modifier =
-                                Modifier.fillMaxWidth()
+                                Modifier.fillMaxSize()
                                     .padding(horizontal = contentPadding),
                             controlContent = controlContent,
                             tileContent = tileContent,
+                            tileLabel = tileLabel,
                         )
-                        if (
-                            separateQqs &&
-                                axQsViewModel.showNotificationMedia &&
-                                mediaViewModel.hasVisibleSessions(AxMediaSurface.SEPARATE_QQS)
-                        ) {
-                            Spacer(Modifier.layoutHeight(spacing))
-                            Box(
-                                Modifier.fillMaxWidth()
-                                    .padding(
-                                        horizontal = dimensionResource(R.dimen.qs_horizontal_margin)
-                                    )
-                                    .layoutHeight(notificationMediaHeight()),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                AxMediaPanel(
-                                    viewModel = mediaViewModel,
-                                    span = AxQsSpan(controlColumns, 2),
-                                    mediaViewModelFactory = viewModel.mediaViewModelFactory,
-                                    modifier = Modifier.fillMaxSize(),
-                                    surface = AxMediaSurface.SEPARATE_QQS,
-                                    motionArtVisible = contentVisible,
-                                    motionArtPlaying = contentPlaying,
-                                )
-                            }
-                        }
-                    }
-                splitShade ->
-                    AxQS(
-                        toolbarViewModel = toolbarViewModel,
-                        shadeHeaderViewModel = viewModel.containerViewModel.shadeHeaderViewModel,
-                        isFullyVisible = { viewModel.isQsFullyExpanded && !viewModel.isEditing },
-                        controlItems = fittedControlItems,
-                        tileItems = tileItems,
-                        controlColumns = controlColumns,
-                        controlRows = rows.controls,
-                        tileColumns = tileColumns,
-                        tileRows = rows.tiles,
-                        showTileLabels = showTileLabels,
-                        showWeather = showWeather,
-                        compactStyle = compactStyle,
-                        rowHeight = rowHeight,
-                        spacing = spacing,
-                        editButtonProgress = qsEntranceProgress,
-                        scrollState = scrollState,
-                        circleCells = circleCells,
-                        modifier =
-                            Modifier.fillMaxSize()
-                                .padding(horizontal = contentPadding),
-                        controlContent = controlContent,
-                        tileContent = tileContent,
-                        tileLabel = tileLabel,
-                    )
-                else ->
-                    AxQS(
-                        toolbarViewModel = toolbarViewModel,
-                        shadeHeaderViewModel = viewModel.containerViewModel.shadeHeaderViewModel,
-                        isFullyVisible = { viewModel.isQsFullyExpanded && !viewModel.isEditing },
-                        controlItems = fittedControlItems,
-                        tileItems = tileItems,
-                        controlColumns = controlColumns,
-                        controlRows = rows.controls,
-                        tileColumns = tileColumns,
-                        tileRows = rows.tiles,
-                        showTileLabels = showTileLabels,
-                        showWeather = showWeather,
-                        compactStyle = compactStyle,
-                        rowHeight = rowHeight,
-                        spacing = spacing,
-                        editButtonProgress = qsEntranceProgress,
-                        scrollState = scrollState,
-                        circleCells = circleCells,
-                        modifier = Modifier.fillMaxSize().padding(horizontal = contentPadding),
-                        controlContent = controlContent,
-                        tileContent = tileContent,
-                        tileLabel = tileLabel,
-                    )
+                    else ->
+                        AxQS(
+                            toolbarViewModel = toolbarViewModel,
+                            shadeHeaderViewModel = viewModel.containerViewModel.shadeHeaderViewModel,
+                            isFullyVisible = { viewModel.isQsFullyExpanded && !viewModel.isEditing },
+                            controlItems = fittedControlItems,
+                            tileItems = tileItems,
+                            controlColumns = controlColumns,
+                            controlRows = rows.controls,
+                            tileColumns = tileColumns,
+                            tileRows = rows.tiles,
+                            showTileLabels = showTileLabels,
+                            showWeather = showWeather,
+                            compactStyle = compactStyle,
+                            rowHeight = rowHeight,
+                            spacing = spacing,
+                            editButtonProgress = qsEntranceProgress,
+                            scrollState = scrollState,
+                            circleCells = circleCells,
+                            modifier = Modifier.fillMaxSize().padding(horizontal = contentPadding),
+                            controlContent = controlContent,
+                            tileContent = tileContent,
+                            tileLabel = tileLabel,
+                        )
+                }
             }
         }
     }
