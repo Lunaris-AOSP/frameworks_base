@@ -528,7 +528,7 @@ public class DozeParameters implements
 
     private void dispatchAlwaysOnEvent() {
         mScreenOffAnimationController.onAlwaysOnChanged(getAlwaysOn());
-        mDozeInteractor.setAodAvailable(getAlwaysOn());
+        mDozeInteractor.setAodAvailable(shouldUseScreenOffAnimationAod());
 
     }
 
