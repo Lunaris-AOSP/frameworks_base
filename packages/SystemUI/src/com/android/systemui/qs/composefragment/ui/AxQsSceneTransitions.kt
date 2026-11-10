@@ -16,8 +16,10 @@
 
 package com.android.systemui.qs.composefragment.ui
 
+import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import com.android.compose.animation.scene.ContentKey
@@ -27,6 +29,7 @@ import com.android.compose.animation.scene.SceneTransitionLayoutState
 import com.android.compose.animation.scene.TransitionBuilder
 import com.android.compose.animation.scene.TransitionKey
 import com.android.compose.animation.scene.content.state.TransitionState
+import com.android.systemui.qs.LunarisQsMotion
 import com.android.systemui.qs.composefragment.SceneKeys
 import com.android.systemui.qs.shared.ui.QuickSettings.Elements
 import com.android.systemui.shade.ui.composable.ShadeHeader
@@ -37,6 +40,10 @@ internal val AxQsPanelSwipeTransition = TransitionKey("AxQsPanelSwipe")
 fun TransitionBuilder.axQsPanelSwipe() {
     translate(SceneKeys.QuickQuickSettings.rootElementKey, Edge.Left)
     translate(SceneKeys.QuickSettings.rootElementKey, Edge.Right)
+    fractionRange(easing = Easing { LunarisQsMotion.panelSwipeAlpha(it) }) {
+        fade(SceneKeys.QuickQuickSettings.rootElementKey)
+        fade(SceneKeys.QuickSettings.rootElementKey)
+    }
     disableAxQsSharedElements()
     sharedElement(ShadeHeader.Elements.Clock, enabled = false)
 }
@@ -114,15 +121,11 @@ fun SceneTransitionLayoutState.editModeTransitionProgress(): Float {
 internal fun Modifier.axQsEntrance(progress: () -> Float): Modifier {
     return graphicsLayer {
         val entrance = progress().coerceIn(0f, 1f)
-        alpha =
-            ((entrance - AX_QS_ENTRANCE_ALPHA_START) / (1f - AX_QS_ENTRANCE_ALPHA_START))
-                .coerceIn(0f, 1f)
-        translationY =
-            if (entrance == 0f) {
-                AX_QS_ENTRANCE_HIDDEN_TRANSLATION_PX
-            } else {
-                -(1f - entrance) * AX_QS_ENTRANCE_TRANSLATION_PX
-            }
+        alpha = LunarisQsMotion.entranceAlpha(entrance, 0f)
+        scaleX = LunarisQsMotion.entranceScale(entrance)
+        scaleY = scaleX
+        transformOrigin = TransformOrigin(0.5f, 0f)
+        translationY = LunarisQsMotion.entranceTranslation(entrance, 0f).dp.toPx()
     }
 }
 
@@ -130,7 +133,4 @@ private fun ContentKey.isAxQsScene(): Boolean {
     return this == SceneKeys.QuickSettings || this == SceneKeys.QuickQuickSettings
 }
 
-private const val AX_QS_ENTRANCE_ALPHA_START = 0.89f
-private const val AX_QS_ENTRANCE_TRANSLATION_PX = 300f
-private const val AX_QS_ENTRANCE_HIDDEN_TRANSLATION_PX = -5000f
 private val AxQsSceneTranslation = 24.dp
