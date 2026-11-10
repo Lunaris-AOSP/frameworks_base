@@ -3,6 +3,7 @@ package org.lunaris.extrainfowidgets
 
 import android.content.Context
 import android.content.res.ColorStateList
+import android.content.res.Configuration
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ColorMatrix
@@ -28,6 +29,7 @@ import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
 import com.android.axion.blur.AxBlurBackgroundRenderer
 import com.android.axion.blur.AxBlurColors
+import com.android.internal.util.lunaris.FontController
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.min
@@ -164,6 +166,12 @@ class InfoWidgetView(context: Context, val widget: InfoWidget) : View(context) {
         super.onDetachedFromWindow()
     }
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        fonts.clear()
+        refresh()
+    }
+
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         rippleMask.cornerRadius =
@@ -214,15 +222,27 @@ class InfoWidgetView(context: Context, val widget: InfoWidget) : View(context) {
         val key = "$symbol/$weight/$fill"
         paint.typeface =
             fonts.getOrPut(key) {
+                val customTypeface =
+                    if (symbol) null
+                    else
+                        FontController.getOverrideTypeface(
+                            if (weight >= 500) "sans-serif-medium" else "sans-serif"
+                        )
                 val resource =
                     if (symbol) R.font.extra_info_symbols else R.font.extra_info_google_sans_flex
-                val base = resources.getFont(resource)
-                Typeface.create(base, weight, false)
+                val base = customTypeface ?: resources.getFont(resource)
+                TextPaint().apply {
+                    typeface = Typeface.create(base, weight, false)
+                    fontVariationSettings =
+                        when {
+                            symbol -> "'FILL' $fill, 'wght' $weight"
+                            customTypeface == null -> "'opsz' 144, 'wght' $weight"
+                            else -> null
+                        }
+                }.typeface
             }
         paint.textSize = size
         paint.letterSpacing = layer.optDouble("tracking", 0.0).toFloat()
-        paint.fontVariationSettings =
-            if (symbol) "'FILL' $fill, 'wght' $weight" else "'opsz' 144, 'wght' $weight"
         paint.style = Paint.Style.FILL
         paint.shader = null
         paint.color = Color.WHITE
