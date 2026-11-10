@@ -616,18 +616,26 @@ public class WallpaperDepthUtils {
         mSpatialEffectController.setActive(active);
     }
 
-    public Bitmap getResizedBitmap(
-            Bitmap wallpaperBitmap, float xOffsetDp, float yOffsetDp) {
-        Rect displayBounds = mContext
+    private Rect getDepthWallpaperBounds() {
+        Rect bounds = mContext
                 .getSystemService(WindowManager.class)
                 .getCurrentWindowMetrics()
                 .getBounds();
+        return new Rect(0, 0,
+                Math.min(bounds.width(), bounds.height()),
+                Math.max(bounds.width(), bounds.height()));
+    }
 
-        DisplayMetrics displayMetrics =
-                mContext.getResources().getDisplayMetrics();
+    public Bitmap getResizedBitmap(
+            Bitmap wallpaperBitmap, float xOffsetDp, float yOffsetDp) {
+        return getResizedBitmap(wallpaperBitmap, xOffsetDp, yOffsetDp,
+                getDepthWallpaperBounds(), mContext.getResources().getDisplayMetrics().density);
+    }
 
-        float xOffsetPx = xOffsetDp * displayMetrics.density;
-        float yOffsetPx = yOffsetDp * displayMetrics.density;
+    private Bitmap getResizedBitmap(Bitmap wallpaperBitmap, float xOffsetDp, float yOffsetDp,
+            Rect displayBounds, float density) {
+        float xOffsetPx = xOffsetDp * density;
+        float yOffsetPx = yOffsetDp * density;
 
         float ratioW = displayBounds.width()
                 / (float) wallpaperBitmap.getWidth();
@@ -781,12 +789,16 @@ public class WallpaperDepthUtils {
         private final int mSubjectOffsetX;
         private final int mSubjectOffsetY;
         private final int mUserId;
+        private final Rect mDisplayBounds;
+        private final float mDensity;
 
         LoadWallpaperTask(String subjectPath, int offsetX, int offsetY, int userId) {
             mSubjectPath = subjectPath;
             mSubjectOffsetX = offsetX;
             mSubjectOffsetY = offsetY;
             mUserId = userId;
+            mDisplayBounds = getDepthWallpaperBounds();
+            mDensity = mContext.getResources().getDisplayMetrics().density;
         }
 
         @Override
@@ -808,7 +820,8 @@ public class WallpaperDepthUtils {
                 }
 
                 Bitmap resizedBitmap =
-                        getResizedBitmap(bitmap, mSubjectOffsetX, mSubjectOffsetY);
+                        getResizedBitmap(bitmap, mSubjectOffsetX, mSubjectOffsetY,
+                                mDisplayBounds, mDensity);
 
                 if (resizedBitmap == null) {
                     Log.d(
@@ -828,7 +841,9 @@ public class WallpaperDepthUtils {
                             getResizedBitmap(
                                     bgRaw,
                                     mSubjectOffsetX,
-                                    mSubjectOffsetY);
+                                    mSubjectOffsetY,
+                                    mDisplayBounds,
+                                    mDensity);
 
                     if (resizedBg != null) {
                         backgroundDrawable =
