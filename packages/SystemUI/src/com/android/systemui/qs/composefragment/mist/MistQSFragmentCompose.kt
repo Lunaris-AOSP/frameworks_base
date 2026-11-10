@@ -208,6 +208,7 @@ import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsSliderStrokeStyle
 import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsSliderStrokeWidth
 import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsTileStrokeStyle
 import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsTileStrokeWidth
+import com.android.systemui.qs.panels.ui.compose.LocalQsScrollGestureStart
 import com.android.systemui.qs.panels.ui.compose.LocalShowQsSliderPercentage
 import com.android.systemui.qs.panels.domain.interactor.EditTilesResetInteractor
 import com.android.systemui.qs.panels.ui.edit.AxQsEditUi
@@ -271,6 +272,7 @@ constructor(
     private val qqsPositionOnRoot = Rect()
     private val composeViewPositionOnScreen = Rect()
     private val scrollState = ScrollState(0)
+    private var activeQsScrollState: ScrollState? = null
     private val locationTemp = IntArray(2)
     private var bottomBarPositionInRoot = IntRect(IntOffset(0, 0), 0)
     private var bottomContentPadding by mutableIntStateOf(0)
@@ -334,13 +336,19 @@ constructor(
 
         val canScrollQs =
             object : CanScrollQs {
+                override fun reset() {
+                    activeQsScrollState = null
+                }
+
                 override fun forward(): Boolean {
-                    return (scrollState.canScrollForward && viewModel.isQsFullyExpanded) ||
+                    return ((activeQsScrollState ?: scrollState).canScrollForward &&
+                        viewModel.isQsFullyExpanded) ||
                         isCustomizing
                 }
 
                 override fun backward(): Boolean {
-                    return (scrollState.canScrollBackward && viewModel.isQsFullyExpanded) ||
+                    return ((activeQsScrollState ?: scrollState).canScrollBackward &&
+                        viewModel.isQsFullyExpanded) ||
                         isCustomizing
                 }
             }
@@ -425,6 +433,11 @@ constructor(
                                 containerView
                                     ?.tilePanelSwipeGesture
                                     ?.onTilePagerDown(canSwipeToNotifications)
+                            },
+                        LocalQsScrollGestureStart provides
+                            { state ->
+                                activeQsScrollState = state
+                                containerView?.onQsScrollGestureStart()
                             },
                     ) {
                         WithStatusIconContext(tintedIconManagerFactory) {
@@ -1674,9 +1687,19 @@ private class FrameLayoutTouchPassthrough(
 
     val tilePanelSwipeGesture = QsTilePanelSwipeGesture(touchSlop.toFloat())
 
+    fun onQsScrollGestureStart() {
+        if (!allowPanelSwipe()) {
+            preventingIntercept = canScrollQs.forward()
+            parent?.requestDisallowInterceptTouchEvent(preventingIntercept)
+        }
+    }
+
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> tilePanelSwipeGesture.onDown(event.x, event.y)
+            MotionEvent.ACTION_DOWN -> {
+                canScrollQs.reset()
+                tilePanelSwipeGesture.onDown(event.x, event.y)
+            }
             MotionEvent.ACTION_MOVE -> tilePanelSwipeGesture.onMove(event.x, event.y)
             MotionEvent.ACTION_POINTER_DOWN -> tilePanelSwipeGesture.reset()
         }
@@ -1690,6 +1713,7 @@ private class FrameLayoutTouchPassthrough(
             event.actionMasked == MotionEvent.ACTION_UP ||
                 event.actionMasked == MotionEvent.ACTION_CANCEL
         ) {
+            canScrollQs.reset()
             tilePanelSwipeGesture.reset()
         }
         return handled
@@ -1771,6 +1795,8 @@ private class FrameLayoutTouchPassthrough(
 }
 
 private interface CanScrollQs {
+    fun reset()
+
     fun forward(): Boolean
 
     fun backward(): Boolean

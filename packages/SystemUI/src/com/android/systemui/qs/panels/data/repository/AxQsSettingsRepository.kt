@@ -161,6 +161,29 @@ constructor(
                 )),
             )
 
+    val splitNotificationEnabled: StateFlow<Boolean> =
+        userRepository.selectedUserInfo
+            .flatMapLatest { user ->
+                systemSettings.observerFlow(user.id, Settings.System.QS_SPLIT_NOTIFICATION)
+                    .onStart { emit(Unit) }
+                    .map {
+                        systemSettings.getIntForUser(
+                            Settings.System.QS_SPLIT_NOTIFICATION, 1, user.id
+                        ) != 0
+                    }
+            }
+            .flowOn(backgroundDispatcher)
+            .distinctUntilChanged()
+            .stateIn(
+                applicationScope,
+                SharingStarted.Eagerly,
+                systemSettings.getIntForUser(
+                    Settings.System.QS_SPLIT_NOTIFICATION,
+                    1,
+                    userRepository.getSelectedUserInfo().id,
+                ) != 0,
+            )
+
     val quickPanelOnLeft: StateFlow<Boolean> = boolSetting(QUICK_PANEL_ON_LEFT, false)
     val panelSwipeEnabled: StateFlow<Boolean> = boolSetting(PANEL_SWIPE_ENABLED, false)
     val sharedQsLayout: StateFlow<Boolean> = boolSetting(SHARED_QS_LAYOUT, false)

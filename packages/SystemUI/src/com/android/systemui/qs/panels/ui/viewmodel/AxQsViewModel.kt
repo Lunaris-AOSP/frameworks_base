@@ -19,6 +19,7 @@ package com.android.systemui.qs.panels.ui.viewmodel
 
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.UserHandle
 import android.util.Log
 import android.widget.RemoteViews
@@ -269,6 +270,16 @@ constructor(
                     configuration.screenWidthDp
                 },
         )
+    private val isLandscape by
+        hydrator.hydratedStateOf(
+            traceName = "isLandscape",
+            initialValue =
+                context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE,
+            source =
+                configurationInteractor.configurationValues.map { configuration ->
+                    configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+                },
+        )
     val defaultTileSpecs: List<String>
         get() = defaultTileIds
 
@@ -404,6 +415,15 @@ constructor(
             initialValue = repository.panelMode.value,
             source = repository.panelMode,
         )
+    val splitNotificationEnabled by
+        hydrator.hydratedStateOf(
+            traceName = "splitNotificationEnabled",
+            initialValue = repository.splitNotificationEnabled.value,
+            source = repository.splitNotificationEnabled,
+        )
+    val useLandscapeLayout: Boolean
+        get() = isLandscape && panelMode == AxQsPanelMode.SEPARATE && !splitNotificationEnabled
+
     val isQsBypassingShade by
         hydrator.hydratedStateOf(
             traceName = "isQsBypassingShade",
@@ -878,6 +898,8 @@ constructor(
             DEFAULT_CONTROL_COLUMNS
         } else if (layout.isSplitShade) {
             splitShadeDefaultColumns
+        } else if (layout.layout == AxQsLayout.QS && useLandscapeLayout) {
+            (normalDefaultColumns / 2).coerceAtLeast(2)
         } else {
             normalDefaultColumns
         }
@@ -919,7 +941,7 @@ constructor(
     private fun maxColumnsForWidth(layout: AxQsGridLayout): Int {
         val contentWidth = (screenWidthDp - spacing.sidePadding * 2).toFloat()
         val gridWidth =
-            if (layout.isSplitShade) {
+            if (layout.isSplitShade || (layout.layout == AxQsLayout.QS && useLandscapeLayout)) {
                 (contentWidth - AxQsLayoutPadding.LANDSCAPE_SPLIT_GRID_SPACING_DP) / 2f
             } else {
                 contentWidth

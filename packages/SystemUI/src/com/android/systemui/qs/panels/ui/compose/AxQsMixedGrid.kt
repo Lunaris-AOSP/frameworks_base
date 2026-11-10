@@ -101,9 +101,10 @@ internal fun ContentScope.AxQsMixedGrid(
     AxQsControl.entries.forEach { control -> values[control.id] = AxQsGridValue.Control(control) }
 
     val splitShade = viewModel.isInSplitShade
+    val landscapeLayout = !qqs && !splitShade && axQsViewModel.useLandscapeLayout
     val compactStyle = axQsViewModel.useCompactStyle && !splitShade
-    LaunchedEffect(splitShade) {
-        if (splitShade) {
+    LaunchedEffect(splitShade, landscapeLayout) {
+        if (splitShade || landscapeLayout) {
             scrollState.scrollTo(0)
         }
     }
@@ -416,8 +417,9 @@ internal fun ContentScope.AxQsMixedGrid(
 
     QuickSettingsTheme {
         BoxWithConstraints(
-            if (compactStyle) modifier.windowInsetsPadding(axCompactQsHorizontalInsets())
-            else modifier
+            if (compactStyle || landscapeLayout) {
+                modifier.windowInsetsPadding(axCompactQsHorizontalInsets())
+            } else modifier
         ) {
             val contentPadding = axQsViewModel.spacing.sidePadding.dp
             val gridWidth = (maxWidth - contentPadding * 2).coerceAtLeast(0.dp)
@@ -429,6 +431,27 @@ internal fun ContentScope.AxQsMixedGrid(
                     allowCircles = allowCircleCells,
                 )
             when {
+                landscapeLayout ->
+                    AxQsLandscapePanel(
+                        toolbarViewModel = toolbarViewModel,
+                        shadeHeaderViewModel = viewModel.containerViewModel.shadeHeaderViewModel,
+                        controlItems = fittedControlItems,
+                        tileItems = tileItems,
+                        controlColumns = controlColumns,
+                        controlRows = rows.controls,
+                        tileColumns = tileColumns,
+                        maxTileRows = tileRowLimit,
+                        showTileLabels = showTileLabels,
+                        showWeather = showWeather,
+                        spacing = spacing,
+                        scrollState = scrollState,
+                        isFullyVisible = { viewModel.isQsFullyExpanded && !viewModel.isEditing },
+                        editButtonProgress = qsEntranceProgress,
+                        modifier = Modifier.fillMaxSize().padding(horizontal = contentPadding),
+                        controlContent = controlContent,
+                        tileContent = tileContent,
+                        tileLabel = tileLabel,
+                    )
                 sharedLayout ->
                     AxQsSharedPanel(
                         toolbarViewModel = toolbarViewModel,
