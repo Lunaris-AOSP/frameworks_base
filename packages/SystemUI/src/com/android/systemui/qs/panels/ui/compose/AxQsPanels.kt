@@ -519,51 +519,6 @@ internal fun AxQsHeaderActions(
 }
 
 @Composable
-internal fun AxQsLandscapeActions(
-    viewModel: ToolbarViewModel,
-    isFullyVisible: () -> Boolean,
-    editButtonProgress: () -> Float,
-    modifier: Modifier = Modifier,
-) {
-    val expandedActionsEnabled by remember(editButtonProgress, isFullyVisible) {
-        derivedStateOf {
-            editButtonProgress() >= EXPANDED_ACTIONS_ENABLE_THRESHOLD && isFullyVisible()
-        }
-    }
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        FooterIconButton(
-            model = viewModel.settingsButtonViewModel,
-            containerColor = AxTileDefaults.backgroundColor(),
-            modifier = Modifier.sysuiResTag("settings_button_container"),
-        )
-        Row(
-            modifier =
-                Modifier.graphicsLayer { alpha = editButtonProgress().coerceIn(0f, 1f) }
-                    .then(
-                        if (expandedActionsEnabled) Modifier
-                        else Modifier.gesturesDisabled().clearAndSetSemantics {}
-                    ),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            AxEditButton(viewModel)
-            AxActiveAppsButton(viewModel)
-        }
-        FooterIconButton(
-            model = viewModel.userSwitcherViewModel,
-            containerColor = AxTileDefaults.backgroundColor(),
-            iconColor = Color.Unspecified,
-            modifier = Modifier.sysuiResTag("multi_user_switch"),
-        )
-        AxFooterOverflowMenu(viewModel)
-    }
-}
-
-@Composable
 private fun AxActiveAppsButton(viewModel: ToolbarViewModel) {
     val count = viewModel.foregroundServicesCount
     if (count <= 0) return

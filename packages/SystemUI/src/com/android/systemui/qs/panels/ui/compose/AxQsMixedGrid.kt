@@ -458,8 +458,6 @@ internal fun ContentScope.AxQsMixedGrid(
                 when {
                     landscapeLayout ->
                         AxQsLandscapePanel(
-                            toolbarViewModel = toolbarViewModel,
-                            shadeHeaderViewModel = viewModel.containerViewModel.shadeHeaderViewModel,
                             controlItems = fittedControlItems,
                             tileItems = tileItems,
                             controlColumns = controlColumns,
@@ -467,11 +465,8 @@ internal fun ContentScope.AxQsMixedGrid(
                             tileColumns = tileColumns,
                             maxTileRows = tileRowLimit,
                             showTileLabels = showTileLabels,
-                            showWeather = showWeather,
                             spacing = spacing,
                             scrollState = scrollState,
-                            isFullyVisible = { viewModel.isQsFullyExpanded && !viewModel.isEditing },
-                            editButtonProgress = qsEntranceProgress,
                             modifier = Modifier.fillMaxSize().padding(horizontal = contentPadding),
                             controlContent = controlContent,
                             tileContent = tileContent,
