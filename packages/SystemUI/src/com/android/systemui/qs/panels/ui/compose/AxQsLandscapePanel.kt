@@ -9,7 +9,6 @@ import android.view.MotionEvent
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.clipScrollableContainer
 import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -35,16 +34,12 @@ import com.android.compose.animation.scene.ContentScope
 import com.android.compose.modifiers.padding as dynamicPadding
 import com.android.systemui.qs.composefragment.ui.AxQsGridContent
 import com.android.systemui.qs.panels.shared.model.AxQsGridItem
-import com.android.systemui.qs.panels.ui.viewmodel.toolbar.ToolbarViewModel
-import com.android.systemui.shade.ui.viewmodel.ShadeHeaderViewModel
 
 internal val LocalQsScrollGestureStart = staticCompositionLocalOf<((ScrollState) -> Unit)?> { null }
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 internal fun <T> ContentScope.AxQsLandscapePanel(
-    toolbarViewModel: ToolbarViewModel,
-    shadeHeaderViewModel: ShadeHeaderViewModel,
     controlItems: List<AxQsGridItem<T>>,
     tileItems: List<AxQsGridItem<T>>,
     controlColumns: Int,
@@ -52,11 +47,8 @@ internal fun <T> ContentScope.AxQsLandscapePanel(
     tileColumns: Int,
     maxTileRows: Int,
     showTileLabels: Boolean,
-    showWeather: Boolean,
     spacing: Dp,
     scrollState: ScrollState,
-    isFullyVisible: () -> Boolean,
-    editButtonProgress: () -> Float,
     modifier: Modifier = Modifier,
     controlContent: @Composable (AxQsGridItem<T>) -> Unit,
     tileContent: @Composable (AxQsGridItem<T>) -> Unit,
@@ -66,133 +58,106 @@ internal fun <T> ContentScope.AxQsLandscapePanel(
     val tileScrollState = rememberScrollState()
     val onScrollGestureStart = LocalQsScrollGestureStart.current
     val swipeOverflow = qsPanelSwipeOverflow()
-    Column(modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = spacing),
-            horizontalArrangement = Arrangement.spacedBy(paneSpacing),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            AxQsDateHeader(
-                toolbarViewModel = toolbarViewModel,
-                shadeHeaderViewModel = shadeHeaderViewModel,
-                showEdit = false,
-                showWeather = showWeather,
-                isFullyVisible = isFullyVisible,
-                editButtonProgress = editButtonProgress,
-                modifier = Modifier.weight(1f),
-                showActions = false,
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        val paneWidth =
+            if (controlItems.isNotEmpty() && tileItems.isNotEmpty()) {
+                ((maxWidth - paneSpacing) / 2).coerceAtLeast(0.dp)
+            } else maxWidth
+        val controlCellHeight =
+            axQsGridCellWidth(paneWidth, controlColumns, spacing).coerceAtLeast(0.dp)
+        val visibleTileColumns =
+            tileColumns.coerceIn(
+                1,
+                ((paneWidth + spacing) / (LandscapeMinCellSize + spacing))
+                    .toInt()
+                    .coerceAtLeast(1),
             )
-            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-                AxQsLandscapeActions(
-                    viewModel = toolbarViewModel,
-                    isFullyVisible = isFullyVisible,
-                    editButtonProgress = editButtonProgress,
-                    modifier =
-                        Modifier.horizontalScroll(rememberScrollState(), overscrollEffect = null),
-                )
-            }
+        val visibleTileRows =
+            axQsVisibleTileRows(tileItems.size, visibleTileColumns, maxTileRows)
+        val pagerState = rememberPagerState {
+            axQsTileGridPageCount(tileItems.size, visibleTileColumns, visibleTileRows)
         }
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-            val paneWidth =
-                if (controlItems.isNotEmpty() && tileItems.isNotEmpty()) {
-                    ((maxWidth - paneSpacing) / 2).coerceAtLeast(0.dp)
-                } else maxWidth
-            val controlCellHeight =
-                axQsGridCellWidth(paneWidth, controlColumns, spacing).coerceAtLeast(0.dp)
-            val visibleTileColumns =
-                tileColumns.coerceIn(
-                    1,
-                    ((paneWidth + spacing) / (LandscapeMinCellSize + spacing))
-                        .toInt()
-                        .coerceAtLeast(1),
-                )
-            val visibleTileRows =
-                axQsVisibleTileRows(tileItems.size, visibleTileColumns, maxTileRows)
-            val pagerState = rememberPagerState {
-                axQsTileGridPageCount(tileItems.size, visibleTileColumns, visibleTileRows)
+        val labelHeight = if (showTileLabels) AX_TILE_LABEL_HEIGHT else 0.dp
+        val indicatorHeight = if (pagerState.pageCount > 1) 6.dp + spacing else 0.dp
+        val tileRowCount = visibleTileRows.coerceAtLeast(1)
+        val tileHeightBudget =
+            ((maxHeight - indicatorHeight - spacing * (tileRowCount - 1)) / tileRowCount -
+                labelHeight).coerceAtLeast(LandscapeMinCellSize)
+        val tileCellSize =
+            minOf(
+                axQsGridCellWidth(paneWidth, visibleTileColumns, spacing).coerceAtLeast(0.dp),
+                AX_TILE_MAX_SIZE,
+                tileHeightBudget,
+            )
+        val tileGridWidth =
+            tileCellSize * visibleTileColumns + spacing * (visibleTileColumns - 1)
+        Row(
+            modifier = Modifier.fillMaxSize().element(AxQsGridContent),
+            horizontalArrangement = Arrangement.spacedBy(paneSpacing),
+        ) {
+            if (controlItems.isNotEmpty()) {
+                Box(
+                    Modifier.weight(1f)
+                        .fillMaxHeight()
+                        .dynamicPadding(horizontal = { -swipeOverflow.roundToPx() })
+                        .clipScrollableContainer(Orientation.Vertical)
+                        .verticalScroll(scrollState, overscrollEffect = null)
+                        .motionEventSpy { event ->
+                            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                                onScrollGestureStart?.invoke(scrollState)
+                            }
+                        }
+                ) {
+                    AxQsGrid(
+                        items = controlItems,
+                        columns = controlColumns,
+                        rowHeight = controlCellHeight,
+                        spacing = spacing,
+                        maxRows = controlRows,
+                        squareCells = true,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = swipeOverflow),
+                        content = controlContent,
+                    )
+                }
             }
-            val labelHeight = if (showTileLabels) AX_TILE_LABEL_HEIGHT else 0.dp
-            val indicatorHeight = if (pagerState.pageCount > 1) 6.dp + spacing else 0.dp
-            val tileRowCount = visibleTileRows.coerceAtLeast(1)
-            val tileHeightBudget =
-                ((maxHeight - indicatorHeight - spacing * (tileRowCount - 1)) / tileRowCount -
-                    labelHeight).coerceAtLeast(LandscapeMinCellSize)
-            val tileCellSize =
-                minOf(
-                    axQsGridCellWidth(paneWidth, visibleTileColumns, spacing).coerceAtLeast(0.dp),
-                    AX_TILE_MAX_SIZE,
-                    tileHeightBudget,
-                )
-            val tileGridWidth =
-                tileCellSize * visibleTileColumns + spacing * (visibleTileColumns - 1)
-            Row(
-                modifier = Modifier.fillMaxSize().element(AxQsGridContent),
-                horizontalArrangement = Arrangement.spacedBy(paneSpacing),
-            ) {
-                if (controlItems.isNotEmpty()) {
-                    Box(
+            if (tileItems.isNotEmpty()) {
+                val tilePaneScrollState =
+                    if (controlItems.isEmpty()) scrollState else tileScrollState
+                Box(
+                    modifier =
                         Modifier.weight(1f)
                             .fillMaxHeight()
                             .dynamicPadding(horizontal = { -swipeOverflow.roundToPx() })
                             .clipScrollableContainer(Orientation.Vertical)
-                            .verticalScroll(scrollState, overscrollEffect = null)
+                            .verticalScroll(
+                                tilePaneScrollState,
+                                overscrollEffect = null,
+                            )
                             .motionEventSpy { event ->
                                 if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-                                    onScrollGestureStart?.invoke(scrollState)
+                                    onScrollGestureStart?.invoke(tilePaneScrollState)
                                 }
-                            }
-                    ) {
-                        AxQsGrid(
-                            items = controlItems,
-                            columns = controlColumns,
-                            rowHeight = controlCellHeight,
+                            },
+                    contentAlignment = Alignment.TopCenter,
+                ) {
+                    Column(Modifier.width(tileGridWidth)) {
+                        AxQsTileGrid(
+                            items = tileItems,
+                            columns = visibleTileColumns,
+                            rows = visibleTileRows,
                             spacing = spacing,
-                            maxRows = controlRows,
-                            squareCells = true,
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = swipeOverflow),
-                            content = controlContent,
+                            showLabels = showTileLabels,
+                            circleCells = true,
+                            pagerState = pagerState,
+                            motionRowOffset = 0,
+                            modifier = Modifier.fillMaxWidth(),
+                            content = tileContent,
+                            label = tileLabel,
                         )
-                    }
-                }
-                if (tileItems.isNotEmpty()) {
-                    val tilePaneScrollState =
-                        if (controlItems.isEmpty()) scrollState else tileScrollState
-                    Box(
-                        modifier =
-                            Modifier.weight(1f)
-                                .fillMaxHeight()
-                                .dynamicPadding(horizontal = { -swipeOverflow.roundToPx() })
-                                .clipScrollableContainer(Orientation.Vertical)
-                                .verticalScroll(
-                                    tilePaneScrollState,
-                                    overscrollEffect = null,
-                                )
-                                .motionEventSpy { event ->
-                                    if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-                                        onScrollGestureStart?.invoke(tilePaneScrollState)
-                                    }
-                                },
-                        contentAlignment = Alignment.TopCenter,
-                    ) {
-                        Column(Modifier.width(tileGridWidth)) {
-                            AxQsTileGrid(
-                                items = tileItems,
-                                columns = visibleTileColumns,
-                                rows = visibleTileRows,
-                                spacing = spacing,
-                                showLabels = showTileLabels,
-                                circleCells = true,
-                                pagerState = pagerState,
-                                motionRowOffset = 0,
-                                modifier = Modifier.fillMaxWidth(),
-                                content = tileContent,
-                                label = tileLabel,
-                            )
-                            AxQsPagerIndicator(
-                                pagerState = pagerState,
-                                modifier = Modifier.fillMaxWidth().padding(top = spacing),
-                            )
-                        }
+                        AxQsPagerIndicator(
+                            pagerState = pagerState,
+                            modifier = Modifier.fillMaxWidth().padding(top = spacing),
+                        )
                     }
                 }
             }

@@ -126,7 +126,7 @@ constructor(
             source = repository.compactStyle,
         )
     val useCompactStyle: Boolean
-        get() = compactStyle && panelMode == AxQsPanelMode.TOGETHER
+        get() = useLandscapeLayout || (compactStyle && panelMode == AxQsPanelMode.TOGETHER)
 
     fun setCompactStyle(enabled: Boolean) = repository.setCompactStyle(enabled)
 

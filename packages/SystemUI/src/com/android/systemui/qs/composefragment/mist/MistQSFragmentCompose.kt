@@ -1209,7 +1209,9 @@ constructor(
                             AxQsCompactFooter(
                                 viewModel = toolbarViewModel,
                                 sidePadding = axQsViewModel.spacing.sidePadding.dp,
-                                expansionProgress = { viewModel.expansionState.progress },
+                                expansionProgress = {
+                                    if (isSeparateShade) 1f else viewModel.expansionState.progress
+                                },
                                 isFullyVisible = {
                                     viewModel.isQsFullyExpanded && !viewModel.isEditing &&
                                         viewModel.isQsVisibleAndAnyShadeExpanded
@@ -1694,10 +1696,8 @@ private class FrameLayoutTouchPassthrough(
     val tilePanelSwipeGesture = QsTilePanelSwipeGesture(touchSlop.toFloat())
 
     fun onQsScrollGestureStart() {
-        if (!allowPanelSwipe()) {
-            preventingIntercept = canScrollQs.forward()
-            parent?.requestDisallowInterceptTouchEvent(preventingIntercept)
-        }
+        preventingIntercept = canScrollQs.forward()
+        parent?.requestDisallowInterceptTouchEvent(preventingIntercept)
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
@@ -1785,6 +1785,12 @@ private class FrameLayoutTouchPassthrough(
                 ) {
                     preventingIntercept = true
                     parent?.requestDisallowInterceptTouchEvent(true)
+                } else if (
+                    allowPanelSwipe() && Math.abs(xDiff) > touchSlop &&
+                        Math.abs(xDiff) > Math.abs(yDiff) * 1.5f
+                ) {
+                    preventingIntercept = false
+                    parent?.requestDisallowInterceptTouchEvent(false)
                 }
                 if (collapsing && vertical) {
                     return true
