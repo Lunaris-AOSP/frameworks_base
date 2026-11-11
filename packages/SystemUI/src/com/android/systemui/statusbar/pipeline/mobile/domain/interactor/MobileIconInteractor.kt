@@ -143,6 +143,9 @@ interface MobileIconInteractor {
 
     val shouldShowFourgIcon: StateFlow<Boolean>
 
+    /** Whether to display a 5G icon for 4G/LTE connections. */
+    val shouldShowFivegForFourgIcon: StateFlow<Boolean>
+
     val fiveGStyle: StateFlow<Int>
 
     val disableStackedMobileIcons: Flow<Boolean>
@@ -207,6 +210,9 @@ class MobileIconInteractorImpl(
     private final val FIVE_G_ICON_STYLE: String =
             "system:" + Settings.System.FIVE_G_ICON_STYLE;
 
+    private val SHOW_FIVEG_FOR_FOURG_ICON: String =
+        "system:" + Settings.System.SHOW_FIVEG_FOR_FOURG_ICON
+
     private final val DISABLE_STACKED_MOBILE_ICONS: String =
         "system:" + Settings.System.DISABLE_STACKED_MOBILE_ICONS
 
@@ -230,6 +236,23 @@ class MobileIconInteractorImpl(
                 started = SharingStarted.WhileSubscribed(),
                 true
             )
+
+    override val shouldShowFivegForFourgIcon: StateFlow<Boolean> =
+        conflatedCallbackFlow {
+                val callback =
+                    object : TunerService.Tunable {
+                        override fun onTuningChanged(key: String, newValue: String?) {
+                            if (key == SHOW_FIVEG_FOR_FOURG_ICON) {
+                                trySend(TunerService.parseIntegerSwitch(newValue, false))
+                            }
+                        }
+                    }
+                Dependency.get(TunerService::class.java)
+                    .addTunable(callback, SHOW_FIVEG_FOR_FOURG_ICON)
+
+                awaitClose { Dependency.get(TunerService::class.java).removeTunable(callback) }
+            }
+            .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
     override val fiveGStyle: StateFlow<Int> =
         conflatedCallbackFlow {

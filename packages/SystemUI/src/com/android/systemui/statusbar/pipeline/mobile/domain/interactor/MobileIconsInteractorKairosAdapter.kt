@@ -249,6 +249,10 @@ constructor(
             override val shouldShowFourgIcon: StateFlow<Boolean> = latest { shouldShowFourgIcon }
                 .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
+            override val shouldShowFivegForFourgIcon: StateFlow<Boolean> =
+                latest { shouldShowFivegForFourgIcon }
+                    .stateIn(scope, SharingStarted.WhileSubscribed(), false)
+
             override val fiveGStyle: StateFlow<Int> = latest { fiveGStyle }
                 .stateIn(scope, SharingStarted.WhileSubscribed(), 0)
 

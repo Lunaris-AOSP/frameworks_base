@@ -38,6 +38,7 @@ import com.android.systemui.statusbar.pipeline.airplane.domain.interactor.Airpla
 import com.android.systemui.statusbar.pipeline.mobile.domain.interactor.MobileIconInteractorKairos
 import com.android.systemui.statusbar.pipeline.mobile.domain.model.SignalIconModel
 import com.android.systemui.statusbar.pipeline.mobile.ui.model.MobileContentDescription
+import com.android.systemui.statusbar.pipeline.mobile.util.MobileNetworkTypeIconUtils
 import com.android.systemui.statusbar.pipeline.shared.ConnectivityConstants
 import com.android.systemui.statusbar.pipeline.shared.data.model.DataActivityModel
 
@@ -266,14 +267,29 @@ private class CellularIconViewModelKairos(
             }
 
     override val networkTypeIcon: KairosState<Icon.Resource?> =
-        combine(iconInteractor.networkTypeIconGroup, showNetworkTypeIcon, iconInteractor.fiveGStyle) {
+        combine(
+            iconInteractor.networkTypeIconGroup,
+            showNetworkTypeIcon,
+            iconInteractor.fiveGStyle,
+            iconInteractor.shouldShowFivegForFourgIcon,
+        ) {
             networkTypeIconGroup,
             shouldShow,
-            fiveGStyle ->
+            fiveGStyle,
+            shouldShowFivegForFourgIcon ->
+            val fivegIconGroup =
+                if (shouldShowFivegForFourgIcon) {
+                    MobileNetworkTypeIconUtils.get5gIconGroup(
+                        networkTypeIconGroup.contentDescription
+                    )
+                } else {
+                    null
+                }
             val desc =
                 if (networkTypeIconGroup.contentDescription != 0) {
                     var contDesc: Int = networkTypeIconGroup.contentDescription
                     contDesc = convertFiveG(contDesc, fiveGStyle)
+                    contDesc = fivegIconGroup?.dataContentDescription ?: contDesc
                     ContentDescription.Resource(contDesc)
                 } else {
                     null
@@ -282,6 +298,7 @@ private class CellularIconViewModelKairos(
                 if (networkTypeIconGroup.iconId != 0) {
                     var contIcon: Int = networkTypeIconGroup.iconId
                     contIcon = convertFiveG(contIcon, fiveGStyle)
+                    contIcon = fivegIconGroup?.dataType ?: contIcon
                     Icon.Resource(contIcon, desc)
                 } else {
                     null

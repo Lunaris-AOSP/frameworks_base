@@ -156,6 +156,12 @@ fun BuildScope.MobileIconInteractorKairosAdapter(
                         "MobileIconInteractorKairosAdapter(subId=$subscriptionId).shouldShowFourgIcon"
                     }
                 ),
+            shouldShowFivegForFourgIcon =
+                shouldShowFivegForFourgIcon.toStateFlow(
+                    nameTag {
+                        "MobileIconInteractorKairosAdapter(subId=$subscriptionId).shouldShowFivegForFourgIcon"
+                    }
+                ),
             fiveGStyle =
                 fiveGStyle.toStateFlow(
                     nameTag {
@@ -193,6 +199,7 @@ private class MobileIconInteractorKairosAdapter(
     override val isAllowedDuringAirplaneMode: StateFlow<Boolean>,
     override val carrierNetworkChangeActive: StateFlow<Boolean>,
     override val shouldShowFourgIcon: StateFlow<Boolean>,
+    override val shouldShowFivegForFourgIcon: StateFlow<Boolean>,
     override val fiveGStyle: StateFlow<Int>,
     override val disableStackedMobileIcons: StateFlow<Boolean>,
 ) : MobileIconInteractor

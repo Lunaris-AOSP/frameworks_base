@@ -7289,6 +7289,12 @@ public final class Settings {
         public static final String SHOW_FOURG_ICON = "show_fourg_icon";
 
         /**
+         * Whether to display a 5G icon for 4G/LTE connections.
+         * @hide
+         */
+        public static final String SHOW_FIVEG_FOR_FOURG_ICON = "show_fiveg_for_fourg_icon";
+
+        /**
          * 5G SA icon style:
          * 0: Default (5G SA)
          * 1: 5G+
