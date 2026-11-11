@@ -59,6 +59,8 @@
     <!-- 4G icon instead LTE -->
     <string name="fourg_icon_title">4G icon</string>
 
+    <string name="fiveg_for_fourg_icon_title">Show 5G instead of 4G</string>
+
     <!-- 5G SA icon -->
     <string name="status_bar_fiveg_sa_icon_title">5G indicator</string>
     <string name="status_bar_fiveg_sa_icon_default">Default (5G SA)</string>

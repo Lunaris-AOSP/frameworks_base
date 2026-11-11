@@ -171,6 +171,8 @@ constructor(
             override val carrierNetworkChangeActive: State<Boolean> =
                 latest(false) { carrierNetworkChangeActive }
             override val shouldShowFourgIcon: State<Boolean> = latest(false) { shouldShowFourgIcon }
+            override val shouldShowFivegForFourgIcon: State<Boolean> =
+                latest(false) { shouldShowFivegForFourgIcon }
             override val fiveGStyle: State<Int> = latest(0) { fiveGStyle }
             override val disableStackedMobileIcons: State<Boolean> = latest(false) { disableStackedMobileIcons }
         }

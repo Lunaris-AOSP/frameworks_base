@@ -48,6 +48,7 @@ import com.android.systemui.Dependency;
 import com.android.systemui.res.R;
 import com.android.systemui.statusbar.pipeline.mobile.domain.interactor.MobileIconsInteractor;
 import com.android.systemui.statusbar.pipeline.mobile.util.MobileMappingsProxy;
+import com.android.systemui.statusbar.pipeline.mobile.util.MobileNetworkTypeIconUtils;
 import com.android.systemui.tuner.TunerService;
 import com.android.systemui.util.CarrierConfigTracker;
 
@@ -84,12 +85,15 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
             "system:" + Settings.System.SHOW_FOURG_ICON;
     private static final String FIVE_G_ICON_STYLE =
             "system:" + Settings.System.FIVE_G_ICON_STYLE;
+    private static final String SHOW_FIVEG_FOR_FOURG_ICON =
+            "system:" + Settings.System.SHOW_FIVEG_FOR_FOURG_ICON;
     private static final String DISABLE_STACKED_MOBILE_ICONS =
         "system:" + Settings.System.DISABLE_STACKED_MOBILE_ICONS;
 
     private boolean mDataDisabledIcon;
     private boolean mDisableStackedMobileIcons;
     private int mFiveGStyle = 0;
+    private boolean mShowFivegForFourgIcon;
 
     private MobileIconGroup mDefaultIcons;
     private Config mConfig;
@@ -183,6 +187,7 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
         Dependency.get(TunerService.class).addTunable(this, DATA_DISABLED_ICON);
         Dependency.get(TunerService.class).addTunable(this, SHOW_FOURG_ICON);
         Dependency.get(TunerService.class).addTunable(this, FIVE_G_ICON_STYLE);
+        Dependency.get(TunerService.class).addTunable(this, SHOW_FIVEG_FOR_FOURG_ICON);
         Dependency.get(TunerService.class).addTunable(this, DISABLE_STACKED_MOBILE_ICONS);
     }
 
@@ -202,6 +207,10 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
             case FIVE_G_ICON_STYLE:
                 mFiveGStyle = TunerService.parseInteger(newValue, 0);
                 updateTelephony();
+                break;
+            case SHOW_FIVEG_FOR_FOURG_ICON:
+                mShowFivegForFourgIcon = TunerService.parseIntegerSwitch(newValue, false);
+                notifyListeners();
                 break;
             case DISABLE_STACKED_MOBILE_ICONS:
                 mDisableStackedMobileIcons =
@@ -313,6 +322,11 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
             return;
         }
         MobileIconGroup icons = getIcons();
+        MobileIconGroup fivegIcons = mShowFivegForFourgIcon
+                ? MobileNetworkTypeIconUtils.get5gIconGroup(icons.dataContentDescription) : null;
+        if (fivegIcons != null) {
+            icons = fivegIcons;
+        }
 
         String contentDescription = getTextIfExists(getContentDescription()).toString();
         CharSequence dataContentDescriptionHtml = getTextIfExists(icons.dataContentDescription);
@@ -327,6 +341,9 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
         }
 
         int iconId = mCurrentState.getNetworkTypeIcon(mContext);
+        if (fivegIcons != null && iconId != 0) {
+            iconId = fivegIcons.dataType;
+        }
         final QsInfo qsInfo = getQsInfo(contentDescription, iconId);
         final SbInfo sbInfo = getSbInfo(contentDescription, iconId);
 

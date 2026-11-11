@@ -28,6 +28,7 @@ import com.android.systemui.statusbar.pipeline.mobile.domain.interactor.MobileIc
 import com.android.systemui.statusbar.pipeline.mobile.domain.interactor.MobileIconsInteractor
 import com.android.systemui.statusbar.pipeline.mobile.domain.model.SignalIconModel
 import com.android.systemui.statusbar.pipeline.mobile.ui.model.MobileContentDescription
+import com.android.systemui.statusbar.pipeline.mobile.util.MobileNetworkTypeIconUtils
 import com.android.systemui.statusbar.pipeline.shared.ConnectivityConstants
 import com.android.systemui.statusbar.pipeline.shared.data.model.DataActivityModel
 import kotlinx.coroutines.CoroutineScope
@@ -271,12 +272,27 @@ private class CellularIconViewModel(
                 showNetworkTypeIcon,
                 iconInteractor.shouldShowFourgIcon,
                 iconInteractor.fiveGStyle,
-            ) { networkTypeIconGroup, shouldShow, shouldShowFourgIcon, fiveGStyle ->
+                iconInteractor.shouldShowFivegForFourgIcon,
+            ) {
+                networkTypeIconGroup,
+                shouldShow,
+                shouldShowFourgIcon,
+                fiveGStyle,
+                shouldShowFivegForFourgIcon ->
+                val fivegIconGroup =
+                    if (shouldShowFivegForFourgIcon) {
+                        MobileNetworkTypeIconUtils.get5gIconGroup(
+                            networkTypeIconGroup.contentDescription
+                        )
+                    } else {
+                        null
+                    }
                 val desc =
                     if (networkTypeIconGroup.contentDescription != 0) {
                         var contDesc: Int = networkTypeIconGroup.contentDescription
                         if (shouldShowFourgIcon) contDesc = convertLteToFourg(contDesc)
                         contDesc = convertFiveG(contDesc, fiveGStyle)
+                        contDesc = fivegIconGroup?.dataContentDescription ?: contDesc
                         ContentDescription.Resource(contDesc)
                     }
                     else null
@@ -285,6 +301,7 @@ private class CellularIconViewModel(
                         var contIcon: Int = networkTypeIconGroup.iconId
                         if (shouldShowFourgIcon) contIcon = convertLteToFourg(contIcon)
                         contIcon = convertFiveG(contIcon, fiveGStyle)
+                        contIcon = fivegIconGroup?.dataType ?: contIcon
                         Icon.Resource(contIcon, desc)
                     }
                     else null
