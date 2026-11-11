@@ -17,6 +17,7 @@ package com.android.systemui.statusbar.notification.icon.domain.interactor
 
 import android.content.Context
 import android.graphics.drawable.Icon
+import android.view.Display
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.deviceentry.domain.interactor.DeviceEntryBypassInteractor
@@ -24,6 +25,7 @@ import com.android.systemui.edgeaurora.EdgeAuroraRepository
 import com.android.systemui.kairos.util.Either
 import com.android.systemui.kairos.util.mergeSecond
 import com.android.systemui.statusbar.data.repository.NotificationListenerSettingsRepository
+import com.android.systemui.statusbar.featurepods.popups.data.repository.DynamicIslandStateRepository
 import com.android.systemui.statusbar.notification.data.repository.ActiveNotificationListRepository
 import com.android.systemui.statusbar.notification.data.repository.ActiveNotificationsStore
 import com.android.systemui.statusbar.notification.data.repository.NotificationsKeyguardViewStateRepository
@@ -244,7 +246,16 @@ constructor(
     iconsInteractor: NotificationIconsInteractor,
     settingsRepository: NotificationListenerSettingsRepository,
     edgeAuroraRepository: EdgeAuroraRepository = EdgeAuroraRepository(),
+    dynamicIslandStateRepository: DynamicIslandStateRepository? = null,
 ) {
+    private val suppressedNotificationKeys: Flow<Set<String>> =
+        combine(
+            edgeAuroraRepository.suppressedStatusBarNotificationKeys,
+            dynamicIslandStateRepository?.states ?: flowOf(emptyMap()),
+        ) { hiddenKeys, states ->
+            hiddenKeys + states[Display.DEFAULT_DISPLAY]?.callNotificationKeys.orEmpty()
+        }
+
     val statusBarNotifs: Flow<Set<ActiveNotificationIconModel>> =
         settingsRepository.showSilentStatusIcons
             .flatMapLatest { showSilentIcons ->
@@ -256,7 +267,7 @@ constructor(
                     showRepliedMessages = false,
                 )
             }
-            .combine(edgeAuroraRepository.suppressedStatusBarNotificationKeys) { notifs, hiddenKeys ->
+            .combine(suppressedNotificationKeys) { notifs, hiddenKeys ->
                 notifs
                     .filter { it.statusBarIcon != null && it.notifKey !in hiddenKeys }
                     .distinctBy { it.statusBarIcon!!.toString() }
