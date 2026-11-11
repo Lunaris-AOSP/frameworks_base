@@ -104,4 +104,8 @@
     <!-- Lyric -->
     <dimen name="lyric_icon_margin_end">4dp</dimen>
     <dimen name="lyric_padding_end">4dp</dimen>
+    <dimen name="notification_compact_landscape_width">440dp</dimen>
+    <dimen name="notification_compact_landscape_min_width">280dp</dimen>
+    <dimen name="notification_side_clear_all_size">56dp</dimen>
+    <dimen name="notification_side_clear_all_gap">24dp</dimen>
 </resources>
