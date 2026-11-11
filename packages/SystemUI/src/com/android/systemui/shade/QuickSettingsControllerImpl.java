@@ -79,6 +79,7 @@ import com.android.systemui.media.controls.ui.controller.MediaHierarchyManager;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.qs.QS;
 import com.android.systemui.qs.flags.QSComposeFragment;
+import com.android.systemui.qs.panels.shared.model.AxQsPanelMode;
 import com.android.systemui.res.R;
 import com.android.systemui.scene.shared.flag.SceneContainerFlag;
 import com.android.systemui.screenrecord.ScreenRecordUxController;
@@ -1399,6 +1400,9 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
 
     void updateQsState() {
         updateNotificationStackVisibility();
+        mNotificationStackScrollLayoutController.getView()
+                .setSeparateNotificationShade(isMistQsEnabled()
+                        && mAxQsShadePolicy.get().getPanelMode().getValue() == AxQsPanelMode.SEPARATE);
         if (mQs == null) return;
         boolean qsAllowed = !isLockscreenQsDisabled();
         mQs.setExpanded(qsAllowed && getExpanded());

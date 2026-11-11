@@ -319,6 +319,7 @@ public class NotificationStackScrollLayout
     private boolean mShouldShowShelfOnly;
     protected boolean mScrollingEnabled;
     protected FooterView mFooterView;
+    private boolean mSeparateNotificationShade;
     protected StackScrollerDecorView mEmptyShadeView;
     private boolean mClearAllInProgress;
     private boolean mFlingAfterUpEvent;
@@ -1085,6 +1086,17 @@ public class NotificationStackScrollLayout
             return;
         }
 
+        if (isCompactLandscapeShade()) {
+            int gutter = mMinimumPaddings
+                    + getResources().getDimensionPixelSize(R.dimen.notification_side_clear_all_size)
+                    + getResources().getDimensionPixelSize(R.dimen.notification_side_clear_all_gap);
+            int panelWidth = Math.min(
+                    getResources().getDimensionPixelSize(R.dimen.notification_compact_landscape_width),
+                    Math.max(0, viewWidth - gutter * 2));
+            mSidePaddings = (viewWidth - panelWidth) / 2;
+            return;
+        }
+
         if (orientation == Configuration.ORIENTATION_PORTRAIT) {
             mSidePaddings = mMinimumPaddings;
             return;
@@ -1116,6 +1128,30 @@ public class NotificationStackScrollLayout
             mCornerRadius = newRadius;
             invalidate();
         }
+    }
+
+    public void setSeparateNotificationShade(boolean separate) {
+        if (mSeparateNotificationShade == separate) return;
+        mSeparateNotificationShade = separate;
+        requestLayout();
+    }
+
+    private boolean isCompactLandscapeShade() {
+        return mSeparateNotificationShade && mIsExpanded && mStatusBarState == StatusBarState.SHADE
+                && !mShouldUseSplitNotificationShade && !SceneContainerFlag.isEnabled()
+                && getResources().getConfiguration().orientation
+                        == Configuration.ORIENTATION_LANDSCAPE
+                && getMeasuredWidth() >= getResources().getDimensionPixelSize(
+                        R.dimen.notification_compact_landscape_min_width)
+                        + 2 * (mMinimumPaddings + getResources().getDimensionPixelSize(
+                                R.dimen.notification_side_clear_all_size)
+                                + getResources().getDimensionPixelSize(
+                                        R.dimen.notification_side_clear_all_gap));
+    }
+
+    float getSideFooterY() {
+        return Math.max(0, getHeight() - Math.max(mBottomPadding, getImeInset())
+                - mFooterView.getMeasuredHeight());
     }
 
     private void notifyHeightChangeListener(ExpandableView view) {
@@ -1213,7 +1249,15 @@ public class NotificationStackScrollLayout
         // correctly as they are used to calculate how many we can fit on the screen.
         final int size = getChildCount();
         for (int i = 0; i < size; i++) {
-            measureChild(getChildAt(i), childWidthSpec, childHeightSpec);
+            View child = getChildAt(i);
+            if (child == mFooterView) {
+                mFooterView.setSideLayout(isCompactLandscapeShade());
+            }
+            int widthSpec = child == mFooterView && mFooterView.isSideLayout()
+                    ? MeasureSpec.makeMeasureSpec(getResources().getDimensionPixelSize(
+                            R.dimen.notification_side_clear_all_size), MeasureSpec.EXACTLY)
+                    : childWidthSpec;
+            measureChild(child, widthSpec, childHeightSpec);
         }
         if (SceneContainerFlag.isEnabled()) {
             setMaxLayoutHeight(getMeasuredHeight());
@@ -1282,9 +1326,16 @@ public class NotificationStackScrollLayout
                 // the screen
                 float width = child.getMeasuredWidth();
                 float height = child.getMeasuredHeight();
-                child.layout((int) (centerX - width / 2.0f),
+                float childLeft = centerX - width / 2.0f;
+                if (child == mFooterView && mFooterView.isSideLayout()) {
+                    int gap = getResources().getDimensionPixelSize(
+                            R.dimen.notification_side_clear_all_gap);
+                    childLeft = isLayoutRtl() ? mSidePaddings - gap - width
+                            : getWidth() - mSidePaddings + gap;
+                }
+                child.layout((int) childLeft,
                         0,
-                        (int) (centerX + width / 2.0f),
+                        (int) (childLeft + width),
                         (int) height);
             }
         }
@@ -1701,7 +1752,8 @@ public class NotificationStackScrollLayout
                 // we never overlap / clip the shelf
                 continue;
             }
-            boolean canClip = !child.isBackgroundOpaque();
+            boolean canClip = !child.isBackgroundOpaque()
+                    && !(child instanceof FooterView footer && footer.isSideLayout());
             if (child.getViewState().lockscreenStackScaleApplied) {
                 // The deck deliberately overlaps, including while it is spreading into a list.
                 canClip = false;
@@ -3518,6 +3570,7 @@ public class NotificationStackScrollLayout
      */
     private void updateScrollStateForRemovedChild(ExpandableView removedChild) {
         SceneContainerFlag.assertInLegacyMode();
+        if (removedChild instanceof FooterView footer && footer.isSideLayout()) return;
         final int startingPosition = getPositionInLinearLayout(removedChild);
         final int childHeight = getIntrinsicHeight(removedChild) + mPaddingBetweenElements;
         final int endPosition = startingPosition + childHeight;
@@ -5101,6 +5154,7 @@ public class NotificationStackScrollLayout
         mStateAnimator.setShadeExpanded(isExpanded);
         mSwipeHelper.setIsExpanded(isExpanded);
         if (changed) {
+            if (mSeparateNotificationShade) requestLayout();
             if (!SceneContainerFlag.isEnabled()) {
                 updateNotificationShadeExpansion();
             }
@@ -5548,6 +5602,7 @@ public class NotificationStackScrollLayout
             removeView(mFooterView);
         }
         mFooterView = footerView;
+        mFooterView.setSideLayout(isCompactLandscapeShade());
         addView(mFooterView, index);
     }
 
@@ -5630,6 +5685,15 @@ public class NotificationStackScrollLayout
         for (int i = childCount - 1; i >= 0; i--) {
             ExpandableView child = getChildAtIndex(i);
             if (child.getVisibility() != View.GONE) {
+                if (child == mFooterView && mFooterView.isSideLayout()) {
+                    if (child.getVisibility() == VISIBLE && mFooterView.isClearAllButtonVisible()
+                            && mFooterView.isContentVisible()
+                            && !mFooterView.isOnEmptySpace(touchX - child.getX(),
+                            touchY - child.getY())) {
+                        return false;
+                    }
+                    continue;
+                }
                 float childTop = child.getY();
                 if (childTop > touchY) {
                     // we are above a notification entirely let's abort
@@ -6124,6 +6188,7 @@ public class NotificationStackScrollLayout
     public void setStatusBarState(int statusBarState) {
         if (mStatusBarState != statusBarState) {
             resetLockscreenNotificationStack();
+            if (mSeparateNotificationShade) requestLayout();
         }
         mStatusBarState = statusBarState;
         mAmbientState.setStatusBarState(statusBarState);

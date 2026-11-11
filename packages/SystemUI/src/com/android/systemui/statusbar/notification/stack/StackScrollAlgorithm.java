@@ -514,6 +514,23 @@ public class StackScrollAlgorithm {
                     emptyShadeVisible = true;
                 }
                 if (!SceneContainerFlag.isEnabled() && v instanceof FooterView footerView) {
+                    if (footerView.isSideLayout()
+                            && mHostView instanceof NotificationStackScrollLayout stack) {
+                        FooterView.FooterViewState footerState =
+                                (FooterView.FooterViewState) footerView.getViewState();
+                        footerState.height = footerView.getMeasuredHeight();
+                        footerState.setYTranslation(stack.getSideFooterY());
+                        footerState.setAlpha(interpolateFooterAlpha(ambientState));
+                        footerState.hidden = footerView.shouldBeHidden()
+                                || !ambientState.isShadeExpanded()
+                                || emptyShadeVisible;
+                        footerState.hideContent = ambientState.isClearAllInProgress();
+                        footerState.location = ExpandableViewState.LOCATION_MAIN_AREA;
+                        footerState.notGoneIndex = notGoneIndex;
+                        footerState.clipTopAmount = 0;
+                        footerState.clipBottomAmount = 0;
+                        continue;
+                    }
                     // If the empty shade is visible or the footer is the first visible
                     // view, we're in a transitory state so let's leave the footer alone.
                     if (emptyShadeVisible || notGoneIndex == 0) {

@@ -47,7 +47,10 @@ import android.os.Vibrator;
 import android.provider.Settings;
 import android.util.AttributeSet;
 import android.util.IndentingPrintWriter;
+import android.view.Gravity;
 import android.view.View;
+import android.widget.FrameLayout;
+import android.widget.ImageButton;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -76,6 +79,11 @@ public class FooterView extends StackScrollerDecorView {
     private static final String TAG = "FooterView";
 
     private FooterViewButton mClearAllButton;
+    private ImageButton mSideClearAllButton;
+    private View mFooterButtons;
+    private boolean mSideLayout;
+    private boolean mFooterLabelVisible;
+    private int mContentPaddingTop;
     private FooterViewButton mManageOrHistoryButton;
     // The settings & history buttons replace the single manage/history button in the redesign
     private FooterViewButton mSettingsButton;
@@ -144,6 +152,32 @@ public class FooterView extends StackScrollerDecorView {
     /** Whether the "Clear all" button is currently visible. */
     public boolean isClearAllButtonVisible() {
         return isSecondaryVisible();
+    }
+
+    public boolean isSideLayout() {
+        return mSideLayout;
+    }
+
+    public void setSideLayout(boolean sideLayout) {
+        if (mSideLayout == sideLayout) return;
+        boolean clearAllVisible = isSecondaryVisible();
+        setSecondaryVisible(false, false, null);
+        mSideLayout = sideLayout;
+        mSecondaryView = sideLayout ? mSideClearAllButton : mClearAllButton;
+        mFooterButtons.setVisibility(sideLayout ? GONE : VISIBLE);
+        mSideClearAllButton.setVisibility(sideLayout ? INVISIBLE : GONE);
+        mContent.setPadding(mContent.getPaddingLeft(), sideLayout ? 0 : mContentPaddingTop,
+                mContent.getPaddingRight(), mContent.getPaddingBottom());
+        mContent.setMinimumHeight(sideLayout ? getResources().getDimensionPixelSize(
+                R.dimen.notification_side_clear_all_size) : 0);
+        setFooterLabelVisible(mFooterLabelVisible);
+        setSecondaryVisible(clearAllVisible, false, null);
+        requestLayout();
+    }
+
+    @Override
+    public boolean hasNoContentHeight() {
+        return mSideLayout || super.hasNoContentHeight();
     }
 
     /** See {@link this#setClearAllButtonVisible(boolean, boolean, Consumer)}. */
@@ -245,6 +279,7 @@ public class FooterView extends StackScrollerDecorView {
             return; // not initialized yet
         }
         mClearAllButton.setContentDescription(getContext().getString(mClearAllButtonDescriptionId));
+        mSideClearAllButton.setContentDescription(mClearAllButton.getContentDescription());
     }
 
     /** Set the text label for the "Manage"/"History" button. */
@@ -333,6 +368,18 @@ public class FooterView extends StackScrollerDecorView {
         }
         super.onFinishInflate();
         mClearAllButton = (FooterViewButton) findSecondaryView();
+        mFooterButtons = (View) mClearAllButton.getParent();
+        mContentPaddingTop = mContent.getPaddingTop();
+        mSideClearAllButton = new ImageButton(mContext);
+        mSideClearAllButton.setImageResource(R.drawable.ic_close);
+        mSideClearAllButton.setContentDescription(
+                getContext().getString(R.string.accessibility_clear_all));
+        mSideClearAllButton.setVisibility(GONE);
+        mSideClearAllButton.setPadding(0, 0, 0, 0);
+        int sideButtonSize = getResources().getDimensionPixelSize(
+                R.dimen.notification_side_clear_all_size);
+        ((FrameLayout) mContent).addView(mSideClearAllButton,
+                new FrameLayout.LayoutParams(sideButtonSize, sideButtonSize, Gravity.CENTER));
         if (NotifRedesignFooter.isEnabled()) {
             mSettingsButton = findViewById(R.id.settings_button);
             mHistoryButton = findViewById(R.id.history_button);
@@ -347,11 +394,8 @@ public class FooterView extends StackScrollerDecorView {
     /** Show a message instead of the footer buttons. */
     public void setFooterLabelVisible(boolean isVisible) {
         // Note: hiding the buttons is handled in the FooterViewModel
-        if (isVisible) {
-            mSeenNotifsFooterTextView.setVisibility(View.VISIBLE);
-        } else {
-            mSeenNotifsFooterTextView.setVisibility(View.GONE);
-        }
+        mFooterLabelVisible = isVisible;
+        mSeenNotifsFooterTextView.setVisibility(isVisible && !mSideLayout ? VISIBLE : GONE);
     }
 
     /** Set onClickListener for the notification settings button. */
@@ -384,6 +428,8 @@ public class FooterView extends StackScrollerDecorView {
         if (mClearAllButtonClickListener == listener) return;
         mClearAllButtonClickListener = listener;
         mClearAllButton.setOnClickListener(withHaptics(listener));
+        mSideClearAllButton.setOnClickListener(listener == null ? null : withHaptics(listener));
+        mSideClearAllButton.setClickable(listener != null);
     }
 
     private OnClickListener withHaptics(OnClickListener listener) {
@@ -438,6 +484,8 @@ public class FooterView extends StackScrollerDecorView {
         // Same resource, separate drawables to prevent touch effects from showing on the wrong
         // button.
         final Drawable clearAllBg = theme.getDrawable(R.drawable.notif_footer_btn_background);
+        final Drawable sideClearAllBg = theme.getDrawable(
+                R.drawable.notif_footer_side_btn_background);
         final Drawable settingsBg = theme.getDrawable(R.drawable.notif_footer_btn_background);
         final Drawable historyBg = NotifRedesignFooter.isEnabled()
                 ? theme.getDrawable(R.drawable.notif_footer_btn_background) : null;
@@ -446,6 +494,7 @@ public class FooterView extends StackScrollerDecorView {
         if (QsCosTileBackground.isEnabled(mContext)) {
             scHigh = SurfaceEffectColors.surfaceEffect2(mContext);
             applyCosTileBackground(clearAllBg, scHigh);
+            applyCosTileBackground(sideClearAllBg, scHigh);
             applyCosTileBackground(settingsBg, scHigh);
             if (historyBg != null) {
                 applyCosTileBackground(historyBg, scHigh);
@@ -459,6 +508,7 @@ public class FooterView extends StackScrollerDecorView {
                     // Apply alpha on background drawables.
                     int backgroundAlpha = (int) (backgroundColor.alpha() * 0xFF);
                     clearAllBg.setAlpha(backgroundAlpha);
+                    sideClearAllBg.setAlpha(backgroundAlpha);
                     settingsBg.setAlpha(backgroundAlpha);
                     if (historyBg != null) {
                         historyBg.setAlpha(backgroundAlpha);
@@ -474,6 +524,7 @@ public class FooterView extends StackScrollerDecorView {
             if (scHigh != 0) {
                 final ColorFilter bgColorFilter = new PorterDuffColorFilter(scHigh, SRC_ATOP);
                 clearAllBg.setColorFilter(bgColorFilter);
+                sideClearAllBg.setColorFilter(bgColorFilter);
                 settingsBg.setColorFilter(bgColorFilter);
                 if (NotifRedesignFooter.isEnabled()) {
                     historyBg.setColorFilter(bgColorFilter);
@@ -484,6 +535,8 @@ public class FooterView extends StackScrollerDecorView {
         }
         mClearAllButton.setBackground(clearAllBg);
         mClearAllButton.setTextColor(onSurface);
+        mSideClearAllButton.setBackground(sideClearAllBg);
+        mSideClearAllButton.setImageTintList(ColorStateList.valueOf(onSurface));
         if (NotifRedesignFooter.isEnabled()) {
             mSettingsButton.setBackground(settingsBg);
             mSettingsButton.setCompoundDrawableTintList(ColorStateList.valueOf(onSurface));
