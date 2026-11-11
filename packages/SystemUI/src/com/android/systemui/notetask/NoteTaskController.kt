@@ -28,6 +28,7 @@ import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.pm.ShortcutManager
 import android.graphics.drawable.Icon
@@ -89,6 +90,35 @@ constructor(
 ) {
 
     @VisibleForTesting val infoReference = AtomicReference<NoteTaskInfo?>()
+
+    fun createKeepNoteIntent(): Intent? {
+        val intent =
+            Intent(Intent.ACTION_CREATE_NOTE)
+                .setPackage("com.google.android.keep")
+                .putExtra(Intent.EXTRA_USE_STYLUS_MODE, false)
+                .addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_MULTIPLE_TASK or
+                        Intent.FLAG_ACTIVITY_NEW_DOCUMENT
+                )
+        val activityInfo =
+            context.packageManager
+                .resolveActivityAsUser(
+                    intent,
+                    PackageManager.MATCH_DEFAULT_ONLY,
+                    userTracker.userId,
+                )
+                ?.activityInfo ?: return null
+
+        if (
+            !activityInfo.exported ||
+                !activityInfo.enabled ||
+                activityInfo.flags and ActivityInfo.FLAG_SHOW_WHEN_LOCKED == 0
+        ) {
+            return null
+        }
+        return intent.setComponent(ComponentName(activityInfo.packageName, activityInfo.name))
+    }
 
     /** @see BubbleExpandListener */
     fun onBubbleExpandChanged(isExpanding: Boolean, key: String?) {
