@@ -15,6 +15,7 @@ import android.widget.TextView
 import kotlin.math.roundToInt
 
 internal class ClockOutlineTextView(context: Context) : TextView(context) {
+    internal var glassFill: ((Canvas, Float) -> Unit)? = null
     private val savedPaint = TextPaint()
     private var element: ClockElement? = null
     private var scale = 0f
@@ -46,7 +47,7 @@ internal class ClockOutlineTextView(context: Context) : TextView(context) {
         val strokeWidth = if (style.textStroke && fill > 0f && Color.alpha(style.textStrokeColor) > 0) {
             style.textStrokeWidth.coerceIn(1, 12) * scale
         } else 0f
-        if (normalOutline <= 0f && aodOutline <= 0f && strokeWidth <= 0f) {
+        if (glassFill == null && normalOutline <= 0f && aodOutline <= 0f && strokeWidth <= 0f) {
             super.onDraw(canvas)
             return
         }
@@ -62,14 +63,17 @@ internal class ClockOutlineTextView(context: Context) : TextView(context) {
         val save = canvas.save()
         try {
             canvas.translate(compoundPaddingLeft.toFloat(), totalPaddingTop.toFloat())
-            val inset = maxOf(outlineWidth / 2f, strokeWidth)
+            val inset = maxOf(outlineWidth / 2f, strokeWidth,
+                if (glassFill != null) (style.glassStyle.glyphBlur / 10f * 3f).coerceAtLeast(16f) else 0f)
             canvas.clipRect(-inset - maxOf(0f, shadowRadius - shadowDx),
                 -inset - maxOf(0f, shadowRadius - shadowDy),
                 textLayout.width + inset + maxOf(0f, shadowRadius + shadowDx),
                 height - totalPaddingTop - totalPaddingBottom + inset + maxOf(0f, shadowRadius + shadowDy))
             if (strokeWidth > 0f) drawText(canvas, textLayout, fill, Paint.Style.STROKE,
                 strokeWidth * 2f, style.textStrokeColor, textShader = false)
-            drawText(canvas, textLayout, fill, Paint.Style.FILL, shadow = strokeWidth <= 0f)
+            val material = glassFill
+            if (material != null) material(canvas, fill)
+            else drawText(canvas, textLayout, fill, Paint.Style.FILL, shadow = strokeWidth <= 0f)
             val normalAlpha = if (normalOutline > 0f && aodOutline < 1f) normalOutline / (1f - aodOutline) else 0f
             drawText(canvas, textLayout, normalAlpha, Paint.Style.STROKE, outlineWidth, shadowAlpha = normalOutline)
             drawText(canvas, textLayout, aodOutline, Paint.Style.STROKE, outlineWidth,

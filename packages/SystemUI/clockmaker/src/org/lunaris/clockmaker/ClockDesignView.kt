@@ -418,7 +418,7 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
                     0f, width / 180f, (element.shadowColor and 0xFFFFFF) or (alpha shl 24))
             } else child.setShadowLayer(0f, 0f, 0f, 0)
             if (element.glass && !appearance.dozing) {
-                glass.add(child, element.blurIntensity, element.blurLift)
+                glass.add(child, element.glassStyle, element.kind == ClockElementKind.DATE)
             }
         }
         glass.commit()

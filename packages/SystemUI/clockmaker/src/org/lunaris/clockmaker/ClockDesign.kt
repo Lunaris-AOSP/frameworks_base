@@ -53,6 +53,7 @@ data class ClockElement(
     val glass: Boolean = false,
     val blurIntensity: Int = ClockGlass.DEFAULT_INTENSITY,
     val blurLift: Int = ClockGlass.DEFAULT_LIFT,
+    val glassStyle: ClockGlassStyle = ClockGlassStyle(),
     val aodOutline: Boolean = false,
     val animateAodOutline: Boolean = true,
     val aodOutlineWidth: Int = 2,
@@ -96,6 +97,7 @@ data class ClockElement(
         .put("imageBorderWidth", imageBorderWidth).put("imageBorderColor", imageBorderColor)
         .put("quickLookDateFallback", quickLookDateFallback)
         .put("glass", glass).put("blurIntensity", blurIntensity).put("blurLift", blurLift)
+        .put("glassStyle", glassStyle.toJson())
         .put("aodOutline", aodOutline).put("animateAodOutline", animateAodOutline)
         .put("aodOutlineWidth", aodOutlineWidth)
         .put("lockscreenOutline", lockscreenOutline).put("lockscreenOutlineWidth", lockscreenOutlineWidth)
@@ -107,6 +109,7 @@ data class ClockElement(
         const val MAX_POSITION = 4f
 
         fun create(kind: ClockElementKind) = ClockElement(kind = kind,
+            glassStyle = if (kind == ClockElementKind.DATE) ClockGlassStyle.DATE_DEFAULT else ClockGlassStyle(),
             size = if (kind == ClockElementKind.TIME) 84 else 22,
             y = when (kind) {
                 ClockElementKind.TIME -> 0.2f
@@ -167,6 +170,10 @@ data class ClockElement(
                 glass = j.optBoolean("glass"),
                 blurIntensity = j.optInt("blurIntensity", ClockGlass.DEFAULT_INTENSITY).coerceIn(0, 100),
                 blurLift = j.optInt("blurLift", ClockGlass.DEFAULT_LIFT).coerceIn(0, 100),
+                glassStyle = ClockGlassStyle.fromJson(j.optJSONObject("glassStyle"),
+                    if (j.optBoolean("glass") && (j.has("blurIntensity") || j.has("blurLift"))) ClockGlassStyle.legacy(
+                        j.optInt("blurIntensity", ClockGlass.DEFAULT_INTENSITY),
+                        j.optInt("blurLift", ClockGlass.DEFAULT_LIFT)) else d.glassStyle),
                 aodOutline = j.optBoolean("aodOutline", false),
                 animateAodOutline = j.optBoolean("animateAodOutline", true),
                 aodOutlineWidth = j.optInt("aodOutlineWidth", 2).coerceIn(1, 6),
