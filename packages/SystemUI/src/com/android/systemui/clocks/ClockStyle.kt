@@ -53,6 +53,7 @@ import org.lunaris.clockmaker.ClockDesignView
 import org.lunaris.clockmaker.ClockEffects
 import org.lunaris.clockmaker.ClockGlass
 import org.lunaris.clockmaker.ClockGlassController
+import org.lunaris.clockmaker.ClockGlassStyle
 
 class ClockStyle @JvmOverloads constructor(
     context: Context,
@@ -95,6 +96,11 @@ class ClockStyle @JvmOverloads constructor(
     private var textGlassEnabled = false
     private var textGlassIntensity = ClockGlass.DEFAULT_INTENSITY
     private var textGlassLift = ClockGlass.DEFAULT_LIFT
+    private var textGlassStyleValue: String? = null
+    private var legacyGlassIntensity = false
+    private var legacyGlassLift = false
+    private var dateGlassStyle = ClockGlassStyle.DATE_DEFAULT
+    private var separateDateGlass = true
     private val textGlass = ClockGlassController(this)
     private var gradientColorStart = DEFAULT_GRADIENT_COLOR_START
     private var gradientColorEnd = DEFAULT_GRADIENT_COLOR_END
@@ -233,6 +239,9 @@ class ClockStyle @JvmOverloads constructor(
             ClockGlass.ENABLED_SETTING,
             ClockGlass.INTENSITY_SETTING,
             ClockGlass.LIFT_SETTING,
+            ClockGlassStyle.SETTING,
+            ClockGlassStyle.DATE_SETTING,
+            ClockGlassStyle.SEPARATE_DATE_SETTING,
         )
         statusBarStateController.addCallback(statusBarStateListener)
         if (albumArtColorEnabled) {
@@ -380,11 +389,25 @@ class ClockStyle @JvmOverloads constructor(
                 applyClockColors()
             }
             ClockGlass.INTENSITY_SETTING -> {
+                legacyGlassIntensity = newValue != null
                 textGlassIntensity = TunerService.parseInteger(newValue, ClockGlass.DEFAULT_INTENSITY).coerceIn(0, 100)
                 applyClockColors()
             }
             ClockGlass.LIFT_SETTING -> {
+                legacyGlassLift = newValue != null
                 textGlassLift = TunerService.parseInteger(newValue, ClockGlass.DEFAULT_LIFT).coerceIn(0, 100)
+                applyClockColors()
+            }
+            ClockGlassStyle.SETTING -> {
+                textGlassStyleValue = newValue
+                applyClockColors()
+            }
+            ClockGlassStyle.DATE_SETTING -> {
+                dateGlassStyle = ClockGlassStyle.parse(newValue, ClockGlassStyle.DATE_DEFAULT)
+                applyClockColors()
+            }
+            ClockGlassStyle.SEPARATE_DATE_SETTING -> {
+                separateDateGlass = TunerService.parseInteger(newValue, 1) != 0
                 applyClockColors()
             }
             CLOCK_HYPER_BLUR_KEY -> {
@@ -765,6 +788,8 @@ class ClockStyle @JvmOverloads constructor(
         if (styledTextViews.isEmpty()) return
         val whiteColor = context.getColor(android.R.color.white)
         val useGlass = textGlassEnabled && !isDozing && clockStyle !in 93..102
+        val glassStyle = ClockGlassStyle.parse(textGlassStyleValue,
+            if (legacyGlassIntensity || legacyGlassLift) ClockGlassStyle.legacy(textGlassIntensity, textGlassLift) else ClockGlassStyle())
         val useGradient = gradientEnabled && !isDozing && !useGlass
         for (i in textClocks.indices) {
             val tc = textClocks[i]
@@ -779,7 +804,7 @@ class ClockStyle @JvmOverloads constructor(
                 useGlass -> {
                     clearGradientFromView(tc)
                     tc.setTextColor(if (isWhiteOriginal) resolveClockColor() else originalColor)
-                    textGlass.add(tc, textGlassIntensity, textGlassLift)
+                    textGlass.add(tc, if (separateDateGlass && ClockGlassController.isDate(tc)) dateGlassStyle else glassStyle)
                 }
                 !isWhiteOriginal -> {
                     clearGradientFromView(tc)
@@ -809,7 +834,7 @@ class ClockStyle @JvmOverloads constructor(
                 useGlass -> {
                     clearGradientFromView(tv)
                     tv.setTextColor(if (isWhiteOriginal) resolveClockColor() else originalColor)
-                    textGlass.add(tv, textGlassIntensity, textGlassLift)
+                    textGlass.add(tv, if (separateDateGlass && ClockGlassController.isDate(tv)) dateGlassStyle else glassStyle)
                 }
                 !isWhiteOriginal -> {
                     clearGradientFromView(tv)
