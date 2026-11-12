@@ -25,6 +25,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewGroup
+import org.lunaris.clockmaker.ClockGlass
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -97,6 +98,17 @@ class ExtraInfoFreeformView(context: Context) : ViewGroup(context) {
             field = value
             children().forEach { it.appearance = value }
         }
+
+    private var glassPreview: ClockGlass? = null
+    private var glassSpace: View? = null
+    private var glassOffset = 0f
+
+    fun setGlassPreview(material: ClockGlass?, space: View, offsetY: Float = 0f) {
+        glassPreview = material
+        glassSpace = space
+        glassOffset = offsetY
+        children().forEach { it.setGlassPreview(material, space, offsetY) }
+    }
 
     var blurSource: View? = null
         set(value) {
@@ -184,6 +196,7 @@ class ExtraInfoFreeformView(context: Context) : ViewGroup(context) {
                     it.appearance = appearance
                     it.onAction = if (editable) null else onAction
                     it.setBlurSource(blurSource)
+                    glassSpace?.let { space -> it.setGlassPreview(glassPreview, space, glassOffset) }
                 }
             )
         }

@@ -16,5 +16,5 @@ android_library {
     asset_dirs: ["assets"],
     manifest: "AndroidManifest.xml",
     platform_apis: true,
-    static_libs: ["ax_blur"],
+    static_libs: ["ax_blur", "LunarisClockMaker"],
 }
