@@ -28,7 +28,7 @@ class ClockGlass private constructor(val clear: Bitmap, private val referenceWid
     private val pending = mutableMapOf<Int, MutableSet<Runnable>>()
 
     internal fun shader(mask: Bitmap, style: ClockGlassStyle, tint: Int, date: Boolean,
-        inset: Int, ready: Runnable): RuntimeShader? {
+        originX: Float, originY: Float, ready: Runnable): RuntimeShader? {
         val s = style.normalized()
         val blur = requestBlur(s.blurRadius, ready) ?: return null
         fun bitmapShader(bitmap: Bitmap) =
@@ -42,7 +42,7 @@ class ClockGlass private constructor(val clear: Bitmap, private val referenceWid
             setFilterMode(BitmapShader.FILTER_MODE_LINEAR)
             setLocalMatrix(Matrix().apply {
                 setScale(mask.width.toFloat() / bitmap.width, mask.height.toFloat() / bitmap.height)
-                postTranslate(-inset.toFloat(), -inset.toFloat())
+                postTranslate(originX, originY)
             })
         }
         val shadowMask = Bitmap.createScaledBitmap(mask, (mask.width / 4).coerceAtLeast(1),
@@ -69,7 +69,7 @@ class ClockGlass private constructor(val clear: Bitmap, private val referenceWid
             setFloatUniform("tintOpacity", s.tintOpacity / 100f)
             setFloatUniform("wallpaperSize", clear.width.toFloat(), clear.height.toFloat())
             setFloatUniform("glyphSize", mask.width.toFloat(), mask.height.toFloat())
-            setFloatUniform("glyphInset", inset.toFloat())
+            setFloatUniform("glyphOrigin", originX, originY)
         }
     }
 

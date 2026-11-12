@@ -17,6 +17,7 @@ import android.graphics.drawable.Drawable
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.RuntimeShader
+import android.graphics.Rect
 import android.text.Layout
 import android.text.TextPaint
 import android.util.Log
@@ -43,6 +44,9 @@ class ClockGlassController(private val host: View) :
         private val shadowOffsets = IntArray(2)
         private var mask: Bitmap? = null
         private var inset = 0
+        private val viewport = Rect()
+        private var maskLeft = 0f
+        private var maskTop = 0f
         private var layout: Layout? = null
         private var text: String? = null
         private var tint = 0
@@ -54,8 +58,7 @@ class ClockGlassController(private val host: View) :
         private val drawable = object : Drawable() {
             override fun draw(canvas: Canvas) {
                 val save = canvas.save()
-                canvas.translate((view.compoundPaddingLeft - view.scrollX).toFloat(),
-                    (view.totalPaddingTop - view.scrollY).toFloat())
+                canvas.translate(view.compoundPaddingLeft.toFloat(), view.totalPaddingTop.toFloat())
                 drawGlass(canvas, 1f)
                 canvas.restoreToCount(save)
             }
@@ -73,6 +76,30 @@ class ClockGlassController(private val host: View) :
             view.invalidate()
         }
 
+        private fun releaseMaterial() {
+            paint.shader = null
+            shader = null
+            outlineShader = null
+            mask = null
+            explicitShadow = null
+        }
+
+        fun release() {
+            restore()
+            releaseMaterial()
+            background = null
+            layout = null
+            text = null
+            failed = false
+        }
+
+        private fun fail(error: Throwable) {
+            restore()
+            releaseMaterial()
+            failed = true
+            Log.w("ClockGlass", "Cannot create glyph lens", error)
+        }
+
         private fun drawGlass(canvas: Canvas, alpha: Float) {
             val mask = mask ?: return
             val shader = shader ?: return
@@ -81,28 +108,52 @@ class ClockGlassController(private val host: View) :
             explicitShadow?.let {
                 shadowPaint.color = originalShadowColor
                 shadowPaint.alpha = (Color.alpha(originalShadowColor) * opacity / 255f).roundToInt()
-                canvas.drawBitmap(it, shadowOffsets[0] - inset + originalShadow[1],
-                    shadowOffsets[1] - inset + originalShadow[2], shadowPaint)
+                canvas.drawBitmap(it, shadowOffsets[0] + maskLeft + originalShadow[1],
+                    shadowOffsets[1] + maskTop + originalShadow[2], shadowPaint)
             }
             paint.shader = shader
             paint.alpha = opacity
-            canvas.drawRect(-inset.toFloat(), -inset.toFloat(),
-                (mask.width - inset).toFloat(), (mask.height - inset).toFloat(), paint)
+            canvas.drawRect(maskLeft, maskTop, maskLeft + mask.width, maskTop + mask.height, paint)
         }
 
         fun prepare(background: ClockGlass): Boolean {
             val currentLayout = view.layout ?: return false
             val currentText = view.text.toString()
-            val maskChanged = layout !== currentLayout || text != currentText
+            val width = (view.width - view.compoundPaddingLeft - view.compoundPaddingRight)
+                .coerceIn(1, currentLayout.width.coerceAtLeast(1))
+            val height = (view.height - view.totalPaddingTop - view.totalPaddingBottom)
+                .coerceIn(1, currentLayout.height.coerceAtLeast(1))
+            val left = view.scrollX
+            val top = view.scrollY
+            val maskChanged = layout !== currentLayout || text != currentText ||
+                viewport.left != left || viewport.top != top ||
+                viewport.width() != width || viewport.height() != height
             val changed = maskChanged || this.background !== background || tint != view.currentTextColor
-            if (!changed) return !failed && shader != null
+            if (!changed && (failed || shader != null)) return !failed && shader != null
+            restore()
+            paint.shader = null
+            shader = null
+            outlineShader = null
             failed = false
+            layout = currentLayout
+            text = currentText
+            this.background = background
+            tint = view.currentTextColor
+            viewport.set(left, top, left + width, top + height)
             try {
-                if (maskChanged) {
+                if (maskChanged || mask == null) {
+                    releaseMaterial()
                     inset = ceil(maxOf(style.glyphBlur / 10f * 3f, originalShadow[0] * 3f,
                         kotlin.math.abs(originalShadow[1]), kotlin.math.abs(originalShadow[2]), 16f)).toInt()
-                    val bitmap = Bitmap.createBitmap(currentLayout.width.coerceAtLeast(1) + inset * 2,
-                        currentLayout.height.coerceAtLeast(1) + inset * 2, Bitmap.Config.ARGB_8888)
+                    val bitmapWidth = width.toLong() + inset.toLong() * 2
+                    val bitmapHeight = height.toLong() + inset.toLong() * 2
+                    require(bitmapWidth in 1..MAX_MASK_DIMENSION && bitmapHeight in 1..MAX_MASK_DIMENSION &&
+                        bitmapWidth * bitmapHeight <= MAX_MASK_PIXELS) {
+                        "Glyph mask is too large: ${bitmapWidth}x${bitmapHeight}"
+                    }
+                    maskLeft = left.toFloat() - inset
+                    maskTop = top.toFloat() - inset
+                    val bitmap = Bitmap.createBitmap(bitmapWidth.toInt(), bitmapHeight.toInt(), Bitmap.Config.ARGB_8888)
                     val saved = TextPaint(view.paint)
                     try {
                         view.paint.shader = null
@@ -113,7 +164,7 @@ class ClockGlassController(private val host: View) :
                         view.paint.maskFilter = if (style.glyphBlur > 0)
                             BlurMaskFilter(style.glyphBlur / 10f, BlurMaskFilter.Blur.NORMAL) else null
                         val canvas = Canvas(bitmap)
-                        canvas.translate(inset.toFloat(), inset.toFloat())
+                        canvas.translate(-maskLeft, -maskTop)
                         currentLayout.draw(canvas)
                     } finally {
                         view.paint.set(saved)
@@ -122,24 +173,20 @@ class ClockGlassController(private val host: View) :
                     explicitShadow = if (originalShadow[0] > 0f) bitmap.extractAlpha(Paint().apply {
                         maskFilter = BlurMaskFilter(originalShadow[0], BlurMaskFilter.Blur.NORMAL)
                     }, shadowOffsets) else null
-                    layout = currentLayout
-                    text = currentText
                 }
                 val bitmap = mask ?: return false
-                val material = background.shader(bitmap, style, view.currentTextColor, date, inset, ready) ?: return false
+                val material = background.shader(bitmap, style, tint, date, maskLeft, maskTop, ready) ?: return false
                 shader = material
                 dirty = true
                 outlineShader = if (view is ClockOutlineTextView) {
-                    background.shader(bitmap, style, view.currentTextColor, date, inset, ready)?.apply {
+                    background.shader(bitmap, style, tint, date, maskLeft, maskTop, ready)?.apply {
                         setFloatUniform("outline", 1f)
                     }
                 } else null
-                this.background = background
-                tint = view.currentTextColor
+            } catch (error: OutOfMemoryError) {
+                fail(error)
             } catch (error: Exception) {
-                restore()
-                failed = true
-                Log.w("ClockGlass", "Cannot create glyph lens", error)
+                fail(error)
             }
             return !failed && shader != null
         }
@@ -150,10 +197,10 @@ class ClockGlassController(private val host: View) :
                 it.setFloatUniform("mapX", values[0], values[1], values[2])
                 it.setFloatUniform("mapY", values[3], values[4], values[5])
                 it.setFloatUniform("mapW", values[6], values[7], values[8])
-                extentPoints[0] = (layout?.width ?: view.width) / 2f
-                extentPoints[1] = 0f
+                extentPoints[0] = viewport.exactCenterX()
+                extentPoints[1] = viewport.top.toFloat()
                 extentPoints[2] = extentPoints[0]
-                extentPoints[3] = (layout?.height ?: view.height).toFloat()
+                extentPoints[3] = viewport.bottom.toFloat()
                 transform.mapPoints(extentPoints)
                 val extent = kotlin.math.hypot(extentPoints[2] - extentPoints[0], extentPoints[3] - extentPoints[1]) /
                     (background?.clear?.height ?: height)
@@ -187,6 +234,8 @@ class ClockGlassController(private val host: View) :
             view.paint.shader !== if (view is ClockOutlineTextView) outlineShader else hidden
 
         companion object {
+            private const val MAX_MASK_DIMENSION = 4096L
+            private const val MAX_MASK_PIXELS = 4L * 1024 * 1024
             private val hidden: Shader = LinearGradient(0f, 0f, 0f, 1f,
                 Color.TRANSPARENT, Color.TRANSPARENT, Shader.TileMode.CLAMP)
         }
@@ -219,7 +268,7 @@ class ClockGlassController(private val host: View) :
     }
 
     fun beginUpdate() {
-        entries.forEach { it.restore() }
+        entries.forEach { it.release() }
         entries.clear()
     }
 
@@ -264,7 +313,7 @@ class ClockGlassController(private val host: View) :
         observing = null
         if (listening) ClockGlassWallpaper.unlisten(changed)
         listening = false
-        entries.forEach { it.restore() }
+        entries.forEach { it.release() }
     }
 
     override fun onPreDraw(): Boolean {
