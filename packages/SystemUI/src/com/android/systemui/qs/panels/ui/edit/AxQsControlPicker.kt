@@ -17,6 +17,7 @@
 
 package com.android.systemui.qs.panels.ui.edit
 
+import android.graphics.drawable.Drawable
 import android.service.quicksettings.Tile.STATE_INACTIVE
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
@@ -53,6 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -75,6 +77,7 @@ import com.android.systemui.common.ui.compose.load
 import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.AxQsTileStacks
+import com.android.systemui.qs.panels.shared.model.LunarisQsBluetoothTileStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolderController
 import com.android.systemui.qs.panels.shared.model.LunarisQsWidgetKey
@@ -83,6 +86,7 @@ import com.android.systemui.qs.panels.ui.compose.AxQsPagerIndicator
 import com.android.systemui.qs.panels.ui.compose.AxTileDefaults
 import com.android.systemui.qs.panels.ui.compose.AxTileStackPlaceholder
 import com.android.systemui.qs.panels.ui.compose.LocalAxQsTileStyle
+import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsBluetoothTileStyle
 import com.android.systemui.qs.panels.ui.compose.LocalTileScale
 import com.android.systemui.qs.panels.ui.compose.LunarisFolderPreview
 import com.android.systemui.qs.panels.ui.compose.LunarisModesTile
@@ -118,10 +122,17 @@ internal sealed interface AxAddItem : CategoryAndName {
     val label: String
     val isAdded: Boolean
 
-    data class Tile(val viewModel: EditTileViewModel, override val isAdded: Boolean) : AxAddItem {
+    data class Tile(
+        val viewModel: EditTileViewModel,
+        override val isAdded: Boolean,
+        val span: AxQsSpan = AxQsSpan.TileDefault,
+    ) : AxAddItem {
         override val id = viewModel.tileSpec.spec
         override val label = viewModel.label.text
         override val category = viewModel.category
+
+        val isBluetoothCard: Boolean
+            get() = id == "bt" && span.columns == 2 && span.rows == 2
     }
 
     data class Control(
@@ -158,6 +169,8 @@ internal fun AxAvailableControls(
     tileColumns: Int,
     sliderStyle: (AxQsControl) -> LunarisQsSliderStyle,
     onSliderStyleChanged: (AxQsControl, LunarisQsSliderStyle) -> Unit,
+    onBluetoothStyleChanged: (LunarisQsBluetoothTileStyle) -> Unit,
+    bluetoothArtwork: Drawable?,
     sliderSpan: (AxQsControl) -> AxQsSpan,
     onSliderSpanChanged: (AxQsControl, AxQsSpan) -> Unit,
     controlPreview: @Composable (AxQsControl, AxQsSpan, LunarisQsSliderStyle) -> Unit,
@@ -194,7 +207,12 @@ internal fun AxAvailableControls(
                         sliderSpan(control)
                     else control.defaultSpan,
                 )
-            }
+            } +
+            listOfNotNull(
+                allTiles.firstOrNull { it.tileSpec.spec == "bt" }?.let {
+                    AxAddItem.Tile(it, it.tileSpec.spec in currentIds, AxQsSpan(2, 2))
+                }
+            )
     val folderItem =
         AxAddItem.Folder(
             stringResource(R.string.lunaris_qs_tile_folder),
@@ -219,6 +237,8 @@ internal fun AxAvailableControls(
                 columns = controlColumns,
                 sliderStyle = sliderStyle,
                 onSliderStyleChanged = onSliderStyleChanged,
+                onBluetoothStyleChanged = onBluetoothStyleChanged,
+                bluetoothArtwork = bluetoothArtwork,
                 onRotateSlider = onRotateSlider,
                 onControlSpanChanged = onSliderSpanChanged,
                 spacing = spacing,
@@ -236,6 +256,8 @@ internal fun AxAvailableControls(
                     columns = tileColumns,
                     sliderStyle = sliderStyle,
                     onSliderStyleChanged = onSliderStyleChanged,
+                    onBluetoothStyleChanged = onBluetoothStyleChanged,
+                    bluetoothArtwork = bluetoothArtwork,
                     onRotateSlider = onRotateSlider,
                     onControlSpanChanged = onSliderSpanChanged,
                     spacing = spacing,
@@ -270,6 +292,8 @@ private fun AxAvailableItemGroup(
     columns: Int,
     sliderStyle: (AxQsControl) -> LunarisQsSliderStyle,
     onSliderStyleChanged: (AxQsControl, LunarisQsSliderStyle) -> Unit,
+    onBluetoothStyleChanged: (LunarisQsBluetoothTileStyle) -> Unit,
+    bluetoothArtwork: Drawable?,
     onRotateSlider: (AxAddItem.Control) -> Unit,
     onControlSpanChanged: (AxQsControl, AxQsSpan) -> Unit,
     spacing: Dp,
@@ -329,6 +353,8 @@ private fun AxAvailableItemGroup(
                                 circleCells = circleCells,
                                 sliderStyle = sliderStyle,
                                 onSliderStyleChanged = onSliderStyleChanged,
+                                onBluetoothStyleChanged = onBluetoothStyleChanged,
+                                bluetoothArtwork = bluetoothArtwork,
                                 onRotateSlider = onRotateSlider,
                                 onResizeContent = { content ->
                                     onControlSpanChanged(
@@ -394,27 +420,28 @@ private fun AvailableItemHeader(title: String, iconId: Int, modifier: Modifier =
 }
 
 @Composable
-private fun LunarisSliderStylePager(
-    control: AxQsControl,
-    span: AxQsSpan,
-    selectedStyle: LunarisQsSliderStyle,
-    onStyleSelected: (LunarisQsSliderStyle) -> Unit,
-    controlPreview: @Composable (AxQsControl, AxQsSpan, LunarisQsSliderStyle) -> Unit,
+private fun <T : Any> LunarisControlStylePager(
+    styles: List<T>,
+    selectedStyle: T,
+    onStyleSelected: (T) -> Unit,
+    previewShape: @Composable (T) -> Shape,
+    contentPreview: @Composable (T) -> Unit,
     canAdd: Boolean,
     canChangeStyle: Boolean,
     clickLabel: String,
     onAdd: () -> Unit,
     previewHeight: Dp,
     modifier: Modifier = Modifier,
+    showAddBadge: Boolean = true,
 ) {
-    val styles = LunarisQsSliderStyle.entries
-    val pagerState = rememberPagerState(initialPage = selectedStyle.ordinal) { styles.size }
+    val selectedPage = styles.indexOf(selectedStyle).coerceAtLeast(0)
+    val pagerState = rememberPagerState(initialPage = selectedPage) { styles.size }
     val currentStyle = rememberUpdatedState(selectedStyle)
     val currentCanChangeStyle = rememberUpdatedState(canChangeStyle)
     val currentOnStyleSelected = rememberUpdatedState(onStyleSelected)
     LaunchedEffect(selectedStyle) {
-        if (!pagerState.isScrollInProgress && pagerState.settledPage != selectedStyle.ordinal) {
-            pagerState.scrollToPage(selectedStyle.ordinal)
+        if (!pagerState.isScrollInProgress && pagerState.settledPage != selectedPage) {
+            pagerState.scrollToPage(selectedPage)
         }
     }
     LaunchedEffect(pagerState) {
@@ -444,11 +471,11 @@ private fun LunarisSliderStylePager(
                 val style = styles[page]
                 Box(Modifier.fillMaxSize()) {
                     Box(Modifier.fillMaxSize().clearAndSetSemantics {}) {
-                        controlPreview(control, span, style)
+                        contentPreview(style)
                     }
                     Box(
                         Modifier.fillMaxSize()
-                            .clip(axQsControlShape(control, span, style))
+                            .clip(previewShape(style))
                             .clickable(
                                 enabled = canAdd,
                                 onClickLabel = clickLabel,
@@ -458,7 +485,7 @@ private fun LunarisSliderStylePager(
                     )
                 }
             }
-            AxAddItemBadge(Modifier.align(Alignment.TopEnd))
+            if (showAddBadge) AxAddItemBadge(Modifier.align(Alignment.TopEnd))
         }
         AxQsPagerIndicator(pagerState)
     }
@@ -488,6 +515,8 @@ private fun AxAddItemCell(
     spacing: Dp,
     sliderStyle: (AxQsControl) -> LunarisQsSliderStyle,
     onSliderStyleChanged: (AxQsControl, LunarisQsSliderStyle) -> Unit,
+    onBluetoothStyleChanged: (LunarisQsBluetoothTileStyle) -> Unit,
+    bluetoothArtwork: Drawable?,
     onRotateSlider: (AxAddItem.Control) -> Unit,
     onResizeContent: (AxAddItem.Control) -> Unit,
     controlPreview: @Composable (AxQsControl, AxQsSpan, LunarisQsSliderStyle) -> Unit,
@@ -509,7 +538,8 @@ private fun AxAddItemCell(
             if (item is AxAddItem.Folder && item.limitReached) {
                 stringResource(R.string.lunaris_qs_folder_limit)
             } else if (
-                item is AxAddItem.Control || item is AxAddItem.Stack || item is AxAddItem.Folder
+                item is AxAddItem.Control || item is AxAddItem.Stack || item is AxAddItem.Folder ||
+                    (item is AxAddItem.Tile && item.isBluetoothCard)
             ) {
                 axString("ax_qs_control_grid_full", "Controls grid full")
             } else {
@@ -520,6 +550,7 @@ private fun AxAddItemCell(
         }
     val previewHeight = rowHeight * span.rows + spacing * (span.rows - 1)
     val slider = item is AxAddItem.Control && item.control.isSlider
+    val bluetoothCard = item is AxAddItem.Tile && item.isBluetoothCard
     val controlStyle =
         (item as? AxAddItem.Control)?.control?.let(sliderStyle)
             ?: LunarisQsSliderStyle.M3_EXPRESSIVE
@@ -546,27 +577,52 @@ private fun AxAddItemCell(
             Arrangement.spacedBy(CommonTileDefaults.TileStartPadding, Alignment.Top),
         modifier =
             modifier
-                .graphicsLayer { alpha = if (item.isAdded || !canAdd) .38f else 1f }
+                .graphicsLayer {
+                    alpha = if (!bluetoothCard && (item.isAdded || !canAdd)) .38f else 1f
+                }
                 .semantics(mergeDescendants = true) {
                     if (addedDescription != null) stateDescription = addedDescription
                     if (fullDescription != null) stateDescription = fullDescription
                 },
     ) {
         if (item is AxAddItem.Control && slider) {
-            LunarisSliderStylePager(
-                control = item.control,
-                span = span,
+            LunarisControlStylePager(
+                styles = LunarisQsSliderStyle.entries,
                 selectedStyle = controlStyle,
                 onStyleSelected = { style ->
                     onSliderStyleChanged(item.control, style)
                 },
-                controlPreview = controlPreview,
+                previewShape = { axQsControlShape(item.control, span, it) },
+                contentPreview = { controlPreview(item.control, span, it) },
                 canAdd = !item.isAdded && canAdd,
                 canChangeStyle = !item.isAdded,
                 clickLabel = clickLabel,
                 onAdd = { onAdd(item) },
                 previewHeight = previewHeight,
                 modifier = Modifier.fillMaxWidth(),
+            )
+        } else if (item is AxAddItem.Tile && bluetoothCard) {
+            LunarisControlStylePager(
+                styles = LunarisQsBluetoothTileStyle.entries,
+                selectedStyle = LocalLunarisQsBluetoothTileStyle.current,
+                onStyleSelected = onBluetoothStyleChanged,
+                previewShape = { axQsTileShape(span, LocalAxQsTileStyle.current) },
+                contentPreview = { style ->
+                    AxQsEditTile(
+                        tile = item.viewModel,
+                        span = span,
+                        bluetoothTileStyle = style,
+                        deviceArtwork = bluetoothArtwork,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                },
+                canAdd = !item.isAdded && canAdd,
+                canChangeStyle = true,
+                clickLabel = clickLabel,
+                onAdd = { onAdd(item) },
+                previewHeight = previewHeight,
+                modifier = Modifier.fillMaxWidth(),
+                showAddBadge = !item.isAdded,
             )
         } else {
             Box(modifier = Modifier.fillMaxWidth().height(previewHeight)) {
@@ -623,6 +679,15 @@ private fun AxAddItemCell(
             style = MaterialTheme.typography.labelMedium,
             modifier = Modifier.fillMaxWidth(),
         )
+        if (bluetoothCard) {
+            Text(
+                text = stringResource(R.string.lunaris_qs_bluetooth_style_hint),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
         if (
             item is AxAddItem.Control &&
                 (item.control.isResizableContent || item.control == AxQsControl.MEDIA)
@@ -663,7 +728,7 @@ private fun AxAddItem.pickerSpan(columns: Int): AxQsSpan {
     return when (this) {
         is AxAddItem.Folder -> LunarisQsTileFolderController.Span
         is AxAddItem.Stack -> AxQsTileStacks.Span
-        is AxAddItem.Tile -> AxQsSpan.TileDefault
+        is AxAddItem.Tile -> span
         is AxAddItem.Control -> {
             val span =
                 if (control == AxQsControl.RINGER && this.span.columns > 1) {
@@ -705,6 +770,8 @@ fun AxQsEditTile(
     circleCells: Boolean = false,
     modifier: Modifier = Modifier,
     modes: List<ModeTileViewModel> = emptyList(),
+    bluetoothTileStyle: LunarisQsBluetoothTileStyle = LocalLunarisQsBluetoothTileStyle.current,
+    deviceArtwork: Drawable? = null,
 ) {
     if (
         tile.tileSpec.spec == "dnd" && span.columns > 1 && span.rows > 1 &&
@@ -779,6 +846,10 @@ fun AxQsEditTile(
                     tileState = STATE_INACTIVE,
                     span = span,
                     isDualTarget = tile.isDualTarget,
+                    deviceArtwork = deviceArtwork,
+                    centeredDeviceArtwork =
+                        tile.tileSpec.spec == "bt" &&
+                            bluetoothTileStyle == LunarisQsBluetoothTileStyle.CENTERED_ARTWORK,
                     modifier = Modifier.fillMaxSize(),
                 )
             }

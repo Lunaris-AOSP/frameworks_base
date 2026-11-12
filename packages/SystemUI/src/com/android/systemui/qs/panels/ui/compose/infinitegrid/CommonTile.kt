@@ -434,7 +434,7 @@ fun SmallTileContent(
 }
 
 @Composable
-private fun TileLabel(
+internal fun TileLabel(
     text: String,
     color: ColorProducer,
     style: TextStyle,

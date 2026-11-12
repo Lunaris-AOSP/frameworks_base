@@ -51,6 +51,7 @@ import com.android.systemui.qs.panels.shared.model.AxQsPanelMode
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.AxQsTileStacks
 import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
+import com.android.systemui.qs.panels.shared.model.LunarisQsBluetoothTileStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsPhotoFrame
 import com.android.systemui.qs.panels.shared.model.LunarisQsWidget
 import com.android.systemui.qs.panels.shared.model.LunarisQsWidgetKey
@@ -529,6 +530,12 @@ constructor(
             initialValue = repository.tileStyle.value,
             source = repository.tileStyle,
         )
+    val bluetoothTileStyle by
+        hydrator.hydratedStateOf(
+            traceName = "bluetoothTileStyle",
+            initialValue = repository.bluetoothTileStyle.value,
+            source = repository.bluetoothTileStyle,
+        )
     val mediaStyle by
         hydrator.hydratedStateOf(
             traceName = "mediaStyle",
@@ -846,6 +853,9 @@ constructor(
     fun resetColumns(layout: AxQsGridLayout) = repository.setColumns(layout, 0)
 
     fun resetRows(layout: AxQsGridLayout) = repository.setRows(layout, 0)
+
+    fun setBluetoothTileStyle(style: LunarisQsBluetoothTileStyle) =
+        repository.setBluetoothTileStyle(style)
 
     fun setMediaStyle(style: LunarisQsMediaStyle) = repository.setMediaStyle(style)
 

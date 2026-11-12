@@ -202,6 +202,7 @@ import com.android.systemui.qs.panels.ui.compose.AxQsControlPreview
 import com.android.systemui.qs.panels.ui.compose.AxQsMixedGrid
 import com.android.systemui.qs.panels.ui.compose.axSharedQsEntrance
 import com.android.systemui.qs.panels.ui.compose.LocalAxQsTileStyle
+import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsBluetoothTileStyle
 import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsCosTileBackground
 import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsGradientSettings
 import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsSliderStrokeStyle
@@ -420,6 +421,7 @@ constructor(
                         LocalBlurEnabled provides blurEnabled,
                         LocalAxBlurEnabled provides blurEnabled,
                         LocalAxQsTileStyle provides axQsViewModel.tileStyle,
+                        LocalLunarisQsBluetoothTileStyle provides axQsViewModel.bluetoothTileStyle,
                         LocalLunarisQsGradientSettings provides axQsViewModel.gradientSettings,
                         LocalLunarisQsTileStrokeStyle provides axQsViewModel.tileStrokeStyle,
                         LocalLunarisQsTileStrokeWidth provides axQsViewModel.tileStrokeWidth.dp,

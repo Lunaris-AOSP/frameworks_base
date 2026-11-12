@@ -84,6 +84,7 @@ import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.qs.composefragment.mist.LocalBlurEnabled
 import com.android.systemui.qs.flags.QsDetailedView
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
+import com.android.systemui.qs.panels.shared.model.LunarisQsBluetoothTileStyle
 import com.android.systemui.qs.panels.ui.compose.AxTileDefaults.InactiveCornerRadius
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults.longPressLabelMoreDetails
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults.longPressLabelSettings
@@ -338,6 +339,10 @@ fun ContentScope.AxTile(
                                 sideDrawable = uiState.sideDrawable,
                                 showDialogIndicator = uiState.showDialogIndicator,
                                 deviceArtwork = deviceArtwork.takeIf { uiState.state == STATE_ACTIVE },
+                                centeredDeviceArtwork =
+                                    tile.spec.spec == "bt" &&
+                                        LocalLunarisQsBluetoothTileStyle.current ==
+                                            LunarisQsBluetoothTileStyle.CENTERED_ARTWORK,
                                 colors = colors,
                                 iconShape = iconShape,
                                 tileState = uiState.state,
