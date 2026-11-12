@@ -35,6 +35,7 @@ import org.lunaris.extrainfowidgets.ExtraInfoFreeformView
 import org.lunaris.extrainfowidgets.ExtraInfoGridView
 import org.lunaris.extrainfowidgets.ExtraInfoLayout
 import org.lunaris.extrainfowidgets.InfoAppearance
+import org.lunaris.extrainfowidgets.InfoBackground
 import org.lunaris.extrainfowidgets.InfoData
 
 class ExtraInfoWidgetsController
@@ -240,6 +241,9 @@ constructor(
                     integer("lockscreen_widgets_transparency", 100),
                     integer(ExtraInfoLayout.BLUR, 0) == 1,
                     status.isDozing,
+                    backgroundStyle = InfoBackground.style(string(InfoBackground.SETTING)),
+                    glassStyle = InfoBackground.glass(string(InfoBackground.GLASS_SETTING)),
+                    userId = users.userId,
                 )
             freeform.appearance = extra.appearance
             listOf(
@@ -458,6 +462,8 @@ constructor(
                 ExtraInfoLayout.ENABLED,
                 ExtraInfoLayout.LAYOUT,
                 ExtraInfoLayout.BLUR,
+                InfoBackground.SETTING,
+                InfoBackground.GLASS_SETTING,
                 ExtraInfoFreeformLayout.MODE,
                 ExtraInfoFreeformLayout.LAYOUT,
                 "lockscreen_info_widgets_enabled",

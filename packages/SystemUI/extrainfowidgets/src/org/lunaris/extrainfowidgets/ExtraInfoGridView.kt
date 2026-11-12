@@ -4,10 +4,22 @@ package org.lunaris.extrainfowidgets
 import android.content.Context
 import android.view.View
 import android.view.ViewGroup
+import org.lunaris.clockmaker.ClockGlass
 import kotlin.math.roundToInt
 
 class ExtraInfoGridView(context: Context) : ViewGroup(context) {
     private val catalog = ExtraInfoCatalog.load(context)
+    private var glassPreview: ClockGlass? = null
+    private var glassSpace: View? = null
+    private var glassOffset = 0f
+
+    fun setGlassPreview(material: ClockGlass?, space: View, offsetY: Float = 0f) {
+        glassPreview = material
+        glassSpace = space
+        glassOffset = offsetY
+        children().forEach { it.setGlassPreview(material, space, offsetY) }
+    }
+
     var blurSource: View? = null
         set(value) {
             field = value
@@ -73,6 +85,7 @@ class ExtraInfoGridView(context: Context) : ViewGroup(context) {
                     it.appearance = appearance
                     it.onAction = onAction
                     it.setBlurSource(blurSource)
+                    glassSpace?.let { space -> it.setGlassPreview(glassPreview, space, glassOffset) }
                 }
             )
         }

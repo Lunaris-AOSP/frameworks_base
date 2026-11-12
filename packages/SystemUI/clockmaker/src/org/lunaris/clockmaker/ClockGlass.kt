@@ -30,23 +30,7 @@ class ClockGlass private constructor(val clear: Bitmap, private val referenceWid
     internal fun shader(mask: Bitmap, style: ClockGlassStyle, tint: Int, date: Boolean,
         inset: Int, ready: Runnable): RuntimeShader? {
         val s = style.normalized()
-        val blur = synchronized(this) {
-            blurs.get(s.blurRadius) ?: run {
-                val waiting = pending[s.blurRadius]
-                if (waiting != null) waiting.add(ready) else {
-                    pending[s.blurRadius] = mutableSetOf(ready)
-                    worker.execute {
-                        val result = runCatching { prepareBlur(s.blurRadius) }.getOrNull()
-                        val callbacks = synchronized(this) {
-                            if (result != null) blurs.put(s.blurRadius, result)
-                            pending.remove(s.blurRadius)?.toList().orEmpty()
-                        }
-                        main.post { callbacks.forEach { it.run() } }
-                    }
-                }
-                null
-            }
-        } ?: return null
+        val blur = requestBlur(s.blurRadius, ready) ?: return null
         fun bitmapShader(bitmap: Bitmap) =
             BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).apply {
                 setFilterMode(BitmapShader.FILTER_MODE_LINEAR)
@@ -86,6 +70,56 @@ class ClockGlass private constructor(val clear: Bitmap, private val referenceWid
             setFloatUniform("wallpaperSize", clear.width.toFloat(), clear.height.toFloat())
             setFloatUniform("glyphSize", mask.width.toFloat(), mask.height.toFloat())
             setFloatUniform("glyphInset", inset.toFloat())
+        }
+    }
+
+    private fun requestBlur(radius: Int, ready: Runnable): Blur? {
+        return synchronized(this) {
+            blurs.get(radius) ?: run {
+                val waiting = pending[radius]
+                if (waiting != null) waiting.add(ready) else {
+                    pending[radius] = mutableSetOf(ready)
+                    worker.execute {
+                        val result = runCatching { prepareBlur(radius) }.getOrNull()
+                        val callbacks = synchronized(this) {
+                            if (result != null) blurs.put(radius, result)
+                            pending.remove(radius)?.toList().orEmpty()
+                        }
+                        main.post { callbacks.forEach { it.run() } }
+                    }
+                }
+                null
+            }
+        }
+    }
+
+    fun surfaceShader(style: ClockGlassStyle, tint: Int, ready: Runnable): RuntimeShader? {
+        val s = style.normalized()
+        val blur = requestBlur(s.blurRadius, ready) ?: return null
+        fun bitmapShader(bitmap: Bitmap) =
+            BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).apply {
+                setFilterMode(BitmapShader.FILTER_MODE_LINEAR)
+                setLocalMatrix(Matrix().apply {
+                    setScale(clear.width.toFloat() / bitmap.width, clear.height.toFloat() / bitmap.height)
+                })
+            }
+        val angle = Math.toRadians(s.rimRotation.toDouble())
+        return RuntimeShader(GlassSurfaceShader.SOURCE).apply {
+            setInputShader("blurred", bitmapShader(blur.bitmap))
+            setInputShader("blurSides", bitmapShader(blur.sides))
+            setFloatUniform("refraction", s.refraction / 1000f)
+            setFloatUniform("refractionWidth", s.refractionWidth / 1000f)
+            setFloatUniform("chromatic", s.chromaticAberration / 1000f)
+            setFloatUniform("contrast", s.contrast / 100f)
+            setFloatUniform("rimStrength", s.rimStrength / 100f)
+            setFloatUniform("rimTrig", cos(angle).toFloat(), sin(angle).toFloat())
+            setFloatUniform("softRim", s.softRimStrength / 100f, s.softRimWidth / 100f, s.softRimTint / 100f)
+            setFloatUniform("rimWidth", s.rimWidth / 100f)
+            setFloatUniform("borderStrength", if (s.blackBorder) s.blackBorderStrength / 100f else 0f)
+            setFloatUniform("shadowStrength", s.shadowStrength / 100f)
+            setColorUniform("tint", tint or 0xFF000000.toInt())
+            setFloatUniform("tintOpacity", s.tintOpacity / 100f)
+            setFloatUniform("wallpaperSize", clear.width.toFloat(), clear.height.toFloat())
         }
     }
 

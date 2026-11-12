@@ -30,6 +30,9 @@ import android.view.animation.OvershootInterpolator
 import com.android.axion.blur.AxBlurBackgroundRenderer
 import com.android.axion.blur.AxBlurColors
 import com.android.internal.util.lunaris.FontController
+import org.lunaris.clockmaker.ClockGlass
+import org.lunaris.clockmaker.ClockGlassStyle
+import org.lunaris.clockmaker.GlassSurfaceRenderer
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.min
@@ -42,7 +45,13 @@ data class InfoAppearance(
     val opacity: Int = 100,
     val blur: Boolean = false,
     val dozing: Boolean = false,
-)
+    val backgroundStyle: String = InfoBackground.AX_BLUR,
+    val glassStyle: ClockGlassStyle = InfoBackground.GLASS_DEFAULT,
+    val userId: Int? = null,
+) {
+    val liquidGlass: Boolean get() = blur && backgroundStyle == InfoBackground.LIQUID_GLASS
+    val axBlur: Boolean get() = blur && !liquidGlass
+}
 
 class InfoWidgetView(context: Context, val widget: InfoWidget) : View(context) {
     var data: InfoData = InfoData()
@@ -65,7 +74,9 @@ class InfoWidgetView(context: Context, val widget: InfoWidget) : View(context) {
             field = value
             val opacity = value.opacity.coerceIn(0, if (value.dozing) 70 else 100)
             alpha = opacity / 100f
-            blurs.values.forEach { it.setEnabled(value.blur && !value.dozing) }
+            blurs.values.forEach { it.setEnabled(value.axBlur && !value.dozing) }
+            glass.userId = value.userId ?: context.userId
+            glass.enabled = value.liquidGlass && !value.dozing
             if (value.dozing) {
                 animate().cancel()
                 scaleX = 1f
@@ -84,6 +95,7 @@ class InfoWidgetView(context: Context, val widget: InfoWidget) : View(context) {
         }
 
     private val blurs = mutableMapOf<String, AxBlurBackgroundRenderer>()
+    private val glass = GlassSurfaceRenderer(this)
     private var blurSource: View? = null
     private val paint =
         TextPaint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG or Paint.FILTER_BITMAP_FLAG)
@@ -133,6 +145,8 @@ class InfoWidgetView(context: Context, val widget: InfoWidget) : View(context) {
         blurs.values.forEach { configureSource(it) }
     }
 
+    fun setGlassPreview(material: ClockGlass?, space: View, offsetY: Float = 0f) = glass.setPreview(material, space, offsetY)
+
     private fun configureSource(blur: AxBlurBackgroundRenderer) {
         blur.setSourceView(blurSource)
         blur.setPreferSourceBlur(blurSource != null)
@@ -142,7 +156,7 @@ class InfoWidgetView(context: Context, val widget: InfoWidget) : View(context) {
 
     private fun backgroundBlur(id: String): AxBlurBackgroundRenderer =
         blurs.getOrPut(id) {
-            AxBlurBackgroundRenderer(this, enabled = appearance.blur && !appearance.dozing).also {
+            AxBlurBackgroundRenderer(this, enabled = appearance.axBlur && !appearance.dozing).also {
                 configureSource(it)
                 if (isAttachedToWindow) it.onAttachedToWindow()
             }
@@ -150,6 +164,7 @@ class InfoWidgetView(context: Context, val widget: InfoWidget) : View(context) {
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        glass.onAttachedToWindow()
         blurs.values.forEach {
             configureSource(it)
             it.onAttachedToWindow()
@@ -163,6 +178,7 @@ class InfoWidgetView(context: Context, val widget: InfoWidget) : View(context) {
         isPressed = false
         tap = null
         blurs.values.forEach { it.onDetachedFromWindow() }
+        glass.onDetachedFromWindow()
         super.onDetachedFromWindow()
     }
 
@@ -181,6 +197,7 @@ class InfoWidgetView(context: Context, val widget: InfoWidget) : View(context) {
     override fun onVisibilityAggregated(visible: Boolean) {
         super.onVisibilityAggregated(visible)
         blurs.values.forEach { it.onVisibilityAggregated(visible) }
+        glass.onVisibilityAggregated(visible)
     }
 
     override fun verifyDrawable(who: Drawable): Boolean =
@@ -410,7 +427,11 @@ class InfoWidgetView(context: Context, val widget: InfoWidget) : View(context) {
         when (type) {
             "CARD" -> {
                 val outlined = layer.optBoolean("outline") || appearance.dozing
-                if (appearance.blur && !appearance.dozing && !outlined) {
+                if (appearance.liquidGlass && !appearance.dozing && !outlined) {
+                    val tint = if (tile.isNotEmpty() && data.tile(tile) != 0) ink else color("#FFFFFF")
+                    if (glass.draw(canvas, id, box, radius, appearance.glassStyle, tint)) return
+                }
+                if (appearance.axBlur && !appearance.dozing && !outlined) {
                     val overlay =
                         if (tile.isNotEmpty() && data.tile(tile) != 0)
                             (ink and 0xFFFFFF) or (0x73 shl 24)
