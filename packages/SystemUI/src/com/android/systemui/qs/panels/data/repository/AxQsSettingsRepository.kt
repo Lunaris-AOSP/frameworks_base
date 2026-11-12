@@ -31,6 +31,7 @@ import com.android.systemui.qs.panels.shared.model.AxQsPanelMode
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.AxQsTileStacks
 import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
+import com.android.systemui.qs.panels.shared.model.LunarisQsBluetoothTileStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsGradientSettings
 import com.android.systemui.qs.panels.shared.model.LunarisQsMediaStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsPhotoFrame
@@ -310,6 +311,12 @@ constructor(
     val sliderStyles: StateFlow<Map<LunarisQsSliderKey, LunarisQsSliderStyle>> =
         sliderStyleSettings()
 
+    val bluetoothTileStyle: StateFlow<LunarisQsBluetoothTileStyle> =
+        intSetting(BLUETOOTH_TILE_STYLE, LunarisQsBluetoothTileStyle.CLASSIC.settingValue)
+            .map(LunarisQsBluetoothTileStyle::fromSetting)
+            .distinctUntilChanged()
+            .stateIn(applicationScope, SharingStarted.Eagerly, LunarisQsBluetoothTileStyle.CLASSIC)
+
     val mediaStyle: StateFlow<LunarisQsMediaStyle> =
         intSetting(MEDIA_STYLE, LunarisQsMediaStyle.ARTWORK.settingValue)
             .map(LunarisQsMediaStyle::fromSetting)
@@ -564,6 +571,9 @@ constructor(
     fun setGradientEndColor(color: Int) = putInt(GRADIENT_END_COLOR, color)
 
     fun setTileStyle(style: AxQsTileStyle) = putInt(TILE_STYLE, style.settingValue)
+
+    fun setBluetoothTileStyle(style: LunarisQsBluetoothTileStyle) =
+        putInt(BLUETOOTH_TILE_STYLE, style.settingValue)
 
     fun setMediaStyle(style: LunarisQsMediaStyle) = putInt(MEDIA_STYLE, style.settingValue)
 
@@ -1009,6 +1019,7 @@ constructor(
         private const val GRADIENT_START_COLOR = "ax_qs_gradient_start_color"
         private const val GRADIENT_END_COLOR = "ax_qs_gradient_end_color"
         const val TILE_STYLE = "ax_qs_tile_style"
+        private const val BLUETOOTH_TILE_STYLE = "lunaris_qs_bluetooth_tile_style"
         private const val MEDIA_STYLE = "ax_qs_media_style"
         private const val MEDIA_WIDE_STYLE = "ax_qs_media_wide_style"
         private const val MEDIA_MOTION_ART = "ax_qs_media_motion_art"

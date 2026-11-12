@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -42,6 +43,7 @@ import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon as MaterialIcon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -56,8 +58,11 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -68,17 +73,21 @@ import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.qs.composefragment.mist.LocalBlurEnabled
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
+import com.android.systemui.qs.panels.shared.model.LunarisQsBluetoothTileStyle
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults.longPressLabelSettings
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.LargeTileLabels
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.SmallTileContent
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.TileColors
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.TileLabel
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.bounceScale
 import com.android.systemui.qs.panels.ui.viewmodel.AccessibilityUiState
 import com.android.systemui.qs.ui.compose.borderOnFocus
 
 val LocalTileScale = staticCompositionLocalOf { 1f }
 val LocalAxQsTileStyle = staticCompositionLocalOf { AxQsTileStyle.PILL }
+val LocalLunarisQsBluetoothTileStyle =
+    staticCompositionLocalOf { LunarisQsBluetoothTileStyle.CLASSIC }
 
 @Composable
 fun computeTileScale(): Float {
@@ -181,7 +190,26 @@ fun AxLargeTileContent(
     onLongClick: (() -> Unit)? = null,
     showDialogIndicator: Boolean = false,
     deviceArtwork: Drawable? = null,
+    centeredDeviceArtwork: Boolean = false,
 ) {
+    if (centeredDeviceArtwork && span.columns == 2 && span.rows == 2) {
+        AxCenteredDeviceTileContent(
+            label = label,
+            secondaryLabel = secondaryLabel,
+            iconProvider = iconProvider,
+            deviceArtwork = deviceArtwork,
+            colors = colors,
+            isVisible = isVisible,
+            accessibilityUiState = accessibilityUiState,
+            textScale = textScale,
+            toggleClick = toggleClick,
+            toggleInteractionSource = toggleInteractionSource,
+            onLongClick = onLongClick,
+            modifier = modifier,
+        )
+        return
+    }
+
     val animatedIconBackgroundColor by
         animateColorAsState(
             targetValue = colors.iconBackground,
@@ -320,6 +348,97 @@ fun AxLargeTileContent(
                 Modifier.fillMaxWidth()
                     .bounceScale(TransformOrigin(textOrigin, 1f), textScale),
         )
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+private fun AxCenteredDeviceTileContent(
+    label: String,
+    secondaryLabel: String?,
+    iconProvider: Context.() -> Icon,
+    deviceArtwork: Drawable?,
+    colors: TileColors,
+    isVisible: () -> Boolean,
+    accessibilityUiState: AccessibilityUiState?,
+    textScale: () -> Float,
+    toggleClick: (() -> Unit)?,
+    toggleInteractionSource: MutableInteractionSource?,
+    onLongClick: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    val scale = LocalTileScale.current
+    val animatedLabelColor by animateColorAsState(colors.label, label = "BluetoothTileLabelColor")
+    val animatedSecondaryLabelColor by
+        animateColorAsState(colors.secondaryLabel, label = "BluetoothTileSecondaryLabelColor")
+    val longPressLabel = longPressLabelSettings().takeIf { onLongClick != null }
+    val focusBorderColor = MaterialTheme.colorScheme.secondary
+    val iconShape = RoundedCornerShape(12.dp)
+
+    Column(
+        modifier =
+            modifier.fillMaxSize()
+                .padding(horizontal = 16.dp * scale, vertical = 12.dp * scale),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            modifier =
+                Modifier.fillMaxWidth().weight(1f).thenIf(toggleClick != null) {
+                    Modifier.borderOnFocus(color = focusBorderColor, iconShape.topEnd)
+                        .combinedClickable(
+                            interactionSource = toggleInteractionSource,
+                            onClick = toggleClick!!,
+                            onLongClick = onLongClick,
+                            onLongClickLabel = longPressLabel,
+                            hapticFeedbackEnabled = false,
+                        )
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            if (deviceArtwork != null) {
+                Image(
+                    painter = rememberDrawablePainter(deviceArtwork),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize().padding(8.dp * scale),
+                )
+            } else {
+                SmallTileContent(
+                    iconProvider = iconProvider,
+                    color = colors.icon,
+                    size = { 48.dp * scale },
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp * scale))
+        Column(
+            modifier =
+                Modifier.fillMaxWidth()
+                    .bounceScale(TransformOrigin(.5f, 1f), textScale),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp * scale),
+        ) {
+            TileLabel(
+                text = label,
+                style = MaterialTheme.typography.titleSmallEmphasized.copy(textAlign = TextAlign.Center),
+                color = { animatedLabelColor },
+                isVisible = isVisible,
+            )
+            if (!secondaryLabel.isNullOrEmpty()) {
+                TileLabel(
+                    text = secondaryLabel,
+                    style = MaterialTheme.typography.labelMedium.copy(textAlign = TextAlign.Center),
+                    color = { animatedSecondaryLabelColor },
+                    isVisible = isVisible,
+                    modifier =
+                        Modifier.thenIf(
+                            accessibilityUiState?.stateDescription?.contains(secondaryLabel) == true
+                        ) {
+                            Modifier.clearAndSetSemantics {}
+                        },
+                )
+            }
+        }
     }
 }
 

@@ -20,6 +20,7 @@
 package com.android.systemui.qs.panels.ui.edit
 
 import android.content.res.Configuration
+import android.graphics.drawable.Drawable
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutLinearInEasing
@@ -494,6 +495,7 @@ private fun AxEditableGrid(
     val savedStacks = axQsViewModel.stacks(layout)
     val savedFolders = axQsViewModel.folders(layout)
     val modes by axQsViewModel.modes.collectAsStateWithLifecycle(emptyList())
+    val bluetoothArtwork by axQsViewModel.bluetoothArtwork.collectAsStateWithLifecycle()
     val savedControlPositions = axQsViewModel.controlPositions(layout)
     val sourceItems =
         remember(
@@ -824,6 +826,7 @@ private fun AxEditableGrid(
                     sliderStyle = sliderStyle,
                     hapticFeedback = hapticFeedback,
                     modes = modes,
+                    bluetoothArtwork = bluetoothArtwork,
                 )
             }
         }
@@ -862,6 +865,7 @@ private fun AxEditableGrid(
                     sliderStyle = sliderStyle,
                     hapticFeedback = hapticFeedback,
                     modes = modes,
+                    bluetoothArtwork = bluetoothArtwork,
                 )
             }
         }
@@ -894,6 +898,7 @@ private fun AxEditableGrid(
                     if (
                         addItem is AxAddItem.Stack ||
                             addItem is AxAddItem.Folder ||
+                            (addItem is AxAddItem.Tile && addItem.span != AxQsSpan.TileDefault) ||
                             (addItem is AxAddItem.Control && !addItem.control.canUseTileGrid)
                     ) {
                         AxQsGridSection.CONTROLS
@@ -918,6 +923,8 @@ private fun AxEditableGrid(
             onSliderStyleChanged = { control, style ->
                 axQsViewModel.setSliderStyle(layout, control, style)
             },
+            onBluetoothStyleChanged = axQsViewModel::setBluetoothTileStyle,
+            bluetoothArtwork = bluetoothArtwork,
             sliderSpan = { control ->
                 pickerSliderSpans[control]
                     ?: axQsViewModel.span(control.id, layout, control.defaultSpan)
@@ -1003,6 +1010,7 @@ private fun AxEditableGridSection(
     sliderStyle: (AxQsControl) -> LunarisQsSliderStyle,
     hapticFeedback: HapticFeedback,
     modes: List<ModeTileViewModel>,
+    bluetoothArtwork: Drawable?,
 ) {
     val items = listState.items.filter { it.section == section }
     val editStackLabel = stringResource(R.string.lunaris_qs_stack_edit)
@@ -1585,6 +1593,10 @@ private fun AxEditableGridSection(
                                             span = item.span,
                                             circleCells = circleCells,
                                             modes = modes,
+                                            deviceArtwork =
+                                                bluetoothArtwork.takeIf {
+                                                    value.viewModel.tileSpec.spec == "bt"
+                                                },
                                             modifier = Modifier.fillMaxSize(),
                                         )
                                     is AxEditGridValue.Control ->
@@ -1721,7 +1733,7 @@ private fun AxAddItem.toEditGridItem(
             val controlGrid = section == AxQsGridSection.CONTROLS
             AxQsGridItem(
                 id = id,
-                span = AxQsSpan.TileDefault,
+                span = if (controlGrid) span.coerceForControlTile(columns) else AxQsSpan.TileDefault,
                 minSpan = if (controlGrid) AxQsSpan.ControlTileMin else AxQsSpan.TileDefault,
                 maxSpan =
                     if (controlGrid) {

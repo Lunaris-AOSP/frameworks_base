@@ -110,6 +110,7 @@ import com.android.systemui.qs.panels.shared.model.AxQsGridLayout
 import com.android.systemui.qs.panels.shared.model.AxQsLayout
 import com.android.systemui.qs.panels.shared.model.AxQsPanelMode
 import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
+import com.android.systemui.qs.panels.shared.model.LunarisQsBluetoothTileStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsMediaStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsSpacing
@@ -252,6 +253,24 @@ fun LunariQsPanelSettings(
                                     stringResource(R.string.ax_qs_settings_shape_dynamic_inverted),
                             ),
                         onSelect = { viewModel.setTileStyle(AxQsTileStyle.fromSetting(it)) },
+                    )
+                }
+                item("bluetooth_tile_style") {
+                    SettingsChoice(
+                        title = stringResource(R.string.lunaris_qs_settings_bluetooth_tile_style),
+                        selected = viewModel.bluetoothTileStyle.settingValue,
+                        options =
+                            listOf(
+                                LunarisQsBluetoothTileStyle.CLASSIC.settingValue to
+                                    stringResource(R.string.ax_qs_settings_style_classic),
+                                LunarisQsBluetoothTileStyle.CENTERED_ARTWORK.settingValue to
+                                    stringResource(R.string.lunaris_qs_settings_style_centered_artwork),
+                            ),
+                        onSelect = {
+                            viewModel.setBluetoothTileStyle(
+                                LunarisQsBluetoothTileStyle.fromSetting(it)
+                            )
+                        },
                     )
                 }
                 item("media_style") {

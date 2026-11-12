@@ -64,6 +64,9 @@
     <string name="ax_qs_settings_flashlight_style">Flashlight slider style</string>
     <string name="ax_qs_settings_style_expressive">Expressive</string>
     <string name="ax_qs_settings_style_classic">Classic</string>
+    <string name="lunaris_qs_settings_bluetooth_tile_style">2×2 Bluetooth tile style</string>
+    <string name="lunaris_qs_settings_style_centered_artwork">Centered artwork</string>
+    <string name="lunaris_qs_bluetooth_style_hint">Swipe to change the 2×2 style</string>
     <string name="ax_qs_settings_media_style">2×2 media player style</string>
     <string name="ax_qs_settings_media_wide_style">4×2 media player style</string>
     <string name="ax_qs_settings_style_artwork">Artwork</string>
