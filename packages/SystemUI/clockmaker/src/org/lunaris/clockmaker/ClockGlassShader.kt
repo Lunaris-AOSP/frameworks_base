@@ -29,7 +29,7 @@ internal object ClockGlassShader {
         uniform float tintOpacity;
         uniform float2 wallpaperSize;
         uniform float2 glyphSize;
-        uniform float glyphInset;
+        uniform float2 glyphOrigin;
         uniform float3 mapX;
         uniform float3 mapY;
         uniform float3 mapW;
@@ -96,7 +96,7 @@ internal object ClockGlassShader {
             color = mix(color, half3(0), border);
             color += (half3(sharp) + glowColor * glow * (1.0 - sharp)) * rimStrength * fade;
             if (outline > 0.5) return half4(clamp(color, 0.0, 1.0), 1);
-            float2 edge = clamp(min(p + glyphInset, glyphSize - p - glyphInset) * 0.5, 0.0, 1.0);
+            float2 edge = clamp(min(p - glyphOrigin, glyphSize - p + glyphOrigin) * 0.5, 0.0, 1.0);
             float coverage = smoothstep(0.05, 0.25, a) * edge.x * edge.y;
             float2 c = p + shadowOffset;
             float2 ir = shadowRadius * 0.5;
