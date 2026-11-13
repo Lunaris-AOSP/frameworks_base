@@ -290,6 +290,12 @@ public final class FontManagerService extends IFontManager.Stub {
                 mServiceStarted.join();
             }
         }
+
+        @Override
+        public void onUserUnlocked(@NonNull TargetUser user) {
+            BackgroundThread.getHandler().post(mService::refreshEmojiStyle);
+        }
+
     }
 
     private static class FsverityUtilImpl implements UpdatableFontDir.FsverityUtil {
@@ -372,7 +378,8 @@ public final class FontManagerService extends IFontManager.Stub {
         }
         mContext = context;
         mIsSafeMode = safeMode;
-        mAppEmojiReplacer = new AppEmojiReplacer(context);
+        mAppEmojiReplacer = new AppEmojiReplacer(context,
+                new File("/data/fonts/config/emoji-apps.properties"));
 
         if (Flags.useOptimizedBoottimeFontLoading()) {
             Slog.i(TAG, "Using optimized boot-time font loading.");
@@ -462,6 +469,8 @@ public final class FontManagerService extends IFontManager.Stub {
                     EMOJI_STYLE_SETTING, style, userId)) {
                 Slog.w(TAG, "Failed to save the selected emoji style");
             }
+        } catch (RuntimeException e) {
+            Slog.w(TAG, "Failed to save the selected emoji style", e);
         } finally {
             Binder.restoreCallingIdentity(token);
         }
@@ -473,10 +482,17 @@ public final class FontManagerService extends IFontManager.Stub {
             boolean restoreApps;
             synchronized (mUpdatableFontDirLock) {
                 String style = SystemFonts.getEmojiStyle();
-                if (style.equals(mLastEmojiStyle)) return;
+                if (SystemFonts.EMOJI_STYLE_CUSTOM.equals(style)
+                        && (mUpdatableFontDir == null
+                        || mUpdatableFontDir.getCustomEmojiFile() == null)) {
+                    selectEmojiStyleLocked(SystemFonts.EMOJI_STYLE_ANDROID);
+                    style = SystemFonts.EMOJI_STYLE_ANDROID;
+                }
                 restoreApps = !SystemFonts.EMOJI_STYLE_CUSTOM.equals(style);
-                mLastEmojiStyle = style;
-                updateSerializedFontMap();
+                if (!style.equals(mLastEmojiStyle)) {
+                    mLastEmojiStyle = style;
+                    updateSerializedFontMap();
+                }
             }
             if (restoreApps) mAppEmojiReplacer.restore();
         }
