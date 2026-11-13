@@ -35,4 +35,12 @@ interface IFontManager {
 
     @EnforcePermission("UPDATE_FONTS")
     void clearUpdates();
+
+    int installCustomEmoji(in ParcelFileDescriptor fontFd);
+
+    int clearCustomEmoji();
+
+    @nullable String getCustomEmojiName();
+
+    int applyCustomEmojiToApps();
 }

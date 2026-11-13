@@ -22,6 +22,7 @@ import static com.android.server.graphics.fonts.FontManagerService.SystemFontExc
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.graphics.fonts.FontManager;
+import android.graphics.fonts.FontStyle;
 import android.graphics.fonts.FontUpdateRequest;
 import android.graphics.fonts.SystemFonts;
 import android.os.FileUtils;
@@ -43,6 +44,7 @@ import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.security.SecureRandom;
@@ -68,6 +70,13 @@ final class UpdatableFontDir {
 
     private static final String FONT_SIGNATURE_FILE = "font.fsv_sig";
 
+    private static final String CUSTOM_EMOJI_PREFIX = "emoji-";
+    private static final String CUSTOM_EMOJI_SUFFIX = ".ttf";
+    private static final String CUSTOM_EMOJI_TEMP_FILE = "emoji.tmp";
+    private static final String CUSTOM_EMOJI_POINTER_FILE = "current";
+    private static final long MAX_CUSTOM_EMOJI_FILE_SIZE = 128L * 1024L * 1024L;
+    private static final String EMOJI_LANG = "und-Zsye";
+
     private static final File AX_FONT_BACKUP_DIR = new File("/data/system/ax_font_backup");
 
     /** Interface to mock font file access in tests. */
@@ -84,6 +93,10 @@ final class UpdatableFontDir {
     /** Interface to mock fs-verity in tests. */
     interface FsverityUtil {
         boolean isFromTrustedProvider(String path, byte[] pkcs7Signature);
+
+        default boolean hasFsverity(String path) {
+            return isFromTrustedProvider(path, new byte[0]);
+        }
 
         void setUpFsverity(String path) throws IOException;
 
@@ -151,11 +164,19 @@ final class UpdatableFontDir {
      */
     private final ArrayMap<String, FontFileInfo> mFontFileInfoMap = new ArrayMap<>();
 
+    @Nullable private final File mEmojiDir;
+    @Nullable private FontFileInfo mCustomEmoji;
+
     UpdatableFontDir(File filesDir, FontFileParser parser, FsverityUtil fsverityUtil,
             File configFile) {
+        this(filesDir, parser, fsverityUtil, configFile, null);
+    }
+
+    UpdatableFontDir(File filesDir, FontFileParser parser, FsverityUtil fsverityUtil,
+            File configFile, @Nullable File emojiDir) {
         this(filesDir, parser, fsverityUtil, configFile,
                 System::currentTimeMillis,
-                (map) -> SystemFonts.getSystemFontConfig(map, 0, 0), AX_FONT_BACKUP_DIR
+                (map) -> SystemFonts.getSystemFontConfig(map, 0, 0), AX_FONT_BACKUP_DIR, emojiDir
         );
     }
 
@@ -169,6 +190,14 @@ final class UpdatableFontDir {
     UpdatableFontDir(File filesDir, FontFileParser parser, FsverityUtil fsverityUtil,
             File configFile, Supplier<Long> currentTimeSupplier,
             Function<Map<String, File>, FontConfig> configSupplier, @Nullable File backupDir) {
+        this(filesDir, parser, fsverityUtil, configFile, currentTimeSupplier, configSupplier,
+                backupDir, null);
+    }
+
+    UpdatableFontDir(File filesDir, FontFileParser parser, FsverityUtil fsverityUtil,
+            File configFile, Supplier<Long> currentTimeSupplier,
+            Function<Map<String, File>, FontConfig> configSupplier, @Nullable File backupDir,
+            @Nullable File emojiDir) {
         mFilesDir = filesDir;
         mParser = parser;
         mFsverityUtil = fsverityUtil;
@@ -176,6 +205,7 @@ final class UpdatableFontDir {
         mBackupDir = backupDir;
         mCurrentTimeSupplier = currentTimeSupplier;
         mConfigSupplier = configSupplier;
+        mEmojiDir = emojiDir;
     }
 
     /**
@@ -187,6 +217,7 @@ final class UpdatableFontDir {
         mFontFileInfoMap.clear();
         mLastModifiedMillis = 0;
         mConfigVersion = 1;
+        loadCustomEmoji();
         boolean success = false;
         try {
             File[] dirs = mFilesDir.listFiles();
@@ -210,6 +241,9 @@ final class UpdatableFontDir {
             mLastModifiedMillis = config.lastModifiedMillis;
             FontConfig fontConfig = null;
             for (File dir : dirs) {
+                if (dir.equals(mEmojiDir)) {
+                    continue;
+                }
                 if (!dir.getName().startsWith(RANDOM_DIR_PREFIX)) {
                     if (axFontFeatureSupport) {
                         Slog.w(TAG, "Skipping unexpected dir: " + dir);
@@ -292,7 +326,14 @@ final class UpdatableFontDir {
             if (!success) {
                 mFontFileInfoMap.clear();
                 mLastModifiedMillis = 0;
-                FileUtils.deleteContents(mFilesDir);
+                File[] files = mFilesDir.listFiles();
+                if (files != null) {
+                    for (File file : files) {
+                        if (!file.equals(mEmojiDir)) {
+                            FileUtils.deleteContentsAndDir(file);
+                        }
+                    }
+                }
                 mConfigFile.delete();
                 if (mBackupDir != null) {
                     FileUtils.deleteContentsAndDir(mBackupDir);
@@ -607,7 +648,13 @@ final class UpdatableFontDir {
     @NonNull
     private FontFileInfo validateFontFile(File file, byte[] pkcs7Signature)
             throws SystemFontException {
-        if (!mFsverityUtil.isFromTrustedProvider(file.getAbsolutePath(), pkcs7Signature)) {
+        return validateFontFile(file, pkcs7Signature, false);
+    }
+
+    private FontFileInfo validateFontFile(File file, byte[] pkcs7Signature, boolean customEmoji)
+            throws SystemFontException {
+        if (customEmoji ? !mFsverityUtil.hasFsverity(file.getAbsolutePath())
+                : !mFsverityUtil.isFromTrustedProvider(file.getAbsolutePath(), pkcs7Signature)) {
             throw new SystemFontException(
                     FontManager.RESULT_ERROR_VERIFICATION_FAILURE,
                     "Font validation failed. Fs-verity is not enabled: " + file);
@@ -625,7 +672,7 @@ final class UpdatableFontDir {
                     "Font validation failed. Empty PostScript name: " + file);
         }
         long revision = getFontRevision(file);
-        boolean isUserFont = axFontFeatureSupport && pkcs7Signature.length == 0;
+        boolean isUserFont = customEmoji || (axFontFeatureSupport && pkcs7Signature.length == 0);
         if (revision == -1 && !isUserFont) {
             throw new SystemFontException(
                     FontManager.RESULT_ERROR_INVALID_FONT_FILE,
@@ -673,7 +720,214 @@ final class UpdatableFontDir {
         return map;
     }
 
+    private void loadCustomEmoji() {
+        mCustomEmoji = null;
+        if (mEmojiDir == null || !mEmojiDir.isDirectory()) return;
+        String current = readEmojiPointer();
+        if (current != null) {
+            File file = new File(mEmojiDir, current);
+            try {
+                if (!isCustomEmojiFileName(current) || !file.isFile()
+                        || file.length() == 0 || file.length() > MAX_CUSTOM_EMOJI_FILE_SIZE) {
+                    throw new IOException("Invalid custom emoji file " + file);
+                }
+                mCustomEmoji = validateFontFile(file, new byte[0], true);
+            } catch (Throwable t) {
+                Slog.e(TAG, "Dropping invalid custom emoji font", t);
+                getEmojiPointerFile().delete();
+            }
+        }
+        File[] files = mEmojiDir.listFiles();
+        if (files != null) {
+            for (File file : files) {
+                String name = file.getName();
+                if ((isCustomEmojiFileName(name) || CUSTOM_EMOJI_TEMP_FILE.equals(name))
+                        && (mCustomEmoji == null || !file.equals(mCustomEmoji.getFile()))
+                        && !file.delete()) {
+                    Slog.w(TAG, "Failed to delete stale emoji file " + file);
+                }
+            }
+        }
+    }
+
+    void installCustomEmoji(FileDescriptor fd) throws SystemFontException {
+        ensureEmojiDir();
+        File tempFile = new File(mEmojiDir, CUSTOM_EMOJI_TEMP_FILE);
+        File target = newCustomEmojiFile();
+        tempFile.delete();
+        boolean success = false;
+        try {
+            try (FileOutputStream out = new FileOutputStream(tempFile)) {
+                long copied = FileUtils.copy(fd, out.getFD(), MAX_CUSTOM_EMOJI_FILE_SIZE + 1,
+                        null, null, null);
+                if (copied == 0 || copied > MAX_CUSTOM_EMOJI_FILE_SIZE) {
+                    throw new SystemFontException(FontManager.RESULT_ERROR_INVALID_FONT_FILE,
+                            "Custom emoji font must be between 1 byte and 128 MiB.");
+                }
+                out.getFD().sync();
+            } catch (IOException e) {
+                throw new SystemFontException(FontManager.RESULT_ERROR_FAILED_TO_WRITE_FONT_FILE,
+                        "Failed to write custom emoji font", e);
+            }
+            try {
+                mFsverityUtil.setUpFsverity(tempFile.getAbsolutePath());
+            } catch (IOException e) {
+                throw new SystemFontException(FontManager.RESULT_ERROR_VERIFICATION_FAILURE,
+                        "Failed to enable fs-verity for custom emoji", e);
+            }
+            try {
+                Os.chmod(tempFile.getAbsolutePath(), 0644);
+            } catch (ErrnoException e) {
+                throw new SystemFontException(FontManager.RESULT_ERROR_FAILED_TO_WRITE_FONT_FILE,
+                        "Failed to make custom emoji readable", e);
+            }
+            FontFileInfo info = validateFontFile(tempFile, new byte[0], true);
+            try {
+                mParser.tryToCreateTypeface(tempFile);
+            } catch (Throwable t) {
+                throw new SystemFontException(FontManager.RESULT_ERROR_INVALID_FONT_FILE,
+                        "Failed to create Typeface from custom emoji", t);
+            }
+            if (!mFsverityUtil.rename(tempFile, target)) {
+                throw new SystemFontException(FontManager.RESULT_ERROR_FAILED_TO_WRITE_FONT_FILE,
+                        "Failed to move custom emoji font into place");
+            }
+            writeEmojiPointer(target.getName());
+            mCustomEmoji = new FontFileInfo(target, info.getPostScriptName(),
+                    info.getRevision(), true);
+            mLastModifiedMillis = mCurrentTimeSupplier.get();
+            mConfigVersion++;
+            success = true;
+        } finally {
+            if (!success) {
+                tempFile.delete();
+                target.delete();
+            }
+        }
+    }
+
+    void clearCustomEmoji() throws SystemFontException {
+        if (mEmojiDir == null) return;
+        AtomicFile pointer = getEmojiPointerFile();
+        pointer.delete();
+        if (pointer.exists()) {
+            throw new SystemFontException(FontManager.RESULT_ERROR_FAILED_UPDATE_CONFIG,
+                    "Failed to clear custom emoji pointer");
+        }
+        if (mCustomEmoji != null) {
+            mCustomEmoji = null;
+            mLastModifiedMillis = mCurrentTimeSupplier.get();
+            mConfigVersion++;
+        }
+    }
+
+    @Nullable
+    String getCustomEmojiName() {
+        return mCustomEmoji == null ? null : mCustomEmoji.getPostScriptName();
+    }
+
+    @Nullable
+    File getCustomEmojiFile() {
+        return mCustomEmoji == null ? null : mCustomEmoji.getFile();
+    }
+
+    private void ensureEmojiDir() throws SystemFontException {
+        if (mEmojiDir == null) {
+            throw new SystemFontException(FontManager.RESULT_ERROR_FONT_UPDATER_DISABLED,
+                    "Custom emoji is not supported.");
+        }
+        try {
+            if (!mEmojiDir.isDirectory() && !mEmojiDir.mkdirs()) {
+                throw new IOException("Failed to create " + mEmojiDir);
+            }
+            Os.chmod(mEmojiDir.getAbsolutePath(), 0711);
+            if (!SELinux.restorecon(mEmojiDir)) {
+                throw new IOException("Failed to label " + mEmojiDir);
+            }
+        } catch (IOException | ErrnoException e) {
+            throw new SystemFontException(FontManager.RESULT_ERROR_FAILED_TO_WRITE_FONT_FILE,
+                    "Failed to prepare custom emoji directory", e);
+        }
+    }
+
+    private File newCustomEmojiFile() {
+        SecureRandom random = new SecureRandom();
+        byte[] bytes = new byte[12];
+        File file;
+        do {
+            random.nextBytes(bytes);
+            String id = Base64.encodeToString(bytes,
+                    Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
+            file = new File(mEmojiDir, CUSTOM_EMOJI_PREFIX + id + CUSTOM_EMOJI_SUFFIX);
+        } while (file.exists());
+        return file;
+    }
+
+    private static boolean isCustomEmojiFileName(String name) {
+        return name.indexOf('/') < 0 && name.startsWith(CUSTOM_EMOJI_PREFIX)
+                && name.endsWith(CUSTOM_EMOJI_SUFFIX);
+    }
+
+    private AtomicFile getEmojiPointerFile() {
+        return new AtomicFile(new File(mEmojiDir, CUSTOM_EMOJI_POINTER_FILE));
+    }
+
+    @Nullable
+    private String readEmojiPointer() {
+        try {
+            return new String(getEmojiPointerFile().readFully(), StandardCharsets.UTF_8).trim();
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    private void writeEmojiPointer(String name) throws SystemFontException {
+        AtomicFile pointer = getEmojiPointerFile();
+        FileOutputStream out = null;
+        try {
+            byte[] contents = name.getBytes(StandardCharsets.UTF_8);
+            out = pointer.startWrite();
+            out.write(contents);
+            out.getFD().sync();
+            pointer.finishWrite(out);
+            out = null;
+            if (!Arrays.equals(contents, pointer.readFully())) {
+                throw new IOException("Custom emoji pointer was not committed");
+            }
+        } catch (IOException e) {
+            if (out != null) pointer.failWrite(out);
+            throw new SystemFontException(FontManager.RESULT_ERROR_FAILED_UPDATE_CONFIG,
+                    "Failed to write custom emoji pointer", e);
+        }
+    }
+
+    private List<FontConfig.FontFamily> insertCustomEmoji(List<FontConfig.FontFamily> fallbacks,
+            boolean includeCustomEmoji) {
+        if (!includeCustomEmoji || mCustomEmoji == null) return fallbacks;
+        FontConfig.Font font = new FontConfig.Font(mCustomEmoji.getFile(), null,
+                mCustomEmoji.getPostScriptName(),
+                new FontStyle(FontStyle.FONT_WEIGHT_NORMAL, FontStyle.FONT_SLANT_UPRIGHT),
+                0, "", null, FontConfig.Font.VAR_TYPE_AXES_NONE);
+        FontConfig.FontFamily family = new FontConfig.FontFamily(Collections.singletonList(font),
+                LocaleList.forLanguageTags(EMOJI_LANG), FontConfig.FontFamily.VARIANT_DEFAULT);
+        List<FontConfig.FontFamily> result = new ArrayList<>(fallbacks);
+        int index = result.size();
+        for (int i = 0; i < result.size(); i++) {
+            if (EMOJI_LANG.equals(result.get(i).getLocaleList().toLanguageTags())) {
+                index = i;
+                break;
+            }
+        }
+        result.add(index, family);
+        return result;
+    }
+
     /* package */ FontConfig getSystemFontConfig() {
+        return getSystemFontConfig(
+                SystemFonts.EMOJI_STYLE_CUSTOM.equals(SystemFonts.getEmojiStyle()));
+    }
+
+    /* package */ FontConfig getSystemFontConfig(boolean includeCustomEmoji) {
         Map<String, File> systemFontFiles = getPostScriptMap();
         for (FontFileInfo info : mFontFileInfoMap.values()) {
             if (info.mIsUserFont) {
@@ -700,7 +954,8 @@ final class UpdatableFontDir {
         }
 
         return new FontConfig(
-                config.getFontFamilies(), config.getAliases(), mergedFamilies,
+                insertCustomEmoji(config.getFontFamilies(), includeCustomEmoji),
+                config.getAliases(), mergedFamilies,
                 config.getLocaleFallbackCustomizations(), mLastModifiedMillis, mConfigVersion);
     }
 

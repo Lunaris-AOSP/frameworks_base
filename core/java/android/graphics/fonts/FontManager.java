@@ -20,11 +20,13 @@ import android.Manifest;
 import android.annotation.IntDef;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
 import android.content.Context;
+import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 import android.text.FontConfig;
 
@@ -310,6 +312,58 @@ public class FontManager {
     public void clearUpdates() {
         try {
             mIFontManager.clearUpdates();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Installs and selects a custom system emoji font for newly started processes.
+     * Missing glyphs fall back to the stock emoji fonts. The caller retains ownership of the FD.
+     *
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.UPDATE_FONTS)
+    public @ResultCode int installCustomEmoji(@NonNull ParcelFileDescriptor fontFd) {
+        Objects.requireNonNull(fontFd);
+        try {
+            return mIFontManager.installCustomEmoji(fontFd);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /** Removes the installed custom emoji font and restores stock if selected. @hide */
+    @RequiresPermission(Manifest.permission.UPDATE_FONTS)
+    public @ResultCode int clearCustomEmoji() {
+        try {
+            return mIFontManager.clearCustomEmoji();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /** Returns the installed custom emoji font's PostScript name, or null. @hide */
+    @RequiresPermission(Manifest.permission.UPDATE_FONTS)
+    public @Nullable String getCustomEmojiName() {
+        try {
+            return mIFontManager.getCustomEmojiName();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Copies the selected custom emoji font into apps that keep their own emoji fonts.
+     * This blocks while installd replaces files and clears affected caches.
+     *
+     * @return the number of app files written, or a negative RESULT_* code
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.UPDATE_FONTS)
+    public int applyCustomEmojiToApps() {
+        try {
+            return mIFontManager.applyCustomEmojiToApps();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
