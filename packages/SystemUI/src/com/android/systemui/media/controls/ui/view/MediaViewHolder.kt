@@ -79,11 +79,14 @@ class MediaViewHolder constructor(itemView: View) {
     // Seekbar views - dynamically replaced based on settings
     var seekBar: SeekBar = itemView.requireViewById(R.id.media_progress_bar)
         private set
+    private val seekBarPaddingLeft = seekBar.paddingLeft
+    private val seekBarPaddingRight = seekBar.paddingRight
     var seekBarArtwork: Drawable? = null
         set(value) {
             field = value
             (seekBar as? GradientWaveSeekBar)?.setArtwork(value)
             (seekBar as? GlowingSeekBar)?.setArtwork(value)
+            (seekBar as? CometTrailSeekBar)?.setArtwork(value)
             (seekBar as? CosSeekBar)?.setArtwork(value)
         }
     // These views are only shown while the user is actively scrubbing
@@ -119,6 +122,7 @@ class MediaViewHolder constructor(itemView: View) {
             is WaveformSeekBar -> MediaSeekBarStyle.WAVEFORM
             is GradientWaveSeekBar -> MediaSeekBarStyle.GRADIENT_WAVE
             is GlowingSeekBar -> MediaSeekBarStyle.GLOWING
+            is CometTrailSeekBar -> MediaSeekBarStyle.COMET_TRAIL
             is CosSeekBar -> MediaSeekBarStyle.COS
             else -> MediaSeekBarStyle.DEFAULT
         }
@@ -130,6 +134,7 @@ class MediaViewHolder constructor(itemView: View) {
             MediaSeekBarStyle.WAVEFORM -> WaveformSeekBar(player.context)
             MediaSeekBarStyle.GRADIENT_WAVE -> GradientWaveSeekBar(player.context)
             MediaSeekBarStyle.GLOWING -> GlowingSeekBar(player.context)
+            MediaSeekBarStyle.COMET_TRAIL -> CometTrailSeekBar(player.context)
             MediaSeekBarStyle.COS -> CosSeekBar(player.context)
             MediaSeekBarStyle.DEFAULT -> SeekBar(player.context, null, 0, R.style.MediaPlayer_ProgressBar)
         }.apply {
@@ -142,12 +147,21 @@ class MediaViewHolder constructor(itemView: View) {
             contentDescription = oldBar.contentDescription
             maxHeight = oldBar.maxHeight
             setPadding(oldBar.paddingLeft, oldBar.paddingTop, oldBar.paddingRight, oldBar.paddingBottom)
+            if (this is CometTrailSeekBar) {
+                setPadding(
+                    seekBarPaddingLeft,
+                    oldBar.paddingTop,
+                    seekBarPaddingRight,
+                    oldBar.paddingBottom,
+                )
+            }
             layoutDirection = View.LAYOUT_DIRECTION_LTR
             progressTintList = oldBar.progressTintList
             progressBackgroundTintList = oldBar.progressBackgroundTintList
             thumbTintList = oldBar.thumbTintList
             if (this is GradientWaveSeekBar) setArtwork(seekBarArtwork)
             if (this is GlowingSeekBar) setArtwork(seekBarArtwork)
+            if (this is CometTrailSeekBar) setArtwork(seekBarArtwork)
             if (this is CosSeekBar) setArtwork(seekBarArtwork)
             if (this is WaveformSeekBar) {
                 progressTintList?.defaultColor?.let { setWaveformColor(it) }

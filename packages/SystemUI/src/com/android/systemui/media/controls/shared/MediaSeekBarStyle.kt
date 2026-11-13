@@ -34,7 +34,8 @@ enum class MediaSeekBarStyle(val value: Int) {
     WAVEFORM(1),
     GLOWING(2),
     GRADIENT_WAVE(3),
-    COS(4);
+    COS(4),
+    COMET_TRAIL(5);
 
     companion object {
         fun fromValue(value: Int): MediaSeekBarStyle =
