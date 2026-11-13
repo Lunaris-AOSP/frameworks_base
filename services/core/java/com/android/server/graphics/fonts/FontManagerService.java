@@ -21,16 +21,21 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.content.Context;
+import android.database.ContentObserver;
 import android.graphics.Typeface;
 import android.graphics.fonts.FontFamily;
 import android.graphics.fonts.FontManager;
 import android.graphics.fonts.FontUpdateRequest;
 import android.graphics.fonts.SystemFonts;
+import android.os.Binder;
 import android.os.Build;
 import android.os.ParcelFileDescriptor;
 import android.os.ResultReceiver;
 import android.os.SharedMemory;
 import android.os.ShellCallback;
+import android.os.SystemProperties;
+import android.os.UserHandle;
+import android.provider.Settings;
 import android.system.ErrnoException;
 import android.text.FontConfig;
 import android.util.AndroidException;
@@ -42,6 +47,7 @@ import android.util.Slog;
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.graphics.fonts.IFontManager;
+import com.android.internal.os.BackgroundThread;
 import com.android.internal.security.VerityUtils;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.Preconditions;
@@ -71,6 +77,8 @@ public final class FontManagerService extends IFontManager.Stub {
 
     private static final String FONT_FILES_DIR = "/data/fonts/files";
     private static final String CONFIG_XML_FILE = "/data/fonts/config/config.xml";
+    private static final String EMOJI_DIR = FONT_FILES_DIR + "/emoji";
+    private static final String EMOJI_STYLE_SETTING = "emoji_style";
 
     public static final boolean axFontFeatureSupport = true;
 
@@ -100,6 +108,107 @@ public final class FontManagerService extends IFontManager.Stub {
             }
         } finally {
             closeFileDescriptors(requests);
+        }
+    }
+
+    @RequiresPermission(Manifest.permission.UPDATE_FONTS)
+    @Override
+    public int installCustomEmoji(@NonNull ParcelFileDescriptor fontFd) {
+        synchronized (mEmojiOperationLock) {
+            Objects.requireNonNull(fontFd);
+            try {
+                getContext().enforceCallingPermission(Manifest.permission.UPDATE_FONTS,
+                        "UPDATE_FONTS permission required.");
+                synchronized (mUpdatableFontDirLock) {
+                    if (!ensureUpdatableFontDirLocked()) {
+                        return FontManager.RESULT_ERROR_FONT_UPDATER_DISABLED;
+                    }
+                    mUpdatableFontDir.installCustomEmoji(fontFd.getFileDescriptor());
+                    selectEmojiStyleLocked(SystemFonts.EMOJI_STYLE_CUSTOM);
+                    updateSerializedFontMap();
+                }
+                return FontManager.RESULT_SUCCESS;
+            } catch (SystemFontException e) {
+                Slog.e(TAG, "Failed to install custom emoji", e);
+                return e.getErrorCode();
+            } finally {
+                try {
+                    fontFd.close();
+                } catch (IOException e) {
+                    Slog.w(TAG, "Failed to close custom emoji fd", e);
+                }
+            }
+        }
+    }
+
+    @RequiresPermission(Manifest.permission.UPDATE_FONTS)
+    @Override
+    public int clearCustomEmoji() {
+        synchronized (mEmojiOperationLock) {
+            getContext().enforceCallingPermission(Manifest.permission.UPDATE_FONTS,
+                    "UPDATE_FONTS permission required.");
+            try {
+                synchronized (mUpdatableFontDirLock) {
+                    if (!ensureUpdatableFontDirLocked()) {
+                        return FontManager.RESULT_ERROR_FONT_UPDATER_DISABLED;
+                    }
+                    mUpdatableFontDir.clearCustomEmoji();
+                    selectEmojiStyleLocked(SystemFonts.EMOJI_STYLE_ANDROID);
+                    updateSerializedFontMap();
+                }
+            } catch (SystemFontException e) {
+                Slog.e(TAG, "Failed to clear custom emoji", e);
+                return e.getErrorCode();
+            }
+            mAppEmojiReplacer.restore();
+            return FontManager.RESULT_SUCCESS;
+        }
+    }
+
+    @RequiresPermission(Manifest.permission.UPDATE_FONTS)
+    @Override
+    @Nullable
+    public String getCustomEmojiName() {
+        getContext().enforceCallingPermission(Manifest.permission.UPDATE_FONTS,
+                "UPDATE_FONTS permission required.");
+        synchronized (mUpdatableFontDirLock) {
+            return mUpdatableFontDir == null ? null : mUpdatableFontDir.getCustomEmojiName();
+        }
+    }
+
+    @RequiresPermission(Manifest.permission.UPDATE_FONTS)
+    @Override
+    public int applyCustomEmojiToApps() {
+        synchronized (mEmojiOperationLock) {
+            getContext().enforceCallingPermission(Manifest.permission.UPDATE_FONTS,
+                    "UPDATE_FONTS permission required.");
+            final int callingUid = Binder.getCallingUid();
+            ParcelFileDescriptor fd;
+            synchronized (mUpdatableFontDirLock) {
+                if (mUpdatableFontDir == null) {
+                    return FontManager.RESULT_ERROR_FONT_UPDATER_DISABLED;
+                }
+                File emoji = mUpdatableFontDir.getCustomEmojiFile();
+                if (emoji == null
+                        || !SystemFonts.EMOJI_STYLE_CUSTOM.equals(SystemFonts.getEmojiStyle())) {
+                    return FontManager.RESULT_ERROR_FONT_NOT_FOUND;
+                }
+                try {
+                    fd = ParcelFileDescriptor.open(emoji, ParcelFileDescriptor.MODE_READ_ONLY);
+                } catch (IOException e) {
+                    Slog.e(TAG, "Failed to open custom emoji", e);
+                    return FontManager.RESULT_ERROR_FAILED_TO_OPEN_FONT_FILE;
+                }
+            }
+            try {
+                return mAppEmojiReplacer.apply(fd, callingUid);
+            } finally {
+                try {
+                    fd.close();
+                } catch (IOException e) {
+                    Slog.w(TAG, "Failed to close custom emoji fd", e);
+                }
+            }
         }
     }
 
@@ -167,6 +276,10 @@ public final class FontManagerService extends IFontManager.Stub {
 
         @Override
         public void onBootPhase(int phase) {
+            if (phase == SystemService.PHASE_ACTIVITY_MANAGER_READY) {
+                mServiceStarted.join();
+                mService.observeEmojiStyle();
+            }
             final int latestFontLoadBootPhase =
                     (Flags.completeFontLoadInSystemServicesReady())
                             // Complete font load in the phase before PHASE_SYSTEM_SERVICES_READY
@@ -208,6 +321,11 @@ public final class FontManagerService extends IFontManager.Stub {
         }
 
         @Override
+        public boolean hasFsverity(String fontPath) {
+            return VerityUtils.hasFsverity(fontPath);
+        }
+
+        @Override
         public void setUpFsverity(String filePath) throws IOException {
             VerityUtils.setUpFsverity(filePath);
         }
@@ -232,6 +350,11 @@ public final class FontManagerService extends IFontManager.Stub {
     @Nullable
     private UpdatableFontDir mUpdatableFontDir;
 
+    private final AppEmojiReplacer mAppEmojiReplacer;
+    private final Object mEmojiOperationLock = new Object();
+    @GuardedBy("mUpdatableFontDirLock")
+    private String mLastEmojiStyle;
+
     // mSerializedFontMapLock can be acquired while holding mUpdatableFontDirLock.
     // mUpdatableFontDirLock should not be newly acquired while holding mSerializedFontMapLock.
     private final Object mSerializedFontMapLock = new Object();
@@ -249,6 +372,7 @@ public final class FontManagerService extends IFontManager.Stub {
         }
         mContext = context;
         mIsSafeMode = safeMode;
+        mAppEmojiReplacer = new AppEmojiReplacer(context);
 
         if (Flags.useOptimizedBoottimeFontLoading()) {
             Slog.i(TAG, "Using optimized boot-time font loading.");
@@ -302,7 +426,60 @@ public final class FontManagerService extends IFontManager.Stub {
         }
 
         return new UpdatableFontDir(new File(FONT_FILES_DIR), new OtfFontFileParser(),
-                new FsverityUtilImpl(certs), new File(CONFIG_XML_FILE));
+                new FsverityUtilImpl(certs), new File(CONFIG_XML_FILE), new File(EMOJI_DIR));
+    }
+
+    @GuardedBy("mUpdatableFontDirLock")
+    private boolean ensureUpdatableFontDirLocked() {
+        if (mUpdatableFontDir == null) {
+            mUpdatableFontDir = createUpdatableFontDir();
+            if (mUpdatableFontDir != null) mUpdatableFontDir.loadFontFileMap();
+        }
+        return mUpdatableFontDir != null;
+    }
+
+    private void observeEmojiStyle() {
+        getContext().getContentResolver().registerContentObserver(
+                Settings.System.getUriFor(EMOJI_STYLE_SETTING), false,
+                new ContentObserver(BackgroundThread.getHandler()) {
+                    @Override
+                    public void onChange(boolean selfChange) {
+                        refreshEmojiStyle();
+                    }
+                }, UserHandle.USER_ALL);
+        SystemProperties.addChangeCallback(
+                () -> BackgroundThread.getHandler().post(this::refreshEmojiStyle));
+        refreshEmojiStyle();
+    }
+
+    @GuardedBy("mUpdatableFontDirLock")
+    private void selectEmojiStyleLocked(String style) {
+        final int userId = UserHandle.getCallingUserId();
+        SystemProperties.set(SystemFonts.PROP_EMOJI_STYLE, style);
+        final long token = Binder.clearCallingIdentity();
+        try {
+            if (!Settings.System.putStringForUser(getContext().getContentResolver(),
+                    EMOJI_STYLE_SETTING, style, userId)) {
+                Slog.w(TAG, "Failed to save the selected emoji style");
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+        mLastEmojiStyle = SystemFonts.getEmojiStyle();
+    }
+
+    private void refreshEmojiStyle() {
+        synchronized (mEmojiOperationLock) {
+            boolean restoreApps;
+            synchronized (mUpdatableFontDirLock) {
+                String style = SystemFonts.getEmojiStyle();
+                if (style.equals(mLastEmojiStyle)) return;
+                restoreApps = !SystemFonts.EMOJI_STYLE_CUSTOM.equals(style);
+                mLastEmojiStyle = style;
+                updateSerializedFontMap();
+            }
+            if (restoreApps) mAppEmojiReplacer.restore();
+        }
     }
 
     /**
@@ -316,6 +493,7 @@ public final class FontManagerService extends IFontManager.Stub {
 
     private void initialize() {
         synchronized (mUpdatableFontDirLock) {
+            mLastEmojiStyle = SystemFonts.getEmojiStyle();
             mUpdatableFontDir = createUpdatableFontDir();
             if (mUpdatableFontDir == null) {
                 if (Flags.useOptimizedBoottimeFontLoading()) {
@@ -373,10 +551,14 @@ public final class FontManagerService extends IFontManager.Stub {
     @Override
     public void clearUpdates() {
         super.clearUpdates_enforcePermission();
-        synchronized (mUpdatableFontDirLock) {
-            UpdatableFontDir.deleteAllFiles(new File(FONT_FILES_DIR), new File(CONFIG_XML_FILE));
-            UpdatableFontDir.deleteBackup();
-            initialize();
+        synchronized (mEmojiOperationLock) {
+            synchronized (mUpdatableFontDirLock) {
+                UpdatableFontDir.deleteAllFiles(new File(FONT_FILES_DIR), new File(CONFIG_XML_FILE));
+                UpdatableFontDir.deleteBackup();
+                selectEmojiStyleLocked(SystemFonts.EMOJI_STYLE_ANDROID);
+                initialize();
+            }
+            mAppEmojiReplacer.restore();
         }
     }
 
