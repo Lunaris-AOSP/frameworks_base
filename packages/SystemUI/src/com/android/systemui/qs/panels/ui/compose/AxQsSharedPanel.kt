@@ -62,6 +62,7 @@ internal fun <T> ContentScope.AxQsSharedPanel(
     showTileLabels: Boolean,
     showWeather: Boolean,
     compactStyle: Boolean,
+    autoHideTilePageIndicator: Boolean,
     collapsedHeaderOffset: Int,
     scrollState: ScrollState,
     expansionProgress: () -> Float,
@@ -217,6 +218,8 @@ internal fun <T> ContentScope.AxQsSharedPanel(
                         ) {
                             AxQsPagerIndicator(
                                 pagerState = pagerState,
+                                autoHide = autoHideTilePageIndicator,
+                                isVisible = isFullyVisible,
                                 modifier = Modifier.fillMaxWidth().padding(top = spacing),
                             )
                         }

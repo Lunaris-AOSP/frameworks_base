@@ -49,6 +49,8 @@ internal fun <T> ContentScope.AxQsLandscapePanel(
     showTileLabels: Boolean,
     spacing: Dp,
     scrollState: ScrollState,
+    autoHideTilePageIndicator: Boolean,
+    isFullyVisible: () -> Boolean,
     modifier: Modifier = Modifier,
     controlContent: @Composable (AxQsGridItem<T>) -> Unit,
     tileContent: @Composable (AxQsGridItem<T>) -> Unit,
@@ -156,6 +158,8 @@ internal fun <T> ContentScope.AxQsLandscapePanel(
                         )
                         AxQsPagerIndicator(
                             pagerState = pagerState,
+                            autoHide = autoHideTilePageIndicator,
+                            isVisible = isFullyVisible,
                             modifier = Modifier.fillMaxWidth().padding(top = spacing),
                         )
                     }
