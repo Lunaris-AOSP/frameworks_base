@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isSpecified
 import com.android.axion.blur.AxBlurSurface
+import com.android.axion.blur.model.AxBackdropBlurSettingsSpec
 import com.android.compose.theme.PlatformTheme
 import com.android.systemui.keyboard.shortcut.ui.composable.hasCompactWindowSize
 import com.android.systemui.res.R
@@ -130,6 +131,7 @@ fun SystemUIDialogFactory.createBottomSheet(
     maxWidth: Dp = Dp.Unspecified,
     useAxBlur: Boolean = true,
     surfaceColor: @Composable () -> Color = { MaterialTheme.colorScheme.surfaceContainer },
+    blurSettingsSpec: AxBackdropBlurSettingsSpec = AxBackdropBlurSettingsSpec.dialog(),
 ): ComponentSystemUIDialog {
     return create(
         context = context,
@@ -206,6 +208,7 @@ fun SystemUIDialogFactory.createBottomSheet(
                     Box {
                         if (useAxBlur) {
                             AxBlurSurface(
+                                settingsSpec = blurSettingsSpec,
                                 modifier = Modifier.matchParentSize(),
                                 shape = shape,
                                 cornerRadius = radius,

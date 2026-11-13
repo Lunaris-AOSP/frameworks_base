@@ -127,6 +127,7 @@ constructor(
             maxWidth = 800.dp,
             useAxBlur = true,
             surfaceColor = { com.android.axion.blur.AxBlurSurfaceDefaults.surfaceColor() },
+            blurSettingsSpec = com.android.axion.blur.model.AxBackdropBlurSettingsSpec.system(),
         )
     }
 }
