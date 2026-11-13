@@ -104,6 +104,8 @@ import com.android.systemui.qs.panels.ui.viewmodel.LocalLunarisFlashlightSliderV
 import com.android.systemui.qs.shared.model.CategoryAndName
 import com.android.systemui.qs.shared.model.TileCategory
 import com.android.systemui.qs.shared.model.groupAndSort
+import com.android.systemui.qs.tiles.AutoBrightnessTile
+import com.android.systemui.qs.tiles.SoundTile
 import com.android.systemui.qs.tiles.ringer.animateRingerTileShape
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.policy.ui.dialog.viewmodel.ModeTileViewModel
@@ -160,6 +162,9 @@ internal sealed interface AxAddItem : CategoryAndName {
     override val name: String
         get() = label
 }
+
+internal fun isHiddenLegacyAxQsTile(spec: String): Boolean =
+    spec == AutoBrightnessTile.TILE_SPEC || spec == SoundTile.TILE_SPEC
 
 @Composable
 internal fun AxAvailableControls(
@@ -223,7 +228,10 @@ internal fun AxAvailableControls(
     val onRotateSlider: (AxAddItem.Control) -> Unit = { item ->
         onSliderSpanChanged(item.control, item.control.rotateSpan(item.span, controlColumns))
     }
-    val tiles: List<AxAddItem> = allTiles.map { AxAddItem.Tile(it, it.tileSpec.spec in currentIds) }
+    val tiles: List<AxAddItem> =
+        allTiles
+            .filterNot { isHiddenLegacyAxQsTile(it.tileSpec.spec) }
+            .map { AxAddItem.Tile(it, it.tileSpec.spec in currentIds) }
     val tileGroups = remember(tiles) { groupAndSort(tiles).entries.toList() }
     PreferenceGroup(modifier = modifier.fillMaxWidth(), spacing = 2.dp) {
         settings?.let { settingsContent ->
