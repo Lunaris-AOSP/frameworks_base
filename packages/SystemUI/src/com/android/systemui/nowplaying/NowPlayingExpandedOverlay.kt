@@ -750,6 +750,7 @@ private fun NowPlayingSeekBar(
 
         if (
             state.seekBarStyle == MediaSeekBarStyle.GLOWING ||
+                state.seekBarStyle == MediaSeekBarStyle.COMET_TRAIL ||
                 state.seekBarStyle == MediaSeekBarStyle.GRADIENT_WAVE ||
                 state.seekBarStyle == MediaSeekBarStyle.COS
         ) {
