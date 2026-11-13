@@ -159,7 +159,7 @@ class ExtraInfoFreeformView(context: Context) : ViewGroup(context) {
     private val slop = ViewConfiguration.get(context).scaledTouchSlop
 
     init {
-        clipChildren = true
+        clipChildren = false
         clipToPadding = true
     }
 
