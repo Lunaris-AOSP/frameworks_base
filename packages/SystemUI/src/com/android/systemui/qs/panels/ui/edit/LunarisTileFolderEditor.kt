@@ -124,7 +124,10 @@ internal fun LunarisTileFolderEditor(
     var selectedStyle by remember(initialFolder) { mutableStateOf(initialFolder.tileStyle) }
     val bySpec = remember(availableTiles) { availableTiles.associateBy { it.tileSpec.spec } }
     val entries =
-        selectedSpecs + availableTiles.map { it.tileSpec.spec }.filterNot(selectedSpecs::contains)
+        selectedSpecs +
+            availableTiles
+                .map { it.tileSpec.spec }
+                .filterNot { it in selectedSpecs || isHiddenLegacyAxQsTile(it) }
     val move: (Int, Int) -> Unit = { from, to ->
         selectedSpecs = selectedSpecs.toMutableList().apply { add(to, removeAt(from)) }
     }
