@@ -55,16 +55,16 @@ internal object ClockGlassWallpaper {
     }
 
     fun listen(context: Context, listener: Runnable) {
-        if (listeners.isEmpty()) reset()
+        val app = context.applicationContext ?: context
         if (manager == null) {
-            manager = context.getSystemService(WallpaperManager::class.java)
+            manager = app.getSystemService(WallpaperManager::class.java)
             runCatching { manager?.addOnColorsChangedListener(changed, main, UserHandle.USER_ALL) }
                 .onFailure { Log.w("ClockGlass", "Cannot watch wallpaper changes", it) }
         }
         if (galleryResolver == null) {
             runCatching {
-                context.contentResolver.registerContentObserver(galleryUri, true, galleryChanged, UserHandle.USER_ALL)
-                galleryResolver = context.contentResolver
+                app.contentResolver.registerContentObserver(galleryUri, true, galleryChanged, UserHandle.USER_ALL)
+                galleryResolver = app.contentResolver
             }.onFailure { Log.w("ClockGlass", "Cannot watch gallery wallpaper", it) }
         }
         listeners.add(listener)
@@ -72,15 +72,9 @@ internal object ClockGlassWallpaper {
 
     fun unlisten(listener: Runnable) {
         listeners.remove(listener)
-        if (listeners.isEmpty()) {
-            runCatching { manager?.removeOnColorsChangedListener(changed) }
-            manager = null
-            runCatching { galleryResolver?.unregisterContentObserver(galleryChanged) }
-            galleryResolver = null
-        }
     }
 
-    fun get(context: Context, user: Int): ClockGlass? {
+    fun get(context: Context, user: Int, requestedBlurRadii: IntArray): ClockGlass? {
         val metrics = context.resources.displayMetrics
         val key =
             Key(user, metrics.widthPixels.coerceAtLeast(1), metrics.heightPixels.coerceAtLeast(1),
@@ -90,21 +84,27 @@ internal object ClockGlassWallpaper {
         if (key in loading || !attempted.add(key)) return cached?.material
         loading.add(key)
         val version = generation
+        val blurRadii = (requestedBlurRadii +
+            (cached?.material?.requestedBlurRadii() ?: intArrayOf())).distinct().toIntArray()
         val app = context.applicationContext ?: context
         worker.execute {
             val result =
                 runCatching {
                         val userContext = app.createContextAsUser(UserHandle.of(user), 0)
                         decode(userContext, key.width, key.height, key.display)?.let {
-                            ClockGlass.prepare(it, referenceWidth = key.width, referenceHeight = key.height)
+                            ClockGlass.prepare(it, blurRadii, referenceWidth = key.width, referenceHeight = key.height)
                         }
                     }
                     .onFailure { Log.w("ClockGlass", "Cannot prepare wallpaper fill", it) }
-                    .getOrNull()
             main.post {
                 loading.remove(key)
-                if (result != null) cache.put(key, Cached(version, result))
-                else if (version == generation) cache.remove(key)
+                if (result.isSuccess) {
+                    val material = result.getOrNull()
+                    if (material != null) {
+                        cache.put(key, Cached(version, material))
+                        attempted.remove(key)
+                    } else if (version == generation) cache.remove(key)
+                }
                 listeners.toList().forEach { it.run() }
             }
         }

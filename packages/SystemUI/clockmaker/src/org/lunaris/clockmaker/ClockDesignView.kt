@@ -128,6 +128,7 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
         set(value) {
             if (field == value) return
             field = value
+            glass.userId = value
             weather = ""
             lastWeatherRequest = 0L
             if (registered) {
@@ -203,11 +204,11 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
     }
 
     fun setDesign(value: ClockDesign) {
-        glass.clear()
         val rebuild = childCount != value.elements.size ||
             design.elements.map { it.id to it.kind } != value.elements.map { it.id to it.kind }
         design = value
         if (rebuild) {
+            glass.clear()
             removeAllViews()
             value.elements.forEach { element ->
                 val child = if (element.kind == ClockElementKind.IMAGE) ClockImageView(context) else
@@ -229,6 +230,7 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
 
     fun setAppearance(value: ClockDesignAppearance) {
         if (appearance == value) return
+        glass.enabled = !value.dozing
         appearance = value
         applyElements()
         updateQuickLook()
@@ -280,7 +282,6 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
     }
 
     private fun applyElements() {
-        glass.clear()
         design.elements.forEachIndexed { index, element ->
             val view = getChildAt(index)
             view.visibility = if (element.visible &&
@@ -417,7 +418,7 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
                 child.setShadowLayer((element.shadowSoftness * width / 360f).coerceAtLeast(0.01f),
                     0f, width / 180f, (element.shadowColor and 0xFFFFFF) or (alpha shl 24))
             } else child.setShadowLayer(0f, 0f, 0f, 0)
-            if (element.glass && !appearance.dozing) {
+            if (element.glass) {
                 glass.add(child, element.glassStyle, element.kind == ClockElementKind.DATE)
             }
         }

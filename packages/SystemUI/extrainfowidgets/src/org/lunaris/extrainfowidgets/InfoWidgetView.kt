@@ -77,6 +77,7 @@ class InfoWidgetView(context: Context, val widget: InfoWidget) : View(context) {
             blurs.values.forEach { it.setEnabled(value.axBlur && !value.dozing) }
             glass.userId = value.userId ?: context.userId
             glass.enabled = value.liquidGlass && !value.dozing
+            glass.prepare(value.glassStyle.takeIf { value.liquidGlass })
             if (value.dozing) {
                 animate().cancel()
                 scaleX = 1f

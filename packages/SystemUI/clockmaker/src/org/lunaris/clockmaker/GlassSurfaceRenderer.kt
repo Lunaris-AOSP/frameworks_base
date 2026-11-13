@@ -25,13 +25,18 @@ class GlassSurfaceRenderer(private val host: View) : ViewTreeObserver.OnPreDrawL
     private val spaceToScreen = Matrix()
     private val screenToSpace = Matrix()
     private val values = FloatArray(9)
-    private val ready = Runnable { host.invalidate() }
+    private val ready = Runnable {
+        prepareMaterial()
+        if (enabled) host.invalidate()
+    }
     private var observing: ViewTreeObserver? = null
     private var listening = false
     private var preview = false
     private var previewMaterial: ClockGlass? = null
     private var previewSpace: View? = null
     private var previewOffset = 0f
+    private var preparedStyle: ClockGlassStyle? = null
+    private var blurRadii = intArrayOf()
     private var failed = false
 
     var enabled = false
@@ -39,8 +44,8 @@ class GlassSurfaceRenderer(private val host: View) : ViewTreeObserver.OnPreDrawL
             if (field == value) return
             field = value
             if (value) failed = false
-            else clear()
             observe()
+            if (value) prepareMaterial()
             host.invalidate()
         }
 
@@ -51,6 +56,7 @@ class GlassSurfaceRenderer(private val host: View) : ViewTreeObserver.OnPreDrawL
             clear()
             failed = false
             observe()
+            prepareMaterial()
             host.invalidate()
         }
 
@@ -63,21 +69,44 @@ class GlassSurfaceRenderer(private val host: View) : ViewTreeObserver.OnPreDrawL
         clear()
         failed = false
         observe()
+        prepareMaterial()
         host.invalidate()
     }
 
-    fun onAttachedToWindow() = observe()
+    fun prepare(style: ClockGlassStyle?) {
+        preparedStyle = style?.normalized()
+        blurRadii = preparedStyle?.let { intArrayOf(it.blurRadius) } ?: intArrayOf()
+        if (preparedStyle == null && !enabled) clear()
+        observe()
+        prepareMaterial()
+    }
+
+    private fun material(): ClockGlass? = if (preview) previewMaterial
+        else ClockGlassWallpaper.get(host.context, userId, blurRadii)
+
+    private fun prepareMaterial() {
+        val requested = preparedStyle ?: return
+        if (!preview && !host.isAttachedToWindow) return
+        material()?.isBlurReady(requested, ready)
+    }
+
+    fun onAttachedToWindow() {
+        observe()
+        prepareMaterial()
+    }
 
     fun onDetachedFromWindow() {
         observing?.takeIf { it.isAlive }?.removeOnPreDrawListener(this)
         observing = null
         if (listening) ClockGlassWallpaper.unlisten(ready)
         listening = false
-        clear()
         failed = false
     }
 
-    fun onVisibilityAggregated(visible: Boolean) = observe(visible)
+    fun onVisibilityAggregated(visible: Boolean) {
+        observe(visible)
+        if (visible) prepareMaterial()
+    }
 
     private fun clear() {
         entries.clear()
@@ -85,7 +114,8 @@ class GlassSurfaceRenderer(private val host: View) : ViewTreeObserver.OnPreDrawL
     }
 
     private fun observe(visible: Boolean = host.isShown) {
-        val active = enabled && !failed && host.isAttachedToWindow && visible && host.windowVisibility == View.VISIBLE
+        val attached = (enabled || preparedStyle != null) && !failed && host.isAttachedToWindow
+        val active = attached && enabled && visible && host.windowVisibility == View.VISIBLE
         if (observing?.isAlive == false) observing = null
         if (active && observing == null) {
             observing = host.viewTreeObserver.also { it.addOnPreDrawListener(this) }
@@ -93,7 +123,7 @@ class GlassSurfaceRenderer(private val host: View) : ViewTreeObserver.OnPreDrawL
             observing?.takeIf { it.isAlive }?.removeOnPreDrawListener(this)
             observing = null
         }
-        val watch = active && !preview
+        val watch = attached && !preview
         if (watch && !listening) ClockGlassWallpaper.listen(host.context, ready)
         if (!watch && listening) ClockGlassWallpaper.unlisten(ready)
         listening = watch
@@ -122,7 +152,8 @@ class GlassSurfaceRenderer(private val host: View) : ViewTreeObserver.OnPreDrawL
     }
 
     override fun onPreDraw(): Boolean {
-        val material = if (preview) previewMaterial else ClockGlassWallpaper.get(host.context, userId)
+        val material = material()
+        preparedStyle?.let { material?.isBlurReady(it, ready) }
         if (material != null && map(material) && transform != previous) {
             previous.set(transform)
             host.invalidate()
@@ -132,15 +163,16 @@ class GlassSurfaceRenderer(private val host: View) : ViewTreeObserver.OnPreDrawL
 
     fun draw(canvas: Canvas, id: String, box: RectF, radius: Float, style: ClockGlassStyle, tint: Int): Boolean {
         if (!enabled || failed || !canvas.isHardwareAccelerated || box.isEmpty) return false
-        val material = (if (preview) previewMaterial else ClockGlassWallpaper.get(host.context, userId)) ?: return false
-        if (!map(material)) return false
+        val material = material() ?: return false
         try {
             val s = style.normalized()
             val cached = entries[id]
             val entry = if (cached?.material === material && cached.style == s && cached.tint == tint) cached else {
-                val shader = material.surfaceShader(s, tint, ready) ?: return false
-                Entry(material, s, tint, shader).also { entries[id] = it }
+                val shader = material.surfaceShader(s, tint, ready)
+                if (shader != null) Entry(material, s, tint, shader).also { entries[id] = it }
+                else cached?.takeIf { it.style == s && it.tint == tint } ?: return false
             }
+            if (!map(entry.material)) return false
             transform.getValues(values)
             entry.shader.apply {
                 setFloatUniform("mapX", values[0], values[1], values[2])
