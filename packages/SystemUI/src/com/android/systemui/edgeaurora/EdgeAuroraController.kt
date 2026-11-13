@@ -124,6 +124,7 @@ constructor(
     private var windowConfiguration = Configuration(context.resources.configuration)
     private val window = EdgeAuroraWindow(context, handler, this)
     private val hiddenUntil = mutableMapOf<String, Long>()
+    private val autoHideStates = mutableMapOf<String, AutoHideState>()
     private val contents = mutableMapOf<String, String>()
     private var foreground: String? = null
     private var switchingUser = false
@@ -136,11 +137,18 @@ constructor(
     private var previewId: String? = null
     private var previewToken: String? = null
     private val refresh = Runnable { render() }
+    private val autoHideTimeout = Runnable { render() }
     private val endPreview = Runnable {
         previewId = null
         render()
     }
     private val darkTimeout = Runnable { finishDarkSession() }
+
+    private data class AutoHideState(
+        val fingerprint: String,
+        var shownAt: Long,
+        var hidden: Boolean = false,
+    )
 
     override fun start() {
         previewToken =
@@ -148,7 +156,12 @@ constructor(
         val observer =
             object : ContentObserver(handler) {
                 override fun onChange(selfChange: Boolean, uri: Uri?) {
-                    config = EdgeAuroraConfig(resolver, userTracker.userId)
+                    val updated = EdgeAuroraConfig(resolver, userTracker.userId)
+                    if (config.enabled != updated.enabled || config.autoHide != updated.autoHide) {
+                        autoHideStates.clear()
+                        handler.removeCallbacks(autoHideTimeout)
+                    }
+                    config = updated
                     if (uri == Settings.System.getUriFor(EdgeAuroraConfig.PREVIEW)) readPreview()
                     if (!config.enabled || !config.wake) finishDarkSession()
                     window.closePanel()
@@ -182,6 +195,7 @@ constructor(
 
                 override fun onEntryRemoved(entry: NotificationEntry, reason: Int) {
                     hiddenUntil.remove(entry.key)
+                    autoHideStates.remove(entry.key)
                     contents.remove(entry.key)
                     scheduleRefresh()
                 }
@@ -500,6 +514,14 @@ constructor(
             return false
         if (keyguardVisibility.shouldHideNotification(entry)) return false
         if ((hiddenUntil[entry.key] ?: Long.MIN_VALUE) >= sbn.postTime) return false
+        val autoHide = autoHideStates[entry.key]
+        if (
+            config.autoHide &&
+                autoHide != null &&
+                autoHide.fingerprint == (contents[entry.key] ?: fingerprint(sbn.notification)) &&
+                autoHide.hidden
+        )
+            return false
         return true
     }
 
@@ -540,6 +562,14 @@ constructor(
     }
 
     private fun render(autoPeekKey: String? = null) {
+        handler.removeCallbacks(autoHideTimeout)
+        if (config.autoHide) {
+            val now = SystemClock.uptimeMillis()
+            autoHideStates.values.forEach {
+                if (window.isTouching && !it.hidden) it.shownAt = now
+                else if (now - it.shownAt >= config.autoHideTimeout * 1000L) it.hidden = true
+            }
+        }
         if (isGaming()) {
             previewId = null
             handler.removeCallbacks(endPreview)
@@ -596,10 +626,30 @@ constructor(
                 darkSession,
                 autoPeekKey?.takeUnless { keyguard.isShowing },
             )
+            if (config.autoHide && window.isShowing) {
+                val now = SystemClock.uptimeMillis()
+                val deadline =
+                    payloads.flatMap { it.entries }.minOf { entry ->
+                        val fingerprint = contents[entry.key] ?: fingerprint(entry.sbn.notification)
+                        val state =
+                            autoHideStates[entry.key]?.takeIf { it.fingerprint == fingerprint }
+                                ?: AutoHideState(fingerprint, now).also {
+                                    autoHideStates[entry.key] = it
+                                }
+                        state.shownAt + config.autoHideTimeout * 1000L
+                    }
+                handler.postDelayed(autoHideTimeout, (deadline - now).coerceAtLeast(1L))
+            }
         }
     }
 
     internal fun touched() {
+        if (config.autoHide && window.isShowing) {
+            val now = SystemClock.uptimeMillis()
+            autoHideStates.values.filter { !it.hidden }.forEach { it.shownAt = now }
+            handler.removeCallbacks(autoHideTimeout)
+            handler.postDelayed(autoHideTimeout, config.autoHideTimeout * 1000L)
+        }
         pocketGeneration++
         checkingPocket = false
         stopProximity()
@@ -896,7 +946,9 @@ constructor(
         finishDarkSession()
         previewId = null
         hiddenUntil.clear()
+        autoHideStates.clear()
         contents.clear()
+        handler.removeCallbacks(autoHideTimeout)
         handler.removeCallbacks(endPreview)
         window.hide()
         window.forgetBubbles()
@@ -906,6 +958,7 @@ constructor(
         pw.println("enabled=${config.enabled}, profiles=${config.profiles.size}, dark=$darkSession")
         pw.println("quiet=${quiet()}, window=${window.isShowing}, switchingUser=$switchingUser")
         pw.println("gaming=${isGaming()}")
+        pw.println("autoHide=${config.autoHide}, autoHideTimeout=${config.autoHideTimeout}")
         pw.println(
             "ambient=${dozeHost.auroraPulseBrightness}, brightness=${config.brightness}, " +
                 "timeout=${config.timeout}, clock=${config.clock}, checkingPocket=$checkingPocket"

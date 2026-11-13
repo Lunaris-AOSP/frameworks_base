@@ -56,11 +56,12 @@ public class SystemSettingsValidators {
     static {
         for (String key : new String[]{"edge_aurora_enabled", "edge_aurora_lock_screen",
                 "edge_aurora_wake", "edge_aurora_clock", "edge_aurora_auto_peek",
-                "edge_aurora_popup_blur", "edge_aurora_only_edge"}) {
+                "edge_aurora_popup_blur", "edge_aurora_only_edge", "edge_aurora_auto_hide"}) {
             VALIDATORS.put(key, BOOLEAN_VALIDATOR);
         }
         VALIDATORS.put("edge_aurora_brightness", new InclusiveIntegerRangeValidator(2, 50));
         VALIDATORS.put("edge_aurora_timeout", new InclusiveIntegerRangeValidator(5, 60));
+        VALIDATORS.put("edge_aurora_auto_hide_timeout", new InclusiveIntegerRangeValidator(5, 20));
         VALIDATORS.put("edge_aurora_peek_timeout", new InclusiveIntegerRangeValidator(0, 30));
         VALIDATORS.put("edge_aurora_open_action", new InclusiveIntegerRangeValidator(0, 1));
         VALIDATORS.put("edge_aurora_profiles", value -> value == null || value.length() <= 131072);

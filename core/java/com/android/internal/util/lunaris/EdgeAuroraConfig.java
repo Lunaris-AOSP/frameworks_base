@@ -36,6 +36,8 @@ public final class EdgeAuroraConfig {
     public static final String WAKE = "edge_aurora_wake";
     public static final String BRIGHTNESS = "edge_aurora_brightness";
     public static final String TIMEOUT = "edge_aurora_timeout";
+    public static final String AUTO_HIDE = "edge_aurora_auto_hide";
+    public static final String AUTO_HIDE_TIMEOUT = "edge_aurora_auto_hide_timeout";
     public static final String CLOCK = "edge_aurora_clock";
     public static final String AUTO_PEEK = "edge_aurora_auto_peek";
     public static final String PEEK_TIMEOUT = "edge_aurora_peek_timeout";
@@ -48,8 +50,8 @@ public final class EdgeAuroraConfig {
     public static final String RECENT_COLORS = "edge_aurora_recent_colors";
     public static final String PREVIEW = "edge_aurora_preview";
     public static final String[] KEYS = {ENABLED, PROFILES, LOCK_SCREEN, WAKE, BRIGHTNESS,
-            TIMEOUT, CLOCK, AUTO_PEEK, PEEK_TIMEOUT, POPUP_BLUR, OPEN_ACTION, QUIET_APPS,
-            ONLY_EDGE, PREVIEW};
+            TIMEOUT, AUTO_HIDE, AUTO_HIDE_TIMEOUT, CLOCK, AUTO_PEEK, PEEK_TIMEOUT, POPUP_BLUR,
+            OPEN_ACTION, QUIET_APPS, ONLY_EDGE, PREVIEW};
     public static final int[] PALETTE = {0xffff5c8a, 0xffff7a59, 0xffffc857, 0xff5cff9e,
             0xff5ce1e6, 0xff6c8cff, 0xff8b7cff, 0xffc77dff, 0xffff6ad5, 0xfff4f5f8};
     public static final int MAX_PROFILE_LENGTH = 131072;
@@ -98,8 +100,8 @@ public final class EdgeAuroraConfig {
         }
     }
 
-    public final boolean enabled, lockScreen, wake, clock, autoPeek, popupBlur, onlyEdge;
-    public final int brightness, timeout, peekTimeout, openAction;
+    public final boolean enabled, lockScreen, wake, clock, autoHide, autoPeek, popupBlur, onlyEdge;
+    public final int brightness, timeout, autoHideTimeout, peekTimeout, openAction;
     public final List<Profile> profiles;
     public final Set<String> quietApps;
 
@@ -108,6 +110,8 @@ public final class EdgeAuroraConfig {
         lockScreen = integer(resolver, LOCK_SCREEN, 1, user) == 1;
         wake = integer(resolver, WAKE, 1, user) == 1;
         clock = integer(resolver, CLOCK, 1, user) == 1;
+        autoHide = integer(resolver, AUTO_HIDE, 0, user) == 1;
+        autoHideTimeout = clamp(integer(resolver, AUTO_HIDE_TIMEOUT, 10, user), 5, 20);
         autoPeek = integer(resolver, AUTO_PEEK, 0, user) == 1;
         popupBlur = integer(resolver, POPUP_BLUR, 1, user) == 1;
         openAction = clamp(integer(resolver, OPEN_ACTION, OPEN_ON_TAP, user),

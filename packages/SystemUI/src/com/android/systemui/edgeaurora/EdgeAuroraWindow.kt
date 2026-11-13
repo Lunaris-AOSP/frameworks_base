@@ -113,6 +113,8 @@ internal class EdgeAuroraWindow(
     private val closeInterpolator = PathInterpolator(.4f, 0f, .2f, 1f)
     val isShowing
         get() = root != null
+    val isTouching
+        get() = root?.touching == true
 
     fun show(
         items: List<AuroraPayload>,
@@ -812,6 +814,7 @@ internal class EdgeAuroraWindow(
                             count: Int,
                         ) {
                             drafts[entry.key] = s.toString()
+                            interacted()
                         }
 
                         override fun afterTextChanged(s: Editable?) {}
@@ -1057,6 +1060,8 @@ internal class EdgeAuroraWindow(
         private val targetPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         private var bubbleHeld: String? = null
         private var bubbleTouching = false
+        var touching = false
+            private set
         private var bubbleZone = 0
         private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
         private var tapCandidate = false
@@ -1155,6 +1160,7 @@ internal class EdgeAuroraWindow(
         }
 
         fun cancelGestures() {
+            touching = false
             mainHandler.removeCallbacks(hold)
             mainHandler.removeCallbacks(rebuild)
             held = null
@@ -1666,6 +1672,17 @@ internal class EdgeAuroraWindow(
                 return true
             }
             return super.dispatchKeyEvent(event)
+        }
+
+        override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> touching = true
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> touching = false
+            }
+            val handled = super.dispatchTouchEvent(event)
+            if (event.actionMasked == MotionEvent.ACTION_DOWN && !handled) touching = false
+            if (event.actionMasked == MotionEvent.ACTION_UP && isAttachedToWindow) interacted()
+            return handled
         }
 
         override fun onTouchEvent(event: MotionEvent): Boolean {
