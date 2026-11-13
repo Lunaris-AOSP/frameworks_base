@@ -1,7 +1,12 @@
 #ifndef cpu_H
 #define cpu_H
 
-#if defined(__ARM_FEATURE_CRYPTO) && defined(__ARM_FEATURE_AES) && defined(__ARM_NEON)
+/* The only ARM AES implementation (aegis256_neon_aes.c) is AArch64-only.
+ * 32-bit ARM targets such as armv8.2-a+crypto define the feature macros too,
+ * so restrict the hardware path to AArch64 and fall back to the soft
+ * implementation otherwise. */
+#if defined(__ARM_FEATURE_CRYPTO) && defined(__ARM_FEATURE_AES) && defined(__ARM_NEON) && \
+    (defined(__aarch64__) || defined(_M_ARM64))
 #    define HAS_HW_AES
 #elif defined(__AES__) && defined(__AVX__)
 #    define HAS_HW_AES
