@@ -203,6 +203,8 @@ constructor(
             .distinctUntilChanged()
             .stateIn(applicationScope, SharingStarted.Eagerly, 2)
     val showWeather: StateFlow<Boolean> = boolSetting(SHOW_WEATHER, true)
+    val autoHideTilePageIndicator: StateFlow<Boolean> =
+        boolSetting(AUTO_HIDE_TILE_PAGE_INDICATOR, false)
     val showNotificationMedia: StateFlow<Boolean> = boolSetting(SHOW_NOTIFICATION_MEDIA, true)
     val notificationMediaStatusGlow: StateFlow<Boolean> =
         boolSetting(
@@ -522,6 +524,9 @@ constructor(
     fun setSharedQqsRows(rows: Int) = putInt(SHARED_QQS_ROWS, rows.coerceIn(2, 4))
 
     fun setShowWeather(show: Boolean) = putInt(SHOW_WEATHER, show.toSetting())
+
+    fun setAutoHideTilePageIndicator(enabled: Boolean) =
+        putInt(AUTO_HIDE_TILE_PAGE_INDICATOR, enabled.toSetting())
 
     fun setShowNotificationMedia(show: Boolean) = putInt(SHOW_NOTIFICATION_MEDIA, show.toSetting())
 
@@ -1001,6 +1006,7 @@ constructor(
         const val PORTRAIT_QS_TILE_LABELS = "ax_qs_show_tile_labels"
         const val SPLIT_SHADE_TILE_LABELS = "ax_qs_split_shade_show_tile_labels"
         const val SHOW_WEATHER = "ax_qs_show_weather"
+        private const val AUTO_HIDE_TILE_PAGE_INDICATOR = "ax_qs_auto_hide_tile_page_indicator"
         const val SHOW_NOTIFICATION_MEDIA = "ax_qs_show_notification_media"
         private const val NOTIFICATION_MEDIA_STATUS_GLOW = "ax_qs_notification_media_status_glow"
         private const val MEDIA_TILE_STATUS_GLOW = "ax_qs_media_tile_status_glow"

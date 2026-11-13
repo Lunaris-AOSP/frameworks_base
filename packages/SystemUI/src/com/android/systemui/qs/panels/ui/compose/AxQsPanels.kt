@@ -24,10 +24,13 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.widget.ImageView
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.clipScrollableContainer
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -55,11 +58,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -74,6 +80,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -102,6 +109,8 @@ import com.android.systemui.shade.ui.composable.ShadeHeader
 import com.android.systemui.shade.ui.viewmodel.ShadeHeaderViewModel
 import com.android.systemui.util.icuMessageFormat
 import com.android.internal.util.lunaris.OmniJawsClient
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 
 @Composable
 internal fun <T> ContentScope.AxQQS(
@@ -197,6 +206,7 @@ internal fun <T> ContentScope.AxQS(
     showDate: Boolean = false,
     showWeather: Boolean = true,
     compactStyle: Boolean = false,
+    autoHideTilePageIndicator: Boolean = false,
     modifier: Modifier = Modifier,
     controlContent: @Composable (AxQsGridItem<T>) -> Unit,
     tileContent: @Composable (AxQsGridItem<T>) -> Unit,
@@ -259,6 +269,8 @@ internal fun <T> ContentScope.AxQS(
                         )
                         AxQsPagerIndicator(
                             pagerState = pagerState,
+                            autoHide = autoHideTilePageIndicator,
+                            isVisible = isFullyVisible,
                             modifier = Modifier.fillMaxWidth().padding(top = spacing),
                         )
                     }
@@ -544,9 +556,55 @@ private fun AxActiveAppsButton(viewModel: ToolbarViewModel) {
 }
 
 @Composable
-internal fun AxQsPagerIndicator(pagerState: PagerState, modifier: Modifier = Modifier) {
+internal fun AxQsPagerIndicator(
+    pagerState: PagerState,
+    modifier: Modifier = Modifier,
+    autoHide: Boolean = false,
+    isVisible: () -> Boolean = { true },
+) {
     if (pagerState.pageCount > 1) {
-        Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        var showIndicator by remember(autoHide, pagerState, pagerState.pageCount) {
+            mutableStateOf(!autoHide)
+        }
+        val isDragging by pagerState.interactionSource.collectIsDraggedAsState()
+        val currentIsVisible by rememberUpdatedState(isVisible)
+        LaunchedEffect(autoHide, pagerState, pagerState.pageCount) {
+            if (autoHide) {
+                snapshotFlow {
+                    Triple(
+                        currentIsVisible(),
+                        isDragging,
+                        pagerState.isScrollInProgress,
+                    )
+                }
+                    .collectLatest { (visible, dragging, scrolling) ->
+                        when {
+                            !visible -> showIndicator = false
+                            dragging -> showIndicator = true
+                            !scrolling && showIndicator -> {
+                                delay(3000L)
+                                showIndicator = false
+                            }
+                        }
+                    }
+            }
+        }
+        val indicatorAlpha by
+            animateFloatAsState(
+                targetValue = if (showIndicator) 1f else 0f,
+                animationSpec = tween(durationMillis = 200),
+                label = "qsPagerIndicatorAlpha",
+            )
+        Box(
+            modifier =
+                modifier
+                    .graphicsLayer { alpha = indicatorAlpha }
+                    .then(
+                        if (showIndicator) Modifier
+                        else Modifier.clearAndSetSemantics { hideFromAccessibility() }
+                    ),
+            contentAlignment = Alignment.Center,
+        ) {
             PagerDots(
                 pagerState = pagerState,
                 activeColor = MaterialTheme.colorScheme.primary,

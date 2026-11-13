@@ -458,6 +458,12 @@ constructor(
             initialValue = repository.showSliderPercentage.value,
             source = repository.showSliderPercentage,
         )
+    val autoHideTilePageIndicator by
+        hydrator.hydratedStateOf(
+            traceName = "autoHideTilePageIndicator",
+            initialValue = repository.autoHideTilePageIndicator.value,
+            source = repository.autoHideTilePageIndicator,
+        )
     val showNotificationMedia by
         hydrator.hydratedStateOf(
             traceName = "showNotificationMedia",
@@ -797,6 +803,9 @@ constructor(
     fun setPanelSwipeEnabled(enabled: Boolean) = repository.setPanelSwipeEnabled(enabled)
 
     fun setShowWeather(show: Boolean) = repository.setShowWeather(show)
+
+    fun setAutoHideTilePageIndicator(enabled: Boolean) =
+        repository.setAutoHideTilePageIndicator(enabled)
 
     fun setShowNotificationMedia(show: Boolean) = repository.setShowNotificationMedia(show)
 

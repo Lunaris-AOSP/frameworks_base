@@ -38,6 +38,8 @@
     <string name="ax_qs_settings_shape_dynamic_inverted">Dynamic invert (pill when inactive)</string>
     <string name="ax_qs_settings_percentages">Show slider percentages</string>
     <string name="ax_qs_settings_percentages_summary">Show values on brightness, volume, and flashlight sliders</string>
+    <string name="ax_qs_settings_auto_hide_tile_page_indicator">Auto hide tile page indicator</string>
+    <string name="ax_qs_settings_auto_hide_tile_page_indicator_summary">Keep the page dots hidden until you swipe between tile pages. Hide them again after 3 seconds of inactivity.</string>
     <string name="ax_qs_settings_spacing">Spacing</string>
     <string name="ax_qs_settings_tile_gap">Tile gap</string>
     <string name="ax_qs_settings_tile_gap_summary">Space between tiles and controls</string>

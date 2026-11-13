@@ -237,6 +237,18 @@ fun LunariQsPanelSettings(
                         onCheckedChange = viewModel::setShowSliderPercentage,
                     )
                 }
+                item("auto_hide_tile_page_indicator") {
+                    SettingsSwitch(
+                        title =
+                            stringResource(R.string.ax_qs_settings_auto_hide_tile_page_indicator),
+                        summary =
+                            stringResource(
+                                R.string.ax_qs_settings_auto_hide_tile_page_indicator_summary
+                            ),
+                        checked = viewModel.autoHideTilePageIndicator,
+                        onCheckedChange = viewModel::setAutoHideTilePageIndicator,
+                    )
+                }
                 item("shape") {
                     SettingsChoice(
                         title = stringResource(R.string.ax_qs_settings_tile_shape),
