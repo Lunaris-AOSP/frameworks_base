@@ -39,6 +39,7 @@ class ClockGlassController(private val host: View) :
         var shader: RuntimeShader? = null
         private var outlineShader: RuntimeShader? = null
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val maskPaint = TextPaint()
         private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         private var explicitShadow: Bitmap? = null
         private val shadowOffsets = IntArray(2)
@@ -74,6 +75,14 @@ class ClockGlassController(private val host: View) :
             view.setShadowLayer(originalShadow[0], originalShadow[1], originalShadow[2], originalShadowColor)
             applied = false
             view.invalidate()
+        }
+
+        fun matches(view: TextView, style: ClockGlassStyle, date: Boolean, enabled: Boolean): Boolean {
+            if (this.view !== view || this.style != style || this.date != date) return false
+            if (!enabled) return true
+            return originalShader === view.paint.shader && originalShadowColor == view.shadowColor &&
+                originalShadow[0] == view.shadowRadius && originalShadow[1] == view.shadowDx &&
+                originalShadow[2] == view.shadowDy
         }
 
         private fun releaseMaterial() {
@@ -116,7 +125,9 @@ class ClockGlassController(private val host: View) :
             canvas.drawRect(maskLeft, maskTop, maskLeft + mask.width, maskTop + mask.height, paint)
         }
 
-        fun prepare(background: ClockGlass): Boolean {
+        fun prepare(requestedBackground: ClockGlass): Boolean {
+            val background = if (requestedBackground.isBlurReady(style, ready)) requestedBackground
+                else this.background ?: return false
             val currentLayout = view.layout ?: return false
             val currentText = view.text.toString()
             val width = (view.width - view.compoundPaddingLeft - view.compoundPaddingRight)
@@ -126,6 +137,7 @@ class ClockGlassController(private val host: View) :
             val left = view.scrollX
             val top = view.scrollY
             val maskChanged = layout !== currentLayout || text != currentText ||
+                !maskPaint.equalsForTextMeasurement(view.paint) ||
                 viewport.left != left || viewport.top != top ||
                 viewport.width() != width || viewport.height() != height
             val changed = maskChanged || this.background !== background || tint != view.currentTextColor
@@ -143,6 +155,7 @@ class ClockGlassController(private val host: View) :
             try {
                 if (maskChanged || mask == null) {
                     releaseMaterial()
+                    maskPaint.set(view.paint)
                     inset = ceil(maxOf(style.glyphBlur / 10f * 3f, originalShadow[0] * 3f,
                         kotlin.math.abs(originalShadow[1]), kotlin.math.abs(originalShadow[2]), 16f)).toInt()
                     val bitmapWidth = width.toLong() + inset.toLong() * 2
@@ -242,6 +255,8 @@ class ClockGlassController(private val host: View) :
     }
 
     private val entries = mutableListOf<Entry>()
+    private val previousEntries = mutableListOf<Entry>()
+    private var blurRadii = intArrayOf()
     private val textToScreen = Matrix()
     private val bitmapToText = Matrix()
     private val textToBitmap = Matrix()
@@ -253,9 +268,18 @@ class ClockGlassController(private val host: View) :
     private var previewBackground: ClockGlass? = null
     private var coordinateRoot: View? = null
     private val changed = Runnable { update() }
+    var enabled = true
+        set(value) {
+            if (field == value) return
+            field = value
+            if (!value) entries.forEach { it.restore() }
+            host.invalidate()
+        }
     var userId = host.context.userId
         set(value) {
             if (field == value) return
+            entries.forEach { it.release() }
+            previousEntries.forEach { it.release() }
             field = value
             update()
         }
@@ -263,20 +287,33 @@ class ClockGlassController(private val host: View) :
     init { host.addOnAttachStateChangeListener(this) }
 
     fun clear() {
-        beginUpdate()
+        entries.forEach { it.release() }
+        previousEntries.forEach { it.release() }
+        entries.clear()
+        previousEntries.clear()
+        blurRadii = intArrayOf()
         observe()
     }
 
     fun beginUpdate() {
-        entries.forEach { it.release() }
+        previousEntries.forEach { it.release() }
+        previousEntries.clear()
+        entries.forEach { it.restore() }
+        previousEntries.addAll(entries)
         entries.clear()
     }
 
     fun add(view: TextView, style: ClockGlassStyle, date: Boolean = isDate(view)) {
-        entries.add(Entry(view, style.normalized(), date, changed))
+        val normalized = style.normalized()
+        val cached = previousEntries.firstOrNull { it.matches(view, normalized, date, enabled) }
+        if (cached != null) previousEntries.remove(cached)
+        entries.add(cached ?: Entry(view, normalized, date, changed))
     }
 
     fun commit() {
+        previousEntries.forEach { it.release() }
+        previousEntries.clear()
+        blurRadii = entries.map { it.style.blurRadius }.distinct().toIntArray()
         observe()
         update()
     }
@@ -291,6 +328,7 @@ class ClockGlassController(private val host: View) :
 
     private fun observe() {
         val active = host.isAttachedToWindow && entries.isNotEmpty()
+        if (observing?.isAlive == false) observing = null
         if (active && observing == null) {
             observing = host.viewTreeObserver.also { it.addOnPreDrawListener(this) }
         } else if (!active) {
@@ -313,7 +351,7 @@ class ClockGlassController(private val host: View) :
         observing = null
         if (listening) ClockGlassWallpaper.unlisten(changed)
         listening = false
-        entries.forEach { it.release() }
+        entries.forEach { it.restore() }
     }
 
     override fun onPreDraw(): Boolean {
@@ -323,34 +361,38 @@ class ClockGlassController(private val host: View) :
 
     fun update() {
         if (entries.isEmpty()) return
-        if (!preview && (!host.isShown || host.windowVisibility != View.VISIBLE)) return
-        if (entries.none { it.view.visibility == View.VISIBLE && it.view.alpha > 0f }) return
         val background = if (preview) previewBackground else {
             if (!host.isAttachedToWindow) return
-            ClockGlassWallpaper.get(host.context, userId)
+            ClockGlassWallpaper.get(host.context, userId, blurRadii)
         }
         if (background == null) {
             entries.forEach { it.restore() }
             return
         }
+        entries.forEach { background.isBlurReady(it.style, changed) }
+        if (!enabled) return
+        if (!preview && (!host.isShown || host.windowVisibility != View.VISIBLE)) return
+        if (entries.none { it.view.visibility == View.VISIBLE && it.view.alpha > 0f }) return
         val space = coordinateRoot
         val metrics = host.resources.displayMetrics
         val width = space?.width ?: metrics.widthPixels
         val height = space?.height ?: metrics.heightPixels
         if (width <= 0 || height <= 0) return
-        spaceToScreen.reset()
-        space?.transformMatrixToGlobal(spaceToScreen)
-        spaceToScreen.preScale(width.toFloat() / background.clear.width, height.toFloat() / background.clear.height)
         for (entry in entries) {
             val view = entry.view
             if (view.width <= 0 || view.height <= 0 || view.visibility != View.VISIBLE) continue
+            if (!entry.prepare(background)) continue
+            val material = entry.background ?: continue
+            spaceToScreen.reset()
+            space?.transformMatrixToGlobal(spaceToScreen)
+            spaceToScreen.preScale(width.toFloat() / material.clear.width, height.toFloat() / material.clear.height)
             textToScreen.reset()
             view.transformMatrixToGlobal(textToScreen)
             textToScreen.preTranslate((view.compoundPaddingLeft - view.scrollX).toFloat(),
                 (view.totalPaddingTop - view.scrollY).toFloat())
             if (!textToScreen.invert(bitmapToText)) continue
             bitmapToText.preConcat(spaceToScreen)
-            if (!bitmapToText.invert(textToBitmap) || !entry.prepare(background)) continue
+            if (!bitmapToText.invert(textToBitmap)) continue
             if (entry.shader == null) continue
             if (entry.needsApply(textToBitmap)) {
                 textToBitmap.getValues(values)

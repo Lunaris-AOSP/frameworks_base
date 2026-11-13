@@ -208,6 +208,7 @@ class ClockStyle @JvmOverloads constructor(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         if (callbacksRegistered) return
+        isDozing = statusBarStateController.isDozing
 
         tunerService.addTunable(
             this,
@@ -248,12 +249,9 @@ class ClockStyle @JvmOverloads constructor(
             MediaSessionManager.get().addListener(mediaDataListener)
         }
 
-        isDozing = statusBarStateController.isDozing
-        if (isDozing || currentClockView is ClockDesignView) {
-            applyClockAlpha()
-            applyClockColors()
-            applyClockShadow()
-        }
+        applyClockAlpha()
+        applyClockColors()
+        applyClockShadow()
         if (isDozing) {
             startBurnInProtection()
             startAodTick()
@@ -766,6 +764,7 @@ class ClockStyle @JvmOverloads constructor(
     }
 
     private fun applyClockColors() {
+        textGlass.enabled = !isDozing
         textGlass.beginUpdate()
         textGlass.userId = ActivityManager.getCurrentUser()
         try {
@@ -787,7 +786,7 @@ class ClockStyle @JvmOverloads constructor(
         applyHyperClockColors()
         if (styledTextViews.isEmpty()) return
         val whiteColor = context.getColor(android.R.color.white)
-        val useGlass = textGlassEnabled && !isDozing && clockStyle !in 93..102
+        val useGlass = textGlassEnabled && clockStyle !in 93..102
         val glassStyle = ClockGlassStyle.parse(textGlassStyleValue,
             if (legacyGlassIntensity || legacyGlassLift) ClockGlassStyle.legacy(textGlassIntensity, textGlassLift) else ClockGlassStyle())
         val useGradient = gradientEnabled && !isDozing && !useGlass
@@ -804,7 +803,6 @@ class ClockStyle @JvmOverloads constructor(
                 useGlass -> {
                     clearGradientFromView(tc)
                     tc.setTextColor(if (isWhiteOriginal) resolveClockColor() else originalColor)
-                    textGlass.add(tc, if (separateDateGlass && ClockGlassController.isDate(tc)) dateGlassStyle else glassStyle)
                 }
                 !isWhiteOriginal -> {
                     clearGradientFromView(tc)
@@ -819,6 +817,8 @@ class ClockStyle @JvmOverloads constructor(
                     tc.setTextColor(resolveClockColor())
                 }
             }
+            if (useGlass) textGlass.add(tc,
+                if (separateDateGlass && ClockGlassController.isDate(tc)) dateGlassStyle else glassStyle)
         }
 
         for (i in styledTextViews.indices) {
@@ -834,7 +834,6 @@ class ClockStyle @JvmOverloads constructor(
                 useGlass -> {
                     clearGradientFromView(tv)
                     tv.setTextColor(if (isWhiteOriginal) resolveClockColor() else originalColor)
-                    textGlass.add(tv, if (separateDateGlass && ClockGlassController.isDate(tv)) dateGlassStyle else glassStyle)
                 }
                 !isWhiteOriginal -> {
                     clearGradientFromView(tv)
@@ -849,6 +848,8 @@ class ClockStyle @JvmOverloads constructor(
                     tv.setTextColor(resolveClockColor())
                 }
             }
+            if (useGlass) textGlass.add(tv,
+                if (separateDateGlass && ClockGlassController.isDate(tv)) dateGlassStyle else glassStyle)
         }
     }
 

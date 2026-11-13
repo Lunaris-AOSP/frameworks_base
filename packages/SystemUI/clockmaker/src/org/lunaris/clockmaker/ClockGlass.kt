@@ -12,6 +12,7 @@ import android.graphics.RuntimeShader
 import android.graphics.Shader
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.util.LruCache
 import java.util.concurrent.Executors
 import kotlin.math.ceil
@@ -26,6 +27,14 @@ class ClockGlass private constructor(val clear: Bitmap, private val referenceWid
     private data class Blur(val bitmap: Bitmap, val sides: Bitmap)
     private val blurs = LruCache<Int, Blur>(16)
     private val pending = mutableMapOf<Int, MutableSet<Runnable>>()
+    private val failedBlurs = mutableSetOf<Int>()
+
+    internal fun isBlurReady(style: ClockGlassStyle, ready: Runnable): Boolean =
+        requestBlur(style.blurRadius.coerceIn(0, 120), ready) != null
+
+    internal fun requestedBlurRadii(): IntArray = synchronized(this) {
+        (blurs.snapshot().keys + pending.keys).toIntArray()
+    }
 
     internal fun shader(mask: Bitmap, style: ClockGlassStyle, tint: Int, date: Boolean,
         originX: Float, originY: Float, ready: Runnable): RuntimeShader? {
@@ -75,14 +84,18 @@ class ClockGlass private constructor(val clear: Bitmap, private val referenceWid
 
     private fun requestBlur(radius: Int, ready: Runnable): Blur? {
         return synchronized(this) {
+            if (radius in failedBlurs) return@synchronized null
             blurs.get(radius) ?: run {
                 val waiting = pending[radius]
                 if (waiting != null) waiting.add(ready) else {
                     pending[radius] = mutableSetOf(ready)
                     worker.execute {
-                        val result = runCatching { prepareBlur(radius) }.getOrNull()
+                        val result = runCatching { prepareBlur(radius) }
+                            .onFailure { Log.w("ClockGlass", "Cannot prepare blur radius $radius", it) }
+                            .getOrNull()
                         val callbacks = synchronized(this) {
                             if (result != null) blurs.put(radius, result)
+                            else failedBlurs.add(radius)
                             pending.remove(radius)?.toList().orEmpty()
                         }
                         main.post { callbacks.forEach { it.run() } }
