@@ -82,6 +82,7 @@ constructor(
     private var bindHandle: DisposableHandle? = null
     private var expansionHandle: DisposableHandle? = null
     private var enforceAction: Runnable? = null
+    private val hiddenViews = mutableSetOf<View>()
 
     override fun addViews(constraintLayout: ConstraintLayout) {
         val dismissView =
@@ -177,7 +178,7 @@ constructor(
         constraintLayout.requireViewById<View>(dismissViewId).visibility =
             if (expanded) View.VISIBLE else View.GONE
         if (!expanded && !viewModel.keyguardExpansion.canShow.value) {
-            setIndependentWidgetsSuppressed(constraintLayout, false)
+            setHiddenViewsVisibility(constraintLayout, View.VISIBLE)
         }
         if (expanded) {
             setHiddenViewsVisibility(constraintLayout, View.INVISIBLE)
@@ -204,23 +205,34 @@ constructor(
 
     private fun setHiddenViewsVisibility(constraintLayout: ConstraintLayout, visibility: Int) {
         setIndependentWidgetsSuppressed(constraintLayout, visibility != View.VISIBLE)
-        hiddenTargets(constraintLayout).forEach { v ->
-            v.animate().cancel()
-            if (visibility == View.VISIBLE) {
-                if (v.visibility != View.VISIBLE) {
-                    v.alpha = 0f
-                    v.visibility = View.VISIBLE
+        if (visibility == View.VISIBLE) {
+            hiddenViews.forEach { v ->
+                v.animate().cancel()
+                if (v.visibility == View.GONE) {
+                    v.alpha = 1f
+                } else {
+                    if (v.visibility != View.VISIBLE) {
+                        v.alpha = 0f
+                        v.visibility = View.VISIBLE
+                    }
+                    v.animate()
+                        .alpha(1f)
+                        .setDuration(HIDDEN_VIEWS_FADE_DURATION_START_MS)
+                        .withEndAction(null)
+                        .start()
                 }
-                v.animate()
-                    .alpha(1f)
-                    .setDuration(HIDDEN_VIEWS_FADE_DURATION_START_MS)
-                    .withEndAction(null)
-                    .start()
-            } else {
+            }
+            hiddenViews.clear()
+        } else {
+            hiddenTargets(constraintLayout).filter { it.visibility == View.VISIBLE }.forEach { v ->
+                hiddenViews.add(v)
+                v.animate().cancel()
                 v.animate()
                     .alpha(0f)
                     .setDuration(HIDDEN_VIEWS_FADE_DURATION_END_MS)
-                    .withEndAction { if (v.visibility != visibility) v.visibility = visibility }
+                    .withEndAction {
+                        if (v.visibility == View.VISIBLE) v.visibility = visibility
+                    }
                     .start()
             }
         }
@@ -233,7 +245,10 @@ constructor(
     private fun enforceHidden(constraintLayout: ConstraintLayout) {
         setIndependentWidgetsSuppressed(constraintLayout, true)
         hiddenTargets(constraintLayout).forEach { v ->
-            if (v.visibility != View.INVISIBLE) v.visibility = View.INVISIBLE
+            if (v.visibility == View.VISIBLE) {
+                hiddenViews.add(v)
+                v.visibility = View.INVISIBLE
+            }
         }
         WallpaperDepthUtils.get()?.hideDepthWallpaper()
     }
@@ -392,7 +407,7 @@ constructor(
         bindHandle?.dispose()
         bindHandle = null
         indicationController.setSuppressIndication(false)
-        setIndependentWidgetsSuppressed(constraintLayout, false)
+        setHiddenViewsVisibility(constraintLayout, View.VISIBLE)
         constraintLayout.removeView(dismissViewId)
         constraintLayout.removeView(chipViewId)
     }
