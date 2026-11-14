@@ -385,7 +385,8 @@ public class ToastPresenter {
             final Context context =
                     presenterContext != null ? presenterContext : mView.getContext();
             mAxToastBlurController =
-                    AxDialogBlurController.createToast(context, mView, windowManager, mParams);
+                    AxDialogBlurController.createToast(
+                            context, mView, windowManager, mParams, mPackageName);
             if (mAxToastBlurController != null) {
                 mParams.flags |= WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
                 mAxToastBlurController.attachToView();
