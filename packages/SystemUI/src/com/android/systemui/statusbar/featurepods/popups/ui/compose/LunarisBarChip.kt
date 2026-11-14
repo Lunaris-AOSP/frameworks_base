@@ -77,6 +77,7 @@ import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.SystemEventKind
 import com.android.systemui.statusbar.featurepods.screenrecord.shared.model.ScreenRecordPopupModel
+import kotlin.math.roundToInt
 
 @Composable
 internal fun LunarisBarChip(
@@ -230,10 +231,15 @@ private fun LunarisBarChipContent(
                 it.kind == SystemEventKind.Bluetooth &&
                     settings.enabled("feature_bluetooth_show_battery", true)
             }
-            ?.bluetoothBatteries
-            ?.filter { it.component != BluetoothBatteryComponent.Case && it.level in 0..100 }
-            ?.takeIf { it.isNotEmpty() }
-            ?.let { batteries -> batteries.sumOf { it.level } / batteries.size }
+            ?.let { bluetoothEvent ->
+                val batteries = bluetoothEvent.bluetoothBatteries.filter { it.level in 0..100 }
+                val earbuds = batteries.filter { it.component != BluetoothBatteryComponent.Case }
+                earbuds.takeIf { it.isNotEmpty() }?.let { it.sumOf { it.level } / it.size }
+                    ?: batteries.firstOrNull { it.component == BluetoothBatteryComponent.Case }?.level
+                    ?: bluetoothEvent.progress?.takeIf { it in 0f..1f }?.let {
+                        (it * 100).roundToInt()
+                    }
+            }
     val bluetoothBatteryText = bluetoothBatteryLevel?.let { "$it%" }
     val progress =
         if (event?.kind == SystemEventKind.Bluetooth) bluetoothBatteryLevel?.div(100f)
