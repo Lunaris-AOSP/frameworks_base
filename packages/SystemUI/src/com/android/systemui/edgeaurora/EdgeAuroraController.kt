@@ -130,6 +130,8 @@ constructor(
     private var switchingUser = false
     private var bootCompleted = false
     private var darkSession = false
+    private var darkPulseStarted = false
+    private var finishingDarkSession = false
     private var sleepRequested = false
     private var checkingPocket = false
     private var pocketGeneration = 0
@@ -142,7 +144,7 @@ constructor(
         previewId = null
         render()
     }
-    private val darkTimeout = Runnable { finishDarkSession() }
+    private val darkTimeout = Runnable { finishDarkSession(animate = true) }
 
     private data class AutoHideState(
         val fingerprint: String,
@@ -224,7 +226,7 @@ constructor(
                 }
 
                 override fun onProfilesChanged(profiles: List<android.content.pm.UserInfo>) {
-                    window.hide()
+                    window.hide(animate = false)
                     scheduleRefresh()
                 }
             },
@@ -275,7 +277,7 @@ constructor(
                 override fun onStartedGoingToSleep() {
                     sleepRequested = true
                     finishDarkSession()
-                    window.hide()
+                    window.hide(animate = false)
                 }
 
                 override fun onStartedWakingUp() {
@@ -307,7 +309,7 @@ constructor(
                                 ActivityInfo.CONFIG_LOCALE or
                                 ActivityInfo.CONFIG_LAYOUT_DIRECTION) != 0
                     )
-                        window.hide()
+                        window.hide(animate = false)
                     scheduleRefresh()
                 }
             }
@@ -338,7 +340,7 @@ constructor(
                     when (intent.action) {
                         Intent.ACTION_SCREEN_OFF -> {
                             finishDarkSession()
-                            window.hide()
+                            window.hide(animate = false)
                         }
                         Intent.ACTION_CLOSE_SYSTEM_DIALOGS -> {
                             finishDarkSession()
@@ -562,6 +564,7 @@ constructor(
     }
 
     private fun render(autoPeekKey: String? = null) {
+        if (finishingDarkSession && power.isInteractive) finishDarkSession()
         handler.removeCallbacks(autoHideTimeout)
         if (config.autoHide) {
             val now = SystemClock.uptimeMillis()
@@ -617,7 +620,7 @@ constructor(
             }
         if (payloads.isEmpty()) {
             window.hide()
-            finishDarkSession()
+            finishDarkSession(animate = true)
         } else {
             val resolved = EdgeAuroraConfig.resolveOverlaps(payloads.map { it.profile })
             window.show(
@@ -625,6 +628,7 @@ constructor(
                 config,
                 darkSession,
                 autoPeekKey?.takeUnless { keyguard.isShowing },
+                deferEntrance = darkSession && !darkPulseStarted,
             )
             if (config.autoHide && window.isShowing) {
                 val now = SystemClock.uptimeMillis()
@@ -656,6 +660,7 @@ constructor(
         handler.removeCallbacks(darkTimeout)
         if (darkSession) {
             darkSession = false
+            darkPulseStarted = false
             dozeHost.stopAuroraPulse()
             power.wakeUp(
                 SystemClock.uptimeMillis(),
@@ -839,6 +844,7 @@ constructor(
 
     private fun maybeWake(key: String) {
         if (checkingPocket || darkSession || !config.wake || keyguard.isKeyguardGoingAway) return
+        if (finishingDarkSession) finishDarkSession()
         val sensor = sensors.getDefaultSensor(Sensor.TYPE_PROXIMITY)
         val generation = ++pocketGeneration
         checkingPocket = true
@@ -888,6 +894,7 @@ constructor(
                     return@postDelayed
                 }
                 darkSession = true
+                darkPulseStarted = false
                 render()
                 if (!window.isShowing) {
                     darkSession = false
@@ -905,6 +912,7 @@ constructor(
                                     finishDarkSession()
                                     return
                                 }
+                                darkPulseStarted = true
                                 handler.removeCallbacks(darkTimeout)
                                 handler.postDelayed(darkTimeout, config.timeout * 1000L)
                                 scheduleRefresh()
@@ -925,15 +933,27 @@ constructor(
         )
     }
 
-    private fun finishDarkSession() {
+    private fun finishDarkSession(animate: Boolean = false) {
         pocketGeneration++
         checkingPocket = false
         stopProximity()
         handler.removeCallbacks(darkTimeout)
-        if (!darkSession) return
+        if (!darkSession && !finishingDarkSession) return
         darkSession = false
-        dozeHost.stopAuroraPulse()
-        window.hide()
+        darkPulseStarted = false
+        if (animate) {
+            finishingDarkSession = true
+            window.hide {
+                if (finishingDarkSession) {
+                    finishingDarkSession = false
+                    dozeHost.stopAuroraPulse()
+                }
+            }
+        } else {
+            finishingDarkSession = false
+            dozeHost.stopAuroraPulse()
+            window.hide(animate = false)
+        }
     }
 
     private fun stopProximity() {
@@ -950,7 +970,7 @@ constructor(
         contents.clear()
         handler.removeCallbacks(autoHideTimeout)
         handler.removeCallbacks(endPreview)
-        window.hide()
+        window.hide(animate = false)
         window.forgetBubbles()
     }
 

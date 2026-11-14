@@ -16,6 +16,8 @@
 
 package com.android.systemui.edgeaurora
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.app.Notification
 import android.content.Context
@@ -94,6 +96,8 @@ internal class EdgeAuroraWindow(
 
     private var root: Surface? = null
     private var params: WindowManager.LayoutParams? = null
+    private var hiding = false
+    private var onHidden: (() -> Unit)? = null
     private var payloads = emptyList<AuroraPayload>()
     private lateinit var config: EdgeAuroraConfig
     private var dark = false
@@ -109,10 +113,11 @@ internal class EdgeAuroraWindow(
     private val drafts = mutableMapOf<String, String>()
     private val autoSeen = mutableMapOf<String, Long>()
     private val fold = Runnable { closePanel(true) }
+    private val finishHide = Runnable { if (hiding) root?.let { removeSurface(it) } }
     private val openInterpolator = PathInterpolator(.2f, 0f, 0f, 1f)
     private val closeInterpolator = PathInterpolator(.4f, 0f, .2f, 1f)
     val isShowing
-        get() = root != null
+        get() = root != null && !hiding
     val isTouching
         get() = root?.touching == true
 
@@ -121,7 +126,13 @@ internal class EdgeAuroraWindow(
         settings: EdgeAuroraConfig,
         screenOff: Boolean,
         autoKey: String?,
+        deferEntrance: Boolean = false,
     ) {
+        val hiddenCallback = onHidden
+        onHidden = null
+        hiddenCallback?.invoke()
+        mainHandler.removeCallbacks(finishHide)
+        hiding = false
         config = settings
         payloads = items
         bubbles.keys.retainAll(items.map { it.id }.toSet())
@@ -167,6 +178,7 @@ internal class EdgeAuroraWindow(
             }
         }
         setDark(screenOff, config)
+        root?.updateGlows(items, deferEntrance)
         refreshCard()
         root?.rebuildTargets()
         if (autoKey != null && !editing) {
@@ -249,17 +261,44 @@ internal class EdgeAuroraWindow(
         root?.rebuildTargets()
     }
 
-    fun hide() {
-        root?.cancelGestures()
-        closePanel()
-        root?.let {
-            it.removeCallbacks(it.frame)
-            runCatching { wm.removeViewImmediate(it) }
+    fun hide(animate: Boolean = true, onHidden: (() -> Unit)? = null) {
+        val surface = root
+        if (surface == null) {
+            onHidden?.invoke()
+            return
         }
+        if (onHidden != null) this.onHidden = onHidden
+        if (hiding && animate) return
+        hiding = true
+        surface.cancelGestures()
+        closePanel()
+        payloads = emptyList()
+        surface.clock.visibility = View.GONE
+        surface.rebuildTargets()
+        controller.onWindowContentsChanged(emptyList())
+        if (animate && ValueAnimator.areAnimatorsEnabled() && surface.isAttachedToWindow) {
+            surface.updateGlows(emptyList())
+            // The display may stop delivering animation frames as a doze pulse ends.
+            mainHandler.postDelayed(
+                finishHide,
+                (FADE_OUT_DURATION * ValueAnimator.getDurationScale()).toLong() + 100L,
+            )
+        } else removeSurface(surface)
+    }
+
+    private fun removeSurface(surface: Surface) {
+        if (root !== surface) return
+        mainHandler.removeCallbacks(finishHide)
+        surface.clearGlows()
+        surface.removeCallbacks(surface.frame)
+        runCatching { wm.removeViewImmediate(surface) }
         root = null
         params = null
+        hiding = false
         dark = false
-        controller.onWindowContentsChanged(emptyList())
+        val hiddenCallback = onHidden
+        onHidden = null
+        hiddenCallback?.invoke()
     }
 
     fun forgetBubbles() {
@@ -280,7 +319,7 @@ internal class EdgeAuroraWindow(
     private fun updateFlags() {
         val view = root ?: return
         val lp = params ?: return
-        val focus = selected != null
+        val focus = selected != null && !hiding
         val flags =
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
@@ -290,7 +329,8 @@ internal class EdgeAuroraWindow(
                 else
                     WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                         WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM) or
-                (if (focus && !editing) WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM else 0)
+                (if (focus && !editing) WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM else 0) or
+                (if (hiding) WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE else 0)
         if (lp.flags != flags) {
             lp.flags = flags
             runCatching { wm.updateViewLayout(view, lp) }
@@ -1052,9 +1092,17 @@ internal class EdgeAuroraWindow(
         }
     }
 
+    private class Glow(var profile: Profile) {
+        var opacity = 0f
+        var baseOpacity = 255
+        var visible = false
+        var animator: ValueAnimator? = null
+    }
+
     private inner class Surface :
         FrameLayout(context), ViewTreeObserver.OnComputeInternalInsetsListener {
         private val renderer = EdgeAuroraRenderer()
+        private val glows = mutableMapOf<String, Glow>()
         val safe = RectF()
         private val screen = RectF()
         private val targetPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -1154,9 +1202,99 @@ internal class EdgeAuroraWindow(
         override fun onDetachedFromWindow() {
             updateBackHandler(false)
             removeCallbacks(frame)
+            clearGlows()
             cancelGestures()
             viewTreeObserver.removeOnComputeInternalInsetsListener(this)
             super.onDetachedFromWindow()
+        }
+
+        fun updateGlows(items: List<AuroraPayload>, deferEntrance: Boolean = false) {
+            val ids = items.mapTo(mutableSetOf()) { it.id }
+            glows.toMap().forEach { (id, glow) ->
+                if (id !in ids) setGlowVisible(id, glow, false)
+            }
+            items.forEach { payload ->
+                val glow = glows.getOrPut(payload.id) { Glow(payload.profile) }
+                glow.profile = payload.profile
+                setGlowVisible(payload.id, glow, true, deferEntrance)
+            }
+            removeIfHidden()
+        }
+
+        private fun setGlowVisible(
+            id: String,
+            glow: Glow,
+            visible: Boolean,
+            deferEntrance: Boolean = false,
+        ) {
+            val animationsEnabled = ValueAnimator.areAnimatorsEnabled()
+            val target = if (visible) 1f else 0f
+            if (
+                !deferEntrance &&
+                    glow.visible == visible &&
+                    (glow.animator != null && animationsEnabled ||
+                        glow.animator == null && glow.opacity == target)
+            )
+                return
+            glow.visible = visible
+            val previousAnimator = glow.animator
+            glow.animator = null
+            previousAnimator?.removeAllListeners()
+            previousAnimator?.removeAllUpdateListeners()
+            previousAnimator?.cancel()
+            if (visible && deferEntrance) {
+                glow.opacity = 0f
+                invalidate()
+                return
+            }
+            if (!animationsEnabled || glow.opacity == target) {
+                glow.opacity = target
+                if (!visible) glows.remove(id)
+                invalidate()
+                return
+            }
+            val animator =
+                ValueAnimator.ofFloat(glow.opacity, target).apply {
+                    duration = if (visible) FADE_IN_DURATION else FADE_OUT_DURATION
+                    interpolator = if (visible) openInterpolator else closeInterpolator
+                    addUpdateListener {
+                        glow.opacity = it.animatedValue as Float
+                        invalidate()
+                    }
+                    addListener(
+                        object : AnimatorListenerAdapter() {
+                            override fun onAnimationEnd(animation: Animator) {
+                                if (glow.animator !== animation) return
+                                glow.animator = null
+                                glow.opacity = target
+                                if (!glow.visible) glows.remove(id)
+                                invalidate()
+                                removeIfHidden()
+                            }
+                        }
+                    )
+                }
+            glow.animator = animator
+            animator.start()
+        }
+
+        private fun removeIfHidden() {
+            if (hiding && glows.isEmpty()) {
+                mainHandler.post {
+                    if (hiding && glows.isEmpty()) removeSurface(this)
+                }
+            }
+        }
+
+        fun clearGlows() {
+            glows.values.forEach { glow ->
+                val animator = glow.animator
+                glow.animator = null
+                animator?.removeAllListeners()
+                animator?.removeAllUpdateListeners()
+                animator?.cancel()
+            }
+            glows.clear()
         }
 
         fun cancelGestures() {
@@ -1203,15 +1341,17 @@ internal class EdgeAuroraWindow(
                 if (ValueAnimator.areAnimatorsEnabled())
                     (SystemClock.uptimeMillis() % 3600000) / 1000f
                 else 0f
-            payloads.forEach { payload ->
-                val profile = dragged?.takeIf { held?.id == payload.id } ?: payload.profile
+            glows.forEach { (id, glow) ->
+                if (glow.opacity <= 0f) return@forEach
+                if (glow.visible) glow.baseOpacity = if (id in bubbles) 70 else 255
+                val profile = dragged?.takeIf { held?.id == id } ?: glow.profile
                 renderer.draw(
                     canvas,
                     profile,
                     screen,
                     density,
                     time,
-                    if (payload.id in bubbles) 70 else 255,
+                    (glow.baseOpacity * glow.opacity).toInt(),
                 )
             }
             bubbleHeld?.let { id ->
@@ -1643,6 +1783,7 @@ internal class EdgeAuroraWindow(
         override fun onComputeInternalInsets(info: ViewTreeObserver.InternalInsetsInfo) {
             info.setTouchableInsets(ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_REGION)
             info.touchableRegion.setEmpty()
+            if (hiding) return
             if (dark) info.touchableRegion.set(0, 0, width, height)
             else {
                 hits.values.forEach { info.touchableRegion.op(it, Region.Op.UNION) }
@@ -1675,6 +1816,7 @@ internal class EdgeAuroraWindow(
         }
 
         override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+            if (hiding) return false
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> touching = true
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> touching = false
@@ -1696,5 +1838,10 @@ internal class EdgeAuroraWindow(
             }
             return dark || super.onTouchEvent(event)
         }
+    }
+
+    private companion object {
+        const val FADE_IN_DURATION = 320L
+        const val FADE_OUT_DURATION = 240L
     }
 }
