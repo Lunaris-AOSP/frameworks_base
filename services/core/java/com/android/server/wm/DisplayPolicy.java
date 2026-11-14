@@ -426,6 +426,8 @@ public class DisplayPolicy {
     private boolean mForceShowNavigationBarEnabled;
 
     private volatile boolean mGamingGestureLocked;
+    private volatile boolean mGamingModeActive;
+    private final ContentObserver mGamingSettingsObserver;
 
     private class PolicyHandler extends Handler {
 
@@ -591,7 +593,7 @@ public class DisplayPolicy {
 
                 @Override
                 public void onFling(int duration) {
-                    if (mService.mPowerManagerInternal != null) {
+                    if (!mGamingModeActive && mService.mPowerManagerInternal != null) {
                         mService.mPowerManagerInternal.setPowerBoost(
                                 Boost.INTERACTION, duration);
                     }
@@ -599,7 +601,7 @@ public class DisplayPolicy {
 
                 @Override
                 public void onScroll(int duration) {
-                    if (mService.mPowerManagerInternal != null) {
+                    if (!mGamingModeActive && mService.mPowerManagerInternal != null) {
                         mService.mPowerManagerInternal.setPowerBoost(
                                 Boost.INTERACTION, duration);
                     }
@@ -767,18 +769,25 @@ public class DisplayPolicy {
         mHandler.post(mForceShowNavBarSettingsObserver::register);
 
         ContentResolver resolver = mContext.getContentResolver();
-        mGamingGestureLocked = Settings.Secure.getIntForUser(resolver,
-                "ax_gaming_gesture_lock", 0, UserHandle.USER_CURRENT) == 1;
-        ContentObserver gestureLockObserver = new ContentObserver(mHandler) {
+        mGamingSettingsObserver = new ContentObserver(mHandler) {
             @Override
             public void onChange(boolean selfChange) {
-                mGamingGestureLocked = Settings.Secure.getIntForUser(
-                        mContext.getContentResolver(),
-                        "ax_gaming_gesture_lock", 0, UserHandle.USER_CURRENT) == 1;
+                updateGamingSettings();
             }
         };
         resolver.registerContentObserver(Settings.Secure.getUriFor(
-                "ax_gaming_gesture_lock"), false, gestureLockObserver, UserHandle.USER_ALL);
+                "ax_gaming_gesture_lock"), false, mGamingSettingsObserver, UserHandle.USER_ALL);
+        resolver.registerContentObserver(Settings.Secure.getUriFor(
+                "ax_gaming_mode_active"), false, mGamingSettingsObserver, UserHandle.USER_ALL);
+        updateGamingSettings();
+    }
+
+    private void updateGamingSettings() {
+        final ContentResolver resolver = mContext.getContentResolver();
+        mGamingGestureLocked = Settings.Secure.getIntForUser(resolver,
+                "ax_gaming_gesture_lock", 0, UserHandle.USER_CURRENT) == 1;
+        mGamingModeActive = Settings.Secure.getIntForUser(resolver,
+                "ax_gaming_mode_active", 0, UserHandle.USER_CURRENT) == 1;
     }
 
     private void updateForceShowNavBarSettings() {
@@ -1936,6 +1945,7 @@ public class DisplayPolicy {
     public void switchUser() {
         updateCurrentUserResources();
         updateForceShowNavBarSettings();
+        updateGamingSettings();
     }
 
     /**
@@ -3374,6 +3384,7 @@ public class DisplayPolicy {
         mDisplayContent.mTransitionController.unregisterLegacyListener(mAppTransitionListener);
         mHandler.post(mGestureNavigationSettingsObserver::unregister);
         mHandler.post(mForceShowNavBarSettingsObserver::unregister);
+        mContext.getContentResolver().unregisterContentObserver(mGamingSettingsObserver);
         if (mService.mPointerLocationEnabled) {
             setPointerLocationEnabled(false);
         }
