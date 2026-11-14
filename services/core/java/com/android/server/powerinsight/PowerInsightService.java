@@ -8,6 +8,7 @@ package com.android.server.powerinsight;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.os.BatteryUsageStats;
 import android.os.BatteryStatsManager;
 import android.os.UidBatteryConsumer;
@@ -26,6 +27,7 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.PowerManager;
 import android.os.SystemClock;
+import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.AtomicFile;
 import android.util.Slog;
@@ -610,9 +612,20 @@ public class PowerInsightService extends IPowerInsightService.Stub {
         content.append(mContext.getString(com.android.internal.R.string.power_insight_notif_awake, formatDuration(s.awakeTime), String.format("%.1f", s.awakeTime * 100f / totalOff))).append("\n");
         content.append(mContext.getString(com.android.internal.R.string.power_insight_notif_deep_sleep, formatDuration(s.deepSleepTime), String.format("%.1f", s.deepSleepTime * 100f / totalOff)));
 
+        Intent settingsIntent = new Intent(Intent.ACTION_MAIN)
+                .setClassName("com.android.settings", "com.android.settings.SubSettings")
+                .putExtra(":settings:show_fragment",
+                        "com.android.settings.fuelgauge.powerinsight.PowerInsightSettings")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent contentIntent = PendingIntent.getActivityAsUser(
+                mContext, NOTIF_ID, settingsIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE,
+                null, UserHandle.CURRENT);
+
         Notification.Builder builder = new Notification.Builder(mContext, NOTIF_CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(s.level + "% • " + currentStr)
+            .setContentIntent(contentIntent)
             .setStyle(new Notification.BigTextStyle().bigText(content.toString()))
             .setSmallIcon(generateNotificationIcon())
             .setOngoing(true)
