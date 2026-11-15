@@ -705,9 +705,8 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             getTask().touchActiveTime();
         }
 
-        if (AxSandboxService.get().checkLockApp(mResumedActivity, r)) {
-            return;
-        }
+        // NOTE: the sandbox lock check lives in resumeTopActivity(); running it here as well
+        // made every resume do the task/activity scans twice.
 
         final ActivityRecord prevR = mResumedActivity;
         mResumedActivity = r;
