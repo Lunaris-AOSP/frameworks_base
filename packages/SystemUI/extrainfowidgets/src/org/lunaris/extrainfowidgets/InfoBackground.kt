@@ -13,7 +13,7 @@ object InfoBackground {
     const val AX_BLUR = "ax_blur"
     const val LIQUID_GLASS = "liquid_glass"
 
-    val GLASS_DEFAULT = ClockGlassStyle(glyphBlur = 0, tintOpacity = 20)
+    val GLASS_DEFAULT = ClockGlassStyle()
 
     fun style(value: String?): String = if (value == LIQUID_GLASS) LIQUID_GLASS else AX_BLUR
 
