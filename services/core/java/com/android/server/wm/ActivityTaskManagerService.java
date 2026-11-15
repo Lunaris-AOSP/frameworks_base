@@ -2275,6 +2275,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     }
 
     void removeTask(@NonNull Task task, @NonNull String reason) {
+        AxSandboxService.get().removeTask(task, reason);
         if (task.isLeafTask()) {
             mTaskSupervisor.removeTask(task, true, REMOVE_FROM_RECENTS, reason);
         } else {
