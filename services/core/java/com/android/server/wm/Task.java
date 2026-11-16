@@ -2227,7 +2227,6 @@ class Task extends TaskFragment {
 
         if (prevWindowingMode != getWindowingMode()) {
             taskDisplayArea.onRootTaskWindowingModeChanged(this);
-            AxSandboxService.get().onWindowingModeChanged(this, prevWindowingMode);
         }
 
         if (!isOrganized() && !getRequestedOverrideBounds().isEmpty() && mDisplayContent != null) {
