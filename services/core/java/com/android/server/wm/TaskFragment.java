@@ -1574,6 +1574,12 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         // If the top activity is the resumed one, nothing to do.
         if (mResumedActivity == next && next.isState(RESUMED)
                 && taskDisplayArea.allResumedActivitiesComplete()) {
+            // A task that is moved to another display (e.g. a freeform window created from a
+            // recent task) resumes an activity that is still RESUMED, so this early return used
+            // to skip the app lock check below and a locked app simply showed itself.
+            if (AxSandboxService.get().checkLockApp(null /* prev */, next)) {
+                return false;
+            }
             // Ensure the visibility gets updated before execute app transition.
             taskDisplayArea.ensureActivitiesVisible(null /* starting */, true /* notifyClients */);
             // Make sure we have executed any pending transitions, since there
