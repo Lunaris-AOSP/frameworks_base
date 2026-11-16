@@ -6301,6 +6301,7 @@ final class ActivityRecord extends WindowToken {
     }
 
     void activityPaused(boolean timeout) {
+        AxSandboxService.get().onActivityPaused(this);
         ProtoLog.v(WM_DEBUG_STATES, "Activity paused: token=%s, timeout=%b", token,
                 timeout);
 
