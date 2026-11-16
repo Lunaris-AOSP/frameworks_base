@@ -39,4 +39,6 @@ constructor(interactor: InWindowLauncherUnlockAnimationInteractor) {
      * in-window unlock animation.
      */
     val shouldStartInWindowAnimation = interactor.shouldStartInWindowAnimation
+
+    val unlockTransition = interactor.unlockTransition
 }

@@ -22,7 +22,9 @@ import android.media.ImageReader
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelFileDescriptor
+import android.os.UserHandle
 import android.util.Log
+import android.util.LruCache
 import kotlin.math.max
 
 
@@ -37,10 +39,21 @@ internal object HyperBackdrop {
     private val handler = Handler(Looper.getMainLooper())
     private val listeners = ArrayList<Runnable>(2)
 
-    private var source: Bitmap? = null
-    private var blurred: Bitmap? = null
-    private var blurredRadius = -1f
-    private var tried = false
+    private data class Key(val user: Int, val display: Int, val which: Int)
+    private class Background {
+        var source: Bitmap? = null
+        var blurred: Bitmap? = null
+        var blurredRadius = -1f
+        var tried = false
+
+        fun reset() {
+            source = null
+            blurred = null
+            blurredRadius = -1f
+            tried = false
+        }
+    }
+    private val backgrounds = LruCache<Key, Background>(4)
     private var listening = false
 
     private val wallpaperChanged = WallpaperManager.OnColorsChangedListener { _, _ ->
@@ -48,15 +61,19 @@ internal object HyperBackdrop {
         for (i in listeners.indices) listeners[i].run()
     }
 
-    fun bitmap(context: Context, radiusPx: Float): Bitmap? {
-        val src = source(context) ?: return null
+    fun bitmap(context: Context, radiusPx: Float,
+        which: Int = WallpaperManager.FLAG_LOCK): Bitmap? {
+        val key = Key(context.userId,
+            runCatching { context.display?.displayId ?: 0 }.getOrDefault(0), which)
+        val background = backgrounds.get(key) ?: Background().also { backgrounds.put(key, it) }
+        val src = source(context, background, which) ?: return null
         val r = (radiusPx / SAMPLE).coerceIn(1f, MAX_BLUR)
-        blurred?.let { if (blurredRadius == r) return it }
+        background.blurred?.let { if (background.blurredRadius == r) return it }
         val out = runCatching { blur(src, r) }
             .onFailure { Log.w(TAG, "cannot blur the wallpaper", it) }
             .getOrNull() ?: return null
-        blurred = out
-        blurredRadius = r
+        background.blurred = out
+        background.blurredRadius = r
         return out
     }
 
@@ -70,43 +87,42 @@ internal object HyperBackdrop {
     }
 
     fun invalidate() {
-        source = null
-        blurred = null
-        blurredRadius = -1f
-        tried = false
+        backgrounds.evictAll()
     }
 
     private fun listen(context: Context) {
         if (listening) return
         val wm = context.getSystemService(WallpaperManager::class.java) ?: return
-        runCatching { wm.addOnColorsChangedListener(wallpaperChanged, handler) }
+        runCatching { wm.addOnColorsChangedListener(wallpaperChanged, handler, UserHandle.USER_ALL) }
             .onSuccess { listening = true }
             .onFailure { Log.w(TAG, "cannot watch the wallpaper", it) }
     }
 
-    private fun source(context: Context): Bitmap? {
+    private fun source(context: Context, background: Background, which: Int): Bitmap? {
         val metrics = context.resources.displayMetrics
         val tw = max(1, metrics.widthPixels / SAMPLE)
         val th = max(1, metrics.heightPixels / SAMPLE)
-        source?.let { if (it.width == tw && it.height == th) return it else invalidate() }
-        if (tried) return null
-        tried = true
-        val bm = runCatching { decode(context, tw, th) }
+        background.source?.let {
+            if (it.width == tw && it.height == th) return it else background.reset()
+        }
+        if (background.tried) return null
+        background.tried = true
+        val bm = runCatching { decode(context, tw, th, which) }
             .onFailure { Log.w(TAG, "cannot read the wallpaper", it) }
             .getOrNull()
         if (bm == null) Log.i(TAG, "no wallpaper bitmap; hyper clocks fall back to a tint")
-        source = bm
+        background.source = bm
         return bm
     }
 
-    private fun open(wm: WallpaperManager): ParcelFileDescriptor? =
-        wm.getWallpaperFile(WallpaperManager.FLAG_LOCK)
+    private fun openWallpaper(wm: WallpaperManager, which: Int): ParcelFileDescriptor? =
+        wm.getWallpaperFile(which)
             ?: wm.getWallpaperFile(WallpaperManager.FLAG_SYSTEM)
 
-    private fun decode(context: Context, tw: Int, th: Int): Bitmap? {
+    private fun decode(context: Context, tw: Int, th: Int, which: Int): Bitmap? {
         val wm = context.getSystemService(WallpaperManager::class.java) ?: return null
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        open(wm)?.use { BitmapFactory.decodeFileDescriptor(it.fileDescriptor, null, bounds) }
+        openWallpaper(wm, which)?.use { BitmapFactory.decodeFileDescriptor(it.fileDescriptor, null, bounds) }
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
             if (wm.wallpaperInfo != null) Log.i(TAG, "live wallpaper: nothing to read")
             return null
@@ -115,7 +131,7 @@ internal object HyperBackdrop {
             inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, tw, th)
             inPreferredConfig = Bitmap.Config.ARGB_8888
         }
-        val raw = open(wm)?.use {
+        val raw = openWallpaper(wm, which)?.use {
             BitmapFactory.decodeFileDescriptor(it.fileDescriptor, null, opts)
         } ?: return null
         return cropToDisplay(raw, tw, th)

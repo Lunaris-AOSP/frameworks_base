@@ -4,6 +4,7 @@
  */
 package com.android.systemui.clocks
 
+import android.app.WallpaperManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -35,6 +36,7 @@ import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import org.lunaris.clockmaker.ClockViewTransform
 
 class HyperClockView @JvmOverloads constructor(
     context: Context,
@@ -70,6 +72,8 @@ class HyperClockView @JvmOverloads constructor(
     private var blurEnabled = false
     private var blurRadius = 0f
     private var blurTintAlpha = DEFAULT_BLUR_TINT_ALPHA
+    var wallpaperFlags = WallpaperManager.FLAG_LOCK
+        set(value) { field = value; invalidate() }
 
     private var gradientShader: Shader? = null
     private val gradientPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -82,7 +86,7 @@ class HyperClockView @JvmOverloads constructor(
     private val tintPaint = Paint().apply {
         xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_ATOP)
     }
-    private val screenLoc = IntArray(2)
+    private val screenMatrix = Matrix()
     private val backdropMatrix = Matrix()
     private val backdropChanged = Runnable { invalidate() }
 
@@ -341,7 +345,7 @@ class HyperClockView @JvmOverloads constructor(
 
         val shader = gradientShader
         val backdrop = if (blurEnabled && shader == null) {
-            HyperBackdrop.bitmap(context, blurRadius)
+            HyperBackdrop.bitmap(context, blurRadius, wallpaperFlags)
         } else {
             null
         }
@@ -370,19 +374,9 @@ class HyperClockView @JvmOverloads constructor(
     }
 
     private fun drawBackdrop(canvas: Canvas, backdrop: Bitmap) {
-        getLocationOnScreen(screenLoc)
-        var sx = 1f
-        var sy = 1f
-        var v: View? = this
-        while (v != null) {
-            sx *= v.scaleX
-            sy *= v.scaleY
-            v = v.parent as? View
-        }
-        if (sx == 0f || sy == 0f) return
+        if (!ClockViewTransform.toGlobal(this, screenMatrix) || !screenMatrix.invert(backdropMatrix)) return
         val s = HyperBackdrop.SAMPLE.toFloat()
-        backdropMatrix.setScale(s / sx, s / sy)
-        backdropMatrix.postTranslate(-screenLoc[0] / sx, -screenLoc[1] / sy)
+        backdropMatrix.preScale(s, s)
         canvas.drawBitmap(backdrop, backdropMatrix, backdropPaint)
         tintPaint.color = digitColor
         tintPaint.alpha =

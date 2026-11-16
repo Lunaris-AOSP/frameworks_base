@@ -22,6 +22,7 @@ import android.graphics.Rect
 import android.os.DeadObjectException
 import android.util.Log
 import android.view.View
+import com.android.systemui.clocks.HomeClockProvider
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.keyguard.domain.interactor.InWindowLauncherUnlockAnimationInteractor
@@ -127,11 +128,18 @@ constructor(
                 preparedForUnlock = true
                 manualUnlockAmount = null
 
-                launcher.prepareForUnlock(
-                    false,
-                    Rect(),
-                    0,
-                ) // TODO(b/293894758): Add smartspace animation support.
+                HomeClockProvider.startUnlockAnimation()
+                try {
+                    launcher.prepareForUnlock(
+                        false,
+                        Rect(),
+                        0,
+                    )
+                } catch (e: DeadObjectException) {
+                    preparedForUnlock = false
+                    HomeClockProvider.finishUnlock(true)
+                    Log.e(TAG, "DeadObjectException in prepareForUnlock", e)
+                }
             }
         }
     }
@@ -174,18 +182,24 @@ constructor(
     ) {
         if (preparedForUnlock) {
             launcherAnimationController?.let { launcher ->
-                if (isPixelLauncherUnderneath()) {
-                    launcher.playUnlockAnimation(unlocked, duration, startDelay)
-                } else {
-                    launcher.playUnlockAnimationWithWallpaperDepth(
-                        unlocked,
-                        duration,
-                        startDelay,
-                        biometricUnlockController.isWakeAndUnlock &&
-                            biometricUnlockController.mode != MODE_WAKE_AND_UNLOCK_FROM_DREAM,
-                    )
+                try {
+                    HomeClockProvider.playUnlockAnimation(unlocked, duration, startDelay)
+                    if (isPixelLauncherUnderneath()) {
+                        launcher.playUnlockAnimation(unlocked, duration, startDelay)
+                    } else {
+                        launcher.playUnlockAnimationWithWallpaperDepth(
+                            unlocked,
+                            duration,
+                            startDelay,
+                            biometricUnlockController.isWakeAndUnlock &&
+                                biometricUnlockController.mode != MODE_WAKE_AND_UNLOCK_FROM_DREAM,
+                        )
+                    }
+                    interactor.setStartedUnlockAnimation(true)
+                } catch (e: DeadObjectException) {
+                    HomeClockProvider.finishUnlock(true)
+                    Log.e(TAG, "DeadObjectException in playUnlockAnimation", e)
                 }
-                interactor.setStartedUnlockAnimation(true)
             }
         } else {
             Log.e(TAG, "Attempted to call playUnlockAnimation() before prepareToUnlock().")
@@ -204,6 +218,16 @@ constructor(
         interactor.setStartedUnlockAnimation(false)
     }
 
+    fun startClockUnlock() {
+        if (interactor.transitioningToGoneWithInWindowAnimation.value) {
+            HomeClockProvider.startUnlockAnimation()
+        }
+    }
+
+    fun finishClockUnlock(showKeyguard: Boolean) {
+        HomeClockProvider.finishUnlock(showKeyguard)
+    }
+
     /**
      * Manually sets the unlock amount on launcher. This is used to explicitly set us to fully
      * unlocked, or to manually control the animation (such as during a swipe to unlock).
@@ -219,7 +243,9 @@ constructor(
 
             try {
                 it.setUnlockAmount(amount, forceIfAnimating)
+                HomeClockProvider.setUnlockAmount(amount, forceIfAnimating)
             } catch (e: DeadObjectException) {
+                HomeClockProvider.finishUnlock(true)
                 Log.e(TAG, "DeadObjectException in setUnlockAmount($amount, $forceIfAnimating)", e)
             }
         }

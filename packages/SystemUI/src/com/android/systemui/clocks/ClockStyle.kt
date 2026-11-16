@@ -11,6 +11,7 @@ import android.animation.Keyframe
 import android.animation.ObjectAnimator
 import android.animation.PropertyValuesHolder
 import android.app.ActivityManager
+import android.app.WallpaperManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -19,6 +20,8 @@ import android.graphics.Color
 import android.graphics.Color.colorToHSV
 import android.graphics.Color.HSVToColor
 import android.graphics.LinearGradient
+import android.graphics.Matrix
+import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
 import android.media.session.PlaybackState
@@ -54,11 +57,16 @@ import org.lunaris.clockmaker.ClockEffects
 import org.lunaris.clockmaker.ClockGlass
 import org.lunaris.clockmaker.ClockGlassController
 import org.lunaris.clockmaker.ClockGlassStyle
+import org.lunaris.clockmaker.ClockViewTransform
+import java.util.Collections
+import java.util.WeakHashMap
 
 class ClockStyle @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
 ) : RelativeLayout(context, attrs), TunerService.Tunable {
+
+    var isHomeScreenClock = false
 
     private val tunerService: TunerService = Dependency.get(TunerService::class.java)
     private val statusBarStateController: StatusBarStateController =
@@ -67,6 +75,7 @@ class ClockStyle @JvmOverloads constructor(
     private val random = java.util.Random()
 
     private var currentClockView: View? = null
+    private val clockBoundsMatrix = Matrix()
     private var clockStub: ViewStub? = null
     private var clockContainer: ClockStyleFrameLayout? = null
 
@@ -87,6 +96,9 @@ class ClockStyle @JvmOverloads constructor(
     private var clockFrameMarginTop = DEFAULT_MARGIN_TOP
     private var clockSizeScale = DEFAULT_CLOCK_SIZE
     private var clockFrameMarginStart = DEFAULT_MARGIN_START
+    private var homeClockSizeScale: Int? = null
+    private var homeClockMarginTop: Int? = null
+    private var homeClockMarginStart: Int? = null
     private var clockTiltX = DEFAULT_TILT
     private var clockTiltY = DEFAULT_TILT
     private var clockRotation = DEFAULT_ROTATION
@@ -172,12 +184,13 @@ class ClockStyle @JvmOverloads constructor(
         override fun onStateChanged(newState: Int) {}
 
         override fun onDozingChanged(dozing: Boolean) {
+            if (isHomeScreenClock) return
             if (isDozing == dozing) return
             applyDozing(dozing)
         }
 
         override fun onDozeAmountChanged(linear: Float, eased: Float) {
-            (currentClockView as? ClockDesignView)?.setAodProgress(linear)
+            (currentClockView as? ClockDesignView)?.setAodProgress(if (isHomeScreenClock) 0f else linear)
         }
     }
 
@@ -208,7 +221,13 @@ class ClockStyle @JvmOverloads constructor(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         if (callbacksRegistered) return
-        isDozing = statusBarStateController.isDozing
+        if (!isHomeScreenClock) {
+            lockscreenClocks.add(this)
+            HomeClockProvider.observeKeyguard()
+        }
+        isDozing = !isHomeScreenClock && statusBarStateController.isDozing
+        textGlass.wallpaperFlags = if (isHomeScreenClock) WallpaperManager.FLAG_SYSTEM
+            else WallpaperManager.FLAG_LOCK
 
         tunerService.addTunable(
             this,
@@ -228,6 +247,9 @@ class ClockStyle @JvmOverloads constructor(
             CLOCK_ALBUM_ART_COLOR_KEY,
             CLOCK_WOBBLE_ON_CHARGE_KEY,
             CLOCK_FRAME_MARGIN_START_KEY,
+            HOME_CLOCK_SIZE_KEY,
+            HOME_CLOCK_MARGIN_TOP_KEY,
+            HOME_CLOCK_MARGIN_START_KEY,
             CLOCK_GRADIENT_ENABLED_KEY,
             CLOCK_GRADIENT_COLOR_START_KEY,
             CLOCK_GRADIENT_COLOR_END_KEY,
@@ -271,6 +293,7 @@ class ClockStyle @JvmOverloads constructor(
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
+        lockscreenClocks.remove(this)
         if (!callbacksRegistered) return
 
         statusBarStateController.removeCallback(statusBarStateListener)
@@ -377,6 +400,18 @@ class ClockStyle @JvmOverloads constructor(
                 clockFrameMarginStart = TunerService.parseInteger(newValue, DEFAULT_MARGIN_START)
                     .coerceIn(-200, 200)
                 updateClockFrameMargin()
+            }
+            HOME_CLOCK_SIZE_KEY -> {
+                homeClockSizeScale = newValue?.toIntOrNull()?.coerceIn(25, MAX_CLOCK_SIZE)
+                if (isHomeScreenClock) applyClockScale()
+            }
+            HOME_CLOCK_MARGIN_TOP_KEY -> {
+                homeClockMarginTop = newValue?.toIntOrNull()?.coerceIn(0, 2000)
+                if (isHomeScreenClock) updateClockFrameMargin()
+            }
+            HOME_CLOCK_MARGIN_START_KEY -> {
+                homeClockMarginStart = newValue?.toIntOrNull()?.coerceIn(-2000, 2000)
+                if (isHomeScreenClock) updateClockFrameMargin()
             }
             CLOCK_GRADIENT_ENABLED_KEY -> {
                 gradientEnabled = TunerService.parseInteger(newValue, 0) != 0
@@ -522,6 +557,30 @@ class ClockStyle @JvmOverloads constructor(
         }
     }
 
+    internal fun clockBounds(rootTransform: Matrix? = null, bounds: RectF = RectF()): RectF? {
+        val view = currentClockView ?: return null
+        if (!view.isAttachedToWindow || !view.isLaidOut || view.visibility != View.VISIBLE) return null
+        val matrix = clockBoundsMatrix
+        if (rootTransform == null) {
+            if (!ClockViewTransform.toGlobal(view, matrix)) return null
+        } else {
+            if (!ClockViewTransform.toAncestor(view, this, matrix)) return null
+            matrix.postConcat(rootTransform)
+        }
+        bounds.set(0f, 0f, view.width.toFloat(), view.height.toFloat())
+        matrix.mapRect(bounds)
+        return bounds.takeUnless { it.isEmpty }
+    }
+
+    internal val transitionPadding: Float
+        get() = (if (shadowEnabled) shadowSoftness * 2f + 4f else 8f) *
+            resources.displayMetrics.density
+
+    internal val hasGlassEffects: Boolean
+        get() = textGlass.hasGlassElements ||
+            (hyperBlurEnabled && !gradientEnabled && hyperClocks.isNotEmpty()) ||
+            (currentClockView as? ClockDesignView)?.hasGlassElements == true
+
     private fun forceTimeUpdate() {
         if (currentClockView == null) return
         (currentClockView as? ClockDesignView)?.refreshTime()
@@ -576,8 +635,9 @@ class ClockStyle @JvmOverloads constructor(
                 )
                 (view as? ClockDesignView)?.let {
                     it.userId = ActivityManager.getCurrentUser()
+                    it.wallpaperFlags = textGlass.wallpaperFlags
                     it.setDesign(clockDesign)
-                    it.onQuickLookClick = { action ->
+                    it.onQuickLookClick = if (isHomeScreenClock) null else { action ->
                         val starter = Dependency.get(ActivityStarter::class.java)
                         val pendingIntent = action.pendingIntent
                         val intent = action.intent
@@ -624,6 +684,7 @@ class ClockStyle @JvmOverloads constructor(
                 styledTextViews.add(root)
             }
             is HyperClockView -> {
+                root.wallpaperFlags = textGlass.wallpaperFlags
                 root.setTag(R.id.original_alpha, root.alpha)
                 hyperClocks.add(root)
             }
@@ -640,16 +701,20 @@ class ClockStyle @JvmOverloads constructor(
         val params = clockFrame.layoutParams as? ViewGroup.MarginLayoutParams ?: return
         val density = resources.displayMetrics.density
         val keyguardTop = resources.getDimensionPixelSize(R.dimen.status_bar_height) * 1.25f
+        val marginTop = if (isHomeScreenClock) homeClockMarginTop ?: clockFrameMarginTop
+            else clockFrameMarginTop
         // Lockstyles rounds the full screen offset once; the section already supplies
         // keyguardTop.toInt(), so keep its fractional pixel when adding the user offset.
-        params.topMargin = (keyguardTop + clockFrameMarginTop * density).toInt() - keyguardTop.toInt()
+        params.topMargin = (keyguardTop + marginTop * density).toInt() - keyguardTop.toInt()
         val side = resources.getDimensionPixelSize(R.dimen.below_clock_padding_start)
         params.marginStart = side
         params.marginEnd = side
         // Move a fixed-width clock, just as CustomClocks.frame does in Lockstyles.
         // Changing a margin instead remeasures/recentres it and also changes its size.
-        clockFrame.translationX = if (isNoHorizontalMarginClock(clockStyle)) 0f
-            else (clockFrameMarginStart * density).toInt().toFloat()
+        val marginStart = if (isHomeScreenClock && homeClockMarginStart != null) {
+            homeClockMarginStart!!
+        } else if (isNoHorizontalMarginClock(clockStyle)) 0 else clockFrameMarginStart
+        clockFrame.translationX = (marginStart * density).toInt().toFloat()
         clockFrame.layoutParams = params
     }
 
@@ -776,7 +841,7 @@ class ClockStyle @JvmOverloads constructor(
 
     private fun applyClockColorsToViews() {
         (currentClockView as? ClockDesignView)?.let {
-            it.setAodProgress(statusBarStateController.dozeAmount)
+            it.setAodProgress(if (isHomeScreenClock) 0f else statusBarStateController.dozeAmount)
             it.setAppearance(ClockDesignAppearance(resolveClockColor(), gradientEnabled,
                 gradientColorStart, gradientColorEnd, gradientAnchorY, gradientRadius,
                 makerWeather, isDozing, aodAnimation = aodAnimEnabled))
@@ -901,7 +966,7 @@ class ClockStyle @JvmOverloads constructor(
     }
 
     private fun getScaleFactor(): Float =
-        clockSizeScale.coerceIn(MIN_CLOCK_SIZE, MAX_CLOCK_SIZE) / 100f
+        (if (isHomeScreenClock) homeClockSizeScale ?: clockSizeScale else clockSizeScale) / 100f
 
     private fun applyClockScale() {
         val view = currentClockView ?: return
@@ -1132,6 +1197,20 @@ class ClockStyle @JvmOverloads constructor(
     }
 
     companion object {
+        private val lockscreenClocks = Collections.newSetFromMap(WeakHashMap<ClockStyle, Boolean>())
+
+        internal fun lockscreenClock(displayId: Int): ClockStyle? =
+            lockscreenClocks.firstOrNull {
+                it.id == R.id.clock_ls && it.isShown && it.alpha > 0f &&
+                    it.display?.displayId == displayId && it.clockBounds() != null
+            } ?: lockscreenClocks.firstOrNull {
+                it.isShown && it.alpha > 0f && it.display?.displayId == displayId &&
+                    it.clockBounds() != null
+            }
+
+        internal fun unlockClocks(): List<ClockStyle> = lockscreenClocks
+            .mapNotNull { it.display?.displayId }.distinct().mapNotNull(::lockscreenClock)
+
         private val CLOCK_LAYOUTS = intArrayOf(
             0,
             R.layout.keyguard_clock_oos,            // 1
@@ -1258,6 +1337,9 @@ class ClockStyle @JvmOverloads constructor(
         @JvmField val CLOCK_ALBUM_ART_COLOR_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_ALBUM_ART_COLOR
         @JvmField val CLOCK_WOBBLE_ON_CHARGE_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_WOBBLE_ON_CHARGE
         @JvmField val CLOCK_FRAME_MARGIN_START_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_MARGIN_START
+        const val HOME_CLOCK_SIZE_KEY = "lock_screen_home_clock_size"
+        const val HOME_CLOCK_MARGIN_TOP_KEY = "lock_screen_home_clock_margin_top"
+        const val HOME_CLOCK_MARGIN_START_KEY = "lock_screen_home_clock_margin_start"
         @JvmField val CLOCK_GRADIENT_ENABLED_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_GRADIENT_ENABLED
         @JvmField val CLOCK_GRADIENT_COLOR_START_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_GRADIENT_COLOR_START
         @JvmField val CLOCK_GRADIENT_COLOR_END_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_GRADIENT_COLOR_END

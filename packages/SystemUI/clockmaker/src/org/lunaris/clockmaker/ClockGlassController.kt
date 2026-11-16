@@ -5,6 +5,7 @@
 
 package org.lunaris.clockmaker
 
+import android.app.WallpaperManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.BlurMaskFilter
@@ -268,6 +269,8 @@ class ClockGlassController(private val host: View) :
     private var previewBackground: ClockGlass? = null
     private var coordinateRoot: View? = null
     private val changed = Runnable { update() }
+    val hasGlassElements: Boolean
+        get() = entries.any { it.view.visibility == View.VISIBLE && it.view.alpha > 0f }
     var enabled = true
         set(value) {
             if (field == value) return
@@ -276,6 +279,15 @@ class ClockGlassController(private val host: View) :
             host.invalidate()
         }
     var userId = host.context.userId
+        set(value) {
+            if (field == value) return
+            entries.forEach { it.release() }
+            previousEntries.forEach { it.release() }
+            field = value
+            update()
+        }
+
+    var wallpaperFlags = WallpaperManager.FLAG_LOCK
         set(value) {
             if (field == value) return
             entries.forEach { it.release() }
@@ -359,11 +371,20 @@ class ClockGlassController(private val host: View) :
         return true
     }
 
+    private fun hasVisibleAlpha(): Boolean {
+        var view: View? = host
+        while (view != null) {
+            if (view.alpha <= 0f) return false
+            view = view.parent as? View
+        }
+        return true
+    }
+
     fun update() {
         if (entries.isEmpty()) return
         val background = if (preview) previewBackground else {
             if (!host.isAttachedToWindow) return
-            ClockGlassWallpaper.get(host.context, userId, blurRadii)
+            ClockGlassWallpaper.get(host.context, userId, blurRadii, wallpaperFlags)
         }
         if (background == null) {
             entries.forEach { it.restore() }
@@ -373,6 +394,7 @@ class ClockGlassController(private val host: View) :
         if (!enabled) return
         if (!preview && (!host.isShown || host.windowVisibility != View.VISIBLE)) return
         if (entries.none { it.view.visibility == View.VISIBLE && it.view.alpha > 0f }) return
+        val visible = preview || hasVisibleAlpha()
         val space = coordinateRoot
         val metrics = host.resources.displayMetrics
         val width = space?.width ?: metrics.widthPixels
@@ -382,12 +404,12 @@ class ClockGlassController(private val host: View) :
             val view = entry.view
             if (view.width <= 0 || view.height <= 0 || view.visibility != View.VISIBLE) continue
             if (!entry.prepare(background)) continue
+            if (!visible || view.alpha <= 0f) continue
             val material = entry.background ?: continue
             spaceToScreen.reset()
-            space?.transformMatrixToGlobal(spaceToScreen)
+            if (space != null && !ClockViewTransform.toGlobal(space, spaceToScreen)) continue
             spaceToScreen.preScale(width.toFloat() / material.clear.width, height.toFloat() / material.clear.height)
-            textToScreen.reset()
-            view.transformMatrixToGlobal(textToScreen)
+            if (!ClockViewTransform.toGlobal(view, textToScreen)) continue
             textToScreen.preTranslate((view.compoundPaddingLeft - view.scrollX).toFloat(),
                 (view.totalPaddingTop - view.scrollY).toFloat())
             if (!textToScreen.invert(bitmapToText)) continue

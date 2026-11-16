@@ -18,6 +18,7 @@ package com.android.systemui.keyguard.ui.binder
 
 import com.android.systemui.keyguard.ui.view.InWindowLauncherUnlockAnimationManager
 import com.android.systemui.keyguard.ui.viewmodel.InWindowLauncherAnimationViewModel
+import com.android.systemui.keyguard.shared.model.TransitionState
 import kotlinx.coroutines.CoroutineScope
 import com.android.app.tracing.coroutines.launchTraced as launch
 
@@ -55,6 +56,17 @@ object InWindowLauncherAnimationViewBinder {
                     // we started the animation, since we'll need to start it again if the
                     // conditions become true again.
                     inWindowLauncherUnlockAnimationManager.clearStartedUnlockAnimation()
+                }
+            }
+        }
+
+        scope.launch {
+            viewModel.unlockTransition.collect { step ->
+                when (step.transitionState) {
+                    TransitionState.STARTED -> inWindowLauncherUnlockAnimationManager.startClockUnlock()
+                    TransitionState.CANCELED -> inWindowLauncherUnlockAnimationManager.finishClockUnlock(true)
+                    TransitionState.FINISHED -> inWindowLauncherUnlockAnimationManager.finishClockUnlock(false)
+                    else -> Unit
                 }
             }
         }

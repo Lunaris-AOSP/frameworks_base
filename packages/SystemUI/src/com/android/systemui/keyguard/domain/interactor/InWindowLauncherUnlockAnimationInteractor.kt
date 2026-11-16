@@ -50,6 +50,11 @@ constructor(
 ) {
     val startedUnlockAnimation = repository.startedUnlockAnimation.asStateFlow()
 
+    val unlockTransition = transitionInteractor.transition(
+        edge = Edge.create(to = Scenes.Gone),
+        edgeWithoutSceneContainer = Edge.create(to = GONE),
+    )
+
     /**
      * Whether we've STARTED but not FINISHED a transition to GONE, and the preconditions are met to
      * play the in-window unlock animation.

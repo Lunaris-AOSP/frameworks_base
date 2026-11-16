@@ -150,6 +150,11 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
         set(value) { field = value; refreshTime() }
     private val main = Handler(Looper.getMainLooper())
     private val glass = ClockGlassController(this)
+    val hasGlassElements: Boolean
+        get() = glass.hasGlassElements
+    var wallpaperFlags: Int
+        get() = glass.wallpaperFlags
+        set(value) { glass.wallpaperFlags = value }
     private val quickLook = ClockQuickLook(context) { refreshTime() }
     private val selectionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val pendingFonts = mutableSetOf<String>()

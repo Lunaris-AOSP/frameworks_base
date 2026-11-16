@@ -24,7 +24,8 @@ import android.util.LruCache
 import java.util.concurrent.Executors
 
 internal object ClockGlassWallpaper {
-    private data class Key(val user: Int, val width: Int, val height: Int, val display: Int)
+    private data class Key(val user: Int, val width: Int, val height: Int, val display: Int,
+        val which: Int)
 
     private val main = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor()
@@ -74,11 +75,12 @@ internal object ClockGlassWallpaper {
         listeners.remove(listener)
     }
 
-    fun get(context: Context, user: Int, requestedBlurRadii: IntArray): ClockGlass? {
+    fun get(context: Context, user: Int, requestedBlurRadii: IntArray,
+        which: Int = WallpaperManager.FLAG_LOCK): ClockGlass? {
         val metrics = context.resources.displayMetrics
         val key =
             Key(user, metrics.widthPixels.coerceAtLeast(1), metrics.heightPixels.coerceAtLeast(1),
-                runCatching { context.display?.displayId ?: 0 }.getOrDefault(0))
+                runCatching { context.display?.displayId ?: 0 }.getOrDefault(0), which)
         val cached = cache.get(key)
         if (cached?.generation == generation) return cached.material
         if (key in loading || !attempted.add(key)) return cached?.material
@@ -91,7 +93,7 @@ internal object ClockGlassWallpaper {
             val result =
                 runCatching {
                         val userContext = app.createContextAsUser(UserHandle.of(user), 0)
-                        decode(userContext, key.width, key.height, key.display)?.let {
+                        decode(userContext, key.width, key.height, key.display, key.which)?.let {
                             ClockGlass.prepare(it, blurRadii, referenceWidth = key.width, referenceHeight = key.height)
                         }
                     }
@@ -111,10 +113,13 @@ internal object ClockGlassWallpaper {
         return cached?.material
     }
 
-    private fun decode(context: Context, width: Int, height: Int, display: Int): Bitmap? {
+    private fun decode(context: Context, width: Int, height: Int, display: Int,
+        requestedWhich: Int): Bitmap? {
         val wm = context.getSystemService(WallpaperManager::class.java) ?: return null
         val which =
-            if (wm.getWallpaperId(WallpaperManager.FLAG_LOCK) >= 0) {
+            if (requestedWhich == WallpaperManager.FLAG_SYSTEM) {
+                WallpaperManager.FLAG_SYSTEM
+            } else if (wm.getWallpaperId(WallpaperManager.FLAG_LOCK) >= 0) {
                 WallpaperManager.FLAG_LOCK
             } else WallpaperManager.FLAG_SYSTEM
         val live = wm.getWallpaperInfo(which)

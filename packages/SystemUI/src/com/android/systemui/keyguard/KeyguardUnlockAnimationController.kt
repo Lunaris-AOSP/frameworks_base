@@ -39,6 +39,7 @@ import androidx.core.math.MathUtils
 import com.android.app.animation.Interpolators
 import com.android.internal.R
 import com.android.keyguard.KeyguardViewController
+import com.android.systemui.clocks.HomeClockProvider
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.flags.FeatureFlags
@@ -558,6 +559,7 @@ constructor(
             keyguardStateController.isKeyguardGoingAway &&
                 !statusBarStateController.leaveOpenOnKeyguardHide()
         ) {
+            HomeClockProvider.startUnlockAnimation()
             prepareForInWindowLauncherAnimations()
         }
 
@@ -573,7 +575,9 @@ constructor(
                     1f,
                     biometricUnlockControllerLazy.get().isWakeAndUnlock, /* forceIfAnimating */
                 )
+                HomeClockProvider.setUnlockAmount(1f, false)
             } catch (e: DeadObjectException) {
+                HomeClockProvider.finishUnlock(true)
                 Log.e(
                     TAG,
                     "launcherUnlockAnimationController was dead, but non-null in " +
@@ -634,6 +638,7 @@ constructor(
             (lockscreenSmartspace as BcSmartspaceDataPlugin.SmartspaceView?)?.selectedPage ?: -1
 
         try {
+            HomeClockProvider.prepareForUnlock()
             // Let the launcher know to prepare for this animation.
             launcherUnlockController?.prepareForUnlock(
                 willUnlockWithSmartspaceTransition, /* willAnimateSmartspace */
@@ -643,6 +648,7 @@ constructor(
 
             launcherPreparedForUnlock = true
         } catch (e: RemoteException) {
+            HomeClockProvider.finishUnlock(true)
             Log.e(TAG, "Remote exception in prepareForInWindowUnlockAnimations.", e)
         }
     }
@@ -702,6 +708,9 @@ constructor(
                 setSurfaceBehindAppearAmount(1f)
 
                 try {
+                    HomeClockProvider.playUnlockAnimation(
+                        true, UNLOCK_ANIMATION_DURATION_MS + CANNED_UNLOCK_START_DELAY_MS, 0,
+                    )
                     launcherUnlockController?.playUnlockAnimation(
                         true,
                         UNLOCK_ANIMATION_DURATION_MS + CANNED_UNLOCK_START_DELAY_MS,
@@ -713,6 +722,7 @@ constructor(
                     // would mean prepareToUnlock was called (blanking Launcher in preparation for
                     // the beginning of the unlock animation), but then somehow we were unable to
                     // call playUnlockAnimation to animate the icons back in.
+                    HomeClockProvider.finishUnlock(true)
                     Log.e(
                         TAG,
                         "launcherUnlockAnimationController was dead, but non-null. " +
@@ -823,6 +833,7 @@ constructor(
 
         try {
             val biometricUnlockController = biometricUnlockControllerLazy.get()
+            HomeClockProvider.playUnlockAnimation(true, LAUNCHER_ICONS_ANIMATION_DURATION_MS, 0)
             // Begin the animation, waiting for the shade to animate out.
             if (isPixelLauncherUnderneath()) {
                 launcherUnlockController?.playUnlockAnimation(
@@ -845,6 +856,7 @@ constructor(
             // would mean prepareToUnlock was called (blanking Launcher in preparation for
             // the beginning of the unlock animation), but then somehow we were unable to
             // call playUnlockAnimation to animate the icons back in.
+            HomeClockProvider.finishUnlock(true)
             Log.e(
                 TAG,
                 "launcherUnlockAnimationController was dead, but non-null. " +
@@ -1211,6 +1223,7 @@ constructor(
         dismissAmountThresholdsReached = false
         willUnlockWithInWindowLauncherAnimations = false
         willUnlockWithSmartspaceTransition = false
+        HomeClockProvider.finishUnlock(showKeyguard)
     }
 
     private fun animateKeyguardWallpaperZoom() {
