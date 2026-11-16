@@ -96,6 +96,7 @@ import com.android.systemui.bouncer.domain.interactor.AlternateBouncerInteractor
 import com.android.systemui.bouncer.domain.interactor.PrimaryBouncerInteractor;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Application;
+import com.android.systemui.dagger.qualifiers.LongRunning;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.deviceentry.domain.interactor.DeviceEntryFaceAuthInteractor;
 import com.android.systemui.doze.DozeReceiver;
@@ -167,6 +168,7 @@ public class UdfpsController implements DozeReceiver, Dumpable {
     private final UserActivityNotifier mUserActivityNotifier;
     private final WindowManager mWindowManager;
     private final DelayableExecutor mFgExecutor;
+    private Lazy<Executor> mBackgroundExecutor;
     @NonNull private final Executor mBiometricExecutor;
     @NonNull private final StatusBarStateController mStatusBarStateController;
     @NonNull private final KeyguardStateController mKeyguardStateController;
@@ -531,12 +533,18 @@ public class UdfpsController implements DozeReceiver, Dumpable {
      */
     public void updateOverlayParams(@NonNull FingerprintSensorPropertiesInternal sensorProps,
             @NonNull UdfpsOverlayParams overlayParams) {
-        if (mSensorProps.sensorId != sensorProps.sensorId) {
+        final boolean sensorChanged = mSensorProps.sensorId != sensorProps.sensorId;
+        final boolean paramsChanged = !mOverlayParams.equals(overlayParams);
+        if (sensorChanged) {
             mSensorProps = sensorProps;
             Log.w(TAG, "updateUdfpsParams | sensorId has changed");
         }
 
-        if (!mOverlayParams.equals(overlayParams)) {
+        if (mUdfpsAnimation != null && (sensorChanged || paramsChanged)) {
+            mUdfpsAnimation.onConfigurationChanged(sensorProps);
+        }
+
+        if (paramsChanged) {
             mOverlayParams = overlayParams;
 
             if (mOverlay != null && mOverlay.getRequestReason() == REASON_AUTH_KEYGUARD) {
@@ -893,6 +901,12 @@ public class UdfpsController implements DozeReceiver, Dumpable {
 
         mUseMtkGhbmDimming = mContext.getResources().getBoolean(
             com.android.systemui.res.R.bool.config_udfpsMtkGhbmDimming);
+    }
+
+    @Inject
+    void initializeUdfpsAnimation(@LongRunning Lazy<Executor> backgroundExecutor) {
+        mBackgroundExecutor = backgroundExecutor;
+        if (mUdfpsAnimation != null) return;
         if (com.android.internal.util.lunaris.Utils.isPackageInstalled(mContext,
                 "com.lunaris.udfps.animations")) {
             updateUdfpsAnimation();
@@ -901,13 +915,18 @@ public class UdfpsController implements DozeReceiver, Dumpable {
     }
 
     private void updateUdfpsAnimation() {
-        if (mUdfpsAnimation != null) {
-            mUdfpsAnimation.removeAnimation();
-            mUdfpsAnimation = null;
-        }
-        mUdfpsAnimation = new UdfpsAnimation(mContext, mWindowManager, mSensorProps, mAuthController);
-        if (mUdfpsAnimation != null) {
-            mUdfpsAnimation.updatePosition();
+        if (mUdfpsAnimation == null) {
+            mUdfpsAnimation = new UdfpsAnimation(mContext, mWindowManager, mSensorProps,
+                    mAuthController, command -> mBackgroundExecutor.get().execute(command),
+                    mFgExecutor);
+            if (mOverlay != null) {
+                mUdfpsAnimation.setIsKeyguard(mOverlay.getRequestReason() == REASON_AUTH_KEYGUARD
+                        || mKeyguardStateController.isShowing()
+                        || mStatusBarStateController.isDozing());
+                if (mOnFingerDown) mUdfpsAnimation.show();
+            }
+        } else {
+            mUdfpsAnimation.onConfigurationChanged(mSensorProps);
         }
     }
 
@@ -1373,8 +1392,8 @@ public class UdfpsController implements DozeReceiver, Dumpable {
                     cb.onFingerUp();
                 }
             }
-            hideUdfpsAnimation();
         }
+        hideUdfpsAnimation();
         mOnFingerDown = false;
 
         if (mUseMtkGhbmDimming && mOverlay != null) {

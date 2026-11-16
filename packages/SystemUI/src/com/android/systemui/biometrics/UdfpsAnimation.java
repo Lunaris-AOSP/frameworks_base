@@ -25,13 +25,18 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.database.ContentObserver;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.graphics.drawable.AnimationDrawable;
 import android.graphics.drawable.Drawable;
 import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.AttributeSet;
@@ -49,6 +54,8 @@ import com.android.systemui.res.R;
 import com.android.systemui.biometrics.AuthController;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
+
+import java.util.concurrent.Executor;
 
 public class UdfpsAnimation extends ImageView {
 
@@ -73,13 +80,22 @@ public class UdfpsAnimation extends ImageView {
 
     private final KeyguardStateController mKeyguardStateController;
     private final AuthController mAuthController;
-    private final FingerprintSensorPropertiesInternal mProps;
+    private FingerprintSensorPropertiesInternal mProps;
+    private final Executor mBackgroundExecutor;
+    private final Executor mMainExecutor;
+    private final ContentObserver mSettingsObserver;
+    private final Configuration mAnimationConfiguration;
 
     private boolean mAnimationAdded = false;
+    private boolean mAnimationRequested;
+    private boolean mAnimationLoading;
+    private volatile boolean mDestroyed;
+    private int mAnimationStyle = -1;
+    private volatile int mAnimationLoadGeneration;
 
     // Default values from dimens
-    private final int mDefaultAnimationSize;
-    private final int mDefaultAnimationOffset;
+    private int mDefaultAnimationSize;
+    private int mDefaultAnimationOffset;
 
     private final KeyguardStateController.Callback keyguardStateCallback = new KeyguardStateController.Callback() {
         @Override
@@ -97,6 +113,7 @@ public class UdfpsAnimation extends ImageView {
         public void onReceive(Context context, Intent intent) {
             final String action = intent.getAction();
             if (Intent.ACTION_USER_SWITCHED.equals(action)) {
+                hide();
                 updateAnimationStyle();
                 updateAnimationDimensions();
             }
@@ -104,11 +121,15 @@ public class UdfpsAnimation extends ImageView {
     };
 
     public UdfpsAnimation(Context context, WindowManager windowManager,
-           FingerprintSensorPropertiesInternal props, AuthController authController) {
+           FingerprintSensorPropertiesInternal props, AuthController authController,
+           Executor backgroundExecutor, Executor mainExecutor) {
         super(context);
         mContext = context;
         mAuthController = authController;
         mProps = props;
+        mBackgroundExecutor = backgroundExecutor;
+        mMainExecutor = mainExecutor;
+        mAnimationConfiguration = new Configuration(context.getResources().getConfiguration());
 
         mWindowManager = windowManager;
 
@@ -133,9 +154,23 @@ public class UdfpsAnimation extends ImageView {
                 | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
         mAnimParams.gravity = Gravity.TOP | Gravity.CENTER;
 
-        updatePosition();
-
         setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+
+        mSettingsObserver = new ContentObserver(new Handler(Looper.getMainLooper())) {
+            @Override
+            public void onChange(boolean selfChange) {
+                onSettingsChanged();
+            }
+        };
+        for (String setting : new String[] {Settings.System.UDFPS_ANIM_STYLE,
+                Settings.System.UDFPS_ANIM_SIZE, Settings.System.UDFPS_ANIM_OFFSET}) {
+            mContext.getContentResolver().registerContentObserver(
+                    Settings.System.getUriFor(setting), false, mSettingsObserver,
+                    UserHandle.USER_ALL);
+        }
+        mContext.registerReceiverAsUser(mIntentReceiver, UserHandle.ALL,
+                new IntentFilter(ACTION_USER_SWITCHED), null, null);
+        updateAnimationStyle();
     }
 
     private void updateAnimationDimensions() {
@@ -152,6 +187,7 @@ public class UdfpsAnimation extends ImageView {
 
         mAnimParams.height = mAnimationSize;
         mAnimParams.width = mAnimationSize;
+        updatePosition();
 
         if (DEBUG) {
             Log.d(LOG_TAG, "updateAnimationDimensions: sizeScale=" + sizeScale + 
@@ -161,7 +197,6 @@ public class UdfpsAnimation extends ImageView {
         }
 
         if (mShowing) {
-            updatePosition();
             try {
                 mWindowManager.updateViewLayout(this, mAnimParams);
             } catch (RuntimeException e) {
@@ -172,72 +207,82 @@ public class UdfpsAnimation extends ImageView {
 
     private void addAnimation() {
         if (!mAnimationAdded) {
-            IntentFilter filter = new IntentFilter(ACTION_USER_SWITCHED);
-            mContext.registerReceiverAsUser(mIntentReceiver, UserHandle.ALL, filter, null, null);
-
-            updateAnimationStyle();
-            updateAnimationDimensions();
-
             mKeyguardStateController.addCallback(keyguardStateCallback);
             mAnimationAdded = true;
         }
     }
 
     private void updateAnimationStyle() {
-        int value = Settings.System.getIntForUser(mContext.getContentResolver(),
+        if (mDestroyed) return;
+
+        final int value = Settings.System.getIntForUser(mContext.getContentResolver(),
                 Settings.System.UDFPS_ANIM_STYLE, 0, UserHandle.USER_CURRENT);
-        mContext.getMainExecutor().execute(() -> {
-            updateAnimationStyle(value);
+        if (value == mAnimationStyle) return;
+
+        mAnimationStyle = value;
+        final int generation = ++mAnimationLoadGeneration;
+        final boolean animationRequested = mAnimationRequested;
+        hide();
+        mAnimationRequested = animationRequested;
+        setBackground(null);
+        recognizingAnim = null;
+        mAnimationLoading = value > 0;
+        if (!mAnimationLoading) return;
+
+        mBackgroundExecutor.execute(() -> {
+            if (mDestroyed || generation != mAnimationLoadGeneration) return;
+
+            final AnimationDrawable animation = getBgDrawable(value, generation);
+            if (mDestroyed || generation != mAnimationLoadGeneration) return;
+
+            mMainExecutor.execute(() -> {
+                if (mDestroyed || generation != mAnimationLoadGeneration) return;
+
+                mAnimationLoading = false;
+                setBackground(animation);
+                recognizingAnim = animation;
+                if (mAnimationRequested) show();
+            });
         });
     }
 
-    private void updateAnimationStyle(int styleIdx) {
-        setBackground(null);
-        if (recognizingAnim != null) {
-            recognizingAnim.stop();
-            clearAnimation();
-            recognizingAnim = null;
-        }
-        Drawable bgDrawable = getBgDrawable(styleIdx);
-        if (styleIdx != 0 && bgDrawable != null) {
-            setBackground(bgDrawable);
-            recognizingAnim = bgDrawable instanceof AnimationDrawable ? (AnimationDrawable) bgDrawable : null;
-        }
-    }
+    private AnimationDrawable getBgDrawable(int styleIdx, int generation) {
+        if (styleIdx <= 0) return null;
 
-    private Drawable getBgDrawable(int styleIdx) {
-        Resources mApkResources = null;
         try {
-            mApkResources = mContext.getPackageManager().getResourcesForApplication(UDFPS_ANIMATIONS_PACKAGE);
-        } catch (PackageManager.NameNotFoundException e) {
-            Log.e(LOG_TAG, "Failed to load package resources", e);
-            return null;
-        }
-        String[] mStyleNames = null;
-        if (mApkResources != null) {
-            int res = mApkResources.getIdentifier("udfps_animation_styles",
+            final Resources resources = mContext.getPackageManager()
+                    .getResourcesForApplication(UDFPS_ANIMATIONS_PACKAGE);
+            final int stylesId = resources.getIdentifier("udfps_animation_styles",
                     "array", UDFPS_ANIMATIONS_PACKAGE);
-            if (res == 0) return null;
-            mStyleNames = mApkResources.getStringArray(res);
-        }
-        if (mStyleNames == null || styleIdx >= mStyleNames.length) {
-            return null;
-        }
-        String drawableName = mStyleNames[styleIdx];
-        if (DEBUG) Log.i(LOG_TAG, "Updating animation style to:" + drawableName);
-        try {
-            int resId = mApkResources.getIdentifier(drawableName, "drawable", UDFPS_ANIMATIONS_PACKAGE);
-            if (DEBUG) Log.i(LOG_TAG, "Got resource id: "+ resId +" from package");
+            if (stylesId == 0) return null;
+            final String[] styles = resources.getStringArray(stylesId);
+            if (styleIdx >= styles.length) return null;
+
+            final int resId = resources.getIdentifier(styles[styleIdx], "drawable",
+                    UDFPS_ANIMATIONS_PACKAGE);
             if (resId == 0) return null;
-            return mApkResources.getDrawable(resId);
-        } catch (Resources.NotFoundException e) {
-            Log.w(LOG_TAG, "Drawable resource not found: " + drawableName, e);
+            final Drawable drawable = resources.getDrawable(resId);
+            if (!(drawable instanceof AnimationDrawable animation)) return null;
+
+            animation.mutate();
+            for (int i = 0; i < animation.getNumberOfFrames(); i++) {
+                if (mDestroyed || generation != mAnimationLoadGeneration) return null;
+                animation.getFrame(i);
+            }
+            animation.getPadding(new Rect());
+            animation.isStateful();
+            animation.getMinimumWidth();
+            animation.getMinimumHeight();
+            animation.getOpacity();
+            return animation;
+        } catch (PackageManager.NameNotFoundException | RuntimeException e) {
+            Log.w(LOG_TAG, "Failed to load animation style " + styleIdx, e);
             return null;
         }
     }
 
     public boolean isAnimationEnabled() {
-        return recognizingAnim != null;
+        return mAnimationLoading || recognizingAnim != null;
     }
 
     private float getDisplayFactor() {
@@ -268,9 +313,10 @@ public class UdfpsAnimation extends ImageView {
     }
 
     public void show() {
-        if (!mIsKeyguard || recognizingAnim == null) {
-            return;
-        }
+        if (mDestroyed || !mIsKeyguard) return;
+
+        mAnimationRequested = true;
+        if (recognizingAnim == null) return;
 
         if (mShowing && !isAttachedToWindow()) {
             mShowing = false;
@@ -298,6 +344,7 @@ public class UdfpsAnimation extends ImageView {
     }
 
     public void hide() {
+        mAnimationRequested = false;
         try {
             if (recognizingAnim != null) {
                 recognizingAnim.stop();
@@ -318,13 +365,13 @@ public class UdfpsAnimation extends ImageView {
     public void removeAnimation() {
         hide();
         if (mAnimationAdded) {
-            mContext.unregisterReceiver(mIntentReceiver);
             mKeyguardStateController.removeCallback(keyguardStateCallback);
             mAnimationAdded = false;
         }
     }
 
     public void setIsKeyguard(boolean isKeyguard) {
+        if (mDestroyed) return;
         mIsKeyguard = isKeyguard;
         if (mIsKeyguard) {
             addAnimation();
@@ -334,6 +381,38 @@ public class UdfpsAnimation extends ImageView {
     }
 
     public void onSettingsChanged() {
+        if (mDestroyed) return;
+        updateAnimationStyle();
         updateAnimationDimensions();
+    }
+
+    public void onConfigurationChanged(FingerprintSensorPropertiesInternal props) {
+        if (mDestroyed) return;
+        mProps = props;
+        final Resources resources = mContext.getResources();
+        final int changes = mAnimationConfiguration.updateFrom(resources.getConfiguration());
+        mDefaultAnimationSize = resources.getDimensionPixelSize(R.dimen.udfps_animation_size);
+        mDefaultAnimationOffset = resources.getDimensionPixelSize(R.dimen.udfps_animation_offset);
+        updateAnimationDimensions();
+        if ((mAnimationLoading && changes != 0)
+                || (changes & (ActivityInfo.CONFIG_DENSITY | ActivityInfo.CONFIG_UI_MODE
+                | ActivityInfo.CONFIG_ASSETS_PATHS)) != 0
+                || (recognizingAnim != null
+                && (changes & recognizingAnim.getChangingConfigurations()) != 0)) {
+            mAnimationStyle = -1;
+            updateAnimationStyle();
+        }
+    }
+
+    public void destroy() {
+        if (mDestroyed) return;
+        mDestroyed = true;
+        ++mAnimationLoadGeneration;
+        mAnimationLoading = false;
+        removeAnimation();
+        mContext.getContentResolver().unregisterContentObserver(mSettingsObserver);
+        mContext.unregisterReceiver(mIntentReceiver);
+        setBackground(null);
+        recognizingAnim = null;
     }
 }

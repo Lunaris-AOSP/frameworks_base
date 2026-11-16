@@ -407,9 +407,7 @@ constructor(
             }
 
             override fun onFingerUp() {
-                if (udfpsController?.isAnimationEnabled() == false) {
-                    mView.retractDwellRipple()
-                }
+                mView.retractDwellRipple()
             }
         }
 
