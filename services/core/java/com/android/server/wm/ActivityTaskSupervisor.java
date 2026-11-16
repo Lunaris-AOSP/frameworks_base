@@ -3029,8 +3029,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
                     moveHomeTaskForward = false;
                 }
 
-                AxSandboxService.get().clearUnlockedApp();
-                AxSandboxService.get().lockTopApp(task, "startActivityFromRecents");
+                AxSandboxService.get().onStartActivityFromRecents(task);
 
                 if (moveHomeTaskForward) {
                     // We always want to return to the home activity instead of the recents
