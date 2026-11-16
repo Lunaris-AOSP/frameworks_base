@@ -3734,6 +3734,7 @@ public final class NotificationPanelViewController implements
                 mQsController.cancelShadeOverscroll();
                 mQsController.updateQsFrameTranslation();
             }
+            mQsController.updateGestureInsetsCache();
             if (ShadeWindowGoesAround.isEnabled()) {
                 updateResources();
             }
