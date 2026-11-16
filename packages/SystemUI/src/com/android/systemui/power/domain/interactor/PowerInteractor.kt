@@ -76,6 +76,11 @@ constructor(
             .map { it.isAwake() }
             .distinctUntilChanged(checkEquivalentUnlessEmitDuplicatesUnderTest)
 
+    val isAwakeForAnimations =
+        repository.wakefulness
+            .map { it.isAwakeForAnimations() }
+            .distinctUntilChanged(checkEquivalentUnlessEmitDuplicatesUnderTest)
+
     /** Helper flow in case "isAsleep" reads better than "!isAwake". */
     val isAsleep = isAwake.map { !it }
 

@@ -36,13 +36,11 @@ import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.power.domain.interactor.PowerInteractor
 import com.android.systemui.scene.shared.flag.SceneContainerFlag
 import com.android.systemui.util.kotlin.Utils.Companion.sample as sampleCombine
-import com.android.systemui.util.kotlin.sample
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.flow.debounce
 
 @SysUISingleton
 class FromDozingTransitionInteractor
@@ -95,8 +93,8 @@ constructor(
         // This is separate from `listenForDozingToAny` because any delay on wake and unlock will
         // cause a noticeable issue with animations
         scope.launch {
-            powerInteractor.isAwake
-                .filterRelevantKeyguardStateAnd { isAwake -> isAwake }
+            powerInteractor.isAwakeForAnimations
+                .filterRelevantKeyguardStateAnd { it }
                 .collect {
                     val biometricUnlockState = keyguardInteractor.biometricUnlockState.value
                     if (isWakeAndUnlock(biometricUnlockState.mode)) {
@@ -131,7 +129,6 @@ constructor(
         }
     }
 
-    @OptIn(FlowPreview::class)
     @SuppressLint("MissingPermission")
     private fun listenForDozingToAny() {
         if (KeyguardWmStateRefactor.isEnabled) {
@@ -140,14 +137,22 @@ constructor(
 
         scope.launch {
             powerInteractor.detailedWakefulness
-                .debounce(50L)
-                .filterRelevantKeyguardStateAnd { wakefulness -> wakefulness.isAwake() }
-                .sample(communalInteractor.isCommunalAvailable, ::Pair)
-                .collect { (_, isCommunalAvailable) ->
-                    val isKeyguardOccludedLegacy = keyguardInteractor.isKeyguardOccluded.value
-                    val primaryBouncerShowing = keyguardInteractor.primaryBouncerShowing.value
+                .filterRelevantKeyguardStateAnd { wakefulness -> wakefulness.isAwakeForAnimations() }
+                .sampleCombine(
+                    communalInteractor.isCommunalAvailable,
+                    keyguardInteractor.primaryBouncerShowing,
+                    keyguardInteractor.isKeyguardOccluded,
+                )
+                .collect { (_, isCommunalAvailable, primaryBouncerShowing, isKeyguardOccluded) ->
+                    val biometricUnlockState = keyguardInteractor.biometricUnlockState.value
 
-                    if (!deviceEntryInteractor.isLockscreenEnabled()) {
+                    if (isWakeAndUnlock(biometricUnlockState.mode)) {
+                        return@collect
+                    }
+
+                    val isKeyguardOccludedLegacy = isKeyguardOccluded
+
+                    if (!deviceEntryInteractor.isLockscreenEnabled() && canDismissLockscreen()) {
                         if (!SceneContainerFlag.isEnabled) {
                             startTransitionTo(
                                 KeyguardState.GONE,
@@ -190,7 +195,7 @@ constructor(
 
         scope.launch {
             powerInteractor.detailedWakefulness
-                .filterRelevantKeyguardStateAnd { it.isAwake() }
+                .filterRelevantKeyguardStateAnd { it.isAwakeForAnimations() }
                 .sampleCombine(
                     communalInteractor.isCommunalAvailable,
                     keyguardInteractor.biometricUnlockState,

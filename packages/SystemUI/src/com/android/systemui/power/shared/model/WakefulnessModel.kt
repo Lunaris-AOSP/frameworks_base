@@ -42,6 +42,8 @@ data class WakefulnessModel(
         internalWakefulnessState == WakefulnessState.AWAKE ||
             internalWakefulnessState == WakefulnessState.STARTING_TO_WAKE
 
+    fun isAwakeForAnimations() = internalWakefulnessState == WakefulnessState.AWAKE
+
     fun isAsleep() = !isAwake()
 
     fun isAwakeFrom(wakeSleepReason: WakeSleepReason) =

@@ -1640,11 +1640,8 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
                 && mBiometricUnlockController.getMode() == MODE_WAKE_AND_UNLOCK_PULSING;
         boolean keyguardVisible = mKeyguardStateController.isVisible();
         boolean hideWhileDozing = mDozing && !isWakeAndUnlockPulsing;
-        boolean showNavBarForPulsing = !com.android.systemui.Flags.newDozingKeyguardStates()
-                && mPulsing && !mIsDocked;
-        boolean keyguardWithGestureNav = (keyguardVisible && !mDozing && !mScreenOffAnimationPlaying
-                || showNavBarForPulsing)
-                && mGesturalNav;
+        boolean keyguardWithGestureNav = (keyguardVisible && !mDozing
+                && !mScreenOffAnimationPlaying) && mGesturalNav;
         return (!keyguardVisible && !hideWhileDozing && !mScreenOffAnimationPlaying
                 || primaryBouncerIsShowing()
                 || mRemoteInputActive

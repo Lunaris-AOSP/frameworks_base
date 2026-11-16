@@ -35,13 +35,11 @@ import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.keyguard.shared.model.TransitionModeOnCanceled
 import com.android.systemui.power.domain.interactor.PowerInteractor
 import com.android.systemui.scene.shared.flag.SceneContainerFlag
-import com.android.systemui.util.kotlin.sample
+import com.android.systemui.util.kotlin.Utils.Companion.sample as sampleCombine
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.flow.debounce
 
 @SysUISingleton
 class FromAodTransitionInteractor
@@ -87,33 +85,18 @@ constructor(
     /**
      * Listen for the signal that we're waking up and figure what state we need to transition to.
      */
-    @OptIn(FlowPreview::class)
     private fun listenForAodToAwake() {
-        // Use PowerInteractor's wakefulness, which is the earliest wake signal available. We
-        // have all of the information we need at this time to make a decision about where to
-        // transition.
         scope.launch("$TAG#listenForAodToAwake") {
             powerInteractor.detailedWakefulness
-                .let { flow ->
-                    if (!KeyguardWmStateRefactor.isEnabled) {
-                        // This works around some timing issues pre-refactor that are no longer an
-                        // issue (and this causes problems with the flag enabled).
-                        flow.debounce(50L)
-                    } else {
-                        flow
-                    }
-                }
-                .filterRelevantKeyguardStateAnd { wakefulness -> wakefulness.isAwake() }
-                .sample(wakeToGoneInteractor.canWakeDirectlyToGone, ::Pair)
-                .collect {
-                    (
-                        detailedWakefulness,
-                        canWakeDirectlyToGone,
-                    ) ->
+                .filterRelevantKeyguardStateAnd { wakefulness -> wakefulness.isAwakeForAnimations() }
+                .sampleCombine(
+                    wakeToGoneInteractor.canWakeDirectlyToGone,
+                    keyguardInteractor.primaryBouncerShowing,
+                )
+                .collect { (detailedWakefulness, canWakeDirectlyToGone, primaryBouncerShowing) ->
                     val startedStep = transitionInteractor.startedKeyguardTransitionStep.value
                     val isKeyguardOccludedLegacy = keyguardInteractor.isKeyguardOccluded.value
                     val biometricUnlockMode = keyguardInteractor.biometricUnlockState.value.mode
-                    val primaryBouncerShowing = keyguardInteractor.primaryBouncerShowing.value
                     val autoOpenCommunal = communalSettingsInteractor.autoOpenEnabled.value
 
                     if (!maybeHandleInsecurePowerGesture()) {
