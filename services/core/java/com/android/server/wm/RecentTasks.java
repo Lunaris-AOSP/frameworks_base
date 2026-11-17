@@ -976,6 +976,7 @@ class RecentTasks {
      */
     ParceledListSlice<ActivityManager.RecentTaskInfo> getRecentTasks(int maxNum, int flags,
             boolean getTasksAllowed, int userId, int callingUid) {
+        AxSandboxService.get().getRecentTasksCheck(callingUid, userId);
         return new ParceledListSlice<>(getRecentTasksImpl(maxNum, flags, getTasksAllowed,
                 userId, callingUid));
     }
@@ -2075,7 +2076,7 @@ class RecentTasks {
         if (!getTasksAllowed) {
             Task.trimIneffectiveInfo(tr, rti);
         }
-        AxSandboxService.get().isTopAppLocked(rti, tr.effectiveUid);
+        rti.isTopAppLocked = AxSandboxService.get().isTopAppLocked(rti, tr.effectiveUid);
         return rti;
     }
 
