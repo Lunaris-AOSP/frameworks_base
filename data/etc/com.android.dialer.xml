@@ -27,6 +27,9 @@
         <permission name="android.permission.CONNECTIVITY_USE_RESTRICTED_NETWORKS"/>
         <permission name="android.permission.READ_PRIVILEGED_PHONE_STATE"/>
         <permission name="android.permission.CAPTURE_AUDIO_OUTPUT"/>
+        <permission name="android.permission.CAPTURE_VOICE_COMMUNICATION_OUTPUT"/>
+        <permission name="android.permission.BYPASS_CONCURRENT_RECORD_AUDIO_RESTRICTION"/>
+        <permission name="android.permission.MODIFY_AUDIO_ROUTING"/>
         <permission name="android.permission.CALL_AUDIO_INTERCEPTION"/>
         <permission name="android.permission.NETWORK_STACK"/>
         <permission name="android.permission.MAINLINE_NETWORK_STACK"/>
