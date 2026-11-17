@@ -777,6 +777,35 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
                         + mQs.getView().getY() + mQs.getView().getHeight();
     }
 
+    private float getWindowWidth() {
+        if (mPanelView != null && mPanelView.getContext() != null && mWindowManagerProvider != null) {
+            try {
+                WindowManager wm = mWindowManagerProvider.getWindowManager(mPanelView.getContext());
+                if (wm != null) {
+                    WindowMetrics windowMetrics = wm.getCurrentWindowMetrics();
+                    if (windowMetrics != null && windowMetrics.getBounds() != null) {
+                        int width = windowMetrics.getBounds().width();
+                        if (width > 0) {
+                            mCachedWindowWidth = width;
+                            return width;
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        if (mResources != null && mResources.getDisplayMetrics() != null) {
+            int width = mResources.getDisplayMetrics().widthPixels;
+            if (width > 0) {
+                mCachedWindowWidth = width;
+                return width;
+            }
+        }
+        final int measuredWidth = mPanelView != null ? mPanelView.getMeasuredWidth()
+                : (mQs != null && mQs.getView() != null ? mQs.getView().getMeasuredWidth() : 0);
+        return measuredWidth > 0 ? measuredWidth : mCachedWindowWidth;
+    }
+
     /** Returns whether or not event should open QS */
     @VisibleForTesting
     boolean isOpenQsEvent(MotionEvent event) {
@@ -799,10 +828,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
                         MotionEvent.BUTTON_SECONDARY) || event.isButtonPressed(
                         MotionEvent.BUTTON_TERTIARY));
 
-        final int measuredWidth = mPanelView != null ? mPanelView.getMeasuredWidth()
-                : (mQs != null && mQs.getView() != null ? mQs.getView().getMeasuredWidth() : 0);
-        // The launcher's first gesture can arrive before the shade has been measured.
-        final float w = measuredWidth > 0 ? measuredWidth : mCachedWindowWidth;
+        final float w = getWindowWidth();
         final float x = event.getX();
         float region = w * 1.f / 4.f; // TODO overlay region fraction?
         boolean showQsOverride = false;
