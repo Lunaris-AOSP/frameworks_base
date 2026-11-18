@@ -203,6 +203,9 @@ public class StackScrollAlgorithm {
                             : 1f - ambientState.getDozeAmount();
                     viewState.setAlpha(alpha);
                 }
+            } else if (ambientState.isMiuiShadeAnimationEnabled()
+                    && !ambientState.isBouncerInTransit()) {
+                viewState.setAlpha(1f);
             } else if (ambientState.isExpansionChanging()) {
                 // Adjust alpha for shade open & close.
                 float expansion = ambientState.getExpansionFraction();
@@ -670,6 +673,8 @@ public class StackScrollAlgorithm {
     protected float getExpansionFractionWithoutShelf(
             StackScrollAlgorithmState algorithmState,
             AmbientState ambientState) {
+
+        if (ambientState.isMiuiShadeAnimationEnabled()) return 1f;
 
         final boolean showingShelf = ambientState.getShelf() != null
                 && algorithmState.firstViewInShelf != null;

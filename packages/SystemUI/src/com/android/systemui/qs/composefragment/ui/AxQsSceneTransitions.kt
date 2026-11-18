@@ -48,11 +48,15 @@ fun TransitionBuilder.axQsPanelSwipe() {
     sharedElement(ShadeHeader.Elements.Clock, enabled = false)
 }
 
-fun TransitionBuilder.axFromQuickQuickSettingsToQuickSettings() {
+fun TransitionBuilder.axFromQuickQuickSettingsToQuickSettings(miuiAnimation: Boolean = false) {
     fractionRange(start = 0.15f, end = 0.85f, easing = FastOutSlowInEasing) {
         fade(SceneKeys.QuickQuickSettings.rootElementKey)
-        fade(SceneKeys.QuickSettings.rootElementKey)
-        translate(AxQsGridContent, y = AxQsSceneTranslation)
+        if (!miuiAnimation) {
+            fade(SceneKeys.QuickSettings.rootElementKey)
+            translate(AxQsGridContent, y = AxQsSceneTranslation)
+        } else {
+            fade(Elements.FooterActions)
+        }
     }
     disableAxQsSharedElements()
     sharedElement(ShadeHeader.Elements.Clock, enabled = false)

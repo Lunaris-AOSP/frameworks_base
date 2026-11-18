@@ -528,6 +528,23 @@ fun LunariQsPanelSettings(
                 item("behavior") {
                     SettingsHeading(stringResource(R.string.ax_qs_settings_behavior))
                 }
+                item("miui_qs_animation") {
+                    SettingsSwitch(
+                        title = stringResource(R.string.lunaris_qs_miui_animation),
+                        summary = stringResource(R.string.lunaris_qs_miui_animation_summary),
+                        checked = viewModel.miuiQsAnimation,
+                        onCheckedChange = viewModel::setMiuiQsAnimation,
+                        position = SettingPosition.First,
+                    )
+                }
+                item("miui_split_qs_animation") {
+                    SettingsSwitch(
+                        title = stringResource(R.string.lunaris_qs_miui_split_animation),
+                        summary = stringResource(R.string.lunaris_qs_miui_split_animation_summary),
+                        checked = viewModel.miuiSplitQsAnimation,
+                        onCheckedChange = viewModel::setMiuiSplitQsAnimation,
+                    )
+                }
                 item("shared_layout") {
                     SettingsSwitch(
                         title = stringResource(R.string.lunaris_qs_shared_layout),
@@ -535,7 +552,6 @@ fun LunariQsPanelSettings(
                         checked = viewModel.sharedQsLayout,
                         onCheckedChange = viewModel::setSharedQsLayout,
                         enabled = !separate,
-                        position = SettingPosition.First,
                     )
                 }
                 if (viewModel.useSharedQsLayout) {

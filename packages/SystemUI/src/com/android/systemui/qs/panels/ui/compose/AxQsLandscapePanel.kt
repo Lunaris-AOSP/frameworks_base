@@ -60,6 +60,8 @@ internal fun <T> ContentScope.AxQsLandscapePanel(
     val tileScrollState = rememberScrollState()
     val onScrollGestureStart = LocalQsScrollGestureStart.current
     val swipeOverflow = qsPanelSwipeOverflow()
+    val entranceOverflow = qsMiuiEntranceOverflow()
+    val scrollOverflow = maxOf(swipeOverflow, entranceOverflow)
     BoxWithConstraints(modifier.fillMaxSize()) {
         val paneWidth =
             if (controlItems.isNotEmpty() && tileItems.isNotEmpty()) {
@@ -101,7 +103,12 @@ internal fun <T> ContentScope.AxQsLandscapePanel(
                 Box(
                     Modifier.weight(1f)
                         .fillMaxHeight()
-                        .dynamicPadding(horizontal = { -swipeOverflow.roundToPx() })
+                        .qsTouchBounds()
+                        .dynamicPadding(
+                            start = { -scrollOverflow.roundToPx() },
+                            end = { -scrollOverflow.roundToPx() },
+                            top = { -entranceOverflow.roundToPx() },
+                        )
                         .clipScrollableContainer(Orientation.Vertical)
                         .verticalScroll(scrollState, overscrollEffect = null)
                         .motionEventSpy { event ->
@@ -117,7 +124,11 @@ internal fun <T> ContentScope.AxQsLandscapePanel(
                         spacing = spacing,
                         maxRows = controlRows,
                         squareCells = true,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = swipeOverflow),
+                        modifier =
+                            Modifier.fillMaxWidth()
+                                .padding(
+                                    start = scrollOverflow, end = scrollOverflow, top = entranceOverflow
+                                ),
                         content = controlContent,
                     )
                 }
@@ -129,7 +140,12 @@ internal fun <T> ContentScope.AxQsLandscapePanel(
                     modifier =
                         Modifier.weight(1f)
                             .fillMaxHeight()
-                            .dynamicPadding(horizontal = { -swipeOverflow.roundToPx() })
+                            .qsTouchBounds()
+                            .dynamicPadding(
+                                start = { -scrollOverflow.roundToPx() },
+                                end = { -scrollOverflow.roundToPx() },
+                                top = { -entranceOverflow.roundToPx() },
+                            )
                             .clipScrollableContainer(Orientation.Vertical)
                             .verticalScroll(
                                 tilePaneScrollState,
@@ -142,7 +158,12 @@ internal fun <T> ContentScope.AxQsLandscapePanel(
                             },
                     contentAlignment = Alignment.TopCenter,
                 ) {
-                    Column(Modifier.width(tileGridWidth)) {
+                    Column(
+                        Modifier.padding(
+                            start = scrollOverflow, end = scrollOverflow, top = entranceOverflow
+                        )
+                            .width(tileGridWidth)
+                    ) {
                         AxQsTileGrid(
                             items = tileItems,
                             columns = visibleTileColumns,

@@ -214,6 +214,8 @@ internal fun <T> ContentScope.AxQS(
 ) {
     val pagerState = rememberAxQsTilePagerState(tileItems, tileColumns, tileRows)
     val swipeOverflow = qsPanelSwipeOverflow()
+    val entranceOverflow = qsMiuiEntranceOverflow()
+    val scrollOverflow = maxOf(swipeOverflow, entranceOverflow)
     Column(
         modifier = modifier.fillMaxSize(),
     ) {
@@ -233,12 +235,21 @@ internal fun <T> ContentScope.AxQS(
             modifier =
                 Modifier.weight(1f)
                     .fillMaxWidth()
-                    .dynamicPadding(horizontal = { -swipeOverflow.roundToPx() })
+                    .qsTouchBounds()
+                    .dynamicPadding(
+                        start = { -scrollOverflow.roundToPx() },
+                        end = { -scrollOverflow.roundToPx() },
+                        top = { -entranceOverflow.roundToPx() },
+                    )
                     .clipScrollableContainer(Orientation.Vertical)
                     .verticalScroll(scrollState, overscrollEffect = null),
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = swipeOverflow).element(AxQsGridContent),
+                modifier =
+                    Modifier.padding(
+                        start = scrollOverflow, end = scrollOverflow, top = entranceOverflow
+                    )
+                        .element(AxQsGridContent),
                 verticalArrangement = Arrangement.spacedBy(spacing),
             ) {
                 if (controlItems.isNotEmpty()) {
@@ -301,13 +312,18 @@ internal fun AxQsDateHeader(
     bottomSpacing: Dp = 0.dp,
 ) {
     Row(
-        modifier = modifier.fillMaxWidth().layout { measurable, constraints ->
-            val placeable = measurable.measure(constraints)
-            val gap = if (placeable.height > 0) bottomSpacing.roundToPx() else 0
-            layout(placeable.width, (placeable.height + gap).coerceAtMost(constraints.maxHeight)) {
-                placeable.placeRelative(0, 0)
-            }
-        },
+        modifier =
+            modifier.fillMaxWidth()
+                .layout { measurable, constraints ->
+                    val placeable = measurable.measure(constraints)
+                    val gap = if (placeable.height > 0) bottomSpacing.roundToPx() else 0
+                    layout(
+                        placeable.width,
+                        (placeable.height + gap).coerceAtMost(constraints.maxHeight),
+                    ) {
+                        placeable.placeRelative(0, 0)
+                    }
+                },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(
@@ -319,6 +335,7 @@ internal fun AxQsDateHeader(
                 AxQuickSettingsDate(viewModel = shadeHeaderViewModel)
             }
             QsDataUsage(
+                modifier = Modifier.miuiQsHeaderMotion(),
                 textColor = ShadeHeader.Colors.textColor,
                 compact = true,
             )
@@ -448,6 +465,7 @@ fun AxQsWeather(
     Row(
         modifier =
             modifier
+                .miuiQsHeaderMotion()
                 .clip(RoundedCornerShape(12.dp))
                 .clickable {
                     try {
@@ -519,12 +537,12 @@ internal fun AxQsHeaderActions(
             model = viewModel.userSwitcherViewModel,
             containerColor = AxTileDefaults.backgroundColor(),
             iconColor = Color.Unspecified,
-            modifier = Modifier.sysuiResTag("multi_user_switch"),
+            modifier = Modifier.miuiQsHeaderMotion().sysuiResTag("multi_user_switch"),
         )
         FooterIconButton(
             model = viewModel.settingsButtonViewModel,
             containerColor = AxTileDefaults.backgroundColor(),
-            modifier = Modifier.sysuiResTag("settings_button_container"),
+            modifier = Modifier.miuiQsHeaderMotion().sysuiResTag("settings_button_container"),
         )
         AxFooterOverflowMenu(viewModel)
     }
@@ -540,7 +558,7 @@ private fun AxActiveAppsButton(viewModel: ToolbarViewModel) {
     AxHeaderButton(
         onClick = viewModel::onForegroundServicesButtonClicked,
         modifier =
-            Modifier.sysuiResTag("fgs_manager_button").semantics {
+            Modifier.miuiQsHeaderMotion().sysuiResTag("fgs_manager_button").semantics {
                 contentDescription = description
             },
     ) {
@@ -622,7 +640,7 @@ private fun AxEditButton(viewModel: ToolbarViewModel) {
     if (!editModeButtonViewModel.isEditButtonVisible) return
     AxHeaderButton(
         onClick = { editModeButtonViewModel.onButtonClick() },
-        modifier = Modifier.sysuiResTag("qs_edit_mode_button"),
+        modifier = Modifier.miuiQsHeaderMotion().sysuiResTag("qs_edit_mode_button"),
     ) {
         Icon(
             imageVector = Icons.Default.Edit,
@@ -645,6 +663,7 @@ private fun AxFooterOverflowMenu(viewModel: ToolbarViewModel) {
                 expandable = it
                 expanded = true
             },
+            modifier = Modifier.miuiQsHeaderMotion(),
         ) {
             Icon(
                 imageVector = Icons.Default.MoreVert,

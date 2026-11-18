@@ -154,6 +154,7 @@ fun AxCompactQuickSettingsHeader(
                         onClick = viewModel::onClockClicked,
                         textColor = textColor,
                         textSize = 14f + 10f * progress,
+                        modifier = Modifier.miuiQsHeaderMotion(),
                     )
                 },
                 {
@@ -330,11 +331,12 @@ private fun AxStatusIcons(
     modifier: Modifier = Modifier,
     showMobileIcons: Boolean = false,
 ) {
+    val iconModifier = modifier.miuiQsHeaderMotion()
     if (SystemStatusIconsInCompose.isEnabled) {
         SystemStatusIcons(
             viewModelFactory = viewModel.systemStatusIconsViewModelFactory,
             tint = Color(foregroundColor),
-            modifier = modifier,
+            modifier = iconModifier,
             showMobileIcons = showMobileIcons,
         )
     } else {
@@ -362,7 +364,7 @@ private fun AxStatusIcons(
             isPrivacyChipEnabled = viewModel.isPrivacyChipVisible,
             isLocationIndicationEnabled = viewModel.isLocationIndicationEnabled,
             showMobileIcons = showMobileIcons,
-            modifier = modifier,
+            modifier = iconModifier,
             content = movableContent,
         )
     }
@@ -383,7 +385,7 @@ private fun AxPrivacyChip(
             }
         },
         update = { it.privacyList = privacyList },
-        modifier = modifier,
+        modifier = modifier.miuiQsHeaderMotion(),
     )
 }
 
@@ -395,7 +397,8 @@ fun AxCarrierText(
     modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = modifier.clickable { viewModel.onShadeCarrierGroupClicked() },
+        modifier =
+            modifier.miuiQsHeaderMotion().clickable { viewModel.onShadeCarrierGroupClicked() },
         horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -554,12 +557,13 @@ fun AxQuickSettingsClock(
     clockStyle: Int = rememberClockStyle(),
 ) {
     val textColor = ShadeHeader.Colors.textColor
+    val clockModifier = modifier.miuiQsHeaderMotion()
     when (clockStyle) {
-        0 -> AxHeaderClock(onClick = viewModel::onClockClicked, textColor = textColor, modifier = modifier)
-        1 -> AxCustomClockView(layoutRes = R.layout.qs_header_clock_chip, onClick = viewModel::onClockClicked, modifier = modifier)
-        2 -> AxCustomClockView(layoutRes = R.layout.qs_header_clock_oos, onClick = viewModel::onClockClicked, modifier = modifier)
-        3 -> AxCustomClockView(layoutRes = R.layout.qs_header_clock_analog, onClick = viewModel::onClockClicked, modifier = modifier)
-        else -> AxCustomClockView(layoutRes = R.layout.qs_header_clock_simple, onClick = viewModel::onClockClicked, modifier = modifier)
+        0 -> AxHeaderClock(onClick = viewModel::onClockClicked, textColor = textColor, modifier = clockModifier)
+        1 -> AxCustomClockView(layoutRes = R.layout.qs_header_clock_chip, onClick = viewModel::onClockClicked, modifier = clockModifier)
+        2 -> AxCustomClockView(layoutRes = R.layout.qs_header_clock_oos, onClick = viewModel::onClockClicked, modifier = clockModifier)
+        3 -> AxCustomClockView(layoutRes = R.layout.qs_header_clock_analog, onClick = viewModel::onClockClicked, modifier = clockModifier)
+        else -> AxCustomClockView(layoutRes = R.layout.qs_header_clock_simple, onClick = viewModel::onClockClicked, modifier = clockModifier)
     }
 }
 
@@ -601,7 +605,7 @@ fun AxQuickSettingsDate(
         textColor = ShadeHeader.Colors.textColor,
         textSize = textSize,
         modifier =
-            modifier.clickable {
+            modifier.miuiQsHeaderMotion().clickable {
                 try {
                     val intent =
                         Intent.makeMainSelectorActivity(
@@ -833,9 +837,9 @@ private fun AxBatteryInfo(
 ) {
     val batteryModifier =
         if (onClick != null) {
-            modifier.clickable(onClick = onClick)
+            modifier.miuiQsHeaderMotion().clickable(onClick = onClick)
         } else {
-            modifier
+            modifier.miuiQsHeaderMotion()
         }
 
     if (NewStatusBarIcons.isEnabled) {

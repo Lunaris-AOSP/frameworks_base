@@ -47,6 +47,8 @@ constructor(
         Lazy<NotificationStackScrollLayoutController>,
 ) {
     val panelMode = repository.panelMode
+    val miuiQsAnimation = repository.miuiQsAnimation
+    val miuiSplitQsAnimation = repository.miuiSplitQsAnimation
     private val quickPanelOnLeft = repository.quickPanelOnLeft
     val panelSwipeEnabled =
         combine(repository.panelSwipeEnabled, panelMode) { enabled, mode ->
@@ -75,6 +77,10 @@ constructor(
     }
 
     fun isPanelSwipeEnabled(): Boolean = isSeparateShade() && panelSwipeEnabled.value
+
+    fun useMiuiQsAnimation(splitShade: Boolean): Boolean =
+        if (splitShade || panelMode.value == AxQsPanelMode.SEPARATE) miuiSplitQsAnimation.value
+        else miuiQsAnimation.value
 
     fun collapseSeparateShade(): Boolean {
         if (!isSeparateShade()) return false

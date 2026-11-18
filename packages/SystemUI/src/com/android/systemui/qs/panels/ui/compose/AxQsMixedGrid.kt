@@ -99,6 +99,8 @@ internal fun ContentScope.AxQsMixedGrid(
     collapsedHeaderOffset: Int = 0,
     panelSwipeProgress: () -> Float = { -1f },
     panelSwipeFromQs: () -> Boolean = { false },
+    expansionFromLeft: () -> Boolean = { false },
+    animationResetSequence: () -> Int = { 0 },
 ) {
     val tiles = viewModel.containerViewModel.tileGridViewModel.tileViewModels
     val values = LinkedHashMap<String, AxQsGridValue>()
@@ -420,9 +422,27 @@ internal fun ContentScope.AxQsMixedGrid(
     }
 
     val panelView = LocalView.current
+    val miuiMotion =
+        if (axQsViewModel.useMiuiQsAnimation(splitShade) &&
+            viewModel.statusBarState == StatusBarState.SHADE && !viewModel.isEditing &&
+            !viewModel.isTransitioningToFullShade
+        ) {
+            rememberMiuiQsPanelMotion(
+                expansion = {
+                    if (qqs || sharedLayout || splitShade ||
+                        axQsViewModel.panelMode == AxQsPanelMode.SEPARATE
+                    ) viewModel.panelExpansionFraction
+                    else minOf(viewModel.panelExpansionFraction, viewModel.expansionState.progress)
+                },
+                visible = { contentVisible },
+                swiping = { panelSwipeProgress() >= 0f },
+                fromLeft = expansionFromLeft,
+                resetSequence = animationResetSequence,
+            )
+        } else null
     val elementMotion = remember(
         viewModel, axQsViewModel, panelView, controlRowCount, rows.tiles,
-        panelSwipeProgress, panelSwipeFromQs,
+        panelSwipeProgress, panelSwipeFromQs, miuiMotion,
     ) {
         LunarisQsElementMotion(
             expansion = {
@@ -437,14 +457,17 @@ internal fun ContentScope.AxQsMixedGrid(
             panelWidth = { panelView.width.toFloat() },
             controlRows = controlRowCount,
             tileRows = rows.tiles,
+            miuiAnimation = miuiMotion,
         )
     }
     CompositionLocalProvider(LocalLunarisQsElementMotion provides elementMotion) {
         QuickSettingsTheme {
-            BoxWithConstraints(
+            val panelModifier =
                 if (compactStyle || landscapeLayout) {
                     modifier.windowInsetsPadding(axCompactQsHorizontalInsets())
                 } else modifier
+            BoxWithConstraints(
+                modifier = panelModifier.miuiQsMotionBounds(miuiMotion)
             ) {
                 val contentPadding = axQsViewModel.spacing.sidePadding.dp
                 val gridWidth = (maxWidth - contentPadding * 2).coerceAtLeast(0.dp)
@@ -548,7 +571,8 @@ internal fun ContentScope.AxQsMixedGrid(
                                         .padding(
                                             horizontal = dimensionResource(R.dimen.qs_horizontal_margin)
                                         )
-                                        .layoutHeight(notificationMediaHeight()),
+                                        .layoutHeight(notificationMediaHeight())
+                                        .miuiQsHeaderMotion(motion = miuiMotion),
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     AxMediaPanel(

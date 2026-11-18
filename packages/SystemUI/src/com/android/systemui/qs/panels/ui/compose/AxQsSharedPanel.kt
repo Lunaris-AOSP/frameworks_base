@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.android.compose.animation.scene.ContentScope
 import com.android.compose.gesture.gesturesDisabled
+import com.android.compose.modifiers.padding as dynamicPadding
 import com.android.systemui.qs.composefragment.ui.axQsEntrance as axQsPanelEntrance
 import com.android.systemui.qs.panels.shared.model.AxQsGridItem
 import com.android.systemui.qs.panels.ui.viewmodel.toolbar.ToolbarViewModel
@@ -97,6 +98,7 @@ internal fun <T> ContentScope.AxQsSharedPanel(
     }
     var headerHeight by remember(compactStyle) { mutableIntStateOf(0) }
     val density = LocalDensity.current
+    val entranceOverflow = qsMiuiEntranceOverflow()
     BoxWithConstraints(modifier.fillMaxSize()) {
         val tileHeight =
             if (circleCells) axQsGridCellWidth(maxWidth, tileColumns, spacing) else rowHeight
@@ -141,11 +143,20 @@ internal fun <T> ContentScope.AxQsSharedPanel(
             Column(
                 Modifier.weight(1f)
                     .fillMaxWidth()
+                    .qsTouchBounds()
+                    .dynamicPadding(
+                        start = { -entranceOverflow.roundToPx() },
+                        end = { -entranceOverflow.roundToPx() },
+                        top = { -entranceOverflow.roundToPx() },
+                    )
                     .clipScrollableContainer(Orientation.Vertical)
                     .verticalScroll(
                         state = scrollState,
                         enabled = fullyExpanded || hasScroll,
                         overscrollEffect = null,
+                    )
+                    .padding(
+                        start = entranceOverflow, end = entranceOverflow, top = entranceOverflow
                     ),
                 verticalArrangement = Arrangement.spacedBy(spacing),
             ) {

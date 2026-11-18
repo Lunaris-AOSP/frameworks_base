@@ -4179,6 +4179,15 @@ public final class NotificationPanelViewController implements
                 return true;
             }
 
+            if (event.getActionMasked() == MotionEvent.ACTION_DOWN && !mTouchDisabled
+                    && !mInstantExpanding && !mLastEventSynthesizedDown && !isTracking()
+                    && !mQsController.isTracking() && mHeightAnimator != null
+                    && mLastFlingExpand && !isClosing()
+                    && mQsController.isMiuiQsContentTouch(event)) {
+                mHeightAnimator.end();
+                setExpandedHeightInternal(getMaxPanelTransitionDistance());
+            }
+
             if (!canHandlePanelSwipe()) {
                 mQsController.cancelPanelSwipe();
             } else if (mQsController.onInterceptPanelSwipe(event)) {

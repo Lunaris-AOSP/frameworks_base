@@ -29,6 +29,7 @@ import com.android.systemui.application.ContentProviderContextInitializer
 import com.android.systemui.dagger.ContextComponentHelper
 import com.android.systemui.dagger.SysUIComponent
 import com.android.systemui.qs.flags.MistQsMode
+import com.android.systemui.scene.shared.flag.SceneContainerFlag
 import com.android.tools.r8.keepanno.annotations.KeepTarget
 import com.android.tools.r8.keepanno.annotations.UsesReflection
 import java.lang.reflect.InvocationTargetException
@@ -65,6 +66,9 @@ abstract class SystemUIAppComponentFactoryBase : AppComponentFactory() {
         return systemUIInitializer
             ?: run {
                 MistQsMode.initialize(context)
+                if (MistQsMode.isEnabled) {
+                    SceneContainerFlag.isEnabledOnVariant = false
+                }
                 val initializer = createSystemUIInitializer(context.applicationContext)
                 try {
                     initializer.init(false)

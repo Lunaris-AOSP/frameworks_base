@@ -65,6 +65,7 @@ import com.android.systemui.qs.panels.ui.edit.LunarisQsWidgetActivity
 import com.android.systemui.qs.panels.widgets.LunarisQsWidgetService
 import com.android.systemui.res.R
 import com.android.systemui.shade.ShadeDisplayAware
+import com.android.systemui.shade.data.repository.ShadeRepository
 import com.android.systemui.shade.domain.interactor.ShadeInteractor
 import com.android.systemui.statusbar.phone.SystemUIDialog
 import com.android.systemui.statusbar.phone.SystemUIDialogFactory
@@ -74,6 +75,7 @@ import com.android.systemui.user.data.repository.UserRepository
 import com.android.systemui.utils.coroutines.flow.conflatedCallbackFlow
 import javax.inject.Inject
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 
 class AxQsViewModel
@@ -86,6 +88,7 @@ constructor(
     private val dialogTransitionAnimator: DialogTransitionAnimator,
     configurationInteractor: ConfigurationInteractor,
     shadeInteractor: ShadeInteractor,
+    shadeRepository: ShadeRepository,
     columnsRepository: QSColumnsRepository,
     carrierTextManagerBuilder: CarrierTextManager.Builder,
     bluetoothArtworkRepository: LunarisBluetoothArtworkRepository,
@@ -140,6 +143,16 @@ constructor(
             traceName = "isShadeBeingDragged",
             initialValue = true,
             source = shadeInteractor.isUserInteracting,
+        )
+    @Suppress("DEPRECATION")
+    val isShadeTracking by
+        hydrator.hydratedStateOf(
+            traceName = "isShadeTracking",
+            initialValue = false,
+            source =
+                combine(shadeRepository.legacyShadeTracking, shadeRepository.legacyQsTracking) {
+                    shadeTracking, qsTracking -> shadeTracking || qsTracking
+                },
         )
     private val photoUserId by
         hydrator.hydratedStateOf(
@@ -446,6 +459,23 @@ constructor(
             initialValue = false,
             source = repository.panelSwipeEnabled,
         )
+    val miuiQsAnimation by
+        hydrator.hydratedStateOf(
+            traceName = "miuiQsAnimation",
+            initialValue = repository.miuiQsAnimation.value,
+            source = repository.miuiQsAnimation,
+        )
+    val miuiSplitQsAnimation by
+        hydrator.hydratedStateOf(
+            traceName = "miuiSplitQsAnimation",
+            initialValue = repository.miuiSplitQsAnimation.value,
+            source = repository.miuiSplitQsAnimation,
+        )
+
+    fun useMiuiQsAnimation(splitShade: Boolean): Boolean =
+        if (splitShade || panelMode == AxQsPanelMode.SEPARATE) miuiSplitQsAnimation
+        else miuiQsAnimation
+
     val showWeather by
         hydrator.hydratedStateOf(
             traceName = "showWeather",
@@ -801,6 +831,10 @@ constructor(
     fun setQuickPanelOnLeft(onLeft: Boolean) = repository.setQuickPanelOnLeft(onLeft)
 
     fun setPanelSwipeEnabled(enabled: Boolean) = repository.setPanelSwipeEnabled(enabled)
+
+    fun setMiuiQsAnimation(enabled: Boolean) = repository.setMiuiQsAnimation(enabled)
+
+    fun setMiuiSplitQsAnimation(enabled: Boolean) = repository.setMiuiSplitQsAnimation(enabled)
 
     fun setShowWeather(show: Boolean) = repository.setShowWeather(show)
 

@@ -1668,8 +1668,13 @@ public class NotificationStackScrollLayoutController implements Dumpable {
         mAxNotificationStackVisibility.setQuickQsHidden(mView, hidden);
     }
 
+    public void setMiuiShadeExpansion(float expansion, boolean enabled, boolean fromLeft) {
+        mView.setMiuiShadeExpansion(expansion, enabled, fromLeft);
+    }
+
     public void setSeparateShadeCollapsing(boolean collapsing) {
-        mAxNotificationStackVisibility.setSeparateShadeCollapsing(mView, collapsing);
+        mAxNotificationStackVisibility.setSeparateShadeCollapsing(
+                mView, collapsing && !mView.isMiuiShadeAnimationEnabled());
     }
 
     public boolean isShowingEmptyShadeView() {

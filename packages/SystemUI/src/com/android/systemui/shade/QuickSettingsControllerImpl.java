@@ -293,6 +293,9 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
      * We cache this on ACTION_DOWN, and query it during both ACTION_DOWN and ACTION_MOVE events.
      */
     private int mCachedWindowWidth;
+    private boolean mQsExpansionFromLeft;
+    private long mQsExpansionOriginDownTime = -1L;
+    private final int[] mQsExpansionOriginLocation = new int[2];
 
     /**
      * The amount of progress we are currently in if we're transitioning to the full shade.
@@ -656,10 +659,18 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         if (isMistQsEnabled()) {
             mJavaAdapter.alwaysCollectFlow(mAxQsShadePolicy.get().getPanelMode(), mode -> {
                 updateQsState();
+                updateMiuiShadeExpansion();
             });
             mJavaAdapter.alwaysCollectFlow(mAxQsShadePolicy.get().getPanelSwipeEnabled(), enabled -> {
                 if (!enabled) cancelPanelSwipe();
             });
+            mJavaAdapter.alwaysCollectFlow(mAxQsShadePolicy.get().getMiuiQsAnimation(), enabled -> {
+                updateMiuiShadeExpansion();
+            });
+            mJavaAdapter.alwaysCollectFlow(
+                    mAxQsShadePolicy.get().getMiuiSplitQsAnimation(), enabled -> {
+                        updateMiuiShadeExpansion();
+                    });
         }
         mJavaAdapter.alwaysCollectFlow(
                 mShadeInteractor.isExpandToQsEnabled(), this::setExpansionEnabledPolicy);
@@ -1065,6 +1076,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
             cancelShadeOverscroll();
         }
         mDozing = dozing;
+        updateQsFrameTranslation();
     }
 
     @Override
@@ -1212,6 +1224,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         if (mQs != null) {
             mQs.setInSplitShade(mSplitShadeEnabled || (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE));
             updateMinHeight();
+            updateMiuiShadeExpansion();
         }
         updateNotificationStackVisibility();
     }
@@ -1312,6 +1325,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
     }
 
     void initDownStates(MotionEvent event, boolean collapsedOnDown, boolean isSynthesizedDown) {
+        if (!isSynthesizedDown) updateQsExpansionOrigin(event);
         mCollapsedOnDown = collapsedOnDown;
         if (mSeparateShadeGestureDownTime == event.getDownTime()) {
             return;
@@ -1330,7 +1344,28 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         }
         mShadeExpandedHeight = expandedHeight;
         mShadeExpandedFraction = expandedFraction;
+        updateMiuiShadeExpansion();
         mMediaHierarchyManager.setShadeExpandedFraction(expandedFraction);
+    }
+
+    private void updateMiuiShadeExpansion() {
+        mNotificationStackScrollLayoutController.setMiuiShadeExpansion(
+                mShadeExpandedFraction, useMiuiShadeAnimation(), mQsExpansionFromLeft);
+    }
+
+    private boolean useMiuiShadeAnimation() {
+        return isMistQsEnabled() && mBarState == StatusBarState.SHADE && !mDozing
+                && !isCustomizing()
+                && mTransitioningToFullShadeProgress == 0f
+                && mAxQsShadePolicy.get().useMiuiQsAnimation(mSplitShadeEnabled);
+    }
+
+    boolean isMiuiQsContentTouch(MotionEvent event) {
+        return event.getActionMasked() == MotionEvent.ACTION_DOWN && useMiuiShadeAnimation()
+                && !isMistSeparateNotificationShade() && isQsFragmentCreated()
+                && mQs.getView() != null && (getExpanded() || isExpandImmediate()
+                        || shouldQuickSettingsIntercept(event.getX(), event.getY(), 0))
+                && isTouchInQsArea(event.getX(), event.getY());
     }
 
     @VisibleForTesting
@@ -1342,6 +1377,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         if (expandImmediate != isExpandImmediate()) {
             mShadeLog.logQsExpandImmediateChanged(expandImmediate);
             mShadeRepository.setLegacyExpandImmediate(expandImmediate);
+            updateQsFrameTranslation();
         }
         updateNotificationStackVisibility();
     }
@@ -1450,6 +1486,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
     void updateExpansion() {
         updateNotificationStackVisibility();
         if (mQs == null) return;
+        updateMiuiShadeExpansion();
         final float squishiness;
         if ((isExpandImmediate() || getExpanded()) && !mSplitShadeEnabled) {
             squishiness = 1;
@@ -1464,6 +1501,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         final float qsExpansionFraction = computeExpansionFraction();
         final float adjustedExpansionFraction = (mSplitShadeEnabled || (isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE))
                 ? 1f : qsExpansionFraction;
+        mQs.setQsExpansionFromLeft(mQsExpansionFromLeft);
         mQs.setQsExpansion(
                 adjustedExpansionFraction,
                 mShadeExpandedFraction,
@@ -1606,6 +1644,13 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
             return;
         }
         float bounceTranslation = mBounceEnabled ? mShadeOverScrollAmount : 0f;
+        if (mBounceEnabled && mBarState == StatusBarState.SHADE && !mDozing
+                && isMistSeparateShade() && (getExpanded() || isExpandImmediate())) {
+            float targetHeight = mPanelViewControllerLazy.get().getMaxPanelTransitionDistance();
+            bounceTranslation += ShadeExpansionSpring.offset(
+                    Math.min(0f, mShadeExpandedFraction - 1f) * targetHeight,
+                    mPanelView.getContext().getResources().getDisplayMetrics().density);
+        }
         if (mBounceEnabled && mQsOverscroll != 0f) {
             bounceTranslation += ShadeExpansionSpring.offset(mQsOverscroll,
                     mPanelView.getContext().getResources().getDisplayMetrics().density);
@@ -2128,6 +2173,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
 
     boolean handleTouch(MotionEvent event, boolean isFullyCollapsed,
             boolean isShadeOrQsHeightAnimationRunning, boolean isSynthesizedDown) {
+        if (!isSynthesizedDown) updateQsExpansionOrigin(event);
         boolean separateShadeGesturePrepared = false;
         if (mSeparateShadeGesturePending) {
             mSeparateShadeGesturePending = false;
@@ -2237,8 +2283,28 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
     }
 
     void prepareSplitShade(MotionEvent event) {
+        updateQsExpansionOrigin(event);
         mSeparateShadeGesturePending = false;
         prepareSplitShade(isOpenQsEvent(event));
+    }
+
+    private void updateQsExpansionOrigin(MotionEvent event) {
+        if (!isMistQsEnabled() || event.getActionMasked() != MotionEvent.ACTION_DOWN
+                || event.getDownTime() == mQsExpansionOriginDownTime) {
+            return;
+        }
+        if (mShadeExpandedFraction > 0f
+                && (mShadeExpandedFraction < 1f || getExpanded())) {
+            return;
+        }
+        mQsExpansionOriginDownTime = event.getDownTime();
+        mPanelView.getLocationOnScreen(mQsExpansionOriginLocation);
+        int width = mPanelView.getWidth();
+        if (width <= 0) width = mResources.getDisplayMetrics().widthPixels;
+        mQsExpansionFromLeft =
+                event.getRawX() - mQsExpansionOriginLocation[0] < width * 0.5f;
+        updateMiuiShadeExpansion();
+        if (mQs != null) mQs.setQsExpansionFromLeft(mQsExpansionFromLeft);
     }
 
     private void prepareSplitShade(boolean openQs) {
@@ -2369,6 +2435,11 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
         if ((isLegacySplitShadeEligible() && mBarState == StatusBarState.SHADE)
                 || isMistSeparateNotificationShade()) {
             return false;
+        }
+        if (mExpansionAnimator != null && mAnimatorExpand && !isTracking()
+                && isMiuiQsContentTouch(event)) {
+            mExpansionAnimator.end();
+            setExpansionHeight(getMaxExpansionHeight());
         }
         int pointerIndex = event.findPointerIndex(mTrackingPointer);
         if (pointerIndex < 0) {

@@ -30,7 +30,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -45,6 +47,8 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.pointer.motionEventSpy
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LookaheadScope
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
@@ -69,6 +73,7 @@ fun <T> AxQsGrid(
     animateItemBounds: Boolean = false,
     staticItemId: String? = null,
     motionRowOffset: Int = 0,
+    miuiEntranceVisible: () -> Boolean = { true },
     onItemBounds: (String, Rect) -> Unit = { _, _ -> },
     onCells: ((List<AxQsGridCell>) -> Unit)? = null,
     content: @Composable (AxQsGridItem<T>) -> Unit,
@@ -78,6 +83,14 @@ fun <T> AxQsGrid(
     val placements =
         remember(itemSnapshot, columns, maxRows) { packItems(itemSnapshot, columns, maxRows) }
     val elementMotion = LocalLunarisQsElementMotion.current
+    val miuiMotion = elementMotion?.miuiAnimation
+    val miuiGeometry = if (miuiMotion != null) remember(miuiMotion) { MiuiQsGridGeometry() } else null
+    val layoutDirection = LocalLayoutDirection.current
+    if (miuiMotion != null && miuiGeometry != null) {
+        DisposableEffect(miuiMotion, miuiGeometry) {
+            onDispose { miuiMotion.removeGrid(miuiGeometry) }
+        }
+    }
     LookaheadScope {
         val lookaheadScope = this
         Layout(
@@ -90,14 +103,35 @@ fun <T> AxQsGrid(
                             } else {
                                 Modifier
                             }
+                        val entranceModifier =
+                            if (miuiMotion != null && miuiGeometry != null) {
+                                Modifier.miuiQsElementMotion(
+                                    miuiMotion, miuiGeometry, placement.item.id,
+                                    canAnimate = miuiEntranceVisible,
+                                    rowTranslationX = {
+                                        elementMotion?.panelRowTranslation(
+                                            motionRowOffset + placement.row
+                                        ) ?: 0f
+                                    },
+                                )
+                            } else {
+                                Modifier.lunarisQsElementMotion(
+                                    elementMotion, motionRowOffset + placement.row
+                                )
+                            }
                         Box(
                             itemModifier.fillMaxSize()
-                                .lunarisQsElementMotion(elementMotion, motionRowOffset + placement.row)
+                                .then(entranceModifier)
                         ) { content(placement.item) }
                     }
                 }
             },
-            modifier = modifier,
+            modifier =
+                if (miuiMotion != null && miuiGeometry != null) {
+                    modifier.onPlaced {
+                        miuiMotion.updateGrid(miuiGeometry, motionRowOffset, it.positionInRoot())
+                    }
+                } else modifier,
         ) { measurables, constraints ->
             val width = constraints.maxWidth
             val horizontalSpacingPx = spacing.roundToPx()
@@ -109,6 +143,7 @@ fun <T> AxQsGrid(
                 return availableWidth * column / columns + horizontalSpacingPx * column
             }
 
+            val miuiItemBounds = if (miuiGeometry != null) mutableMapOf<String, Rect>() else null
             val placeables =
                 measurables.mapIndexed { index, measurable ->
                     val placement = placements[index]
@@ -121,6 +156,15 @@ fun <T> AxQsGrid(
                         rowHeightPx * placement.item.span.rows +
                             verticalSpacingPx * (placement.item.span.rows - 1)
                     val top = placement.row * (rowHeightPx + verticalSpacingPx)
+                    val physicalLeft =
+                        if (layoutDirection == LayoutDirection.Rtl) width - end else start
+                    miuiItemBounds?.set(
+                        placement.item.id,
+                        Rect(
+                            physicalLeft.toFloat(), top.toFloat(),
+                            (physicalLeft + itemWidth).toFloat(), (top + itemHeight).toFloat(),
+                        ),
+                    )
                     onItemBounds(
                         placement.item.id,
                         Rect(
@@ -132,6 +176,9 @@ fun <T> AxQsGrid(
                     )
                     measurable.measure(Constraints.fixed(itemWidth, itemHeight))
                 }
+            if (miuiGeometry != null && miuiItemBounds != null) {
+                miuiGeometry.itemBounds = miuiItemBounds
+            }
             val rows =
                 maxOf(placements.maxOfOrNull { it.row + it.item.span.rows } ?: 0, minimumRows)
             onCells?.invoke(
@@ -351,6 +398,11 @@ fun <T> AxQsTileGrid(
     val elementMotion = LocalLunarisQsElementMotion.current
     val layoutDirection = LocalLayoutDirection.current
     val swipeOverflow = qsPanelSwipeOverflow()
+    val entranceOverflow = qsMiuiEntranceOverflow()
+    val miuiMotion = elementMotion?.miuiAnimation
+    val miuiAnimating by remember(miuiMotion) {
+        derivedStateOf { miuiMotion?.animationsRunning == true }
+    }
     val panelSwiping = swipeOverflow > 0.dp
     var pagerInterruptedByPanelSwipe by remember(pagerState) { mutableStateOf(false) }
     LaunchedEffect(pagerState, panelSwiping) {
@@ -382,13 +434,18 @@ fun <T> AxQsTileGrid(
             } else {
                 itemHeight * rows + spacing * (rows - 1)
             }
-        val pagerPadding = spacing + swipeOverflow
+        val pagerPadding = spacing + maxOf(swipeOverflow, entranceOverflow)
         HorizontalPager(
             state = pagerState,
             modifier =
                 Modifier.fillMaxWidth()
                     .height(pageHeight)
-                    .padding(horizontal = { -pagerPadding.roundToPx() })
+                    .qsTouchBounds()
+                    .padding(
+                        start = { -pagerPadding.roundToPx() },
+                        end = { -pagerPadding.roundToPx() },
+                        top = { -entranceOverflow.roundToPx() },
+                    )
                     .motionEventSpy { event ->
                         if (event.actionMasked == MotionEvent.ACTION_DOWN) {
                             onTilePagerGestureStart?.invoke(
@@ -400,7 +457,8 @@ fun <T> AxQsTileGrid(
                             )
                         }
                     },
-            contentPadding = PaddingValues(horizontal = pagerPadding),
+            contentPadding =
+                PaddingValues(start = pagerPadding, end = pagerPadding, top = entranceOverflow),
             beyondViewportPageCount = 1,
             pageSpacing = spacing,
             verticalAlignment = Alignment.Top,
@@ -416,9 +474,12 @@ fun <T> AxQsTileGrid(
                 rowHeight = itemHeight,
                 spacing = spacing,
                 modifier = Modifier.fillMaxSize().drawWithContent {
-                    if (!panelSwiping || page == pagerState.currentPage) drawContent()
+                    if ((!panelSwiping && !miuiAnimating) || page == pagerState.currentPage) {
+                        drawContent()
+                    }
                 },
                 motionRowOffset = motionRowOffset ?: elementMotion?.controlRows ?: 0,
+                miuiEntranceVisible = { page == pagerState.currentPage },
             ) { item ->
                 itemWrapper(page, itemIndices.getValue(item.id)) {
                     Column(

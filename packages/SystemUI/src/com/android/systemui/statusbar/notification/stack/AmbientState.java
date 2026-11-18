@@ -160,6 +160,7 @@ public class AmbientState implements Dumpable {
 
     /** Fraction of shade expansion. */
     private float mExpansionFraction;
+    private boolean mMiuiShadeAnimationEnabled;
 
     /** Fraction of QS expansion. 0 when in shade, 1 when in QS. */
     private float mQsExpansionFraction;
@@ -291,6 +292,14 @@ public class AmbientState implements Dumpable {
      */
     public float getExpansionFraction() {
         return mExpansionFraction;
+    }
+
+    public void setMiuiShadeAnimationEnabled(boolean enabled) {
+        mMiuiShadeAnimationEnabled = enabled;
+    }
+
+    public boolean isMiuiShadeAnimationEnabled() {
+        return mMiuiShadeAnimationEnabled;
     }
 
     /**

@@ -213,6 +213,8 @@ public interface QS extends FragmentBase {
 
     default void setPanelSwipeProgress(float progress) {}
 
+    default void setQsExpansionFromLeft(boolean fromLeft) {}
+
     /**
      * Callback for when QSPanel container is scrolled
      */

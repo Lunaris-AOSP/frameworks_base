@@ -187,6 +187,18 @@ constructor(
 
     val quickPanelOnLeft: StateFlow<Boolean> = boolSetting(QUICK_PANEL_ON_LEFT, false)
     val panelSwipeEnabled: StateFlow<Boolean> = boolSetting(PANEL_SWIPE_ENABLED, false)
+    val miuiQsAnimation: StateFlow<Boolean> =
+        boolSetting(
+            MIUI_QS_ANIMATION,
+            default = false,
+            initialValue = readMiuiAnimation(MIUI_QS_ANIMATION),
+        )
+    val miuiSplitQsAnimation: StateFlow<Boolean> =
+        boolSetting(
+            MIUI_SPLIT_QS_ANIMATION,
+            default = false,
+            initialValue = readMiuiAnimation(MIUI_SPLIT_QS_ANIMATION),
+        )
     val sharedQsLayout: StateFlow<Boolean> = boolSetting(SHARED_QS_LAYOUT, false)
     val compactStyle: StateFlow<Boolean> =
         boolSetting(
@@ -517,6 +529,11 @@ constructor(
 
     fun setPanelSwipeEnabled(enabled: Boolean) = putInt(PANEL_SWIPE_ENABLED, enabled.toSetting())
 
+    fun setMiuiQsAnimation(enabled: Boolean) = putInt(MIUI_QS_ANIMATION, enabled.toSetting())
+
+    fun setMiuiSplitQsAnimation(enabled: Boolean) =
+        putInt(MIUI_SPLIT_QS_ANIMATION, enabled.toSetting())
+
     fun setSharedQsLayout(enabled: Boolean) = putInt(SHARED_QS_LAYOUT, enabled.toSetting())
 
     fun setCompactStyle(enabled: Boolean) = putInt(COMPACT_STYLE, enabled.toSetting())
@@ -721,6 +738,9 @@ constructor(
             }
             .flowOn(backgroundDispatcher)
     }
+
+    private fun readMiuiAnimation(key: String): Boolean =
+        secureSettings.getIntForUser(key, 0, userRepository.getSelectedUserInfo().id) != 0
 
     private fun boolSetting(
         key: String,
@@ -991,6 +1011,8 @@ constructor(
         const val SPLIT_SHADE_SPANS = "ax_qs_split_shade_spans"
         const val QUICK_PANEL_ON_LEFT = "ax_qs_quick_panel_on_left"
         const val PANEL_SWIPE_ENABLED = "lunaris_qs_panel_swipe_enabled"
+        const val MIUI_QS_ANIMATION = "lunaris_qs_miui_animation"
+        const val MIUI_SPLIT_QS_ANIMATION = "lunaris_qs_miui_split_animation"
         const val SHARED_QS_LAYOUT = "lunaris_qs_shared_layout"
         const val COMPACT_STYLE = "ax_qs_compact_style"
         const val SHARED_QQS_ROWS = "lunaris_qs_shared_qqs_rows"

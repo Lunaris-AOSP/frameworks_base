@@ -212,7 +212,7 @@ private fun Modifier.interceptParentScroll(enabled: Boolean, view: View): Modifi
     if (!enabled) return this
     return pointerInput(view) {
         awaitEachGesture {
-            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Main)
+            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
             view.parent?.requestDisallowInterceptTouchEvent(true)
             try {
                 var pressed = true

@@ -120,7 +120,6 @@ import com.android.compose.animation.scene.TransitionKey
 import com.android.compose.animation.scene.content.state.TransitionState
 import com.android.compose.animation.scene.rememberMutableSceneTransitionLayoutState
 import com.android.compose.animation.scene.transitions
-import com.android.compose.gesture.gesturesDisabled
 import com.android.compose.modifiers.height
 import com.android.compose.modifiers.padding
 import com.android.compose.modifiers.thenIf
@@ -210,6 +209,11 @@ import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsSliderStrokeWidth
 import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsTileStrokeStyle
 import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsTileStrokeWidth
 import com.android.systemui.qs.panels.ui.compose.LocalQsScrollGestureStart
+import com.android.systemui.qs.panels.ui.compose.LocalMiuiQsHeaderMotion
+import com.android.systemui.qs.panels.ui.compose.LocalMiuiQsMotionController
+import com.android.systemui.qs.panels.ui.compose.MiuiQsMotionController
+import com.android.systemui.qs.panels.ui.compose.miuiQsMotionBounds
+import com.android.systemui.qs.panels.ui.compose.rememberMiuiQsPanelMotion
 import com.android.systemui.qs.panels.ui.compose.LocalShowQsSliderPercentage
 import com.android.systemui.qs.panels.domain.interactor.EditTilesResetInteractor
 import com.android.systemui.qs.panels.ui.edit.AxQsEditUi
@@ -281,6 +285,11 @@ constructor(
     private var sharedLayoutActive by mutableStateOf(false)
     private var currentPanelSwipeProgress by mutableFloatStateOf(-1f)
     private var panelSwipeFromQs by mutableStateOf(false)
+    private var qsGestureFromLeft by mutableStateOf(false)
+    private var miuiAnimationResetSequence by mutableIntStateOf(0)
+    private var miuiQsSceneResetSequence by mutableIntStateOf(0)
+    private val miuiQsMotionController = MiuiQsMotionController()
+    private var lastMiuiPanelExpansion = 0f
     private var lastQsExpansion = 0f
     private val isSeparateShade: Boolean
         get() =
@@ -330,7 +339,11 @@ constructor(
                     repeatOnLifecycle(Lifecycle.State.CREATED) {
                         initOnBackPressedDispatcherOwner(this@repeatWhenAttached.lifecycle)
                         setContent {
-                            this@MistQSFragmentCompose.Content(Modifier.sysUiResTagContainer())
+                            CompositionLocalProvider(
+                                LocalMiuiQsMotionController provides miuiQsMotionController
+                            ) {
+                                this@MistQSFragmentCompose.Content(Modifier.sysUiResTagContainer())
+                            }
                         }
                     }
                 }
@@ -374,6 +387,8 @@ constructor(
                         !viewModel.isInSplitShade &&
                         viewModel.statusBarState == StatusBarState.SHADE && !viewModel.isEditing
                 },
+                isBrightnessMirrorShowing = { viewModel.showingMirror },
+                miuiQsMotionController = miuiQsMotionController,
             )
         frame.addView(
             composeView,
@@ -407,15 +422,12 @@ constructor(
                                 Modifier.offset {
                                     IntOffset(
                                         x = 0,
-                                        y = viewModel.viewTranslationY.fastRoundToInt(),
+                                        y =
+                                            if (useMiuiQsAnimation() && viewModel.overScrollAmount == 0) 0
+                                            else viewModel.viewTranslationY.fastRoundToInt(),
                                     )
                                 }
                             }
-                            // Disable touches in the whole composable while the mirror is
-                            // showing. While the mirror is showing, an ancestor of the
-                            // ComposeView is made alpha 0, but touches are still being captured
-                            // by the composables.
-                            .thenIf(viewModel.showingMirror) { Modifier.gesturesDisabled() }
                 ) {
                     CompositionLocalProvider(
                         LocalBlurEnabled provides blurEnabled,
@@ -460,6 +472,17 @@ constructor(
     @Composable
     private fun CollapsableQuickSettingsSTL() {
         val separateShade = isSeparateShade
+        val miuiAnimation = useMiuiQsAnimation()
+        val miuiHeaderMotion =
+            if (miuiAnimation) {
+                rememberMiuiQsPanelMotion(
+                    expansion = { viewModel.panelExpansionFraction },
+                    visible = { viewModel.isQsVisibleAndAnyShadeExpanded },
+                    swiping = { currentPanelSwipeProgress >= 0f },
+                    fromLeft = { qsGestureFromLeft },
+                    resetSequence = { miuiAnimationResetSequence },
+                )
+            } else null
         val sharedLayout =
             axQsViewModel.useSharedQsLayout && !viewModel.isInSplitShade &&
                 LocalConfiguration.current.orientation != Configuration.ORIENTATION_LANDSCAPE
@@ -481,7 +504,7 @@ constructor(
                 transitions =
                     transitions {
                         from(QuickQuickSettings, QuickSettings) {
-                            axFromQuickQuickSettingsToQuickSettings()
+                            axFromQuickQuickSettingsToQuickSettings(miuiAnimation)
                         }
                         from(QuickQuickSettings, QuickSettings, key = AxQsPanelSwipeTransition) {
                             axQsPanelSwipe()
@@ -571,14 +594,16 @@ constructor(
                 .collectAsStateWithLifecycle()
 
         Box(
-            Modifier.fillMaxSize().thenIf(sceneState.shouldComposeLiveAxQs()) {
-                when {
-                    separateShade ->
-                        Modifier.axSharedQsEntrance { viewModel.panelExpansionFraction }
-                    sharedLayout -> Modifier.axSharedQsEntrance { qqsSquishiness }
-                    else -> Modifier.axQsEntrance { qqsSquishiness }
+            Modifier.fillMaxSize().miuiQsMotionBounds(miuiHeaderMotion)
+                .thenIf(sceneState.shouldComposeLiveAxQs()) {
+                    when {
+                        miuiAnimation -> Modifier
+                        separateShade ->
+                            Modifier.axSharedQsEntrance { viewModel.panelExpansionFraction }
+                        sharedLayout -> Modifier.axSharedQsEntrance { qqsSquishiness }
+                        else -> Modifier.axQsEntrance { qqsSquishiness }
+                    }
                 }
-            }
         ) {
             SceneTransitionLayout(
                 state = sceneState,
@@ -629,19 +654,21 @@ constructor(
             val editProgress = sceneState.editModeTransitionProgress()
             val headerAlpha = (1f - editProgress).coerceIn(0f, 1f)
             if (useOverlayShadeHeader() && sceneState.shouldComposeLiveAxQs() && headerAlpha > 0f) {
-                QuickSettingsStatusOverlayHeader(
-                    headerViewModel = viewModel.containerViewModel.shadeHeaderViewModel,
-                    isTransitioning =
-                        if (sharedLayout) sharedQsTransitioning
-                        else sceneState.isTransitioningBetween(QuickQuickSettings, QuickSettings),
-                    modifier =
-                        Modifier.graphicsLayer {
-                            alpha = headerAlpha
-                            scaleX = 1f - (editProgress * 0.08f)
-                            scaleY = 1f - (editProgress * 0.08f)
-                            translationY = -editProgress * 40f
-                        },
-                )
+                CompositionLocalProvider(LocalMiuiQsHeaderMotion provides miuiHeaderMotion) {
+                    QuickSettingsStatusOverlayHeader(
+                        headerViewModel = viewModel.containerViewModel.shadeHeaderViewModel,
+                        isTransitioning =
+                            if (sharedLayout) sharedQsTransitioning
+                            else sceneState.isTransitioningBetween(QuickQuickSettings, QuickSettings),
+                        modifier =
+                            Modifier.graphicsLayer {
+                                alpha = headerAlpha
+                                scaleX = 1f - (editProgress * 0.08f)
+                                scaleY = 1f - (editProgress * 0.08f)
+                                translationY = -editProgress * 40f
+                            },
+                    )
+                }
             }
         }
     }
@@ -738,6 +765,10 @@ constructor(
         axQsViewModel.setForceQsEvent(forceQsEvent)
     }
 
+    override fun setQsExpansionFromLeft(fromLeft: Boolean) {
+        qsGestureFromLeft = fromLeft
+    }
+
     override fun setPanelSwipeProgress(progress: Float) {
         if (progress >= 0f && currentPanelSwipeProgress < 0f) {
             panelSwipeFromQs = progress >= 0.5f
@@ -786,6 +817,13 @@ constructor(
         headerTranslation: Float,
         squishinessFraction: Float,
     ) {
+        if (panelExpansionFraction <= 0f && lastMiuiPanelExpansion > 0f) {
+            miuiAnimationResetSequence++
+        }
+        if (qsExpansionFraction <= 0f && lastQsExpansion > 0f) {
+            miuiQsSceneResetSequence++
+        }
+        lastMiuiPanelExpansion = panelExpansionFraction
         if (
             qsExpansionFraction < lastQsExpansion ||
                 panelExpansionFraction < viewModel.panelExpansionFraction
@@ -1061,6 +1099,8 @@ constructor(
                                         viewModel.containerViewModel.brightnessSliderViewModel,
                                     volumeSliderViewModel = volumeSliderViewModel,
                                     scrollState = scrollState,
+                                    expansionFromLeft = { qsGestureFromLeft },
+                                    animationResetSequence = { miuiAnimationResetSequence },
                                     modifier =
                                         Modifier.fillMaxWidth()
                                             .offset { IntOffset(0, compactHeaderOffset) },
@@ -1198,6 +1238,12 @@ constructor(
                             collapsedHeaderOffset = collapsedHeaderOffset,
                             panelSwipeProgress = { currentPanelSwipeProgress },
                             panelSwipeFromQs = { panelSwipeFromQs },
+                            expansionFromLeft = { qsGestureFromLeft },
+                            animationResetSequence = {
+                                miuiAnimationResetSequence +
+                                    if (sharedLayout || viewModel.isInSplitShade || isSeparateShade) 0
+                                    else miuiQsSceneResetSequence
+                            },
                             modifier =
                                 Modifier.fillMaxSize()
                                     .sysuiResTag(ResIdTags.quickSettingsPanel)
@@ -1377,6 +1423,11 @@ constructor(
     private fun useOverlayShadeHeader() = true
 
     private fun useCompactQsStyle() = axQsViewModel.useCompactStyle && !viewModel.isInSplitShade
+
+    private fun useMiuiQsAnimation() =
+        viewModel.statusBarState == StatusBarState.SHADE && !viewModel.isEditing &&
+            !viewModel.isTransitioningToFullShade &&
+            axQsViewModel.useMiuiQsAnimation(viewModel.isInSplitShade)
 
     private fun registerDumpable() {
         val instanceId = instanceProvider.getNextId()
@@ -1573,10 +1624,13 @@ private class FrameLayoutTouchPassthrough(
     private val backgroundDispatcher: CoroutineDispatcher,
     private val isInBottomReservedArea: (Float, Float) -> Boolean,
     private val allowPanelSwipe: () -> Boolean,
+    private val isBrightnessMirrorShowing: () -> Boolean,
+    private val miuiQsMotionController: MiuiQsMotionController,
 ) : FrameLayout(context) {
 
     private val lastConfig = Configuration(context.resources.configuration)
     var panelSwipeInProgress = false
+    private var blockTouchForMirror = false
 
     init {
         repeatWhenAttached {
@@ -1703,8 +1757,29 @@ private class FrameLayoutTouchPassthrough(
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            blockTouchForMirror = isBrightnessMirrorShowing()
+            if (blockTouchForMirror) {
+                canScrollQs.reset()
+                tilePanelSwipeGesture.reset()
+                miuiQsMotionController.endInteraction()
+                parent?.requestDisallowInterceptTouchEvent(true)
+            }
+        }
+        if (blockTouchForMirror) {
+            val handled = super.dispatchTouchEvent(event)
+            if (
+                event.actionMasked == MotionEvent.ACTION_UP ||
+                    event.actionMasked == MotionEvent.ACTION_CANCEL
+            ) {
+                blockTouchForMirror = false
+                parent?.requestDisallowInterceptTouchEvent(false)
+            }
+            return handled
+        }
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                miuiQsMotionController.beginInteraction()
                 canScrollQs.reset()
                 tilePanelSwipeGesture.onDown(event.x, event.y)
             }
@@ -1723,11 +1798,25 @@ private class FrameLayoutTouchPassthrough(
         ) {
             canScrollQs.reset()
             tilePanelSwipeGesture.reset()
+            miuiQsMotionController.endInteraction()
+        }
+        if (event.actionMasked == MotionEvent.ACTION_DOWN && !handled) {
+            miuiQsMotionController.endInteraction()
         }
         return handled
     }
 
+    override fun onDetachedFromWindow() {
+        if (blockTouchForMirror) {
+            blockTouchForMirror = false
+            parent?.requestDisallowInterceptTouchEvent(false)
+        }
+        miuiQsMotionController.endInteraction()
+        super.onDetachedFromWindow()
+    }
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (blockTouchForMirror) return true
         val action = event.actionMasked
         when (action) {
             MotionEvent.ACTION_DOWN -> {
@@ -1759,6 +1848,7 @@ private class FrameLayoutTouchPassthrough(
     }
 
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
+        if (blockTouchForMirror) return true
         // If there's a touch on this view and we can scroll down, we don't want to be intercepted
         val action = ev.actionMasked
 
