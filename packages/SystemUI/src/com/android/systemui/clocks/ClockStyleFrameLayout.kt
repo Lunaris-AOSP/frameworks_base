@@ -7,8 +7,8 @@ package com.android.systemui.clocks
 import android.content.Context
 import android.util.AttributeSet
 import android.widget.FrameLayout
-import kotlin.math.ceil
 import org.lunaris.clockmaker.ClockDesignView
+import org.lunaris.clockmaker.ClockViewTransform
 
 class ClockStyleFrameLayout @JvmOverloads constructor(
     context: Context,
@@ -29,13 +29,12 @@ class ClockStyleFrameLayout @JvmOverloads constructor(
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
         val clock = getChildAt(0)?.takeIf { it.visibility != GONE } ?: return
-        val height = clock.measuredHeight
-        val pivotY = if (clock is ClockDesignView) clock.measuredWidth / 2f else height / 2f
-        val bottom = paddingTop + pivotY + (height - pivotY) * clockScale + paddingBottom
+        val height = paddingTop + ClockViewTransform.layoutHeight(clock.measuredWidth,
+            clock.measuredHeight, clockScale, clock is ClockDesignView) + paddingBottom
         setMeasuredDimension(
             measuredWidthAndState,
             resolveSizeAndState(
-                ceil(bottom).toInt().coerceAtLeast(suggestedMinimumHeight),
+                height.coerceAtLeast(suggestedMinimumHeight),
                 heightMeasureSpec,
                 measuredState shl MEASURED_HEIGHT_STATE_SHIFT,
             ),

@@ -31,9 +31,13 @@ import android.os.UserHandle
 import android.provider.Settings
 import android.util.AttributeSet
 import android.view.LayoutInflater
+import android.view.IWallpaperZoomListener
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewStub
+import android.view.ViewTreeObserver
+import android.view.WindowManager
+import android.view.WindowManagerGlobal
 import android.view.animation.AccelerateInterpolator
 import android.view.animation.OvershootInterpolator
 import android.widget.FrameLayout
@@ -41,11 +45,17 @@ import android.widget.ImageView
 import android.widget.RelativeLayout
 import android.widget.TextClock
 import android.widget.TextView
+import androidx.core.graphics.ColorUtils
 import com.android.systemui.Dependency
 import com.android.systemui.media.MediaSessionManager
 import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.plugins.statusbar.StatusBarStateController
 import com.android.systemui.res.R
+import com.android.systemui.scrim.ScrimView
+import com.android.systemui.shared.R as SharedR
+import com.android.systemui.statusbar.StatusBarState
+import com.android.systemui.statusbar.SysuiStatusBarStateController
+import com.android.systemui.statusbar.policy.KeyguardStateController
 import com.android.systemui.tuner.TunerService
 import kotlin.math.abs
 import kotlin.math.cos
@@ -57,9 +67,13 @@ import org.lunaris.clockmaker.ClockEffects
 import org.lunaris.clockmaker.ClockGlass
 import org.lunaris.clockmaker.ClockGlassController
 import org.lunaris.clockmaker.ClockGlassStyle
+import org.lunaris.clockmaker.ClockPreviewGeometry
 import org.lunaris.clockmaker.ClockViewTransform
+import org.lunaris.extrainfowidgets.ExtraInfoGridView
 import java.util.Collections
 import java.util.WeakHashMap
+import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.roundToInt
 
 class ClockStyle @JvmOverloads constructor(
     context: Context,
@@ -69,8 +83,10 @@ class ClockStyle @JvmOverloads constructor(
     var isHomeScreenClock = false
 
     private val tunerService: TunerService = Dependency.get(TunerService::class.java)
-    private val statusBarStateController: StatusBarStateController =
-        Dependency.get(StatusBarStateController::class.java)
+    private val statusBarStateController: SysuiStatusBarStateController =
+        Dependency.get(StatusBarStateController::class.java) as SysuiStatusBarStateController
+    private val keyguardStateController: KeyguardStateController =
+        Dependency.get(KeyguardStateController::class.java)
     private val handler = Handler(Looper.getMainLooper())
     private val random = java.util.Random()
 
@@ -134,6 +150,21 @@ class ClockStyle @JvmOverloads constructor(
 
     private var pendingLayoutListener: View.OnLayoutChangeListener? = null
     private var clockSizeListener: View.OnLayoutChangeListener? = null
+    private val previewGeometryListener = ViewTreeObserver.OnGlobalLayoutListener {
+        updatePreviewGeometry()
+    }
+    private var previewGeometryKey: Pair<Int, Int>? = null
+    private var previewScrimView: ScrimView? = null
+    private val previewAppearanceListener = ViewTreeObserver.OnPreDrawListener {
+        updatePreviewAppearance()
+        true
+    }
+    private var previewWallpaperZoomListener: IWallpaperZoomListener? = null
+    private var previewWallpaperDisplayId = 0
+    private var previewWallpaperScale = 1f
+    private var previewWallpaperPivotX = 0f
+    private var previewWallpaperPivotY = 0f
+    private var previewHasWallpaperZoom = false
 
     private var clockWobbleOnChargeEnabled = true
     private var wobbleAnimator: ObjectAnimator? = null
@@ -181,7 +212,9 @@ class ClockStyle @JvmOverloads constructor(
     }
 
     private val statusBarStateListener = object : StatusBarStateController.StateListener {
-        override fun onStateChanged(newState: Int) {}
+        override fun onStateChanged(newState: Int) {
+            if (newState == StatusBarState.KEYGUARD) handler.post { updatePreviewGeometry() }
+        }
 
         override fun onDozingChanged(dozing: Boolean) {
             if (isHomeScreenClock) return
@@ -218,11 +251,169 @@ class ClockStyle @JvmOverloads constructor(
         updateClockView()
     }
 
+    private fun updatePreviewGeometry() {
+        if (!canUpdatePreview()) return
+        val view = currentClockView ?: return
+        val frame = clockContainer ?: return
+        val params = frame.layoutParams as? ViewGroup.MarginLayoutParams ?: return
+        if (view.width <= 0 || height <= 0) return
+        val matrix = Matrix()
+        if (!ClockViewTransform.toGlobal(this, matrix, excludeAnimationOf = this,
+                excludeTransformOf = parent as? View)) return
+        val origin = floatArrayOf((frame.left + view.left).toFloat(),
+            (frame.top - params.topMargin + view.top).toFloat())
+        matrix.mapPoints(origin)
+        val bounds = context.getSystemService(WindowManager::class.java)?.currentWindowMetrics?.bounds
+            ?: return
+        if (bounds.width() <= 0 || bounds.height() <= 0 || view.width > bounds.width()) return
+        val displayId = display?.displayId ?: return
+        val user = ActivityManager.getCurrentUser()
+        val density = resources.displayMetrics.density
+        val infoGridInset = (12f * density).toInt()
+        var infoTopOffset = 12 + infoGridInset
+        var appWidgetBottom = bounds.height() - 2 * (96f * density).toInt()
+        var appWidgetMaxHeight = (bounds.height() * 0.45f).toInt()
+        var contentLeft = 0
+        var contentTop = 0
+        var contentWidth = bounds.width()
+        var contentHeight = bounds.height()
+        var appWidgetCenterX = bounds.width() / 2f
+        var appWidgetContentOffset = 0
+        var appWidgetTrailingOffset = 0
+        (parent as? ViewGroup)?.let { root ->
+            val info = root.findViewById<View>(R.id.keyguard_info_widgets)?.takeIf {
+                it.parent === root && it.visibility == View.VISIBLE && it.height > 0
+            }
+            fun contentBottom(ids: List<Int>): Int = ids.mapNotNull { root.findViewById<View>(it) }
+                .filter { it.parent === root && it.visibility == View.VISIBLE }
+                .maxOfOrNull { it.bottom }?.coerceAtLeast(bottom) ?: bottom
+            val weatherIds = listOf(R.id.keyguard_weather, R.id.default_weather_image,
+                R.id.default_weather_text)
+            val infoGrid = (info as? ViewGroup)?.let { container ->
+                (0 until container.childCount).map { container.getChildAt(it) }
+                    .firstOrNull { it is ExtraInfoGridView && it.visibility == View.VISIBLE }
+            }
+            infoTopOffset = (info?.top ?: (contentBottom(weatherIds) + 12)) - bottom +
+                (infoGrid?.top ?: infoGridInset)
+            val auxiliaryBottom = contentBottom(weatherIds + listOf(R.id.keyguard_slice_view,
+                SharedR.id.bc_smartspace_view, SharedR.id.date_smartspace_view,
+                SharedR.id.date_smartspace_view_large))
+            appWidgetContentOffset = auxiliaryBottom - bottom
+            root.findViewById<View>(R.id.keyguard_app_widget_anchor)?.let {
+                appWidgetTrailingOffset = (it.bottom - maxOf(auxiliaryBottom, info?.bottom ?: bottom))
+                    .coerceAtLeast(0)
+            }
+            val rootOrigin = floatArrayOf(0f, 0f)
+            if (ClockViewTransform.toGlobal(root, matrix, excludeTransformOf = root)) {
+                matrix.mapPoints(rootOrigin)
+                contentLeft = rootOrigin[0].roundToInt()
+                contentTop = rootOrigin[1].roundToInt()
+                contentWidth = root.width.coerceAtLeast(1)
+                contentHeight = root.height.coerceAtLeast(1)
+                val viewport = root.findViewById<View>(R.id.keyguard_app_widgets)
+                    ?.takeIf { it.width > 0 }
+                appWidgetCenterX = rootOrigin[0] + if (viewport != null)
+                    viewport.left + viewport.width / 2f else root.width / 2f
+                val reserved = (96f * density).toInt()
+                val limit = listOf(R.id.device_entry_icon_view, R.id.keyguard_indication_area,
+                    R.id.start_button, R.id.end_button, R.id.ambient_indication_container)
+                    .mapNotNull { root.findViewById<View>(it) }
+                    .filter { it.visibility != View.GONE && it.top > 0 }
+                    .minOfOrNull { it.top } ?: (root.height - reserved)
+                appWidgetBottom = rootOrigin[1].roundToInt() + limit - reserved
+                appWidgetMaxHeight = (root.height * 0.45f).toInt()
+            }
+        }
+        val key = displayId to user
+        previewGeometryKey = key
+        previewGeometries[key] = ClockPreviewGeometry(
+            displayId, user, bounds.width(), bounds.height(), origin[0].roundToInt(),
+            origin[1].roundToInt(), view.width,
+            resources.getDimensionPixelSize(R.dimen.status_bar_height) * 1.25f,
+            density, infoTopOffset, appWidgetBottom, appWidgetMaxHeight,
+            contentLeft, contentTop, contentWidth, contentHeight, appWidgetCenterX,
+            appWidgetContentOffset, appWidgetTrailingOffset,
+            previewWallpaperScale,
+            if (previewHasWallpaperZoom) previewWallpaperPivotX else bounds.exactCenterX(),
+            if (previewHasWallpaperZoom) previewWallpaperPivotY else bounds.exactCenterY(),
+            previewGeometries[key]?.wallpaperScrimColor ?: 0,
+        )
+        updatePreviewAppearance()
+    }
+
+    private fun canUpdatePreview() = isAttachedToWindow && isShown && !isHomeScreenClock &&
+        windowVisibility == View.VISIBLE && !isDozing && clockStyle != 0 &&
+        statusBarStateController.state == StatusBarState.KEYGUARD &&
+        !keyguardStateController.isOccluded && !keyguardStateController.isPrimaryBouncerShowing &&
+        !keyguardStateController.isKeyguardGoingAway
+
+    private fun updatePreviewAppearance() {
+        if (!canUpdatePreview()) return
+        val key = previewGeometryKey ?: return
+        val geometry = previewGeometries[key] ?: return
+        val scrim = previewScrimView ?: rootView.findViewById<ScrimView>(R.id.scrim_behind)
+            ?.also { previewScrimView = it } ?: return
+        val tint = scrim.tint
+        val color = if (scrim.shouldBlendWithMainColor()) {
+            ColorUtils.blendARGB(scrim.colors.mainColor, tint, Color.alpha(tint) / 255f)
+        } else tint
+        val scrimColor = (color and 0xFFFFFF) or
+            ((scrim.viewAlpha.coerceIn(0f, 1f) * 255f).toInt() shl 24)
+        if (geometry.wallpaperScrimColor != scrimColor) {
+            previewGeometries[key] = geometry.copy(wallpaperScrimColor = scrimColor)
+        }
+    }
+
+    private fun updatePreviewWallpaperZoom() {
+        if (keyguardStateController.isKeyguardGoingAway) return
+        val key = previewWallpaperDisplayId to ActivityManager.getCurrentUser()
+        val geometry = previewGeometries[key] ?: return
+        val bounds = context.getSystemService(WindowManager::class.java)?.currentWindowMetrics?.bounds
+            ?: return
+        if (bounds.width() <= 0 || bounds.height() <= 0) return
+        val updated = geometry.copy(wallpaperScale = previewWallpaperScale,
+            wallpaperPivotX = previewWallpaperPivotX * geometry.screenWidth / bounds.width(),
+            wallpaperPivotY = previewWallpaperPivotY * geometry.screenHeight / bounds.height())
+        if (geometry == updated) return
+        previewGeometries[key] = updated
+        context.contentResolver.notifyChange(ClockPreviewGeometry.URI, null, 0, key.second)
+    }
+
+    private fun observePreviewWallpaperZoom() {
+        if (previewWallpaperZoomListener != null) return
+        val displayId = display?.displayId ?: return
+        val windowManager = runCatching {
+            WindowManagerGlobal.getWindowManagerService()
+        }.getOrNull() ?: return
+        previewWallpaperDisplayId = displayId
+        val listener = object : IWallpaperZoomListener.Stub() {
+            override fun onWallpaperZoomChanged(scale: Float, pivotX: Float, pivotY: Float) {
+                if (!scale.isFinite() || scale <= 0f || !pivotX.isFinite() || !pivotY.isFinite()) return
+                handler.post {
+                    if (previewWallpaperZoomListener !== this) return@post
+                    previewWallpaperScale = scale
+                    previewWallpaperPivotX = pivotX
+                    previewWallpaperPivotY = pivotY
+                    previewHasWallpaperZoom = true
+                    updatePreviewWallpaperZoom()
+                    updatePreviewGeometry()
+                }
+            }
+        }
+        previewWallpaperZoomListener = listener
+        runCatching {
+            windowManager.registerWallpaperZoomListener(listener, displayId)
+        }.onFailure { previewWallpaperZoomListener = null }
+    }
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         if (callbacksRegistered) return
         if (!isHomeScreenClock) {
             lockscreenClocks.add(this)
+            viewTreeObserver.addOnGlobalLayoutListener(previewGeometryListener)
+            viewTreeObserver.addOnPreDrawListener(previewAppearanceListener)
+            observePreviewWallpaperZoom()
             HomeClockProvider.observeKeyguard()
         }
         isDozing = !isHomeScreenClock && statusBarStateController.isDozing
@@ -294,6 +485,18 @@ class ClockStyle @JvmOverloads constructor(
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         lockscreenClocks.remove(this)
+        viewTreeObserver.removeOnGlobalLayoutListener(previewGeometryListener)
+        viewTreeObserver.removeOnPreDrawListener(previewAppearanceListener)
+        previewWallpaperZoomListener?.let { listener ->
+            previewWallpaperZoomListener = null
+            runCatching {
+                WindowManagerGlobal.getWindowManagerService()
+                    ?.unregisterWallpaperZoomListener(listener, previewWallpaperDisplayId)
+            }
+        }
+        previewScrimView = null
+        previewGeometryKey = null
+        previewHasWallpaperZoom = false
         if (!callbacksRegistered) return
 
         statusBarStateController.removeCallback(statusBarStateListener)
@@ -705,7 +908,7 @@ class ClockStyle @JvmOverloads constructor(
             else clockFrameMarginTop
         // Lockstyles rounds the full screen offset once; the section already supplies
         // keyguardTop.toInt(), so keep its fractional pixel when adding the user offset.
-        params.topMargin = (keyguardTop + marginTop * density).toInt() - keyguardTop.toInt()
+        params.topMargin = ClockPreviewGeometry.topInset(keyguardTop, marginTop, density)
         val side = resources.getDimensionPixelSize(R.dimen.below_clock_padding_start)
         params.marginStart = side
         params.marginEnd = side
@@ -734,9 +937,8 @@ class ClockStyle @JvmOverloads constructor(
 
     private fun applyClockAlpha() {
         val view = currentClockView ?: return
-        val effective = if (isDozing && clockOpacity > AOD_OPACITY_CAP) AOD_OPACITY_CAP else clockOpacity
-        view.alpha = effective / 100f
-        if (view is ClockDesignView) view.animationsEnabled = effective > 0
+        view.alpha = ClockViewTransform.alpha(clockOpacity, isDozing)
+        if (view is ClockDesignView) view.animationsEnabled = view.alpha > 0f
     }
 
     private fun resolveClockColor(): Int {
@@ -982,23 +1184,7 @@ class ClockStyle @JvmOverloads constructor(
 
     private fun applyClockTransform() {
         val view = currentClockView ?: return
-        if (clockTiltX == 0 && clockTiltY == 0 && clockRotation == 0) {
-            view.rotationX = 0f
-            view.rotationY = 0f
-            view.rotation = 0f
-            return
-        }
-        if (view.width > 0 && view.height > 0) {
-            view.pivotX = view.width / 2f
-            view.pivotY = (view as? ClockDesignView)?.transformPivotY ?: (view.height / 2f)
-            val extent = if (view is ClockDesignView) view.width.toFloat()
-                else maxOf(view.width, view.height).toFloat()
-            view.cameraDistance = (extent * TILT_CAMERA_DISTANCE_FACTOR)
-                .coerceAtLeast(TILT_MIN_CAMERA_DISTANCE_DP * resources.displayMetrics.density)
-        }
-        view.rotationX = clockTiltX.toFloat()
-        view.rotationY = clockTiltY.toFloat()
-        view.rotation = clockRotation.toFloat()
+        ClockViewTransform.applyClockTransform(view, clockRotation, clockTiltX, clockTiltY)
         disableClippingOnParents(view)
     }
 
@@ -1198,6 +1384,10 @@ class ClockStyle @JvmOverloads constructor(
 
     companion object {
         private val lockscreenClocks = Collections.newSetFromMap(WeakHashMap<ClockStyle, Boolean>())
+        private val previewGeometries = ConcurrentHashMap<Pair<Int, Int>, ClockPreviewGeometry>()
+
+        internal fun previewGeometry(displayId: Int, userId: Int): ClockPreviewGeometry? =
+            previewGeometries[displayId to userId]
 
         internal fun lockscreenClock(displayId: Int): ClockStyle? =
             lockscreenClocks.firstOrNull {
@@ -1363,7 +1553,6 @@ class ClockStyle @JvmOverloads constructor(
         private const val DEFAULT_SHADOW_OPACITY = 35
         private const val DEFAULT_MARGIN_TOP = 15
         private const val DEFAULT_CUSTOM_COLOR = Color.WHITE
-        private const val AOD_OPACITY_CAP = 70
         private const val DEFAULT_CLOCK_SIZE = 100
         private const val MIN_CLOCK_SIZE = 50
         private const val MAX_CLOCK_SIZE = 150
@@ -1372,8 +1561,6 @@ class ClockStyle @JvmOverloads constructor(
         private const val DEFAULT_TILT = 0
         private const val MIN_TILT = -75
         private const val MAX_TILT = 75
-        private const val TILT_CAMERA_DISTANCE_FACTOR = 4f
-        private const val TILT_MIN_CAMERA_DISTANCE_DP = 1280f
 
         private const val DEFAULT_ROTATION = 0
         private const val MIN_ROTATION = -180
@@ -1392,9 +1579,9 @@ class ClockStyle @JvmOverloads constructor(
         private const val BURN_IN_PROTECTION_INTERVAL = 10_000L
         private const val BURN_IN_PROTECTION_MAX_SHIFT = 4
 
-        private const val AOD_SCALE_DOWN = 0.85f
-        private const val AOD_ANIM_OUT_MS = 300L
-        private const val AOD_ANIM_IN_MS = 400L
+        private const val AOD_SCALE_DOWN = ClockViewTransform.AOD_SCALE_DOWN
+        private const val AOD_ANIM_OUT_MS = ClockViewTransform.AOD_ANIM_OUT_MS
+        private const val AOD_ANIM_IN_MS = ClockViewTransform.AOD_ANIM_IN_MS
 
         private const val WOBBLE_RISE_DP = 26f
         private const val WOBBLE_DURATION_MS = 1150L

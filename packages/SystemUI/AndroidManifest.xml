@@ -1236,6 +1236,14 @@
             android:exported="true"
             android:permission="android.permission.STATUS_BAR_SERVICE" />
 
+        <provider
+            android:name=".clocks.ClockPreviewProvider"
+            android:authorities="com.android.systemui.clockpreview"
+            android:directBootAware="true"
+            android:singleUser="true"
+            android:exported="true"
+            android:permission="android.permission.STATUS_BAR_SERVICE" />
+
         <provider android:name=".keyguard.KeyguardSliceProvider"
                   android:authorities="com.android.systemui.keyguard"
                   android:grantUriPermissions="true"
