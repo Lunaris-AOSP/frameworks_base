@@ -100,6 +100,7 @@ final class DuckRkpV1 {
                         + " failed: " + e.code + " (" + e.detail + ")");
                 if (!e.code.equals("hal_unavailable") && !e.code.equals("hal_rejected")
                         && !e.code.equals("native_rejected")
+                        && !e.code.equals("native_transport")
                         && !e.code.equals("native_unavailable") && !e.code.equals("missing_eek")
                         && !e.code.equals("invalid_hal_response")
                         && !(e.code.equals("http_error") && (e.detail == 400 || e.detail == 422))) {
