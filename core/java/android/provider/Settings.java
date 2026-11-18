@@ -6981,10 +6981,16 @@ public final class Settings {
         public static final String NOWPLAYING_ENABLED = "nowplaying_enabled";
 
         /**
-         * 0 = White (default), 1 = Accent color 2 = Album art
+         * 0 = White (default), 1 = Accent color, 2 = Album art, 3 = Custom color
          * @hide
          */
         public static final String NOWPLAYING_COLOR_MODE = "nowplaying_color_mode";
+
+        /**
+         * Custom ARGB color for now playing text. Defaults to white.
+         * @hide
+         */
+        public static final String NOWPLAYING_CUSTOM_COLOR = "nowplaying_custom_color";
 
         /**
          * Whether to show app icon above track title.

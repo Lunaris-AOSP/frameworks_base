@@ -232,7 +232,7 @@ constructor(
     }
 
     private fun updateViewWithSettings(settings: NowPlayingSettings) {
-        val textColor = resolveTextColor(settings.colorMode)
+        val textColor = resolveTextColor(settings)
         
         if (!settings.tapToExpand && NowPlayingOverlayState.isOverlayOpen.value) {
             expandedOverlay.hide()
@@ -356,20 +356,21 @@ constructor(
         updateState()
     }
 
-    private fun resolveTextColor(colorMode: Int): Int =
-        when (colorMode) {
+    private fun resolveTextColor(settings: NowPlayingSettings): Int =
+        when (settings.colorMode) {
             NowPlayingSettingsRepository.COLOR_MODE_ACCENT ->
                 Utils.getColorAccentDefaultColor(context)
             NowPlayingSettingsRepository.COLOR_MODE_ALBUM ->
                 (currentAlbumArtColor ?: sharedMediaColor)?.let { boostSaturation(it) }
                     ?: 0xFFFFFFFF.toInt()
+            NowPlayingSettingsRepository.COLOR_MODE_CUSTOM -> settings.customColor
             else -> 0xFFFFFFFF.toInt()
         }
 
     private fun updateAlbumArtColor() {
         val color = currentAlbumArtColor ?: sharedMediaColor
         NowPlayingOverlayState.update { copy(albumArtColor = color) }
-        nowPlayingView.textColor = resolveTextColor(currentSettings.colorMode)
+        nowPlayingView.textColor = resolveTextColor(currentSettings)
     }
 
     private fun extractAlbumArtColor(bitmap: Bitmap): Int? {

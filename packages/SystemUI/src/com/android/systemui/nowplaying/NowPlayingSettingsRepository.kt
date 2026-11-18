@@ -18,6 +18,7 @@ package com.android.systemui.nowplaying
 import android.content.ContentResolver
 import android.content.Context
 import android.database.ContentObserver
+import android.graphics.Color
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -41,7 +42,8 @@ data class NowPlayingSettings(
     val showOnLockscreen: Boolean,
     val tapToExpand: Boolean = true,
     val seekBarStyle: MediaSeekBarStyle = MediaSeekBarStyle.DEFAULT,
-    val useLyricsMode: Boolean = false
+    val useLyricsMode: Boolean = false,
+    val customColor: Int = Color.WHITE
 )
 
 class NowPlayingSettingsRepository(context: Context) {
@@ -68,6 +70,7 @@ class NowPlayingSettingsRepository(context: Context) {
         observeSettingInt(SETTING_TAP_TO_EXPAND, 1),
         MediaSeekBarStyle.observe(context),
         observeSettingInt(SETTING_LYRICS_MODE, 0),
+        observeSettingInt(SETTING_CUSTOM_COLOR, Color.WHITE),
     ) { flows: Array<Any?> ->
         val enabled = flows[0] as Int
         val colorMode = flows[1] as Int
@@ -82,6 +85,7 @@ class NowPlayingSettingsRepository(context: Context) {
         val tapToExpand = flows[10] as Int
         val seekBarStyle = flows[11] as MediaSeekBarStyle
         val lyricsMode = flows[12] as Int
+        val customColor = flows[13] as Int
         val position = (positionInt / 100f).coerceIn(0.1f, 1.0f)
         val iconStyleClamped = iconStyle.coerceIn(0, 2)
         val iconSizeClamped = iconSize.coerceIn(5, 40)
@@ -90,7 +94,7 @@ class NowPlayingSettingsRepository(context: Context) {
         
         NowPlayingSettings(
             isEnabled = enabled == 1,
-            colorMode = colorMode.coerceIn(0, 2),
+            colorMode = colorMode.coerceIn(COLOR_MODE_WHITE, COLOR_MODE_CUSTOM),
             iconStyle = iconStyleClamped,
             iconSize = iconSizeClamped,
             useCompactStyle = compactStyle == 1,
@@ -102,6 +106,7 @@ class NowPlayingSettingsRepository(context: Context) {
             tapToExpand = tapToExpand == 1,
             seekBarStyle = seekBarStyle,
             useLyricsMode = lyricsMode == 1,
+            customColor = customColor,
         )
     }.distinctUntilChanged()
 
@@ -143,7 +148,7 @@ class NowPlayingSettingsRepository(context: Context) {
             ) == 1,
             colorMode = Settings.System.getIntForUser(
                 resolver, SETTING_COLOR_MODE, 0, UserHandle.USER_CURRENT
-            ).coerceIn(0, 2),
+            ).coerceIn(COLOR_MODE_WHITE, COLOR_MODE_CUSTOM),
             iconStyle = iconStyle.coerceIn(0, 2),
             iconSize = iconSize.coerceIn(5, 40),
             useCompactStyle = Settings.System.getIntForUser(
@@ -167,6 +172,9 @@ class NowPlayingSettingsRepository(context: Context) {
             useLyricsMode = Settings.System.getIntForUser(
                 resolver, SETTING_LYRICS_MODE, 0, UserHandle.USER_CURRENT
             ) == 1,
+            customColor = Settings.System.getIntForUser(
+                resolver, SETTING_CUSTOM_COLOR, Color.WHITE, UserHandle.USER_CURRENT
+            ),
         )
     }
 
@@ -201,6 +209,7 @@ class NowPlayingSettingsRepository(context: Context) {
         private const val TAG = "NowPlayingSettings"
         private const val SETTING_ENABLED = "nowplaying_enabled"
         private const val SETTING_COLOR_MODE = "nowplaying_color_mode"
+        private const val SETTING_CUSTOM_COLOR = Settings.System.NOWPLAYING_CUSTOM_COLOR
         private const val SETTING_ICON_STYLE = "nowplaying_icon_style"
         private const val SETTING_ICON_SIZE = "nowplaying_icon_size"
         private const val SETTING_USE_COMPACT_STYLE = "nowplaying_use_compact_style"
@@ -216,5 +225,6 @@ class NowPlayingSettingsRepository(context: Context) {
         const val COLOR_MODE_WHITE = 0
         const val COLOR_MODE_ACCENT = 1
         const val COLOR_MODE_ALBUM = 2
+        const val COLOR_MODE_CUSTOM = 3
     }
 }
