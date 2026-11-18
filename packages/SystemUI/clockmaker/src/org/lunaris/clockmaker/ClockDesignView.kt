@@ -275,7 +275,8 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
     private fun updateQuickLook() {
         quickLook.update(isAttachedToWindow && aggregatedVisible && isShown && windowVisibility == VISIBLE &&
             (screenInteractive || appearance.dozing) && design.elements.any {
-                it.kind == ClockElementKind.QUICKLOOK && it.visible && it.opacity > 0
+                it.kind == ClockElementKind.QUICKLOOK && it.visible &&
+                    (!appearance.dozing || it.visibleOnAod) && it.opacity > 0
             }, userId)
     }
 
@@ -289,7 +290,7 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
     private fun applyElements() {
         design.elements.forEachIndexed { index, element ->
             val view = getChildAt(index)
-            view.visibility = if (element.visible &&
+            view.visibility = if (element.visible && (!appearance.dozing || element.visibleOnAod) &&
                 (element.kind != ClockElementKind.WEATHER || appearance.weather)) View.VISIBLE else View.GONE
             view.alpha = element.opacity / 100f
             view.rotation = element.rotation.toFloat()

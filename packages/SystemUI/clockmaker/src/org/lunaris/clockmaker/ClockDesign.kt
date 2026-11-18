@@ -33,6 +33,7 @@ data class ClockElement(
     val color: Int? = null,
     val opacity: Int = 100,
     val visible: Boolean = true,
+    val visibleOnAod: Boolean = true,
     val gradient: Boolean = false,
     val gradientStart: Int = 0xFF00E5FF.toInt(),
     val gradientEnd: Int = 0xFFFF2DAA.toInt(),
@@ -87,7 +88,8 @@ data class ClockElement(
         .put("x", x.toDouble()).put("y", y.toDouble()).put("size", size).put("font", font)
         .put("weight", weight).put("italic", italic).put("letterSpacing", letterSpacing)
         .put("rotation", rotation).put("color", color ?: JSONObject.NULL).put("opacity", opacity)
-        .put("visible", visible).put("gradient", gradient).put("gradientStart", gradientStart)
+        .put("visible", visible).put("visibleOnAod", visibleOnAod)
+        .put("gradient", gradient).put("gradientStart", gradientStart)
         .put("gradientEnd", gradientEnd).put("shadow", shadow).put("shadowColor", shadowColor)
         .put("shadowSoftness", shadowSoftness).put("shadowOpacity", shadowOpacity)
         .put("image", image).put("imageWidth", imageWidth).put("imageHeight", imageHeight)
@@ -149,6 +151,7 @@ data class ClockElement(
                 rotation = j.optInt("rotation").coerceIn(-180, 180),
                 color = if (j.isNull("color")) null else j.optInt("color", Color.WHITE),
                 opacity = j.optInt("opacity", 100).coerceIn(0, 100), visible = j.optBoolean("visible", true),
+                visibleOnAod = j.optBoolean("visibleOnAod", true),
                 gradient = j.optBoolean("gradient"), gradientStart = j.optInt("gradientStart", d.gradientStart),
                 gradientEnd = j.optInt("gradientEnd", d.gradientEnd), shadow = j.optBoolean("shadow"),
                 shadowColor = j.optInt("shadowColor", d.shadowColor),
