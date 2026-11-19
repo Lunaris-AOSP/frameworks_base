@@ -267,9 +267,17 @@ private fun LunarisBarContainer(
     val selectedIndex = chips.indexOfFirst { it.chipId == selectedChipId }.coerceAtLeast(0)
     val selectedChip = chips.getOrNull(selectedIndex)
     val shownChip = chips.firstOrNull { it.isPopupShown }
+    val isPopupAnchorRedacted =
+        chips.any {
+            it.chipId == popupAnchorChip?.chipId && it.popupContent == PopupContentModel.None
+        }
 
-    LaunchedEffect(shownChip) {
-        if (shownChip != null) {
+    LaunchedEffect(shownChip, isPopupAnchorRedacted) {
+        if (isPopupAnchorRedacted) {
+            popupAnchorChip = null
+            popupVisible = false
+            popupOriginBounds = null
+        } else if (shownChip != null) {
             if (popupAnchorChip == null) {
                 val fromPeek = shownChip.chipId != selectedChipId
                 popupOriginBounds =
@@ -413,7 +421,7 @@ private fun LunarisBarContainer(
                 }
             }
         }
-        popupAnchorChip?.let { anchoredChip ->
+        popupAnchorChip?.takeUnless { isPopupAnchorRedacted }?.let { anchoredChip ->
             StatusBarPopup(
                 viewModel = withIslandLaunch(shownChip ?: anchoredChip),
                 isVisible = popupVisible,

@@ -90,6 +90,7 @@ public final class LunarisBarSettings {
                 "audio_recording", "now_playing", "lyrics", "lockscreen", "disable_in_landscape"}) {
             defaults.put("status_bar_dynamic_island_" + feature, 0);
         }
+        defaults.put("status_bar_dynamic_island_hide_notification_content_on_lockscreen", 1);
         for (String feature : new String[] {"media_controls", "screen_recording", "alarms",
                 "flashlight", "stopwatch", "live_scores", "redesigned_media"}) {
             defaults.put("status_bar_dynamic_island_" + feature, 1);

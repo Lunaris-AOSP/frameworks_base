@@ -45,6 +45,7 @@ import com.android.systemui.statusbar.featurepods.popups.data.repository.Dynamic
 import com.android.systemui.statusbar.featurepods.popups.data.repository.LunarisBarForegroundApp
 import com.android.systemui.statusbar.featurepods.popups.data.repository.observeLunarisBarForegroundApp
 import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.CALLS
+import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.HIDE_NOTIFICATION_CONTENT_ON_LOCKSCREEN
 import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.LOCKSCREEN
 import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.observeDynamicIslandEnabled
 import com.android.systemui.statusbar.featurepods.popups.shared.DynamicIslandFeatureSettings.readDynamicIslandEnabled
@@ -114,6 +115,13 @@ constructor(
                 defaultValue = false,
             )
         )
+    private var hideNotificationContentOnLockscreen by
+        mutableStateOf(
+            context.contentResolver.readDynamicIslandFeatureEnabled(
+                HIDE_NOTIFICATION_CONTENT_ON_LOCKSCREEN,
+                defaultValue = true,
+            )
+        )
     private val dynamicIslandObserver =
         object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean) {
@@ -125,7 +133,24 @@ constructor(
                         LOCKSCREEN,
                         defaultValue = false,
                     )
-                if (!isDynamicIslandEnabled || (isOnLockscreen && !isLockscreenEnabled)) {
+                hideNotificationContentOnLockscreen =
+                    context.contentResolver.readDynamicIslandFeatureEnabled(
+                        HIDE_NOTIFICATION_CONTENT_ON_LOCKSCREEN,
+                        defaultValue = true,
+                    )
+                val showingNotificationPopup =
+                    currentShownPopupChipId?.let { currentId ->
+                        systemEventChips.chips.any {
+                            it.chipId == currentId && it.popupContent.isNotificationPopup
+                        }
+                    } == true
+                if (
+                    !isDynamicIslandEnabled ||
+                        (isOnLockscreen && !isLockscreenEnabled) ||
+                        (isOnLockscreen &&
+                            hideNotificationContentOnLockscreen &&
+                            showingNotificationPopup)
+                ) {
                     showPopup(null)
                 }
             }
@@ -154,11 +179,16 @@ constructor(
     private var autoPopupJob: Job? = null
 
     private fun showPopup(id: PopupChipId?) {
+        val isNotificationPopup =
+            id != null && systemEventChips.chips.any {
+                it.chipId == id && it.popupContent.isNotificationPopup
+            }
         if (
             id != null &&
                 (!isDynamicIslandEnabled ||
                     isShadeVisible ||
-                    (isOnLockscreen && !isLockscreenEnabled))
+                    (isOnLockscreen && !isLockscreenEnabled) ||
+                    (isOnLockscreen && hideNotificationContentOnLockscreen && isNotificationPopup))
         ) {
             return
         }
@@ -212,7 +242,27 @@ constructor(
         }
 
     val lockscreenPopupChips: List<PopupChipModel.Shown>
-        get() = if (isOnLockscreen) availablePopupChips else emptyList()
+        get() =
+            if (isOnLockscreen) {
+                availablePopupChips.map { chip ->
+                    if (
+                        hideNotificationContentOnLockscreen &&
+                            chip.popupContent.isNotificationPopup
+                    ) {
+                        chip.copy(
+                            contentDescription = null,
+                            chipText = (chip.notificationCount ?: 1).coerceAtLeast(1).toString(),
+                            popupContent = PopupContentModel.None,
+                            isPopupShown = false,
+                            showPopup = {},
+                            hidePopup = {},
+                            autoPopupRequest = null,
+                            autoPopupDurationMs = 0L,
+                            dismissNotification = null,
+                        )
+                    } else chip
+                }
+            } else emptyList()
 
     internal val dynamicIslandState: DynamicIslandState
         get() =
@@ -386,6 +436,12 @@ constructor(
             )
             context.contentResolver.registerContentObserver(
                 Settings.System.getUriFor(LOCKSCREEN),
+                false,
+                dynamicIslandObserver,
+                UserHandle.USER_ALL,
+            )
+            context.contentResolver.registerContentObserver(
+                Settings.System.getUriFor(HIDE_NOTIFICATION_CONTENT_ON_LOCKSCREEN),
                 false,
                 dynamicIslandObserver,
                 UserHandle.USER_ALL,

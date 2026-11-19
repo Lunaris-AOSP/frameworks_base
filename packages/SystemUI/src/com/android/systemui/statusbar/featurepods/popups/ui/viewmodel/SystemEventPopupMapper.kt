@@ -578,6 +578,7 @@ constructor(
                     else -> null
                 },
             icons = listOf(ChipIcon(icon = compactIcon, tint = compactIcon is Icon.Resource)),
+            notificationCount = notificationCount.takeIf { event is IslandEvent.Notification },
             chipText =
                 when (event) {
                     is IslandEvent.Charging -> "${event.level}%"

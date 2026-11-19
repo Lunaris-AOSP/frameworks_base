@@ -263,6 +263,10 @@ constructor(
                             } to details
                     }
                     .collect { (events, details) ->
+                        val notificationCounts =
+                            events.filterIsInstance<IslandEvent.Notification>()
+                                .groupingBy { it.sbn.packageName to it.sbn.userId }
+                                .eachCount()
                         send(
                             events.mapNotNull { event ->
                                 mapper
@@ -271,7 +275,11 @@ constructor(
                                         connectivity::disconnectBluetooth,
                                         system::setRingerMode,
                                         notificationCount =
-                                            events.count { it is IslandEvent.Notification },
+                                            if (event is IslandEvent.Notification) {
+                                                notificationCounts.getValue(
+                                                    event.sbn.packageName to event.sbn.userId
+                                                )
+                                            } else 0,
                                         chargingDetails = details,
                                     )
                                     ?.let { chip ->

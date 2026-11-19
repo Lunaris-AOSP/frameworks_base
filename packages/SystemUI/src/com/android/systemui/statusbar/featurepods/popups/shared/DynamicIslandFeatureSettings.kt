@@ -37,6 +37,8 @@ object DynamicIslandFeatureSettings {
     const val BLUETOOTH = "status_bar_dynamic_island_bluetooth"
     const val CALLS = "status_bar_dynamic_island_calls"
     const val NOTIFICATIONS = "status_bar_dynamic_island_notifications"
+    const val HIDE_NOTIFICATION_CONTENT_ON_LOCKSCREEN =
+        "status_bar_dynamic_island_hide_notification_content_on_lockscreen"
     const val ONGOING_ACTIVITIES = "status_bar_dynamic_island_ongoing_activities"
     const val HOTSPOT = "status_bar_dynamic_island_hotspot"
     const val VPN = "status_bar_dynamic_island_vpn"
