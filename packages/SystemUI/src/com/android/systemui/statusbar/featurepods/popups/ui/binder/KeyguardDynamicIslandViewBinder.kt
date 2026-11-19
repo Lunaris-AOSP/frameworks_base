@@ -80,6 +80,7 @@ constructor(
                     PlatformTheme {
                         StatusBarDynamicIslandContainer(
                             chips = viewModel.lockscreenPopupChips,
+                            collapseForShade = viewModel.isShadeVisible,
                             onIslandBoundsChanged = iconFader::update,
                             onIslandActiveChanged = { active ->
                                 visibility = if (active) View.VISIBLE else View.GONE

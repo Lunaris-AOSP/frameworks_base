@@ -185,6 +185,9 @@ interface HomeStatusBarViewModel : Activatable {
     /** The popup chips that should be shown on the right-hand side of the status bar. */
     val popupChips: List<PopupChipModel.Shown>
 
+    val collapsePopupChips: Boolean
+        get() = false
+
     val mediaTransitionChip: PopupChipModel.Shown?
         get() = null
 
@@ -320,6 +323,9 @@ constructor(
 
     override val popupChips
         get() = statusBarPopupChips.shownPopupChips
+
+    override val collapsePopupChips
+        get() = statusBarPopupChips.isShadeVisible
 
     override val mediaTransitionChip
         get() = statusBarPopupChips.mediaTransitionChip

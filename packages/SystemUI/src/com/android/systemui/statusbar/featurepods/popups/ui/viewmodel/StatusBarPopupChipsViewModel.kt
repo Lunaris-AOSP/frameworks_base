@@ -143,12 +143,13 @@ constructor(
         mutableStateOf(
             keyguardTransitionInteractor.currentKeyguardState.value == KeyguardState.LOCKSCREEN
         )
-    private var isShadeVisible by
+    var isShadeVisible by
         mutableStateOf(
             (shadeInteractor.isAnyExpanded.value && !isOnLockscreen) ||
                 shadeInteractor.anyExpansion.value > 0f ||
                 shadeInteractor.isUserInteracting.value
         )
+        private set
     private var isReadyForAutoPopup by mutableStateOf(false)
     private var autoPopupJob: Job? = null
 
@@ -190,7 +191,7 @@ constructor(
     }
 
     val shownPopupChips: List<PopupChipModel.Shown>
-        get() = if (isOnLockscreen) emptyList() else visiblePopupChips
+        get() = if (isOnLockscreen) emptyList() else availablePopupChips
 
     val mediaTransitionChip: PopupChipModel.Shown?
         get() {
@@ -211,7 +212,7 @@ constructor(
         }
 
     val lockscreenPopupChips: List<PopupChipModel.Shown>
-        get() = if (isOnLockscreen) visiblePopupChips else emptyList()
+        get() = if (isOnLockscreen) availablePopupChips else emptyList()
 
     internal val dynamicIslandState: DynamicIslandState
         get() =
@@ -249,7 +250,11 @@ constructor(
     }
 
     private val visiblePopupChips: List<PopupChipModel.Shown> by derivedStateOf {
-        if (!isDynamicIslandEnabled || (isOnLockscreen && !isLockscreenEnabled) || isShadeVisible) {
+        if (isShadeVisible) emptyList() else availablePopupChips
+    }
+
+    private val availablePopupChips: List<PopupChipModel.Shown> by derivedStateOf {
+        if (!isDynamicIslandEnabled || (isOnLockscreen && !isLockscreenEnabled)) {
             return@derivedStateOf emptyList()
         }
 

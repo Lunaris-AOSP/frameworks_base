@@ -44,6 +44,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
@@ -92,6 +94,8 @@ internal fun LunarisBarChip(
     companion: Boolean = false,
     onCard: (String) -> Unit = {},
     measuring: Boolean = false,
+    collapseForShade: Boolean = false,
+    shadeReveal: State<Float>? = null,
 ) {
     LunarisBarContentTheme(viewModel.popupContent, viewModel.chipId) {
         LunarisBarChipContent(
@@ -106,6 +110,8 @@ internal fun LunarisBarChip(
             companion,
             onCard,
             measuring,
+            collapseForShade,
+            shadeReveal,
         )
     }
 }
@@ -123,9 +129,12 @@ private fun LunarisBarChipContent(
     companion: Boolean,
     onCard: (String) -> Unit,
     measuring: Boolean,
+    collapseForShade: Boolean,
+    shadeReveal: State<Float>?,
 ) {
     val state = LocalLunarisBarState.current
     val settings = state.settings
+    val isShadeCollapsed by remember(shadeReveal) { derivedStateOf { shadeReveal?.value == 0f } }
     val alignment = LunarisBarAlignment.fromSetting(settings.alignment)
     val layoutDirection = LocalLayoutDirection.current
     val colors = LocalLunarisBarColors.current
@@ -201,9 +210,11 @@ private fun LunarisBarChipContent(
         settings.isReducedMotion,
         popupAttached,
         measuring,
+        isShadeCollapsed,
     ) {
         if (
             measuring ||
+                isShadeCollapsed ||
                 media?.isPlaying != true ||
                 !settings.isArtworkRotating ||
                 settings.isReducedMotion ||
@@ -254,6 +265,7 @@ private fun LunarisBarChipContent(
     val pulseIcon =
         !settings.isReducedMotion &&
             !measuring &&
+            !isShadeCollapsed &&
             !viewModel.isPopupShown &&
             !popupAttached &&
             (recording is ScreenRecordPopupModel.Recording ||
@@ -361,9 +373,11 @@ private fun LunarisBarChipContent(
                         settings.enabled("status_glow", true) &&
                             !settings.isReducedMotion &&
                             !measuring &&
-                            !resting &&
-                            !viewModel.isPopupShown &&
-                            !popupAttached,
+                            !resting,
+                    visible = !collapseForShade && !viewModel.isPopupShown && !popupAttached,
+                    alpha = {
+                        (legacy?.surfaceAlpha ?: collapse) * (shadeReveal?.value ?: 1f)
+                    },
                 )
                 .semantics {
                     contentDescription =
@@ -393,6 +407,7 @@ private fun LunarisBarChipContent(
                     )
                     .widthIn(max = 240.dp * widthScale + cameraGap)
                     .combinedClickable(
+                        enabled = !collapseForShade,
                         onClick = {
                             perform(
                                 if (companion) "expand" else settings.text("gesture_tap", "expand")
@@ -493,11 +508,14 @@ private fun LunarisBarChipContent(
                             settings.isEqualizerEnabled &&
                             media.isPlaying
                     ) {
-                        AudioReactiveBars(
-                            isPlaying = !settings.isReducedMotion && !measuring,
-                            color = if (ownMedia) rightPalette.second else colors.miniContent,
-                            artworkDrawable = (media.artworkIcon as? IconModel.Loaded)?.drawable,
-                        )
+                        if (!isShadeCollapsed) {
+                            AudioReactiveBars(
+                                isPlaying = !settings.isReducedMotion && !measuring,
+                                color = if (ownMedia) rightPalette.second else colors.miniContent,
+                                artworkDrawable =
+                                    (media.artworkIcon as? IconModel.Loaded)?.drawable,
+                            )
+                        }
                     } else if (appIcon != null) {
                         Icon(
                             appIcon,

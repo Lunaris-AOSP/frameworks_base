@@ -19,7 +19,7 @@ internal class EdgeSweep {
         startTurn = turn
     }
 
-    fun setProgress(progress: Float) {
+    fun setProgress(progress: Float, alpha: Float = 1f) {
         val turn =
             if (progress < TRAVEL_END) startTurn + (1f - startTurn) * ease(progress / TRAVEL_END)
             else 1f
@@ -30,7 +30,7 @@ internal class EdgeSweep {
                 progress < HOLD_END -> 1f
                 progress < TRAVEL_END -> 1f - ease((progress - HOLD_END) / (TRAVEL_END - HOLD_END))
                 else -> 0f
-            }
+            } * alpha
         glow.set(turn, GLOW_BAND, GLOW_BAND, GLOW_NEAR_ALPHA * glowLevel, GLOW_FAR_ALPHA * glowLevel)
 
         val lineLevel =
@@ -38,7 +38,7 @@ internal class EdgeSweep {
                 progress < RISE_END -> ease(progress / RISE_END)
                 progress < HOLD_END -> 1f
                 else -> 1f - ease((progress - HOLD_END) / (1f - HOLD_END))
-            }
+            } * alpha
         val lineWidth =
             when {
                 progress < RISE_END -> LINE_THIN + ease(progress / RISE_END) * LINE_GROWTH

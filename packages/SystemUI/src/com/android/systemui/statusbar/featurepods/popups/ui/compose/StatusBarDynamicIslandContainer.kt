@@ -21,6 +21,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -55,7 +56,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.lerp
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
@@ -94,6 +98,7 @@ fun StatusBarDynamicIslandContainer(
     onIslandActiveChanged: (Boolean) -> Unit = {},
     onIslandMotionChanged: (Boolean, Float) -> Unit = { _, _ -> },
     mediaTransitionChip: PopupChipModel.Shown? = null,
+    collapseForShade: Boolean = false,
 ) {
     LunarisBarTheme {
         LunarisBarContainer(
@@ -104,6 +109,7 @@ fun StatusBarDynamicIslandContainer(
             onIslandActiveChanged,
             onIslandMotionChanged,
             mediaTransitionChip,
+            collapseForShade,
         )
     }
 }
@@ -117,6 +123,7 @@ private fun LunarisBarContainer(
     onIslandActiveChanged: (Boolean) -> Unit,
     onIslandMotionChanged: (Boolean, Float) -> Unit,
     mediaTransitionChip: PopupChipModel.Shown?,
+    collapseForShade: Boolean,
 ) {
     val state = LocalLunarisBarState.current
     val settings = state.settings
@@ -125,6 +132,21 @@ private fun LunarisBarContainer(
     val layoutDirection = LocalLayoutDirection.current
     val alignment = LunarisBarAlignment.fromSetting(settings.alignment)
     var hostLeft by remember { mutableFloatStateOf(0f) }
+    val shadeReveal =
+        animateFloatAsState(
+            targetValue = if (collapseForShade) 0f else 1f,
+            animationSpec =
+                tween(
+                    durationMillis =
+                        if (settings.isReducedMotion || !ValueAnimator.areAnimatorsEnabled()) 0
+                        else
+                            ((if (collapseForShade) 240 else 320) /
+                                    settings.animationSpeed.coerceAtLeast(0.1f))
+                                .toInt(),
+                    easing = FastOutSlowInEasing,
+                ),
+            label = "lunarisbar_shade_reveal",
+        )
     val currentOnIslandBoundsChanged by rememberUpdatedState(onIslandBoundsChanged)
     val currentOnIslandActiveChanged by rememberUpdatedState(onIslandActiveChanged)
     val currentMediaVisibilityChanged by rememberUpdatedState(onMediaControlPopupVisibilityChanged)
@@ -348,8 +370,10 @@ private fun LunarisBarContainer(
                 (bounds.bottom - dy).toInt(),
             )
         }
-        if (selectedChip != null && !selectedChip.isPopupShown) include(mainChipBounds)
-        if (companionChip != null && showCompanionChip) include(companionChipBounds)
+        if (shadeReveal.value > 0f) {
+            if (selectedChip != null && !selectedChip.isPopupShown) include(mainChipBounds)
+            if (companionChip != null && showCompanionChip) include(companionChipBounds)
+        }
         currentOnIslandBoundsChanged(coverage)
     }
     SideEffect {
@@ -408,7 +432,14 @@ private fun LunarisBarContainer(
 
         if (selectedChip == null) return@Box
 
-        LunarisBarPositionedContent(cutoutSpec, alignment, settings, hostLeft) {
+        LunarisBarPositionedContent(
+            cutoutSpec,
+            alignment,
+            settings,
+            hostLeft,
+            reveal = shadeReveal.value,
+            collapseBounds = displayCutout.cutoutBounds,
+        ) {
             Row(
                 modifier =
                     Modifier.graphicsLayer {
@@ -426,6 +457,8 @@ private fun LunarisBarContainer(
                     } else {
                         LunarisBarChip(
                             viewModel = withIslandLaunch(companionChip),
+                            collapseForShade = collapseForShade,
+                            shadeReveal = shadeReveal,
                             popupAttached = popupAnchorChip?.chipId == companionChip.chipId,
                             pageCount = 1,
                             cutoutSpec = cutoutSpec,
@@ -543,6 +576,8 @@ private fun LunarisBarContainer(
 
                     LunarisBarChip(
                         viewModel = launchableChip,
+                        collapseForShade = collapseForShade,
+                        shadeReveal = shadeReveal,
                         popupAttached = popupAnchorChip?.chipId == chip.chipId,
                         pageCount = effectivePageCount,
                         cutoutSpec = cutoutSpec,
@@ -556,7 +591,8 @@ private fun LunarisBarContainer(
                         onCard = ::selectCard,
                         modifier =
                             Modifier.graphicsLayer { translationX = dragOffset.value }
-                                .pointerInput(chips.size, chip.chipId, settings) {
+                                .pointerInput(chips.size, chip.chipId, settings, collapseForShade) {
+                                    if (collapseForShade) return@pointerInput
                                     detectDragGestures(
                                         onDragEnd = {
                                             val switched =
@@ -672,6 +708,8 @@ private fun LunarisBarContainer(
                         if (showCompanionChip) {
                             LunarisBarChip(
                                 viewModel = withIslandLaunch(companionChip),
+                                collapseForShade = collapseForShade,
+                                shadeReveal = shadeReveal,
                                 popupAttached = popupAnchorChip?.chipId == companionChip.chipId,
                                 pageCount = 1,
                                 cutoutSpec = cutoutSpec,
@@ -702,9 +740,15 @@ private fun LunarisBarPositionedContent(
     alignment: LunarisBarAlignment,
     settings: LunarisBarSettings,
     hostLeft: Float,
+    reveal: Float = 1f,
+    collapseBounds: Rect? = null,
     content: @Composable () -> Unit,
 ) {
-    Layout(content = content) { measurables, constraints ->
+    var origin by remember { mutableStateOf(Offset.Zero) }
+    Layout(
+        content = content,
+        modifier = Modifier.onGloballyPositioned { origin = it.positionInWindow() },
+    ) { measurables, constraints ->
         val windowWidth =
             cutoutSpec.windowWidthPx.takeIf { it > 0 }?.toFloat() ?: constraints.maxWidth.toFloat()
         val camera = cutoutSpec.cutoutBounds
@@ -745,7 +789,35 @@ private fun LunarisBarPositionedContent(
                 margin,
             )
         layout(constraints.maxWidth, placeable.height) {
-            placeable.place((left - hostLeft).roundToInt(), settings.offsetY.dp.roundToPx())
+            val expandedLeft = (left - hostLeft).roundToInt().toFloat()
+            val expandedTop = settings.offsetY.dp.roundToPx().toFloat()
+            val expanded =
+                Rect(
+                    expandedLeft,
+                    expandedTop,
+                    expandedLeft + placeable.width,
+                    expandedTop + placeable.height,
+                )
+            val restDiameter = minOf(placeable.height.toFloat(), gap.coerceAtLeast(1f))
+            val collapsed =
+                collapseBounds?.takeUnless { it.isEmpty }?.translate(Offset(-origin.x, -origin.y))
+                    ?: Rect(
+                        expanded.center.x - restDiameter / 2f,
+                        expanded.center.y - restDiameter / 2f,
+                        expanded.center.x + restDiameter / 2f,
+                        expanded.center.y + restDiameter / 2f,
+                    )
+            val frame = lerp(collapsed, expanded, reveal)
+            val x = frame.left.roundToInt()
+            val y = frame.top.roundToInt()
+            placeable.placeWithLayer(x, y) {
+                transformOrigin = TransformOrigin(0f, 0f)
+                translationX = frame.left - x
+                translationY = frame.top - y
+                scaleX = frame.width / placeable.width.coerceAtLeast(1)
+                scaleY = frame.height / placeable.height.coerceAtLeast(1)
+                alpha = reveal
+            }
         }
     }
 }
