@@ -55,6 +55,7 @@ import kotlinx.coroutines.flow.SharingStarted.Companion.WhileSubscribed
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -75,6 +76,9 @@ interface WallpaperRepository {
 
     /** Emits true if the current user's current wallpaper supports ambient mode. */
     val wallpaperSupportsAmbientMode: Flow<Boolean>
+
+    /** Emits whether the current user wants ambient wallpaper to be blurred. */
+    val ambientWallpaperBlurEnabled: Flow<Boolean>
 
     /** Set rootView to get its windowToken afterwards */
     var rootView: View?
@@ -121,6 +125,7 @@ constructor(
     override val lockscreenWallpaperInfo: StateFlow<WallpaperInfo?> = getWallpaperInfo(FLAG_LOCK)
     override val wallpaperSupportsAmbientMode: Flow<Boolean> =
         combine(
+                selectedUser,
                 secureSettings
                     .observerFlow(
                         UserHandle.USER_ALL,
@@ -128,13 +133,35 @@ constructor(
                     )
                     .onStart { emit(Unit) },
                 configurationInteractor.onAnyConfigurationChange,
-                ::Pair,
-            )
-            .map {
+            ) { user, _, _ ->
                 val wallpaperEnabled =
-                    secureSettings.getInt(Settings.Secure.DOZE_ALWAYS_ON_WALLPAPER_ENABLED, 0) == 1
+                    secureSettings.getIntForUser(
+                        Settings.Secure.DOZE_ALWAYS_ON_WALLPAPER_ENABLED,
+                        0,
+                        user.userInfo.id,
+                    ) == 1
                 wallpaperEnabled && configEnabled() && ambientAod()
             }
+            .distinctUntilChanged()
+            .flowOn(bgDispatcher)
+
+    override val ambientWallpaperBlurEnabled: Flow<Boolean> =
+        combine(
+                selectedUser,
+                secureSettings
+                    .observerFlow(
+                        UserHandle.USER_ALL,
+                        Settings.Secure.DOZE_ALWAYS_ON_WALLPAPER_BLUR_ENABLED,
+                    )
+                    .onStart { emit(Unit) },
+            ) { user, _ ->
+                secureSettings.getIntForUser(
+                    Settings.Secure.DOZE_ALWAYS_ON_WALLPAPER_BLUR_ENABLED,
+                    1,
+                    user.userInfo.id,
+                ) != 0
+            }
+            .distinctUntilChanged()
             .flowOn(bgDispatcher)
 
     override var rootView: View? = null

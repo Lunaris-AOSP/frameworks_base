@@ -12327,6 +12327,16 @@ public final class Settings {
                 "doze_always_on_wallpaper_enabled";
 
         /**
+         * Indicates whether ambient wallpaper is blurred with AOD.
+         * <p>
+         * Type: int (0 for false, 1 for true). Defaults to 1.
+         *
+         * @hide
+         */
+        public static final String DOZE_ALWAYS_ON_WALLPAPER_BLUR_ENABLED =
+                "doze_always_on_wallpaper_blur_enabled";
+
+        /**
          * Whether the device should pulse on pick up gesture.
          * @hide
          */

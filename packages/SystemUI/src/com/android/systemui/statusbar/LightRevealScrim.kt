@@ -416,16 +416,29 @@ constructor(
         isScrimOpaque = revealAmount == 0.0f && alpha == 1.0f && visibility == VISIBLE
     }
 
+    private var onRevealChanged: Runnable? = null
+
+    fun setRevealChangedListener(listener: Runnable?) {
+        onRevealChanged = listener
+    }
+
+    override fun invalidate() {
+        super.invalidate()
+        onRevealChanged?.run()
+    }
+
     override fun setAlpha(alpha: Float) {
         super.setAlpha(alpha)
         scrimLogger?.d(TAG, "alpha", "$alpha on $logString")
         updateScrimOpaque()
+        onRevealChanged?.run()
     }
 
     override fun setVisibility(visibility: Int) {
         super.setVisibility(visibility)
         scrimLogger?.d(TAG, "visibility", "$visibility on $logString")
         updateScrimOpaque()
+        onRevealChanged?.run()
     }
 
     /**

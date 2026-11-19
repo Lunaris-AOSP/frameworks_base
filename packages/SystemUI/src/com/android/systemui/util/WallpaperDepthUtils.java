@@ -23,7 +23,14 @@ import android.content.IntentFilter;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Matrix;
+import android.graphics.Paint;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
+import android.graphics.RenderEffect;
+import android.graphics.Shader;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.AsyncTask;
@@ -46,7 +53,9 @@ import android.widget.FrameLayout;
 import com.android.systemui.Dependency;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.media.MediaViewController;
+import com.android.systemui.res.R;
 import com.android.systemui.settings.UserTracker;
+import com.android.systemui.statusbar.LightRevealScrim;
 import com.android.systemui.statusbar.phone.ScrimController;
 import com.android.systemui.statusbar.phone.ScrimState;
 import com.android.systemui.tuner.TunerService;
@@ -95,6 +104,16 @@ public class WallpaperDepthUtils {
     private int mSubjectWallpaperId;
     private int mSubjectUserId;
     private boolean mDozing;
+    private boolean mAmbientWallpaperEnabled;
+    private float mAmbientWallpaperBlurRadius;
+    private float mAppliedAmbientBlurRadius;
+    private boolean mShowingAmbientWallpaper;
+    private LightRevealScrim mLightRevealScrim;
+    private final Runnable mAmbientScrimChangedListener = () -> {
+        if (canShowAmbientWallpaper()) {
+            mLockScreenSubject.invalidate();
+        }
+    };
     private boolean mBouncerShowing;
     private boolean mGlanceableHubShowing;
     private boolean mDynamicBarExpanded;
@@ -137,6 +156,10 @@ public class WallpaperDepthUtils {
                 super.onAttachedToWindow();
                 mSpatialEffectController.attachBackgroundView(mLockScreenBackground);
                 mSpatialEffectController.attachSubjectView(mLockScreenSubject);
+                mLightRevealScrim = getRootView().findViewById(R.id.light_reveal_scrim);
+                if (mLightRevealScrim != null) {
+                    mLightRevealScrim.setRevealChangedListener(mAmbientScrimChangedListener);
+                }
                 registerTunable();
                 updateWallpaperZoomListener();
             }
@@ -238,13 +261,23 @@ public class WallpaperDepthUtils {
     }
 
     public void onUnlockStarted() {
+        if (mUnlocking) {
+            return;
+        }
         mUnlocking = true;
         hideDepthWallpaperImmediate();
         updateSpatialEffectActive();
     }
 
     public void onUnlockCancelled() {
+        if (!mUnlocking) {
+            return;
+        }
         mUnlocking = false;
+        mLockScreenSubject.animate().cancel();
+        mLockScreenSubject.setAlpha(1f);
+        mLockScreenBackground.animate().cancel();
+        mLockScreenBackground.setAlpha(1f);
         updateDepthWallpaperVisibility();
         updateSpatialEffectActive();
     }
@@ -259,12 +292,19 @@ public class WallpaperDepthUtils {
             return;
         }
         mDozing = dozing;
-        if (mDozing) {
-            hideDepthWallpaper();
-        } else {
-            updateDepthWallpaperVisibility();
-        }
+        updateDepthWallpaperVisibility();
         updateSpatialEffectActive();
+    }
+
+    public void setAmbientWallpaperState(boolean enabled, float blurRadius) {
+        blurRadius = Math.max(0f, blurRadius);
+        if (mAmbientWallpaperEnabled == enabled
+                && Float.compare(mAmbientWallpaperBlurRadius, blurRadius) == 0) {
+            return;
+        }
+        mAmbientWallpaperEnabled = enabled;
+        mAmbientWallpaperBlurRadius = blurRadius;
+        updateDepthWallpaperVisibility();
     }
 
     public void onBouncerShowingChanged(boolean showing) {
@@ -377,7 +417,8 @@ public class WallpaperDepthUtils {
         if (mLockScreenSubject == null) {
             return;
         }
-        mLockScreenSubject.post(() -> mLockScreenSubject.setAlpha(subjectAlpha));
+        mLockScreenSubject.post(() -> mLockScreenSubject.setAlpha(
+                canShowAmbientWallpaper() ? 1f : subjectAlpha));
     }
 
     private void applyBottomFade() {
@@ -483,6 +524,9 @@ public class WallpaperDepthUtils {
         if (!mHasWallpaperZoom) return;
         mSpatialEffectController.setWallpaperZoom(
                 mWallpaperZoomScale, mWallpaperZoomPivotX, mWallpaperZoomPivotY);
+        if (canShowAmbientWallpaper()) {
+            mLockScreenSubject.invalidate();
+        }
     }
 
     public FrameLayout getBackgroundView() {
@@ -495,8 +539,7 @@ public class WallpaperDepthUtils {
                 && !mWallpaperSubjectPath.isEmpty();
     }
 
-    private boolean canShowDepthWallpaper() {
-        ScrimState currentState = mScrimController.getState();
+    private boolean canShowWallpaperLayers() {
         MediaViewController mediaViewController =
                 MediaViewController.getOrNull();
         boolean albumArtVisible = mediaViewController != null
@@ -505,15 +548,27 @@ public class WallpaperDepthUtils {
                 && isDWallpaperEnabled()
                 && mWallpaperLoaded
                 && mHasWallpaperZoom
-                && !mDozing
                 && !mBouncerShowing
                 && !mGlanceableHubShowing
                 && !mDynamicBarExpanded
                 && !mUnlocking
-                && currentState == ScrimState.KEYGUARD
                 && mContext.getResources().getConfiguration().orientation
                         != Configuration.ORIENTATION_LANDSCAPE
                 && !albumArtVisible;
+    }
+
+    private boolean canShowDepthWallpaper() {
+        return canShowWallpaperLayers()
+                && !mDozing
+                && mScrimController.getState() == ScrimState.KEYGUARD;
+    }
+
+    private boolean canShowAmbientWallpaper() {
+        ScrimState currentState = mScrimController.getState();
+        return canShowWallpaperLayers()
+                && mDozing
+                && mAmbientWallpaperEnabled
+                && (currentState == ScrimState.AOD || currentState == ScrimState.PULSING);
     }
 
     public void updateDepthWallpaperVisibility() {
@@ -521,33 +576,34 @@ public class WallpaperDepthUtils {
             return;
         }
 
-        int subjectVisibility =
-                canShowDepthWallpaper() ? View.VISIBLE : View.GONE;
-
-        if (mLockScreenSubject.getVisibility() == subjectVisibility
-                && (mLockScreenBackground == null
-                || mLockScreenBackground.getVisibility() == subjectVisibility)) {
-            return;
-        }
-
         mLockScreenSubject.post(() -> {
-            int targetVisibility = canShowDepthWallpaper() ? View.VISIBLE : View.GONE;
-            if (mLockScreenSubject.getVisibility() == targetVisibility
-                    && (mLockScreenBackground == null
-                    || mLockScreenBackground.getVisibility() == targetVisibility)) return;
-            mLockScreenSubject.setVisibility(targetVisibility);
-
-            if (mLockScreenBackground != null) {
-                mLockScreenBackground.setVisibility(targetVisibility);
+            ViewGroup parent = (ViewGroup) mLockScreenSubject.getParent();
+            if (parent != null && mLockScreenBackground.getParent() == null) {
+                parent.addView(mLockScreenBackground, 0);
             }
-
-            if (targetVisibility == View.VISIBLE) {
-                mLockScreenSubject.invalidate();
-
-                if (mLockScreenBackground != null) {
-                    mLockScreenBackground.invalidate();
+            boolean showDepth = canShowDepthWallpaper();
+            boolean showAmbient = canShowAmbientWallpaper();
+            if (mShowingAmbientWallpaper != showAmbient) {
+                if (showAmbient) {
+                    mLockScreenSubject.setAlpha(1f);
                 }
+                mLockScreenSubject.invalidate();
             }
+            mShowingAmbientWallpaper = showAmbient;
+            float blurRadius = showAmbient ? mAmbientWallpaperBlurRadius : 0f;
+            if (Float.compare(mAppliedAmbientBlurRadius, blurRadius) != 0) {
+                RenderEffect blurEffect = blurRadius > 0f
+                        ? RenderEffect.createBlurEffect(
+                                blurRadius, blurRadius, Shader.TileMode.CLAMP)
+                        : null;
+                mLockScreenBackground.setRenderEffect(blurEffect);
+                mLockScreenSubject.setRenderEffect(blurEffect);
+                mAppliedAmbientBlurRadius = blurRadius;
+            }
+            mLockScreenSubject.setVisibility(
+                    showDepth || showAmbient ? View.VISIBLE : View.GONE);
+            mLockScreenBackground.setVisibility(
+                    showDepth || showAmbient ? View.VISIBLE : View.GONE);
         });
 
         updateSpatialEffectActive();
@@ -555,7 +611,8 @@ public class WallpaperDepthUtils {
 
     public void hideDepthWallpaper() {
         if (mLockScreenSubject == null
-                || mLockScreenSubject.getVisibility() == View.GONE) {
+                || (mLockScreenSubject.getVisibility() == View.GONE
+                        && mLockScreenBackground.getVisibility() == View.GONE)) {
             return;
         }
 
@@ -575,7 +632,7 @@ public class WallpaperDepthUtils {
             return;
         }
 
-        mLockScreenSubject.post(() -> {
+        Runnable fade = () -> {
             mLockScreenSubject.animate().cancel();
 
             if (mLockScreenBackground != null) {
@@ -602,7 +659,12 @@ public class WallpaperDepthUtils {
                         .setDuration(120)
                         .start();
             }
-        });
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            fade.run();
+        } else {
+            mMainHandler.post(fade);
+        }
 
         updateSpatialEffectActive();
     }
@@ -634,49 +696,19 @@ public class WallpaperDepthUtils {
 
     private Bitmap getResizedBitmap(Bitmap wallpaperBitmap, float xOffsetDp, float yOffsetDp,
             Rect displayBounds, float density) {
-        float xOffsetPx = xOffsetDp * density;
-        float yOffsetPx = yOffsetDp * density;
-
-        float ratioW = displayBounds.width()
-                / (float) wallpaperBitmap.getWidth();
-        float ratioH = displayBounds.height()
-                / (float) wallpaperBitmap.getHeight();
-
-        int desiredHeight = Math.round(
-                Math.max(ratioH, ratioW) * wallpaperBitmap.getHeight());
-        int desiredWidth = Math.round(
-                Math.max(ratioH, ratioW) * wallpaperBitmap.getWidth());
-
-        desiredHeight = Math.max(desiredHeight, 0);
-        desiredWidth = Math.max(desiredWidth, 0);
-
-        Bitmap scaledWallpaperBitmap = Bitmap.createScaledBitmap(
-                wallpaperBitmap, desiredWidth, desiredHeight, true);
-
-        int xPixelShift = Math.max(
-                (desiredWidth - displayBounds.width()) / 2, 0)
-                - Math.round(xOffsetPx);
-
-        int yPixelShift = Math.max(
-                (desiredHeight - displayBounds.height()) / 2, 0)
-                - Math.round(yOffsetPx);
-
-        int cropWidth = Math.min(
-                displayBounds.width(),
-                scaledWallpaperBitmap.getWidth() - xPixelShift);
-
-        int cropHeight = Math.min(
-                displayBounds.height(),
-                scaledWallpaperBitmap.getHeight() - yPixelShift);
-
-        scaledWallpaperBitmap = Bitmap.createBitmap(
-                scaledWallpaperBitmap,
-                Math.max(xPixelShift, 0),
-                Math.max(yPixelShift, 0),
-                cropWidth,
-                cropHeight);
-
-        return scaledWallpaperBitmap;
+        int width = displayBounds.width();
+        int height = displayBounds.height();
+        float scale = Math.max(width / (float) wallpaperBitmap.getWidth(),
+                height / (float) wallpaperBitmap.getHeight());
+        Matrix matrix = new Matrix();
+        matrix.setScale(scale, scale);
+        matrix.postTranslate(
+                (width - wallpaperBitmap.getWidth() * scale) / 2f + xOffsetDp * density,
+                (height - wallpaperBitmap.getHeight() * scale) / 2f + yOffsetDp * density);
+        Bitmap resizedBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(resizedBitmap);
+        canvas.drawBitmap(wallpaperBitmap, matrix, new Paint(Paint.FILTER_BITMAP_FLAG));
+        return resizedBitmap;
     }
 
     public void updateDepthWallpaper(boolean forced) {
@@ -705,10 +737,14 @@ public class WallpaperDepthUtils {
         mLockScreenSubject.setVisibility(View.GONE);
         mLockScreenSubject.setAlpha(1f);
         mLockScreenSubject.setBackground(null);
+        mLockScreenSubject.setRenderEffect(null);
         mLockScreenBackground.animate().cancel();
         mLockScreenBackground.setVisibility(View.GONE);
         mLockScreenBackground.setAlpha(1f);
         mLockScreenBackground.setBackground(null);
+        mLockScreenBackground.setRenderEffect(null);
+        mAppliedAmbientBlurRadius = 0f;
+        mShowingAmbientWallpaper = false;
         updateSpatialEffectActive();
     }
 
@@ -782,6 +818,46 @@ public class WallpaperDepthUtils {
         }
     }
 
+    private class AmbientSubjectDrawable extends FadeBottomDrawable {
+        private final Paint mScrimPaint = new Paint();
+        private final Matrix mSubjectMatrix = new Matrix();
+        private final Matrix mScrimMatrix = new Matrix();
+        private final Matrix mScrimToSubjectMatrix = new Matrix();
+
+        AmbientSubjectDrawable(Bitmap bitmap) {
+            super(bitmap, 0);
+            mScrimPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC_ATOP));
+        }
+
+        @Override
+        public void draw(Canvas canvas) {
+            if (!canShowAmbientWallpaper() || mLightRevealScrim == null
+                    || mLightRevealScrim.getVisibility() != View.VISIBLE
+                    || mLightRevealScrim.getAlpha() == 0f) {
+                super.draw(canvas);
+                return;
+            }
+            Rect bounds = getBounds();
+            int subjectLayer = canvas.saveLayer(
+                    bounds.left, bounds.top, bounds.right, bounds.bottom, null);
+            super.draw(canvas);
+            mSubjectMatrix.reset();
+            mScrimMatrix.reset();
+            mLockScreenSubject.transformMatrixToGlobal(mSubjectMatrix);
+            mLightRevealScrim.transformMatrixToGlobal(mScrimMatrix);
+            if (mSubjectMatrix.invert(mScrimToSubjectMatrix)) {
+                mScrimToSubjectMatrix.preConcat(mScrimMatrix);
+                mScrimPaint.setAlpha(Math.round(mLightRevealScrim.getAlpha() * 255f));
+                int scrimLayer = canvas.saveLayer(
+                        bounds.left, bounds.top, bounds.right, bounds.bottom, mScrimPaint);
+                canvas.concat(mScrimToSubjectMatrix);
+                mLightRevealScrim.draw(canvas);
+                canvas.restoreToCount(scrimLayer);
+            }
+            canvas.restoreToCount(subjectLayer);
+        }
+    }
+
     private class LoadWallpaperTask
             extends AsyncTask<Void, Void, WallpaperLayers> {
 
@@ -830,7 +906,7 @@ public class WallpaperDepthUtils {
                     return null;
                 }
 
-                Drawable bitmapDrawable = new FadeBottomDrawable(resizedBitmap, 0);
+                Drawable bitmapDrawable = new AmbientSubjectDrawable(resizedBitmap);
 
                 if (isCancelled()) return null;
                 Drawable backgroundDrawable = null;
@@ -840,8 +916,8 @@ public class WallpaperDepthUtils {
                     Bitmap resizedBg =
                             getResizedBitmap(
                                     bgRaw,
-                                    mSubjectOffsetX,
-                                    mSubjectOffsetY,
+                                    0,
+                                    0,
                                     mDisplayBounds,
                                     mDensity);
 
@@ -907,6 +983,10 @@ public class WallpaperDepthUtils {
     }
 
     public void onDetachedFromWindow() {
+        if (mLightRevealScrim != null) {
+            mLightRevealScrim.setRevealChangedListener(null);
+            mLightRevealScrim = null;
+        }
         unregisterWallpaperZoomListener();
         clearDepthWallpaper();
         mBroadcastDispatcher.unregisterReceiver(mWallpaperChangedReceiver);

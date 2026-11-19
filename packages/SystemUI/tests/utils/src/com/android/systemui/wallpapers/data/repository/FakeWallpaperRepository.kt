@@ -35,6 +35,9 @@ class FakeWallpaperRepository : WallpaperRepository {
     private val _wallpaperSupportsAmbientMode = MutableStateFlow(false)
     override val wallpaperSupportsAmbientMode: Flow<Boolean> =
         _wallpaperSupportsAmbientMode.asStateFlow()
+    private val _ambientWallpaperBlurEnabled = MutableStateFlow(true)
+    override val ambientWallpaperBlurEnabled: Flow<Boolean> =
+        _ambientWallpaperBlurEnabled.asStateFlow()
     override var rootView: View? = null
     private val _shouldSendFocalArea = MutableStateFlow(false)
     override val shouldSendFocalArea: StateFlow<Boolean> = _shouldSendFocalArea.asStateFlow()
@@ -45,6 +48,10 @@ class FakeWallpaperRepository : WallpaperRepository {
 
     fun setWallpaperSupportsAmbientMode(supportsAmbientMode: Boolean) {
         _wallpaperSupportsAmbientMode.value = supportsAmbientMode
+    }
+
+    fun setAmbientWallpaperBlurEnabled(enabled: Boolean) {
+        _ambientWallpaperBlurEnabled.value = enabled
     }
 
     fun setWallpaperInfo(wallpaperInfo: WallpaperInfo?) {

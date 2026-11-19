@@ -73,12 +73,24 @@ class ScrimUtils private constructor(context: Context?) {
     }
 
     private var mWallpaperDepthUtils: WallpaperDepthUtils? = null
+    private var mAmbientWallpaperEnabled = false
+    private var mAmbientWallpaperBlurRadius = 0f
 
     fun setWallpaperDepthUtils(utils: WallpaperDepthUtils) {
         mWallpaperDepthUtils = utils
+        utils.setAmbientWallpaperState(mAmbientWallpaperEnabled, mAmbientWallpaperBlurRadius)
+        utils.onDozingChanged(isDozing())
+        updateDepthWallpaperUnlockState()
+    }
+
+    fun setAmbientWallpaperState(enabled: Boolean, blurRadius: Float) {
+        mAmbientWallpaperEnabled = enabled
+        mAmbientWallpaperBlurRadius = blurRadius
+        mWallpaperDepthUtils?.setAmbientWallpaperState(enabled, blurRadius)
     }
 
     private var mUnlockAnimationController: KeyguardUnlockAnimationController? = null
+    private val hideDepthOnUnlock = Runnable { mWallpaperDepthUtils?.onUnlockStarted() }
 
     private val mUnlockAnimationListener =
         object : KeyguardUnlockAnimationController.KeyguardUnlockAnimationListener {
@@ -89,16 +101,18 @@ class ScrimUtils private constructor(context: Context?) {
                 unlockAnimationDuration: Long,
             ) {
                 keyguardRetryRunnable?.let { mainHandler.removeCallbacks(it) }
-                mainHandler.postDelayed({
-                    mWallpaperDepthUtils?.hideDepthWallpaperImmediate()
-                }, unlockAnimationStartDelay)
+                mainHandler.removeCallbacks(hideDepthOnUnlock)
+                mainHandler.postDelayed(hideDepthOnUnlock, unlockAnimationStartDelay)
             }
 
             override fun onUnlockAnimationFinished() {
+                mainHandler.removeCallbacks(hideDepthOnUnlock)
+                updateDepthWallpaperUnlockState()
             }
         }
 
     fun setKeyguardUnlockAnimationController(controller: KeyguardUnlockAnimationController) {
+        mainHandler.removeCallbacks(hideDepthOnUnlock)
         mUnlockAnimationController?.removeKeyguardUnlockAnimationListener(mUnlockAnimationListener)
         mUnlockAnimationController = controller
         controller.addKeyguardUnlockAnimationListener(mUnlockAnimationListener)
@@ -166,12 +180,23 @@ class ScrimUtils private constructor(context: Context?) {
         mKeyguardFadingAway = fadingAway
         listeners.notifyOnMain { it.onKeyguardFadingAwayChanged(fadingAway) }
         postKeyguardRetry()
+        updateDepthWallpaperUnlockState()
     }
 
     fun onKeyguardGoingAwayChanged(goingAway: Boolean) {
         mKeyguardGoingAway = goingAway
         listeners.notifyOnMain { it.onKeyguardGoingAwayChanged(goingAway) }
         postKeyguardRetry()
+        updateDepthWallpaperUnlockState()
+    }
+
+    private fun updateDepthWallpaperUnlockState() {
+        if (mKeyguardFadingAway == true || mKeyguardGoingAway == true) {
+            mWallpaperDepthUtils?.onUnlockStarted()
+        } else {
+            mainHandler.removeCallbacks(hideDepthOnUnlock)
+            mWallpaperDepthUtils?.onUnlockCancelled()
+        }
     }
 
     fun onPrimaryBouncerShowingChanged(showing: Boolean) {

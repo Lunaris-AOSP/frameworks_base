@@ -889,6 +889,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
         if (mScrimBehind != null) {
             dispatchBackScrimState(mScrimBehind.getViewAlpha());
         }
+        ScrimUtils.get(mContext).updateDepthWallpaperVisibility();
     }
 
     private static void debugLog(String state) {

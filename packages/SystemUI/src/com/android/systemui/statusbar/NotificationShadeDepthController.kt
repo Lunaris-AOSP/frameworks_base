@@ -56,6 +56,7 @@ import com.android.systemui.statusbar.phone.BiometricUnlockController.MODE_WAKE_
 import com.android.systemui.statusbar.phone.DozeParameters
 import com.android.systemui.statusbar.phone.ScrimController
 import com.android.systemui.statusbar.policy.KeyguardStateController
+import com.android.systemui.util.ScrimUtils
 import com.android.systemui.util.WallpaperController
 import com.android.systemui.wallpapers.domain.interactor.WallpaperInteractor
 import com.android.systemui.window.domain.interactor.WindowRootViewBlurInteractor
@@ -69,6 +70,7 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.math.sign
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 /**
@@ -131,8 +133,9 @@ constructor(
     private var prevTimestamp: Long = -1
     private var prevShadeDirection = 0
     private var prevShadeVelocity = 0f
-    private var prevDozeAmount: Float = 0f
+    private var prevDozeAmount: Float = statusBarStateController.dozeAmount
     @VisibleForTesting var wallpaperSupportsAmbientMode: Boolean = false
+    private var ambientWallpaperBlurEnabled: Boolean = true
 
     // tracks whether app launch transition is in progress. This involves two independent factors
     // that control blur, shade expansion and app launch animation from outside sysui.
@@ -410,6 +413,10 @@ constructor(
 
     private fun onBlurApplied(appliedBlurRadius: Int, zoomOutFromShadeRadius: Float) {
         lastAppliedBlur = appliedBlurRadius
+        ScrimUtils.get().setAmbientWallpaperState(
+            wallpaperSupportsAmbientMode,
+            appliedBlurRadius.toFloat(),
+        )
         onZoomOutChanged(zoomOutFromShadeRadius)
         listeners.forEach { it.onBlurRadiusChanged(appliedBlurRadius) }
         notificationShadeWindowController.setBackgroundBlurRadius(appliedBlurRadius)
@@ -452,14 +459,13 @@ constructor(
                         startDelay = keyguardStateController.keyguardFadingAwayDelay
                         interpolator = Interpolators.FAST_OUT_SLOW_IN
                         addUpdateListener { animation: ValueAnimator ->
-                            wakeAndUnlockBlurRadius =
-                                blurUtils.blurRadiusOfRatioForAod(animation.animatedValue as Float)
+                            updateWakeBlurRadius(animation.animatedValue as Float)
                         }
                         addListener(
                             object : AnimatorListenerAdapter() {
                                 override fun onAnimationEnd(animation: Animator) {
                                     keyguardAnimator = null
-                                    wakeAndUnlockBlurRadius = 0f
+                                    updateWakeBlurRadius(0f)
                                 }
                             }
                         )
@@ -514,10 +520,14 @@ constructor(
 
     private fun updateWakeBlurRadius(ratio: Float) {
         wakeAndUnlockBlurRadius = getNewWakeBlurRadius(ratio)
+        ScrimUtils.get().setAmbientWallpaperState(
+            wallpaperSupportsAmbientMode,
+            lastAppliedBlur.toFloat(),
+        )
     }
 
     private fun getNewWakeBlurRadius(ratio: Float): Float {
-        return if (!wallpaperSupportsAmbientMode) {
+        return if (!wallpaperSupportsAmbientMode || !ambientWallpaperBlurEnabled) {
             0f
         } else {
             blurUtils.blurRadiusOfRatioForAod(ratio)
@@ -546,17 +556,23 @@ constructor(
             }
         }
         applicationScope.launch {
-            wallpaperInteractor.wallpaperSupportsAmbientMode.collect { supported ->
-                wallpaperSupportsAmbientMode = supported
-                if (getNewWakeBlurRadius(prevDozeAmount) == wakeAndUnlockBlurRadius) {
-                    // Update wake and unlock radius only if the previous value comes from wake-up.
+            combine(
+                    wallpaperInteractor.wallpaperSupportsAmbientMode,
+                    wallpaperInteractor.ambientWallpaperBlurEnabled,
+                    ::Pair,
+                )
+                .collect { (supported, blurEnabled) ->
+                    wallpaperSupportsAmbientMode = supported
+                    ambientWallpaperBlurEnabled = blurEnabled
                     updateWakeBlurRadius(prevDozeAmount)
                 }
-            }
         }
         applicationScope.launch {
             blurUtils.maxBlurRadiusFlow.collect {
-                scheduleUpdate()
+                if (::root.isInitialized) {
+                    updateWakeBlurRadius(prevDozeAmount)
+                    scheduleUpdate()
+                }
             }
         }
         initBlurListeners()
@@ -734,6 +750,9 @@ constructor(
     }
 
     private fun scheduleUpdate() {
+        if (!::root.isInitialized) {
+            return
+        }
         // Do not blur or zoom out the wallpaper if the blurred wallpaper is not supported.
         if (!windowRootViewBlurInteractor.isBlurredWallpaperSupported) {
             return
