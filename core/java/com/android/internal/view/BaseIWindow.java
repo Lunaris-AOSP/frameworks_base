@@ -87,6 +87,11 @@ public class BaseIWindow extends IWindow.Stub {
     }
 
     @Override
+    public void dispatchEdgeGoAction(int action, android.os.RemoteCallback callback) {
+        if (callback != null) callback.sendResult(new android.os.Bundle());
+    }
+
+    @Override
     public void executeCommand(String command, String parameters, ParcelFileDescriptor out) {
         if (out != null) {
             try {

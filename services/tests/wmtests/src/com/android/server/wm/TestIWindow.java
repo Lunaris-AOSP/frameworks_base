@@ -33,7 +33,7 @@ import com.android.internal.os.IResultReceiver;
 
 import java.util.ArrayList;
 
-public class TestIWindow extends IWindow.Stub {
+public class TestIWindow extends com.android.internal.view.BaseIWindow {
 
     private ArrayList<DragEvent> mDragEvents;
 

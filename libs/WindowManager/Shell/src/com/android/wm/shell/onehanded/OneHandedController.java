@@ -357,14 +357,17 @@ public class OneHandedController implements RemoteCallable<OneHandedController>,
 
     @VisibleForTesting
     void startOneHanded() {
-        if (isLockedDisabled() || mKeyguardShowing) {
+        if (!mIsOneHandedEnabled || isLockedDisabled() || mKeyguardShowing) {
             Slog.d(TAG, "Temporary lock disabled");
             return;
         }
 
         if (!mDisplayAreaOrganizer.isReady()) {
             // Must wait until DisplayAreaOrganizer is ready for transitioning.
-            mMainExecutor.executeDelayed(this::startOneHanded, DISPLAY_AREA_READY_RETRY_MS);
+            final int userId = mUserId;
+            mMainExecutor.executeDelayed(() -> {
+                if (mUserId == userId && mIsOneHandedEnabled) startOneHanded();
+            }, DISPLAY_AREA_READY_RETRY_MS);
             return;
         }
 
@@ -719,6 +722,12 @@ public class OneHandedController implements RemoteCallable<OneHandedController>,
         @Override
         public void startOneHanded() {
             mMainExecutor.execute(() -> {
+                if (isLockedDisabled() || mKeyguardShowing) return;
+                if (!mIsOneHandedEnabled) {
+                    if (!mOneHandedSettingsUtil.setOneHandedModeEnabled(
+                            mContext.getContentResolver(), 1, mUserId)) return;
+                    setOneHandedEnabled(true);
+                }
                 OneHandedController.this.startOneHanded();
             });
         }

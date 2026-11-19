@@ -1,4 +1,8 @@
 /*
+ * SPDX-FileCopyrightText: Lunaris AOSP
+ * SPDX-License-Identifier: Apache-2.0
+ */
+/*
  * Copyright (C) 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -276,6 +280,7 @@ import kotlinx.coroutines.CoroutineScope;
         DreamModule.class,
         EventLogModule.class,
         com.android.systemui.edgeaurora.EdgeAuroraModule.class,
+        com.android.systemui.edgego.EdgeGoModule.class,
         FalsingModule.class,
         FlagsModule.class,
         FlagDependenciesModule.class,

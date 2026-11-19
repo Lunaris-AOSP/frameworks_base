@@ -33,6 +33,7 @@ import android.graphics.Rect;
 import android.graphics.Region;
 import android.os.Bundle;
 import android.os.IRemoteCallback;
+import android.os.RemoteCallback;
 import android.os.ParcelFileDescriptor;
 import android.view.DisplayCutout;
 import android.view.DisplayInfo;
@@ -1209,4 +1210,8 @@ interface IWindowManager
      * Returns whether the display with {@code displayId} ignores orientation request.
      */
     boolean getIgnoreOrientationRequest(int displayId);
+
+    @EnforcePermission("STATUS_BAR_SERVICE")
+    oneway void requestEdgeGoAction(int action, String expectedPackage, int userId,
+            in RemoteCallback callback);
 }

@@ -357,7 +357,7 @@ public class BackAnimationController implements RemoteCallable<BackAnimationCont
 
         @Override
         public void onThresholdCrossed() {
-            BackAnimationController.this.onThresholdCrossed();
+            mShellExecutor.execute(BackAnimationController.this::onThresholdCrossed);
         }
 
         @Override

@@ -427,7 +427,7 @@ public final class GestureUtils {
         for (int i = 0; i < len; i++) {
             sum += vector1[i] * vector2[i];
         }
-        return (float) Math.acos(sum);
+        return (float) Math.acos(Math.max(-1, Math.min(1, sum)));
     }
     
     /**
@@ -450,11 +450,11 @@ public final class GestureUtils {
             final float tan = b/a;
             final double angle = Math.atan(tan);
             if (numOrientations > 2 && Math.abs(angle) >= Math.PI / numOrientations) {
-                return (float) Math.acos(a);
+                return (float) Math.acos(Math.max(-1, Math.min(1, a)));
             } else {
                 final double cosine = Math.cos(angle);
                 final double sine = cosine * tan; 
-                return (float) Math.acos(a * cosine + b * sine);
+                return (float) Math.acos(Math.max(-1, Math.min(1, a * cosine + b * sine)));
             }
         } else {
             return (float) Math.PI / 2;

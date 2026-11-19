@@ -1362,5 +1362,8 @@
             android:exported="true"
             />
 
+        <receiver
+            android:name="com.android.systemui.edgego.EdgeGoAlarmReceiver"
+            android:exported="false" />
     </application>
 </manifest>

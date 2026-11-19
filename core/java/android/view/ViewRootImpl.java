@@ -12086,6 +12086,26 @@ public final class ViewRootImpl implements ViewParent,
             }
         }
 
+        @Override
+        public void dispatchEdgeGoAction(int action, android.os.RemoteCallback callback) {
+            if (Binder.getCallingUid() != Process.SYSTEM_UID) {
+                throw new SecurityException("Only WindowManager may request EdgeGo actions");
+            }
+            final ViewRootImpl root = mViewAncestor.get();
+            if (root == null) {
+                if (callback != null) callback.sendResult(new Bundle());
+                return;
+            }
+            root.mHandler.post(() -> {
+                if ((root.mWindowAttributes.flags & WindowManager.LayoutParams.FLAG_SECURE) != 0) {
+                    if (callback != null) callback.sendResult(new Bundle());
+                    return;
+                }
+                com.android.internal.util.lunaris.EdgeGoWindowActions.perform(
+                        root.mView, action, callback);
+            });
+        }
+
         private static int checkCallingPermission(String permission) {
             try {
                 return ActivityManager.getService().checkPermission(

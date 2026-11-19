@@ -5955,6 +5955,55 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
+    @Override
+    @EnforcePermission(android.Manifest.permission.STATUS_BAR_SERVICE)
+    public void requestEdgeGoAction(int action, String expectedPackage, int userId,
+            RemoteCallback callback) {
+        requestEdgeGoAction_enforcePermission();
+        if (callback == null) return;
+        int currentUser;
+        synchronized (mGlobalLock) { currentUser = mCurrentUserId; }
+        if (userId != currentUser || expectedPackage == null || expectedPackage.length() > 255
+                || !com.android.internal.util.lunaris.EdgeGoWindowActions.supported(action)
+                || Settings.Secure.getIntForUser(mContext.getContentResolver(),
+                        com.android.internal.util.lunaris.EdgeGoConfig.ENABLED, 0, currentUser) != 1) {
+            callback.sendResult(new Bundle());
+            return;
+        }
+        com.android.internal.util.lunaris.EdgeGoConfig edgeGo =
+                new com.android.internal.util.lunaris.EdgeGoConfig(mContext.getContentResolver(), currentUser);
+        if (edgeGo.bool("disable_in_gaming_mode") && (expectedPackage.equals("io.chaldeaprjkt.gamespace")
+                || Settings.Secure.getIntForUser(mContext.getContentResolver(),
+                        "ax_gaming_mode_active", 0, currentUser) == 1)) {
+            callback.sendResult(new Bundle());
+            return;
+        }
+        IWindow target = null;
+        synchronized (mGlobalLock) {
+            WindowState focused = getFocusedWindowLocked();
+            if (mCurrentUserId == currentUser && !mPolicy.isKeyguardLocked() && focused != null
+                    && focused.getDisplayId() == Display.DEFAULT_DISPLAY
+                    && UserHandle.getUserId(focused.mOwnerUid) == currentUser
+                    && focused.isVisible() && expectedPackage.equals(focused.getOwningPackage())
+                    && focused.mAttrs.type < WindowManager.LayoutParams.FIRST_SYSTEM_WINDOW
+                    && !focused.isSecureLocked()) {
+                target = focused.mClient;
+            }
+        }
+        if (target == null) {
+            callback.sendResult(new Bundle());
+            return;
+        }
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            target.dispatchEdgeGoAction(action, callback);
+        } catch (RemoteException e) {
+            callback.sendResult(new Bundle());
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
     WindowState getFocusedWindowLocked() {
         // Return the focused window in the focused display.
         return mRoot.getTopFocusedDisplayContent().mCurrentFocus;

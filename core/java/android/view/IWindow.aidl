@@ -30,6 +30,7 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.inputmethod.ImeTracker;
 import android.view.WindowRelayoutResult;
+import android.os.RemoteCallback;
 
 import com.android.internal.os.IResultReceiver;
 
@@ -124,4 +125,6 @@ oneway interface IWindow {
      * Dump the details of a window.
      */
     void dumpWindow(in ParcelFileDescriptor pfd);
+
+    void dispatchEdgeGoAction(int action, in RemoteCallback callback);
 }

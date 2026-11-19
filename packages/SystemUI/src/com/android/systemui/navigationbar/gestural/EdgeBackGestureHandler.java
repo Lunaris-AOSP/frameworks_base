@@ -88,6 +88,7 @@ import com.android.internal.config.sysui.SystemUiDeviceConfigFlags;
 import com.android.internal.policy.GestureNavigationSettingsObserver;
 import com.android.internal.util.lunaris.Utils;
 import com.android.systemui.LauncherProxyService;
+import com.android.systemui.edgego.EdgeGoGestureController;
 import com.android.systemui.contextualeducation.GestureType;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.model.SysUiState;
@@ -345,6 +346,9 @@ public class EdgeBackGestureHandler implements TunerService.Tunable {
 
     private final DisplayManager mDisplayManager;
     private final DisplayBackGestureHandlerImpl.Factory mDisplayBackGestureHandlerFactory;
+    private final EdgeGoGestureController mEdgeGoGestureController;
+    private boolean mEdgeGoOwnsGesture;
+    private long mEdgeGoBackDownTime;
     private final DesktopState mDesktopState;
 
     private final GestureNavigationSettingsObserver mGestureNavigationSettingsObserver;
@@ -358,6 +362,7 @@ public class EdgeBackGestureHandler implements TunerService.Tunable {
             new NavigationEdgeBackPlugin.BackCallback() {
                 @Override
                 public void triggerBack(boolean isLongPress) {
+                    if (!isLongPress) mEdgeGoGestureController.onNativeBackGesture(mEdgeGoBackDownTime);
                     // Notify FalsingManager that an intentional gesture has occurred.
                     mFalsingManager.isFalseTouch(BACK_GESTURE);
                     // Only inject back keycodes when ahead-of-time back dispatching is disabled.
@@ -523,7 +528,8 @@ public class EdgeBackGestureHandler implements TunerService.Tunable {
             DisplayManager displayManager,
             DisplayBackGestureHandlerImpl.Factory displayBackGestureHandlerFactory,
             DesktopState desktopState,
-            TunerService tunerService) {
+            TunerService tunerService,
+            EdgeGoGestureController edgeGoGestureController) {
         mContext = context;
         mMainDisplayId = context.getDisplayId();
         mUiThreadContext = uiThreadContext;
@@ -550,6 +556,7 @@ public class EdgeBackGestureHandler implements TunerService.Tunable {
         mDisplayBackGestureHandlerFactory = displayBackGestureHandlerFactory;
         mDesktopState = desktopState;
         mTunerService = tunerService;
+        mEdgeGoGestureController = edgeGoGestureController;
 
         int defaultLauncher = SystemProperties.getInt("persist.sys.default_launcher", 0);
         String[] launcherComponents = context.getResources().getStringArray(com.android.internal.R.array.config_launcherComponents);
@@ -624,6 +631,7 @@ public class EdgeBackGestureHandler implements TunerService.Tunable {
         // Update this before calling mButtonForcedVisibleCallback since NavigationBar will relayout
         // and query isHandlingGestures() as a part of the callback
         mIsBackGestureAllowed = !mIsButtonForcedVisible;
+        updateEdgeGoNavigationBlocked();
         if (previousForcedVisible != mIsButtonForcedVisible
                 && mButtonForcedVisibleCallback != null) {
             mButtonForcedVisibleCallback.accept(mIsButtonForcedVisible);
@@ -934,12 +942,16 @@ public class EdgeBackGestureHandler implements TunerService.Tunable {
                 // Begin listening to changes in blocked activities list
                 mBlockedActivitiesJob = mJavaAdapter.alwaysCollectFlow(
                         mGestureInteractor.getTopActivityBlocked(),
-                        blocked -> mGestureBlockingActivityRunning.set(blocked));
+                        blocked -> {
+                            mGestureBlockingActivityRunning.set(blocked);
+                            updateEdgeGoNavigationBlocked();
+                        });
 
             }
             // Update the ML model resources.
             updateMLModelState();
         } finally {
+            updateEdgeGoNavigationBlocked();
             Trace.endSection();
         }
     }
@@ -1322,7 +1334,29 @@ public class EdgeBackGestureHandler implements TunerService.Tunable {
     }
 
     private void onMotionEvent(MotionEvent ev) {
+        if (mEdgeGoGestureController.isEdgeGoInjectedGesture(ev)) {
+            if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                mAllowGesture = false; mLogGesture = false; mThresholdCrossed = false;
+            }
+            return;
+        }
         int action = ev.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) {
+            mEdgeGoBackDownTime = ev.getDownTime();
+            updateEdgeGoNavigationBlocked();
+            mEdgeGoOwnsGesture = mEdgeGoGestureController.shouldIntercept(ev);
+            if (mEdgeGoOwnsGesture) {
+                mAllowGesture = false;
+                mLogGesture = false;
+                mThresholdCrossed = false;
+            }
+        }
+        if (mEdgeGoOwnsGesture) {
+            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                mEdgeGoOwnsGesture = false;
+            }
+            return;
+        }
         DisplayBackGestureHandler displayBackGestureHandler = mDisplayBackGestureHandlers.get(
                 ev.getDisplayId());
         if (DesktopExperienceFlags.ENABLE_MULTIDISPLAY_TRACKPAD_BACK_GESTURE.isTrue()
@@ -1551,6 +1585,13 @@ public class EdgeBackGestureHandler implements TunerService.Tunable {
         int rotation = newConfig.windowConfiguration.getRotation();
         mDisabledForQuickstep = mStartingQuickstepRotation > -1 &&
                 mStartingQuickstepRotation != rotation;
+        updateEdgeGoNavigationBlocked();
+    }
+
+    private void updateEdgeGoNavigationBlocked() {
+        if (mMainDisplayId != Display.DEFAULT_DISPLAY) return;
+        mEdgeGoGestureController.setNavigationBlocked(mInGestureNavMode
+                && (mDisabledForQuickstep || !mIsBackGestureAllowed || mGestureBlockingActivityRunning.get()));
     }
 
     public void onConfigurationChanged(@NonNull Configuration newConfig) {
@@ -1688,7 +1729,11 @@ public class EdgeBackGestureHandler implements TunerService.Tunable {
         if (backAnimation != null) {
             final Executor uiThreadExecutor = mUiThreadContext.getExecutor();
             backAnimation.setPilferPointerCallback(
-                    () -> uiThreadExecutor.execute(() -> pilferPointers(mLastDownEventDisplayId)));
+                    () -> uiThreadExecutor.execute(() -> {
+                        if (!mEdgeGoGestureController.pilferIfOwned()) {
+                            pilferPointers(mLastDownEventDisplayId);
+                        }
+                    }));
             backAnimation.setTopUiRequestCallback(
                     (requestTopUi, tag) -> uiThreadExecutor.execute(
                             () -> mTopUiController.setRequestTopUi(requestTopUi, tag)));

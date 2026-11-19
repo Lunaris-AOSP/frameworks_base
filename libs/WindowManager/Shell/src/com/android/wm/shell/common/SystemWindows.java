@@ -338,7 +338,7 @@ public class SystemWindows {
         }
     }
 
-    static class ContainerWindow extends IWindow.Stub {
+    static class ContainerWindow extends com.android.internal.view.BaseIWindow {
         ContainerWindow() {}
 
         @Override
