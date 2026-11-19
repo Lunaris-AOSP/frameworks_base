@@ -178,7 +178,8 @@ class ClockStyle @JvmOverloads constructor(
                 Intent.ACTION_TIME_CHANGED,
                 DOZE_PULSE_ACTION -> onTimeChanged()
                 Intent.ACTION_POWER_CONNECTED -> {
-                    if (clockWobbleOnChargeEnabled && !isDozing) {
+                    if (clockWobbleOnChargeEnabled && !isDozing &&
+                        (currentClockView !is ClockDesignView || clockAodProgress() == 0f)) {
                         startWobbleAnimation()
                     }
                 }
@@ -203,8 +204,9 @@ class ClockStyle @JvmOverloads constructor(
             currentShiftX = random.nextInt(BURN_IN_PROTECTION_MAX_SHIFT * 2) - BURN_IN_PROTECTION_MAX_SHIFT
             currentShiftY = random.nextInt(BURN_IN_PROTECTION_MAX_SHIFT * 2) - BURN_IN_PROTECTION_MAX_SHIFT
             currentClockView?.apply {
-                translationX = currentShiftX.toFloat()
-                translationY = currentShiftY.toFloat()
+                val progress = if (this is ClockDesignView) clockAodProgress() else 1f
+                translationX = currentShiftX * progress
+                translationY = currentShiftY * progress
             }
             invalidate()
             handler.postDelayed(this, BURN_IN_PROTECTION_INTERVAL)
@@ -223,7 +225,12 @@ class ClockStyle @JvmOverloads constructor(
         }
 
         override fun onDozeAmountChanged(linear: Float, eased: Float) {
-            (currentClockView as? ClockDesignView)?.setAodProgress(if (isHomeScreenClock) 0f else linear)
+            if (isHomeScreenClock) return
+            if (currentClockView !is ClockDesignView) return
+            (currentClockView as ClockDesignView).setAodProgress(eased)
+            applyClockAlpha()
+            applyClockShadow()
+            applyClockScale()
         }
     }
 
@@ -580,7 +587,7 @@ class ClockStyle @JvmOverloads constructor(
             }
             CLOCK_AOD_ANIM_KEY -> {
                 aodAnimEnabled = TunerService.parseInteger(newValue, 1) != 0
-                if (currentClockView is ClockDesignView) applyClockColors()
+                if (currentClockView is ClockDesignView) updateClockAppearance()
             }
             CLOCK_ALBUM_ART_COLOR_KEY -> {
                 val wasEnabled = albumArtColorEnabled
@@ -688,10 +695,12 @@ class ClockStyle @JvmOverloads constructor(
 
     private fun applyDozing(dozing: Boolean) {
         isDozing = dozing
+        if (currentClockView is ClockDesignView) cancelWobbleAnimation()
         animateAodTransition(dozing)
         applyClockAlpha()
         applyClockColors()
         applyClockShadow()
+        if (currentClockView is ClockDesignView) applyClockScale()
         if (dozing) {
             startBurnInProtection()
             startAodTick()
@@ -724,14 +733,17 @@ class ClockStyle @JvmOverloads constructor(
         if (clockStyle == 0) return
         handler.removeCallbacks(burnInProtectionRunnable)
         currentClockView?.apply {
-            translationX = 0f
-            translationY = 0f
+            if (this !is ClockDesignView) {
+                translationX = 0f
+                translationY = 0f
+            }
         }
     }
 
     private fun animateAodTransition(toAod: Boolean) {
         val view = currentClockView ?: return
         view.animate().cancel()
+        if (view is ClockDesignView) return
         if (!aodAnimEnabled) return
         if (toAod) {
             view.animate()
@@ -931,14 +943,18 @@ class ClockStyle @JvmOverloads constructor(
 
     private fun applyClockShadow() {
         val view = currentClockView ?: return
-        view.setRenderEffect(if (shadowEnabled && !isDozing) ClockEffects.shadow(shadowColor,
-            shadowOpacity, shadowSoftness, resources.displayMetrics.density) else null)
+        val progress = if (view is ClockDesignView) clockAodProgress() else if (isDozing) 1f else 0f
+        view.setRenderEffect(if (shadowEnabled && progress < 1f) ClockEffects.shadow(shadowColor,
+            (shadowOpacity * (1f - progress)).roundToInt(), shadowSoftness, resources.displayMetrics.density) else null)
     }
 
     private fun applyClockAlpha() {
         val view = currentClockView ?: return
-        view.alpha = ClockViewTransform.alpha(clockOpacity, isDozing)
-        if (view is ClockDesignView) view.animationsEnabled = view.alpha > 0f
+        if (view is ClockDesignView) {
+            val progress = clockAodProgress()
+            view.alpha = ClockViewTransform.alpha(clockOpacity, progress)
+            view.animationsEnabled = view.alpha > 0f && !isDozing && progress == 0f
+        } else view.alpha = ClockViewTransform.alpha(clockOpacity, isDozing)
     }
 
     private fun resolveClockColor(): Int {
@@ -1043,10 +1059,10 @@ class ClockStyle @JvmOverloads constructor(
 
     private fun applyClockColorsToViews() {
         (currentClockView as? ClockDesignView)?.let {
-            it.setAodProgress(if (isHomeScreenClock) 0f else statusBarStateController.dozeAmount)
             it.setAppearance(ClockDesignAppearance(resolveClockColor(), gradientEnabled,
                 gradientColorStart, gradientColorEnd, gradientAnchorY, gradientRadius,
                 makerWeather, isDozing, aodAnimation = aodAnimEnabled))
+            it.setAodProgress(clockAodProgress())
             return
         }
         if (isNoColorClock(clockStyle)) return
@@ -1170,9 +1186,27 @@ class ClockStyle @JvmOverloads constructor(
     private fun getScaleFactor(): Float =
         (if (isHomeScreenClock) homeClockSizeScale ?: clockSizeScale else clockSizeScale) / 100f
 
+    private fun clockAodProgress(): Float = when {
+        isHomeScreenClock -> 0f
+        !aodAnimEnabled -> if (isDozing) 1f else 0f
+        else -> statusBarStateController.interpolatedDozeAmount.coerceIn(0f, 1f)
+    }
+
     private fun applyClockScale() {
         val view = currentClockView ?: return
-        val scale = getScaleFactor()
+        val scale = if (view is ClockDesignView) {
+            val progress = clockAodProgress()
+            view.setAodProgress(progress)
+            if (!isHomeScreenClock && (progress > 0f || currentShiftX != 0 || currentShiftY != 0)) {
+                view.translationX = currentShiftX * progress
+                view.translationY = currentShiftY * progress
+                if (progress == 0f) {
+                    currentShiftX = 0
+                    currentShiftY = 0
+                }
+            }
+            ClockViewTransform.renderScale(getScaleFactor(), progress, aodAnimEnabled)
+        } else getScaleFactor()
         view.scaleX = scale
         view.scaleY = scale
         view.pivotX = view.width / 2f

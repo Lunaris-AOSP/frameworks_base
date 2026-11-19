@@ -10,6 +10,8 @@ import android.graphics.Path
 import android.graphics.RectF
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialShapes
+import androidx.graphics.shapes.Morph
+import androidx.graphics.shapes.RoundedPolygon
 import androidx.graphics.shapes.toPath
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -54,11 +56,29 @@ object ClockImageShapes {
         )
     }
     val ids: List<String> get() = listOf("none") + shapes.keys
+    private val rectangle = RoundedPolygon(floatArrayOf(0f, 0f, 1f, 0f, 1f, 1f, 0f, 1f))
+    private val morphs = mutableMapOf<Pair<String, String>, Morph>()
 
     fun path(id: String, width: Float, height: Float): Path {
         val polygon = shapes[id]
         if (polygon == null) return Path().apply { addRect(0f, 0f, width, height, Path.Direction.CW) }
         val path = polygon.toPath()
+        return fit(path, width, height)
+    }
+
+    fun path(start: String, end: String, progress: Float, width: Float, height: Float): Path {
+        val p = ClockElementAnimation.progress(progress)
+        if (start == end || p == 0f) return path(start, width, height)
+        if (p == 1f) return path(end, width, height)
+        val key = start to end
+        val morph = morphs[key] ?: Morph(shapes[start] ?: rectangle, shapes[end] ?: rectangle).also {
+            if (morphs.size >= 64) morphs.clear()
+            morphs[key] = it
+        }
+        return fit(morph.toPath(p), width, height)
+    }
+
+    private fun fit(path: Path, width: Float, height: Float): Path {
         val bounds = RectF().also { path.computeBounds(it, true) }
         path.transform(Matrix().apply {
             setRectToRect(bounds, RectF(0f, 0f, width, height), Matrix.ScaleToFit.FILL)

@@ -17,8 +17,15 @@ object ClockViewTransform {
     fun alpha(opacity: Int, dozing: Boolean = false): Float =
         opacity.coerceIn(0, if (dozing) AOD_OPACITY_CAP else 100) / 100f
 
+    fun alpha(opacity: Int, aodProgress: Float): Float = ClockElementAnimation.lerp(
+        alpha(opacity), alpha(opacity, true), ClockElementAnimation.progress(aodProgress))
+
     fun renderScale(scale: Float, dozing: Boolean, aodAnimation: Boolean): Float =
         if (dozing && aodAnimation) AOD_SCALE_DOWN else scale
+
+    fun renderScale(scale: Float, aodProgress: Float, aodAnimation: Boolean): Float =
+        ClockElementAnimation.lerp(scale, renderScale(scale, true, aodAnimation),
+            ClockElementAnimation.progress(aodProgress))
 
     fun layoutHeight(width: Int, height: Int, scale: Float, clockMaker: Boolean = false): Int {
         val pivot = if (clockMaker) width / 2f else height / 2f

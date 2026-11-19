@@ -7,6 +7,7 @@ package org.lunaris.clockmaker
 
 import android.content.Context
 import android.graphics.Canvas
+import android.graphics.Matrix
 import android.graphics.Path
 import android.graphics.Paint
 import android.graphics.drawable.AnimatedImageDrawable
@@ -25,11 +26,16 @@ internal class ClockImageView(context: Context) : ImageView(context) {
     private var generation = 0
     private var pending: Future<*>? = null
     private var shape = "none"
+    private var aodShape = "none"
+    private var aodProgress = 0f
+    private var fit = ClockImageFit.CROP
+    private var aodFit = ClockImageFit.CROP
+    private val imageTransform = Matrix()
     private var clip = Path()
     private var aggregatedVisible = false
     private var playbackAllowed = false
-    private var borderWidth = 0
-    private var designWidth = 120
+    private var borderWidth = 0f
+    private var designWidth = 120f
     private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeJoin = Paint.Join.ROUND
@@ -37,18 +43,26 @@ internal class ClockImageView(context: Context) : ImageView(context) {
 
     init {
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        scaleType = ScaleType.MATRIX
     }
 
-    fun bind(element: ClockElement, user: Int, animate: Boolean) {
-        playbackAllowed = animate && element.visible && element.opacity > 0
-        scaleType = if (element.imageFit == ClockImageFit.CROP) ScaleType.CENTER_CROP else ScaleType.FIT_CENTER
-        borderPaint.color = element.imageBorderColor
-        if (shape != element.imageShape || borderWidth != element.imageBorderWidth || designWidth != element.imageWidth) {
+    fun bind(element: ClockElement, user: Int, animate: Boolean, progress: Float = 0f) {
+        val p = ClockElementAnimation.progress(progress)
+        val frame = ClockElementAnimation.frame(element, p)
+        playbackAllowed = animate && frame.alpha > 0f
+        fit = element.imageFit
+        aodFit = element.aodStyle.imageFit
+        borderPaint.color = frame.imageBorderColor
+        if (shape != element.imageShape || aodShape != element.aodStyle.imageShape || aodProgress != p ||
+            borderWidth != frame.imageBorderWidth || designWidth != frame.imageWidth) {
             shape = element.imageShape
-            borderWidth = element.imageBorderWidth
-            designWidth = element.imageWidth
+            aodShape = element.aodStyle.imageShape
+            aodProgress = p
+            borderWidth = frame.imageBorderWidth
+            designWidth = frame.imageWidth
             updateClip()
         }
+        updateImageTransform()
         if (imageId != element.image || imageUser != user) {
             release()
             imageId = element.image
@@ -74,6 +88,7 @@ internal class ClockImageView(context: Context) : ImageView(context) {
                 pending = null
                 if (loaded is AnimatedImageDrawable) loaded.repeatCount = AnimatedImageDrawable.REPEAT_INFINITE
                 setImageDrawable(loaded)
+                updateImageTransform()
                 updatePlayback()
             }
         }
@@ -107,17 +122,33 @@ internal class ClockImageView(context: Context) : ImageView(context) {
     }
 
     private fun updateClip() {
-        borderPaint.strokeWidth = (borderWidth * width / designWidth.toFloat())
+        borderPaint.strokeWidth = (borderWidth * width / designWidth)
             .coerceAtMost(minOf(width, height) / 2f)
         val inset = borderPaint.strokeWidth / 2f
-        clip = ClockImageShapes.path(shape, (width - inset * 2).coerceAtLeast(0f),
+        clip = ClockImageShapes.path(shape, aodShape, aodProgress, (width - inset * 2).coerceAtLeast(0f),
             (height - inset * 2).coerceAtLeast(0f)).apply { offset(inset, inset) }
         invalidate()
+    }
+
+    private fun updateImageTransform() {
+        val image = drawable ?: return
+        val w = (width - paddingLeft - paddingRight).toFloat()
+        val h = (height - paddingTop - paddingBottom).toFloat()
+        val dw = image.intrinsicWidth.toFloat()
+        val dh = image.intrinsicHeight.toFloat()
+        if (w <= 0f || h <= 0f || dw <= 0f || dh <= 0f) return
+        fun scale(mode: ClockImageFit) = if (mode == ClockImageFit.CROP) maxOf(w / dw, h / dh)
+            else minOf(w / dw, h / dh)
+        val scale = ClockElementAnimation.lerp(scale(fit), scale(aodFit), aodProgress)
+        imageTransform.setScale(scale, scale)
+        imageTransform.postTranslate((w - dw * scale) / 2f, (h - dh * scale) / 2f)
+        imageMatrix = imageTransform
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         updateClip()
+        updateImageTransform()
     }
 
     override fun onDraw(canvas: Canvas) {

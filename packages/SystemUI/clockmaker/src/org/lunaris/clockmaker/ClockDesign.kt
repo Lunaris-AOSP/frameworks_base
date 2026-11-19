@@ -33,7 +33,6 @@ data class ClockElement(
     val color: Int? = null,
     val opacity: Int = 100,
     val visible: Boolean = true,
-    val visibleOnAod: Boolean = true,
     val gradient: Boolean = false,
     val gradientStart: Int = 0xFF00E5FF.toInt(),
     val gradientEnd: Int = 0xFFFF2DAA.toInt(),
@@ -55,9 +54,6 @@ data class ClockElement(
     val blurIntensity: Int = ClockGlass.DEFAULT_INTENSITY,
     val blurLift: Int = ClockGlass.DEFAULT_LIFT,
     val glassStyle: ClockGlassStyle = ClockGlassStyle(),
-    val aodOutline: Boolean = false,
-    val animateAodOutline: Boolean = true,
-    val aodOutlineWidth: Int = 2,
     val lockscreenOutline: Boolean = false,
     val lockscreenOutlineWidth: Int = 2,
     val textStroke: Boolean = false,
@@ -65,13 +61,36 @@ data class ClockElement(
     val textStrokeColor: Int = Color.BLACK,
     val timePart: ClockTimePart = ClockTimePart.FULL,
     val hourFormat: ClockHourFormat = ClockHourFormat.SYSTEM,
+    val aod: ClockElementAodStyle? = null,
+    val aodLayoutConfigured: Boolean = aod != null,
 ) {
+    val aodStyle: ClockElementAodStyle
+        get() {
+            val saved = aod ?: return ClockElementAodStyle.fromElement(this)
+            if (aodLayoutConfigured) return saved
+            return ClockElementAodStyle.fromElement(this).copy(
+                visible = visible && saved.visible, outline = saved.outline,
+                outlineWidth = saved.outlineWidth, animateOutline = saved.animateOutline,
+            )
+        }
+
     val supportsAodOutline: Boolean
         get() = kind != ClockElementKind.IMAGE && kind != ClockElementKind.QUICKLOOK
 
     val needsSecondTicks: Boolean
         get() = kind == ClockElementKind.TIME &&
             (timePart.isSecond || (timePart == ClockTimePart.FULL && format.contains('s')))
+
+    fun configureAod(style: ClockElementAodStyle = aodStyle): ClockElement =
+        copy(aod = style, aodLayoutConfigured = true)
+
+    fun resetAod(): ClockElement = configureAod(ClockElementAodStyle.fromElement(this))
+
+    fun editAod(value: ClockElement): ClockElement = copy(
+        font = value.font, weight = value.weight, italic = value.italic,
+        aod = ClockElementAodStyle.fromElement(value).copy(animateOutline = aodStyle.animateOutline),
+        aodLayoutConfigured = true,
+    )
 
     fun resizeImage(width: Int? = null, height: Int? = null): ClockElement {
         if (!imageAspectLocked) return copy(imageWidth = (width ?: imageWidth).coerceIn(16, 360),
@@ -88,7 +107,7 @@ data class ClockElement(
         .put("x", x.toDouble()).put("y", y.toDouble()).put("size", size).put("font", font)
         .put("weight", weight).put("italic", italic).put("letterSpacing", letterSpacing)
         .put("rotation", rotation).put("color", color ?: JSONObject.NULL).put("opacity", opacity)
-        .put("visible", visible).put("visibleOnAod", visibleOnAod)
+        .put("visible", visible)
         .put("gradient", gradient).put("gradientStart", gradientStart)
         .put("gradientEnd", gradientEnd).put("shadow", shadow).put("shadowColor", shadowColor)
         .put("shadowSoftness", shadowSoftness).put("shadowOpacity", shadowOpacity)
@@ -100,11 +119,11 @@ data class ClockElement(
         .put("quickLookDateFallback", quickLookDateFallback)
         .put("glass", glass).put("blurIntensity", blurIntensity).put("blurLift", blurLift)
         .put("glassStyle", glassStyle.toJson())
-        .put("aodOutline", aodOutline).put("animateAodOutline", animateAodOutline)
-        .put("aodOutlineWidth", aodOutlineWidth)
         .put("lockscreenOutline", lockscreenOutline).put("lockscreenOutlineWidth", lockscreenOutlineWidth)
         .put("textStroke", textStroke).put("textStrokeWidth", textStrokeWidth).put("textStrokeColor", textStrokeColor)
         .put("timePart", timePart.name).put("hourFormat", hourFormat.name)
+        .put("aod", aod?.toJson() ?: JSONObject.NULL)
+        .put("aodLayoutConfigured", aodLayoutConfigured)
 
     companion object {
         const val MIN_POSITION = -4f
@@ -139,7 +158,7 @@ data class ClockElement(
                 j.optDouble(key, default.toDouble()).toFloat().let {
                     if (it.isFinite()) it.coerceIn(min, max) else default
                 }
-            return d.copy(
+            val element = d.copy(
                 id = j.optString("id", d.id).take(80), text = j.optString("text").take(240),
                 format = j.optString("format").takeIf(::validFormat) ?: "",
                 x = number("x", d.x, MIN_POSITION, MAX_POSITION),
@@ -151,7 +170,6 @@ data class ClockElement(
                 rotation = j.optInt("rotation").coerceIn(-180, 180),
                 color = if (j.isNull("color")) null else j.optInt("color", Color.WHITE),
                 opacity = j.optInt("opacity", 100).coerceIn(0, 100), visible = j.optBoolean("visible", true),
-                visibleOnAod = j.optBoolean("visibleOnAod", true),
                 gradient = j.optBoolean("gradient"), gradientStart = j.optInt("gradientStart", d.gradientStart),
                 gradientEnd = j.optInt("gradientEnd", d.gradientEnd), shadow = j.optBoolean("shadow"),
                 shadowColor = j.optInt("shadowColor", d.shadowColor),
@@ -177,9 +195,6 @@ data class ClockElement(
                     if (j.optBoolean("glass") && (j.has("blurIntensity") || j.has("blurLift"))) ClockGlassStyle.legacy(
                         j.optInt("blurIntensity", ClockGlass.DEFAULT_INTENSITY),
                         j.optInt("blurLift", ClockGlass.DEFAULT_LIFT)) else d.glassStyle),
-                aodOutline = j.optBoolean("aodOutline", false),
-                animateAodOutline = j.optBoolean("animateAodOutline", true),
-                aodOutlineWidth = j.optInt("aodOutlineWidth", 2).coerceIn(1, 6),
                 lockscreenOutline = j.optBoolean("lockscreenOutline", false),
                 lockscreenOutlineWidth = j.optInt("lockscreenOutlineWidth", 2).coerceIn(1, 6),
                 textStroke = j.optBoolean("textStroke", false),
@@ -190,6 +205,17 @@ data class ClockElement(
                 hourFormat = runCatching { ClockHourFormat.valueOf(j.optString("hourFormat")) }
                     .getOrDefault(ClockHourFormat.SYSTEM),
             )
+            val legacyAod = ClockElementAodStyle.fromElement(element).copy(
+                visible = j.optBoolean("visibleOnAod", true),
+                outline = j.optBoolean("aodOutline", false),
+                outlineWidth = j.optInt("aodOutlineWidth", 2).coerceIn(1, 6),
+                animateOutline = j.optBoolean("animateAodOutline", true),
+            )
+            val nestedAod = j.optJSONObject("aod")
+            val aod = if (j.has("aod") && j.isNull("aod")) null
+                else ClockElementAodStyle.fromJson(nestedAod, legacyAod)
+            return element.copy(aod = aod, aodLayoutConfigured = aod != null &&
+                j.optBoolean("aodLayoutConfigured", nestedAod != null))
         }
     }
 }
@@ -200,21 +226,24 @@ data class ClockDesign(
     val elements: List<ClockElement> = listOf(ClockElement.create(ClockElementKind.TIME),
         ClockElement.create(ClockElementKind.DATE)),
 ) {
-    fun toJson() = JSONObject().put("version", 1).put("id", id).put("name", name)
+    fun prepareAod(): ClockDesign = copy(elements = elements.map { it.configureAod() })
+
+    fun toJson() = JSONObject().put("version", VERSION).put("id", id).put("name", name)
         .put("elements", JSONArray().also { a -> elements.forEach { a.put(it.toJson()) } })
 
     companion object {
         const val STYLE = 103
         const val SETTING = "lock_screen_custom_clock_design"
         const val MAX_ELEMENTS = 16
-        const val MAX_JSON_LENGTH = 32768
+        const val VERSION = 2
+        const val MAX_JSON_LENGTH = 65536
 
         fun parse(value: String?): ClockDesign? = value?.takeIf { it.length <= MAX_JSON_LENGTH }?.let {
             runCatching { fromJson(JSONObject(it)) }.getOrNull()
         }
 
         fun fromJson(j: JSONObject): ClockDesign {
-            require(j.optInt("version", 1) == 1)
+            require(j.optInt("version", 1) in 1..VERSION)
             val array = j.getJSONArray("elements")
             require(array.length() <= MAX_ELEMENTS)
             val elements = List(array.length()) { ClockElement.fromJson(array.getJSONObject(it)) }

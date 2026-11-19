@@ -118,11 +118,14 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
     var appearance = ClockDesignAppearance()
         private set
     private var aodProgress = 0f
+    private val renderProgress: Float
+        get() = if (appearance.aodAnimation) aodProgress else if (appearance.dozing) 1f else 0f
     var animationsEnabled = true
         set(value) {
             if (field == value) return
             field = value
             updateImages()
+            scheduleTick()
         }
     var userId: Int = context.userId
         set(value) {
@@ -166,13 +169,13 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
     private var grabY = 0f
     private var registered = false
     private var aggregatedVisible = false
-    private var screenInteractive = context.getSystemService(PowerManager::class.java).isInteractive
+    private var screenInteractive = context.getSystemService(PowerManager::class.java)?.isInteractive ?: true
     private val tick = object : Runnable {
         override fun run() {
             if (!isAttachedToWindow || !isShown || windowVisibility != VISIBLE ||
                 (!screenInteractive && !appearance.dozing)) return
             refreshTime()
-            val interval = if (!appearance.dozing && screenInteractive && animationsEnabled && design.elements.any {
+            val interval = if (!appearance.dozing && renderProgress == 0f && screenInteractive && animationsEnabled && design.elements.any {
                 it.visible && it.needsSecondTicks
             }) 1000L else 60000L
             main.postDelayed(this, interval - System.currentTimeMillis() % interval)
@@ -235,7 +238,6 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
 
     fun setAppearance(value: ClockDesignAppearance) {
         if (appearance == value) return
-        glass.enabled = !value.dozing
         appearance = value
         applyElements()
         updateQuickLook()
@@ -247,18 +249,24 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
         if (!value.isFinite()) return
         val progress = value.coerceIn(0f, 1f)
         if (aodProgress == progress) return
+        val waking = renderProgress > 0f
         aodProgress = progress
-        updateTextEffects()
+        applyElements(updateFonts = false)
+        updateQuickLook()
+        if (waking && renderProgress == 0f) {
+            refreshTime()
+            scheduleTick()
+        }
     }
 
     private fun updateTextEffects() {
         design.elements.forEachIndexed { index, element ->
             val view = getChildAt(index) as? ClockOutlineTextView ?: return@forEachIndexed
             val progress = when {
-                !element.animateAodOutline || !appearance.aodAnimation -> if (appearance.dozing) 1f else 0f
-                else -> aodProgress
+                !element.aodStyle.animateOutline -> if (appearance.dozing) 1f else 0f
+                else -> renderProgress
             }
-            view.setTextEffects(element, width / 360f, progress)
+            view.setTextEffects(element, width / 360f, renderProgress, progress)
         }
     }
 
@@ -274,33 +282,41 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
 
     private fun updateQuickLook() {
         quickLook.update(isAttachedToWindow && aggregatedVisible && isShown && windowVisibility == VISIBLE &&
-            (screenInteractive || appearance.dozing) && design.elements.any {
-                it.kind == ClockElementKind.QUICKLOOK && it.visible &&
-                    (!appearance.dozing || it.visibleOnAod) && it.opacity > 0
+            (screenInteractive || appearance.dozing || renderProgress > 0f) && design.elements.any {
+                it.kind == ClockElementKind.QUICKLOOK &&
+                    ClockElementAnimation.frame(it, renderProgress).alpha > 0f
             }, userId)
     }
 
     private fun updateImages() {
         design.elements.forEachIndexed { index, element ->
             (getChildAt(index) as? ClockImageView)?.bind(element, userId,
-                animationsEnabled && screenInteractive && !appearance.dozing)
+                animationsEnabled && screenInteractive && !appearance.dozing && renderProgress == 0f,
+                renderProgress)
         }
     }
 
-    private fun applyElements() {
+    private fun applyElements(updateFonts: Boolean = true) {
+        val progress = renderProgress
+        glass.enabled = progress < 1f
+        glass.aodProgress = progress
         design.elements.forEachIndexed { index, element ->
             val view = getChildAt(index)
-            view.visibility = if (element.visible && (!appearance.dozing || element.visibleOnAod) &&
-                (element.kind != ClockElementKind.WEATHER || appearance.weather)) View.VISIBLE else View.GONE
-            view.alpha = element.opacity / 100f
-            view.rotation = element.rotation.toFloat()
+            val frame = ClockElementAnimation.frame(element, progress, appearance.color)
+            view.visibility = if (frame.visibility > 0f &&
+                (element.kind != ClockElementKind.WEATHER || appearance.weather)) View.VISIBLE else View.INVISIBLE
+            view.alpha = frame.alpha
+            view.rotation = frame.rotation
             if (view is ClockImageView) {
-                view.bind(element, userId, animationsEnabled && screenInteractive && !appearance.dozing)
+                view.bind(element, userId, animationsEnabled && screenInteractive &&
+                    !appearance.dozing && progress == 0f, progress)
                 return@forEachIndexed
             }
             view as TextView
-            view.letterSpacing = element.letterSpacing / 100f
-            view.setTextColor(if (appearance.dozing) Color.WHITE else element.color ?: appearance.color)
+            view.letterSpacing = frame.letterSpacing
+            view.setTextColor(frame.color)
+            (view as? ClockQuickLookView)?.setAodProgress(progress)
+            if (!updateFonts) return@forEachIndexed
             val face = ClockFonts.cached(userId, element.font)
             view.typeface = Typeface.create(face ?: Typeface.DEFAULT, element.weight, element.italic)
             val fontKey = "$userId/${element.font}"
@@ -332,9 +348,10 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
                     Settings.Secure.LOCK_SCREEN_ALLOW_PRIVATE_NOTIFICATIONS, 0, userId) != 0 &&
                     Settings.Secure.getIntForUser(context.contentResolver,
                         Settings.Secure.LOCK_SCREEN_SHOW_NOTIFICATIONS, 1, userId) != 0
+                val dozing = appearance.dozing || renderProgress > 0f
                 view.bind(ClockQuickLookContent.create(quickLook.targets, date,
-                    element.quickLookDateFallback, appearance.weather, allowSensitive), appearance.dozing,
-                    onQuickLookClick.takeIf { !appearance.dozing && onSelect == null })
+                    element.quickLookDateFallback, appearance.weather, allowSensitive), dozing,
+                    onQuickLookClick.takeIf { !dozing && onSelect == null })
                 return@forEachIndexed
             }
             val text = when (element.kind) {
@@ -380,16 +397,18 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
         var bottom = 1f
         design.elements.forEachIndexed { index, element ->
             val child = getChildAt(index)
+            val frame = ClockElementAnimation.frame(element, renderProgress)
             if (child is TextView) {
-                child.setTextSize(TypedValue.COMPLEX_UNIT_PX, element.size * w / 360f)
+                child.setTextSize(TypedValue.COMPLEX_UNIT_PX, frame.size * w / 360f)
                 child.measure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.AT_MOST),
                     MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
             } else {
-                child.measure(MeasureSpec.makeMeasureSpec((element.imageWidth * w / 360f).roundToInt(), MeasureSpec.EXACTLY),
-                    MeasureSpec.makeMeasureSpec((element.imageHeight * w / 360f).roundToInt(), MeasureSpec.EXACTLY))
+                child.measure(MeasureSpec.makeMeasureSpec((frame.imageWidth * w / 360f).roundToInt(), MeasureSpec.EXACTLY),
+                    MeasureSpec.makeMeasureSpec((frame.imageHeight * w / 360f).roundToInt(), MeasureSpec.EXACTLY))
             }
-            if (child.visibility != View.GONE) {
-                bottom = maxOf(bottom, element.y * w + child.measuredHeight / 2f + w * 0.04f)
+            if (element.kind != ClockElementKind.WEATHER || appearance.weather) {
+                val extent = (frame.y * w + child.measuredHeight / 2f + w * 0.04f).coerceAtLeast(0f)
+                bottom = maxOf(bottom, extent * frame.visibility)
             }
         }
         val h = if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY) {
@@ -401,26 +420,35 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         glass.beginUpdate()
         glass.userId = userId
+        val progress = renderProgress
         design.elements.forEachIndexed { index, element ->
             val child = getChildAt(index)
-            val x = (element.x * width - child.measuredWidth / 2f).roundToInt()
-            val y = (element.y * width - child.measuredHeight / 2f).roundToInt()
+            val frame = ClockElementAnimation.frame(element, progress, appearance.color)
+            val targetX = frame.x * width - child.measuredWidth / 2f
+            val targetY = frame.y * width - child.measuredHeight / 2f
+            val x = targetX.roundToInt()
+            val y = targetY.roundToInt()
             child.layout(x, y, x + child.measuredWidth, y + child.measuredHeight)
+            child.translationX = targetX - x
+            child.translationY = targetY - y
             if (child !is TextView) {
-                child.setRenderEffect(if (element.shadow && !appearance.dozing) ClockEffects.shadow(
-                    element.shadowColor, element.shadowOpacity, element.shadowSoftness, width / 360f) else null)
+                child.setRenderEffect(if (element.shadow && progress < 1f) ClockEffects.shadow(
+                    element.shadowColor, (element.shadowOpacity * (1f - progress)).roundToInt(),
+                    element.shadowSoftness, width / 360f) else null)
                 return@forEachIndexed
             }
             val inheritGradient = element.color == null && appearance.gradient
-            child.paint.shader = if (!appearance.dozing && !element.glass && (element.gradient || inheritGradient)) {
-                val start = if (element.gradient) element.gradientStart else appearance.gradientStart
-                val end = if (element.gradient) element.gradientEnd else appearance.gradientEnd
+            child.paint.shader = if (progress < 1f && !element.glass && (element.gradient || inheritGradient)) {
+                val start = ClockElementAnimation.color(
+                    if (element.gradient) element.gradientStart else appearance.gradientStart, Color.WHITE, progress)
+                val end = ClockElementAnimation.color(
+                    if (element.gradient) element.gradientEnd else appearance.gradientEnd, Color.WHITE, progress)
                 val center = if (element.gradient) child.height / 2f else height * appearance.gradientAnchor / 100f - y
                 val radius = if (element.gradient) child.height / 2f else height * appearance.gradientRadius / 200f
                 LinearGradient(0f, center - radius, 0f, center + radius.coerceAtLeast(1f), start, end, Shader.TileMode.CLAMP)
             } else null
-            val alpha = (Color.alpha(element.shadowColor) * element.shadowOpacity / 100f).roundToInt()
-            if (element.shadow && !appearance.dozing && alpha > 0) {
+            val alpha = (Color.alpha(element.shadowColor) * element.shadowOpacity / 100f * (1f - progress)).roundToInt()
+            if (element.shadow && alpha > 0) {
                 child.setShadowLayer((element.shadowSoftness * width / 360f).coerceAtLeast(0.01f),
                     0f, width / 180f, (element.shadowColor and 0xFFFFFF) or (alpha shl 24))
             } else child.setShadowLayer(0f, 0f, 0f, 0)
@@ -464,8 +492,9 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
                 touchId = design.elements[hit].id
                 selectedId = touchId
                 onSelect?.invoke(touchId!!)
-                grabX = event.x - design.elements[hit].x * width
-                grabY = event.y - design.elements[hit].y * width
+                val frame = ClockElementAnimation.frame(design.elements[hit], renderProgress)
+                grabX = event.x - frame.x * width
+                grabY = event.y - frame.y * width
                 parent?.requestDisallowInterceptTouchEvent(true)
             }
             MotionEvent.ACTION_MOVE -> {
@@ -489,7 +518,7 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         if (registered) return
-        screenInteractive = context.getSystemService(PowerManager::class.java).isInteractive
+        screenInteractive = context.getSystemService(PowerManager::class.java)?.isInteractive ?: true
         updateImages()
         context.registerReceiver(receiver, IntentFilter().apply {
             addAction(Intent.ACTION_TIME_CHANGED)

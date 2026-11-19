@@ -20,12 +20,15 @@ internal class ClockOutlineTextView(context: Context) : TextView(context) {
     private var element: ClockElement? = null
     private var scale = 0f
     private var dozeProgress = 0f
+    private var outlineProgress = 0f
 
-    fun setTextEffects(element: ClockElement, scale: Float, progress: Float) {
-        if (this.element == element && this.scale == scale && dozeProgress == progress) return
+    fun setTextEffects(element: ClockElement, scale: Float, progress: Float, outlineProgress: Float = progress) {
+        if (this.element == element && this.scale == scale && dozeProgress == progress &&
+            this.outlineProgress == outlineProgress) return
         this.element = element
         this.scale = scale
         dozeProgress = progress
+        this.outlineProgress = outlineProgress
         invalidate()
     }
 
@@ -36,25 +39,27 @@ internal class ClockOutlineTextView(context: Context) : TextView(context) {
             super.onDraw(canvas)
             return
         }
-        val normalOutline = if (style.lockscreenOutline) 1f - dozeProgress else 0f
-        val aodOutline = if (style.aodOutline) dozeProgress else 0f
+        val aod = style.aodStyle
+        val frame = ClockElementAnimation.frame(style, dozeProgress)
+        val normalOutline = if (style.lockscreenOutline) 1f - outlineProgress else 0f
+        val aodOutline = if (aod.outline) outlineProgress else 0f
         val fill = when {
-            style.lockscreenOutline && style.aodOutline -> 0f
-            style.lockscreenOutline -> dozeProgress
-            style.aodOutline -> 1f - dozeProgress
+            style.lockscreenOutline && aod.outline -> 0f
+            style.lockscreenOutline -> outlineProgress
+            aod.outline -> 1f - outlineProgress
             else -> 1f
         }
-        val strokeWidth = if (style.textStroke && fill > 0f && Color.alpha(style.textStrokeColor) > 0) {
-            style.textStrokeWidth.coerceIn(1, 12) * scale
+        val strokeWidth = if (frame.textStroke > 0f && fill > 0f && Color.alpha(frame.textStrokeColor) > 0) {
+            frame.textStrokeWidth * scale
         } else 0f
         if (glassFill == null && normalOutline <= 0f && aodOutline <= 0f && strokeWidth <= 0f) {
             super.onDraw(canvas)
             return
         }
         val normalWidth = style.lockscreenOutlineWidth.coerceIn(1, 6) * scale
-        val aodWidth = style.aodOutlineWidth.coerceIn(1, 6) * scale
+        val aodWidth = aod.outlineWidth.coerceIn(1, 6) * scale
         val outlineWidth = when {
-            style.lockscreenOutline && style.aodOutline -> normalWidth + (aodWidth - normalWidth) * dozeProgress
+            style.lockscreenOutline && aod.outline -> normalWidth + (aodWidth - normalWidth) * outlineProgress
             style.lockscreenOutline -> normalWidth
             else -> aodWidth
         }
@@ -69,11 +74,16 @@ internal class ClockOutlineTextView(context: Context) : TextView(context) {
                 -inset - maxOf(0f, shadowRadius - shadowDy),
                 textLayout.width + inset + maxOf(0f, shadowRadius + shadowDx),
                 height - totalPaddingTop - totalPaddingBottom + inset + maxOf(0f, shadowRadius + shadowDy))
-            if (strokeWidth > 0f) drawText(canvas, textLayout, fill, Paint.Style.STROKE,
-                strokeWidth * 2f, style.textStrokeColor, textShader = false)
+            if (strokeWidth > 0f) drawText(canvas, textLayout, fill * frame.textStroke, Paint.Style.STROKE,
+                strokeWidth * 2f, frame.textStrokeColor, textShader = false)
             val material = glassFill
-            if (material != null) material(canvas, fill)
-            else drawText(canvas, textLayout, fill, Paint.Style.FILL, shadow = strokeWidth <= 0f)
+            if (material != null) {
+                val aodFill = fill * dozeProgress
+                val normalFill = fill * (1f - dozeProgress)
+                material(canvas, if (aodFill < 1f) normalFill / (1f - aodFill) else 0f)
+                drawText(canvas, textLayout, aodFill, Paint.Style.FILL, color = Color.WHITE,
+                    textShader = false, shadow = false)
+            } else drawText(canvas, textLayout, fill, Paint.Style.FILL, shadow = strokeWidth <= 0f)
             val normalAlpha = if (normalOutline > 0f && aodOutline < 1f) normalOutline / (1f - aodOutline) else 0f
             drawText(canvas, textLayout, normalAlpha, Paint.Style.STROKE, outlineWidth, shadowAlpha = normalOutline)
             drawText(canvas, textLayout, aodOutline, Paint.Style.STROKE, outlineWidth,

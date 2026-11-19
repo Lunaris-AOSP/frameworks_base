@@ -38,6 +38,7 @@ class ClockGlassController(private val host: View) :
         private val originalShadowColor = view.shadowColor
         var background: ClockGlass? = null
         var shader: RuntimeShader? = null
+        var aodProgress = 0f
         private var outlineShader: RuntimeShader? = null
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val maskPaint = TextPaint()
@@ -61,7 +62,19 @@ class ClockGlassController(private val host: View) :
             override fun draw(canvas: Canvas) {
                 val save = canvas.save()
                 canvas.translate(view.compoundPaddingLeft.toFloat(), view.totalPaddingTop.toFloat())
-                drawGlass(canvas, 1f)
+                if (aodProgress < 1f) drawGlass(canvas, 1f)
+                if (aodProgress > 0f) {
+                    val saved = TextPaint(view.paint)
+                    try {
+                        view.paint.shader = null
+                        view.paint.color = Color.WHITE
+                        view.paint.alpha = (255 * aodProgress).roundToInt()
+                        view.paint.clearShadowLayer()
+                        view.layout?.draw(canvas)
+                    } finally {
+                        view.paint.set(saved)
+                    }
+                }
                 canvas.restoreToCount(save)
             }
             override fun setAlpha(alpha: Int) {}
@@ -278,6 +291,13 @@ class ClockGlassController(private val host: View) :
             if (!value) entries.forEach { it.restore() }
             host.invalidate()
         }
+    var aodProgress = 0f
+        set(value) {
+            val progress = ClockElementAnimation.progress(value)
+            if (field == progress) return
+            field = progress
+            entries.forEach { it.aodProgress = progress; it.view.invalidate() }
+        }
     var userId = host.context.userId
         set(value) {
             if (field == value) return
@@ -319,7 +339,7 @@ class ClockGlassController(private val host: View) :
         val normalized = style.normalized()
         val cached = previousEntries.firstOrNull { it.matches(view, normalized, date, enabled) }
         if (cached != null) previousEntries.remove(cached)
-        entries.add(cached ?: Entry(view, normalized, date, changed))
+        entries.add((cached ?: Entry(view, normalized, date, changed)).also { it.aodProgress = aodProgress })
     }
 
     fun commit() {
@@ -382,6 +402,7 @@ class ClockGlassController(private val host: View) :
 
     fun update() {
         if (entries.isEmpty()) return
+        if (!enabled) return
         val background = if (preview) previewBackground else {
             if (!host.isAttachedToWindow) return
             ClockGlassWallpaper.get(host.context, userId, blurRadii, wallpaperFlags)
@@ -391,7 +412,6 @@ class ClockGlassController(private val host: View) :
             return
         }
         entries.forEach { background.isBlurReady(it.style, changed) }
-        if (!enabled) return
         if (!preview && (!host.isShown || host.windowVisibility != View.VISIBLE)) return
         if (entries.none { it.view.visibility == View.VISIBLE && it.view.alpha > 0f }) return
         val visible = preview || hasVisibleAlpha()

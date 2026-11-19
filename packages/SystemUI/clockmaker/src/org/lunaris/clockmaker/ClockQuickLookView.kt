@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.PorterDuff
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.Icon
@@ -25,6 +26,7 @@ internal class ClockQuickLookView(context: Context) : TextView(context) {
     private var onAction: ((QuickLookAction) -> Unit)? = null
     private var displayText = ""
     private var isMedia = false
+    private var aodProgress = -1f
 
     init {
         setOnClickListener {
@@ -49,7 +51,6 @@ internal class ClockQuickLookView(context: Context) : TextView(context) {
         this.onAction = onAction
         isClickable = onAction != null && content.target?.primaryAction != null
         isFocusable = isClickable
-        compoundDrawableTintList = if (dozing) ColorStateList.valueOf(Color.WHITE) else null
         if (target !== content.target) {
             target = content.target
             iconRequest++
@@ -58,6 +59,15 @@ internal class ClockQuickLookView(context: Context) : TextView(context) {
             loadIcon()
         }
         updateText()
+    }
+
+    fun setAodProgress(value: Float) {
+        val progress = ClockElementAnimation.progress(value)
+        if (aodProgress == progress) return
+        aodProgress = progress
+        compoundDrawableTintMode = PorterDuff.Mode.SRC_ATOP
+        compoundDrawableTintList = if (progress > 0f) ColorStateList.valueOf(
+            (Color.WHITE and 0xFFFFFF) or ((255 * progress).roundToInt() shl 24)) else null
     }
 
     private fun updateText() {
