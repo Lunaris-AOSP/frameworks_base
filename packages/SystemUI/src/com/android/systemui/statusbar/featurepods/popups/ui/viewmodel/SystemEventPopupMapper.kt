@@ -451,7 +451,7 @@ constructor(
                 }
                 is IslandEvent.Notification -> {
                     appName = event.appName
-                    chipDrawable = loadAppIcon(event.sbn)?.drawable
+                    chipDrawable = loadAppIcon(event.sbn)?.drawable ?: event.appIcon
                     iconRes = R.drawable.dynamic_island_notification
                     image = event.notificationImage?.let { Icon.Loaded(it, null) }
                     indeterminate = event.isProgressIndeterminate
@@ -519,11 +519,8 @@ constructor(
                 is IslandEvent.Hotspot,
                 is IslandEvent.RingerMode -> Icon.Resource(iconRes, null)
                 is IslandEvent.Notification ->
-                    if (progress == null && !indeterminate)
-                        Icon.Resource(R.drawable.dynamic_island_notification, null)
-                    else
-                        (chipDrawable ?: icon)?.let { Icon.Loaded(it, null) }
-                            ?: Icon.Resource(iconRes, null)
+                    chipDrawable?.let { Icon.Loaded(it, null) }
+                        ?: Icon.Resource(iconRes, null)
                 else ->
                     (chipDrawable ?: icon)?.let { Icon.Loaded(it, null) }
                         ?: Icon.Resource(iconRes, null)
