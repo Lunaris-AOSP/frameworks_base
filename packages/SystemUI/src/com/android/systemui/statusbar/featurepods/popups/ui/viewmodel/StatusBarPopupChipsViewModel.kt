@@ -33,6 +33,7 @@ import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInteractor
 import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.lifecycle.ExclusiveActivatable
+import com.android.systemui.res.R
 import com.android.systemui.settings.UserTracker
 import com.android.systemui.shade.domain.interactor.ShadeInteractor
 import com.android.systemui.statusbar.featurepods.alarm.ui.viewmodel.AlarmPopupChipViewModel
@@ -249,9 +250,15 @@ constructor(
                         hideNotificationContentOnLockscreen &&
                             chip.popupContent.isNotificationPopup
                     ) {
+                        val notificationCount = (chip.notificationCount ?: 1).coerceAtLeast(1)
                         chip.copy(
-                            contentDescription = null,
-                            chipText = (chip.notificationCount ?: 1).coerceAtLeast(1).toString(),
+                            contentDescription =
+                                context.resources.getQuantityString(
+                                    R.plurals.lunaris_bar_notification_count_a11y,
+                                    notificationCount,
+                                    notificationCount,
+                                ),
+                            chipText = notificationCount.toString(),
                             popupContent = PopupContentModel.None,
                             isPopupShown = false,
                             showPopup = {},

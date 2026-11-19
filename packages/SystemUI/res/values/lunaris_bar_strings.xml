@@ -20,6 +20,10 @@
     <string name="lunaris_bar_settings">Settings</string>
     <string name="lunaris_bar_answer">Answer</string>
     <string name="lunaris_bar_end_call">End call</string>
+    <plurals name="lunaris_bar_notification_count_a11y">
+        <item quantity="one">%1$d notification</item>
+        <item quantity="other">%1$d notifications</item>
+    </plurals>
     <string name="lunaris_bar_swipe_dismiss">Swipe to dismiss</string>
     <string name="lunaris_bar_night_colors">Edit dark theme colors</string>
     <string name="lunaris_bar_palette_day">Light theme palette</string>
