@@ -23,6 +23,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.android.app.tracing.coroutines.launchTraced as launch
 import com.android.systemui.keyguard.domain.interactor.KeyguardBlueprintInteractor
+import com.android.systemui.clocks.DynamicClockLayout
 import com.android.systemui.keyguard.ui.view.layout.blueprints.transitions.IntraBlueprintTransition.Config
 import com.android.systemui.keyguard.ui.view.layout.blueprints.transitions.IntraBlueprintTransition.Type
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardClockViewModel
@@ -105,7 +106,8 @@ object KeyguardSmartspaceViewBinder {
                                 ::Pair,
                             )
                             .collect { (isLargeClock, belowLargeclock) ->
-                                if (isLargeClock && belowLargeclock) {
+                                if (isLargeClock && belowLargeclock &&
+                                    DynamicClockLayout.findClock(keyguardRootView)?.isDynamicClockOnLockscreen != true) {
                                     // hide small clock date/weather
                                     keyguardRootView.findViewById<View>(smallViewId)?.let {
                                         it.visibility = View.GONE
@@ -137,6 +139,8 @@ object KeyguardSmartspaceViewBinder {
                                 ::Triple,
                             )
                             .collect { (isLargeClock, belowLarge, largeBounds) ->
+                                if (DynamicClockLayout.findClock(keyguardRootView)?.isDynamicClockOnLockscreen == true)
+                                    return@collect
                                 if (!isLargeClock) return@collect
                                 keyguardRootView.findViewById<View>(smallViewId)?.let {
                                     it.visibility = View.GONE
@@ -166,6 +170,8 @@ object KeyguardSmartspaceViewBinder {
                                 ::Triple,
                             )
                             .collect { (isLargeClock, belowSmall, smallBounds) ->
+                                if (DynamicClockLayout.findClock(keyguardRootView)?.isDynamicClockOnLockscreen == true)
+                                    return@collect
                                 if (isLargeClock) return@collect
                                 keyguardRootView.findViewById<View>(largeViewId)?.let {
                                     it.visibility = View.GONE

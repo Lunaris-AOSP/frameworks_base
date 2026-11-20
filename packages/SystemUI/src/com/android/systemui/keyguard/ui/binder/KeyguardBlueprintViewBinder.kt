@@ -23,6 +23,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.android.app.tracing.coroutines.launchTraced as launch
 import com.android.systemui.Flags
+import com.android.systemui.clocks.DynamicClockLayout
 import com.android.systemui.customization.clocks.ClockLogger.Companion.getVisText
 import com.android.systemui.keyguard.shared.model.KeyguardBlueprint
 import com.android.systemui.keyguard.ui.view.layout.blueprints.transitions.IntraBlueprintTransition
@@ -80,6 +81,8 @@ object KeyguardBlueprintViewBinder {
                                     blueprint.applyConstraints(this)
                                 }
 
+                            DynamicClockLayout.applyConstraints(constraintLayout, cs,
+                                clockViewModel.currentClock.value)
                             logger.logConstraintSet(cs, clockViewModel)
                             cs.applyTo(constraintLayout)
                             if (com.android.systemui.shared.Flags.clockReactiveSmartspaceLayout()) {
@@ -109,6 +112,8 @@ object KeyguardBlueprintViewBinder {
                                     clone(constraintLayout)
                                     blueprint.applyConstraints(this)
                                 }
+                            DynamicClockLayout.applyConstraints(constraintLayout, cs,
+                                clockViewModel.currentClock.value)
                             logger.logConstraintSet(cs, clockViewModel)
                             cs.applyTo(constraintLayout)
                             if (com.android.systemui.shared.Flags.clockReactiveSmartspaceLayout()) {

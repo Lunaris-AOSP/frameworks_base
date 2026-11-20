@@ -15406,6 +15406,18 @@ public final class Settings {
         public static final String LOCK_SCREEN_CUSTOM_CLOCK_DESIGN = "lock_screen_custom_clock_design";
 
         /**
+         * Switch between independent clock layouts according to visible lockscreen notifications.
+         * @hide
+         */
+        public static final String LOCK_SCREEN_DYNAMIC_CLOCK_ENABLED = "lock_screen_dynamic_clock_enabled";
+
+        /**
+         * Independent small and large lockscreen clock layouts, saved together as JSON.
+         * @hide
+         */
+        public static final String LOCK_SCREEN_DYNAMIC_CLOCK_LAYOUTS = "lock_screen_dynamic_clock_layouts";
+
+        /**
          * Whether to use default, system accent or custom color for lock screen clock text
          * @hide
          */

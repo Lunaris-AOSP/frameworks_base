@@ -78,7 +78,7 @@ data class ClockElementAodStyle(
             return fallback.copy(
                 x = number("x", fallback.x, ClockElement.MIN_POSITION, ClockElement.MAX_POSITION),
                 y = number("y", fallback.y, ClockElement.MIN_POSITION, ClockElement.MAX_POSITION),
-                size = j.optInt("size", fallback.size).coerceIn(8, 200),
+                size = j.optInt("size", fallback.size).coerceIn(ClockElement.MIN_TEXT_SIZE, ClockElement.MAX_TEXT_SIZE),
                 letterSpacing = j.optInt("letterSpacing", fallback.letterSpacing).coerceIn(-10, 50),
                 rotation = j.optInt("rotation", fallback.rotation).coerceIn(-180, 180),
                 opacity = j.optInt("opacity", fallback.opacity).coerceIn(0, 100),

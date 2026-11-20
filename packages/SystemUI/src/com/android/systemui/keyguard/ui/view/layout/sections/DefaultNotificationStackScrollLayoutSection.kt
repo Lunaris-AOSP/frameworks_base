@@ -30,6 +30,7 @@ import androidx.constraintlayout.widget.ConstraintSet.START
 import androidx.constraintlayout.widget.ConstraintSet.TOP
 import com.android.systemui.customization.clocks.R as clocksR
 import com.android.systemui.keyguard.domain.interactor.KeyguardBlueprintInteractor
+import com.android.systemui.clocks.DynamicClockLayout
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardClockViewModel
 import com.android.systemui.res.R
 import com.android.systemui.shade.LargeScreenHeaderHelper
@@ -65,21 +66,25 @@ constructor(
         sharedNotificationContainerViewModel,
         sharedNotificationContainerBinder,
     ) {
+    private var keyguardRoot: ConstraintLayout? = null
     private val positioningTunable = TunerService.Tunable { _, _ ->
         blueprintInteractor.get().refreshBlueprint()
     }
 
     override fun bindData(constraintLayout: ConstraintLayout) {
+        keyguardRoot = constraintLayout
         super.bindData(constraintLayout)
         tunerService.addTunable(
             positioningTunable,
             Settings.Secure.LOCK_SCREEN_NOTIFICATIONS_ABOVE_CLOCK,
             Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_STYLE,
+            Settings.Secure.LOCK_SCREEN_DYNAMIC_CLOCK_ENABLED,
             org.lunaris.lockscreenwidgets.WidgetContract.ENABLED,
         )
     }
 
     override fun removeViews(constraintLayout: ConstraintLayout) {
+        keyguardRoot = null
         tunerService.removeTunable(positioningTunable)
         super.removeViews(constraintLayout)
     }
@@ -98,11 +103,13 @@ constructor(
                     0,
                     UserHandle.USER_CURRENT,
                 ) != 0 &&
-                    secureSettings.getIntForUser(
+                    (secureSettings.getIntForUser(
                         Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_STYLE,
                         0,
                         UserHandle.USER_CURRENT,
-                    ) != 0
+                    ) != 0 || keyguardRoot?.let {
+                        DynamicClockLayout.findClock(it)?.isDynamicClockOnLockscreen == true
+                    } == true)
             if (notificationsAboveClock) {
                 val normalClockBottom =
                     keyguardClockViewModel.getSmallClockTopMargin() +

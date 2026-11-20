@@ -36,6 +36,7 @@ import com.android.systemui.keyguard.ui.viewmodel.KeyguardClockViewModel
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardRootViewModel
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardSmartspaceViewModel
 import com.android.systemui.plugins.keyguard.ui.clocks.ClockViewIds
+import com.android.systemui.clocks.DynamicClockLayout
 import com.android.systemui.res.R as R
 import com.android.systemui.shade.ShadeDisplayAware
 import com.android.systemui.shared.Flags.clockReactiveSmartspaceLayout
@@ -138,7 +139,9 @@ constructor(
         val dateWeatherBelowLargeClock =
             keyguardClockViewModel.shouldDateWeatherBeBelowLargeClock.value
 
-        val isLargeClockVisible = keyguardClockViewModel.isLargeClockVisible.value
+        val dynamicClock = (smartspaceView?.parent as? View)?.let(DynamicClockLayout::findClock)
+        val isLargeClockVisible = keyguardClockViewModel.isLargeClockVisible.value &&
+            dynamicClock?.isDynamicClockOnLockscreen != true
 
         if (clockReactiveSmartspaceLayout()) {
             if (dateWeatherBelowSmallClock) {

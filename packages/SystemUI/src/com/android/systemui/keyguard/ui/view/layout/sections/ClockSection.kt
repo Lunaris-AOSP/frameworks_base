@@ -103,6 +103,8 @@ constructor(
         }
     }
 
+    internal val currentClock: ClockController? get() = keyguardClockViewModel.currentClock.value
+
     override fun removeViews(constraintLayout: ConstraintLayout) {
         disposableHandle?.dispose()
     }

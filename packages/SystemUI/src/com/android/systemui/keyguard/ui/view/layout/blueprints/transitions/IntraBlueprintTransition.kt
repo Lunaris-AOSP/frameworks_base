@@ -33,6 +33,7 @@ class IntraBlueprintTransition(
 
     enum class Type(val priority: Int, val animateNotifChanges: Boolean) {
         ClockSize(100, true),
+        DynamicClockSize(100, false),
         ClockCenter(99, false),
         DefaultClockStepping(98, false),
         SmartspaceVisibility(3, true),
@@ -61,6 +62,7 @@ class IntraBlueprintTransition(
         when (config.type) {
             Type.Init -> {}
             Type.NoTransition -> {}
+            Type.DynamicClockSize -> {}
             Type.DefaultClockStepping ->
                 addTransition(
                     clockViewModel.currentClock.value?.let { DefaultClockSteppingTransition(it) }

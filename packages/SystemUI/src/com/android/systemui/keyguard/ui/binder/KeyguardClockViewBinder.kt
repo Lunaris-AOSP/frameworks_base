@@ -32,6 +32,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.viewpager2.widget.ViewPager2
 import com.android.app.tracing.coroutines.launchTraced as launch
 import com.android.systemui.keyguard.domain.interactor.KeyguardBlueprintInteractor
+import com.android.systemui.clocks.DynamicClockLayout
+import com.android.systemui.res.R
 import com.android.systemui.keyguard.domain.interactor.KeyguardClockInteractor
 import com.android.systemui.keyguard.shared.model.ClockSize
 import com.android.systemui.keyguard.ui.view.layout.blueprints.transitions.IntraBlueprintTransition.Config
@@ -122,14 +124,19 @@ object KeyguardClockViewBinder {
                                 UserHandle.USER_CURRENT
                             ) != 0
                             updateBurnInLayer(keyguardRootView, viewModel, clockSize, isCustomClockEnabled)
-                            blueprintInteractor.refreshBlueprint(Type.ClockSize)
+                            val customClock = DynamicClockLayout.findClock(keyguardRootView)
+                            blueprintInteractor.refreshBlueprint(
+                                if (customClock?.isDynamicClockOnLockscreen == true)
+                                    Type.DynamicClockSize else Type.ClockSize)
                         }
                     }
 
                     launch {
                         viewModel.clockShouldBeCentered.collect {
                             viewModel.currentClock.value?.let {
-                                if (it.largeClock.config.hasCustomPositionUpdatedAnimation) {
+                                if (DynamicClockLayout.findClock(keyguardRootView)?.isDynamicClockOnLockscreen == true) {
+                                    blueprintInteractor.refreshBlueprint(Type.DynamicClockSize)
+                                } else if (it.largeClock.config.hasCustomPositionUpdatedAnimation) {
                                     blueprintInteractor.refreshBlueprint(Type.DefaultClockStepping)
                                 } else {
                                     blueprintInteractor.refreshBlueprint(Type.DefaultTransition)
@@ -300,7 +307,8 @@ object KeyguardClockViewBinder {
     ) {
         val constraintSet = ConstraintSet().apply { clone(rootView) }
         clockSection.applyConstraints(constraintSet)
-        if (animated) {
+        DynamicClockLayout.applyConstraints(rootView, constraintSet, clockSection.currentClock)
+        if (animated && DynamicClockLayout.findClock(rootView)?.isDynamicClockOnLockscreen != true) {
             set?.let { TransitionManager.beginDelayedTransition(rootView, it) }
                 ?: run { TransitionManager.beginDelayedTransition(rootView, defaultTransition) }
         }

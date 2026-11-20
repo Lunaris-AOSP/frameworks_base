@@ -15,6 +15,7 @@
  */
 package com.android.systemui.keyguard.ui.view.layout.sections
 
+import com.android.systemui.dagger.SysUISingleton
 import android.content.Context
 import android.view.View
 import android.view.ViewGroup
@@ -30,6 +31,7 @@ import com.android.systemui.weather.WeatherImageView
 import com.android.systemui.weather.WeatherTextView
 import javax.inject.Inject
 
+@SysUISingleton
 class KeyguardWeatherViewSection @Inject constructor(
     private val context: Context,
 ) : KeyguardSection() {

@@ -334,4 +334,5 @@
     <item type="id" name="keyguard_independent_info_widgets" />
     <item type="id" name="keyguard_widget_content_bottom" />
     <item type="id" name="keyguard_app_widget_anchor" />
+    <item type="id" name="dynamic_clock_ls" />
 </resources>

@@ -126,6 +126,8 @@ data class ClockElement(
         .put("aodLayoutConfigured", aodLayoutConfigured)
 
     companion object {
+        const val MIN_TEXT_SIZE = 8
+        const val MAX_TEXT_SIZE = 400
         const val MIN_POSITION = -4f
         const val MAX_POSITION = 4f
 
@@ -163,7 +165,7 @@ data class ClockElement(
                 format = j.optString("format").takeIf(::validFormat) ?: "",
                 x = number("x", d.x, MIN_POSITION, MAX_POSITION),
                 y = number("y", d.y, MIN_POSITION, MAX_POSITION),
-                size = j.optInt("size", d.size).coerceIn(8, 200),
+                size = j.optInt("size", d.size).coerceIn(MIN_TEXT_SIZE, MAX_TEXT_SIZE),
                 font = j.optString("font", d.font).take(100),
                 weight = j.optInt("weight", 400).coerceIn(100, 900),
                 italic = j.optBoolean("italic"), letterSpacing = j.optInt("letterSpacing").coerceIn(-10, 50),

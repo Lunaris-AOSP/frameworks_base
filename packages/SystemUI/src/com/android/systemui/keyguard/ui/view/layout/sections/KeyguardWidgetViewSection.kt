@@ -5,6 +5,7 @@
  */
 package com.android.systemui.keyguard.ui.view.layout.sections
 
+import com.android.systemui.dagger.SysUISingleton
 import android.content.Context
 import android.graphics.Rect
 import android.view.ViewGroup
@@ -14,6 +15,7 @@ import android.view.ViewTreeObserver
 import androidx.constraintlayout.widget.Barrier
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
+import com.android.systemui.clocks.DynamicClockLayout
 import com.android.systemui.communal.domain.interactor.WidgetTrampolineInteractor
 import com.android.systemui.keyguard.shared.model.KeyguardSection
 import com.android.systemui.lockscreen.KeyguardWidgetHostController
@@ -29,6 +31,7 @@ import com.android.systemui.statusbar.policy.KeyguardStateController
 import javax.inject.Inject
 import com.android.systemui.shared.R as SharedR
 
+@SysUISingleton
 class KeyguardWidgetViewSection @Inject constructor(
     private val context: Context,
     private val activityStarter: ActivityStarter,
@@ -59,6 +62,7 @@ class KeyguardWidgetViewSection @Inject constructor(
         constraintLayout.addView(appWidgets)
         contentIds = intArrayOf(
             R.id.clock_ls,
+            R.id.dynamic_clock_ls,
             ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL,
             ClockViewIds.LOCKSCREEN_CLOCK_VIEW_LARGE,
             R.id.keyguard_slice_view,
@@ -93,7 +97,7 @@ class KeyguardWidgetViewSection @Inject constructor(
                 }
                 return bottom
             }
-            val clockBottom = listOf(R.id.clock_ls, ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL,
+            val clockBottom = listOf(R.id.clock_ls, R.id.dynamic_clock_ls, ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL,
                 ClockViewIds.LOCKSCREEN_CLOCK_VIEW_LARGE)
                 .mapNotNull { constraintLayout.findViewById<View>(it) }.maxOfOrNull(::visualBottom) ?: 0
             val anchor = constraintLayout.findViewById<View>(R.id.keyguard_app_widget_anchor)
@@ -116,13 +120,18 @@ class KeyguardWidgetViewSection @Inject constructor(
 
     override fun applyConstraints(constraintSet: ConstraintSet) {
         splitShade = context.resources.getBoolean(R.bool.config_use_split_notification_shade)
+        val content = contentIds.filter { id ->
+            id != R.id.dynamic_clock_ls || widgetView?.rootView?.let {
+                DynamicClockLayout.findClock(it)?.isDynamicClockOnLockscreen == true
+            } == true
+        }.toIntArray()
         constraintSet.apply {
-            createBarrier(R.id.keyguard_widget_content_bottom, Barrier.BOTTOM, 0, *contentIds)
+            createBarrier(R.id.keyguard_widget_content_bottom, Barrier.BOTTOM, 0, *content)
             getConstraint(R.id.keyguard_widget_content_bottom).layout.mBarrierAllowsGoneWidgets = false
             val gap = (8 * context.resources.displayMetrics.density).toInt()
             connect(R.id.keyguard_widgets, ConstraintSet.TOP, R.id.keyguard_widget_content_bottom,
                 ConstraintSet.BOTTOM, gap)
-            val anchorIds = contentIds + R.id.keyguard_widgets +
+            val anchorIds = content + R.id.keyguard_widgets +
                 if (splitShade) intArrayOf(R.id.status_view_media_container) else intArrayOf()
             createBarrier(R.id.keyguard_app_widget_anchor, Barrier.BOTTOM, 0, *anchorIds)
             getConstraint(R.id.keyguard_app_widget_anchor).layout.mBarrierAllowsGoneWidgets = false
@@ -140,7 +149,7 @@ class KeyguardWidgetViewSection @Inject constructor(
             constrainMaxWidth(R.id.keyguard_app_widgets,
                 context.resources.getDimensionPixelSize(R.dimen.shade_panel_width))
             createBarrier(R.id.smart_space_barrier_bottom, Barrier.BOTTOM, 0,
-                *(contentIds + R.id.keyguard_widgets + R.id.keyguard_app_widgets))
+                *(content + R.id.keyguard_widgets + R.id.keyguard_app_widgets))
             getConstraint(R.id.smart_space_barrier_bottom).layout.mBarrierAllowsGoneWidgets = false
             if (splitShade) {
                 connect(R.id.status_view_media_container, ConstraintSet.TOP,

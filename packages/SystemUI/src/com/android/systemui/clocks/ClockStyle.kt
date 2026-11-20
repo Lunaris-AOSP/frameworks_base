@@ -14,8 +14,10 @@ import android.app.ActivityManager
 import android.app.WallpaperManager
 import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.res.Configuration
 import android.content.Intent
 import android.content.IntentFilter
+import android.database.ContentObserver
 import android.graphics.Color
 import android.graphics.Color.colorToHSV
 import android.graphics.Color.HSVToColor
@@ -28,9 +30,11 @@ import android.media.session.PlaybackState
 import android.os.Handler
 import android.os.Looper
 import android.os.UserHandle
+import android.os.Vibrator
 import android.provider.Settings
 import android.util.AttributeSet
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.IWallpaperZoomListener
 import android.view.View
 import android.view.ViewGroup
@@ -45,12 +49,20 @@ import android.widget.ImageView
 import android.widget.RelativeLayout
 import android.widget.TextClock
 import android.widget.TextView
+import androidx.constraintlayout.widget.ConstraintSet
 import androidx.core.graphics.ColorUtils
 import com.android.systemui.Dependency
 import com.android.systemui.media.MediaSessionManager
 import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.plugins.statusbar.StatusBarStateController
 import com.android.systemui.res.R
+import com.android.systemui.plugins.keyguard.ui.clocks.ClockAxisStyle
+import com.android.systemui.plugins.keyguard.ui.clocks.ClockController
+import com.android.systemui.plugins.keyguard.ui.clocks.ClockSettings
+import com.android.systemui.plugins.keyguard.ui.clocks.TimeFormatKind
+import com.android.systemui.shared.clocks.DEFAULT_CLOCK_ID
+import com.android.systemui.shared.clocks.DefaultClockProvider
+import com.android.systemui.customization.clocks.R as ClocksR
 import com.android.systemui.scrim.ScrimView
 import com.android.systemui.shared.R as SharedR
 import com.android.systemui.statusbar.StatusBarState
@@ -64,15 +76,19 @@ import org.lunaris.clockmaker.ClockDesign
 import org.lunaris.clockmaker.ClockDesignAppearance
 import org.lunaris.clockmaker.ClockDesignView
 import org.lunaris.clockmaker.ClockEffects
+import org.lunaris.clockmaker.ClockFonts
 import org.lunaris.clockmaker.ClockGlass
 import org.lunaris.clockmaker.ClockGlassController
 import org.lunaris.clockmaker.ClockGlassStyle
 import org.lunaris.clockmaker.ClockPreviewGeometry
 import org.lunaris.clockmaker.ClockViewTransform
+import org.lunaris.clockmaker.ClockLayoutProfile
+import org.lunaris.clockmaker.DynamicClockSettings
 import org.lunaris.extrainfowidgets.ExtraInfoGridView
 import java.util.Collections
 import java.util.WeakHashMap
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 import kotlin.math.roundToInt
 
 class ClockStyle @JvmOverloads constructor(
@@ -82,12 +98,44 @@ class ClockStyle @JvmOverloads constructor(
 
     var isHomeScreenClock = false
 
+    private var isDynamicFace = false
+    private var layoutProfile: ClockLayoutProfile? = null
+    private var stockClockController: ClockController? = null
+    private var dynamicClockController: DynamicClockController? = null
+    internal var onDynamicClockLayoutChanged: (() -> Unit)? = null
+    private val tuningValues = mutableMapOf<String, String?>()
+    private var profileGeneration = 0
+    private var layoutClockInteractive = true
+    private val updateDynamicLayout = Runnable {
+        if (!isHomeScreenClock && !isDynamicFace) {
+            val controller = dynamicClockController ?: DynamicClockController(this).also {
+                dynamicClockController = it
+            }
+            val layouts = DynamicClockSettings.decode(tuningValues[DynamicClockSettings.LAYOUTS])
+                ?: org.json.JSONObject()
+            controller.configure(
+                TunerService.parseInteger(tuningValues[DynamicClockSettings.ENABLED], 0) != 0,
+                ClockLayoutProfile.parse(layouts.optJSONObject(DynamicClockSettings.SMALL)?.toString(), true)
+                    ?: ClockLayoutProfile.fallback(tuningValues, true),
+                ClockLayoutProfile.parse(layouts.optJSONObject(DynamicClockSettings.LARGE)?.toString(), false)
+                    ?: ClockLayoutProfile.fallback(tuningValues, false),
+            )
+        }
+    }
+
     private val tunerService: TunerService = Dependency.get(TunerService::class.java)
     private val statusBarStateController: SysuiStatusBarStateController =
         Dependency.get(StatusBarStateController::class.java) as SysuiStatusBarStateController
     private val keyguardStateController: KeyguardStateController =
         Dependency.get(KeyguardStateController::class.java)
     private val handler = Handler(Looper.getMainLooper())
+    private val layoutFontObserver = object : ContentObserver(handler) {
+        override fun onChange(selfChange: Boolean) {
+            ClockFonts.clear()
+            profileGeneration++
+            applyLayoutFont()
+        }
+    }
     private val random = java.util.Random()
 
     private var currentClockView: View? = null
@@ -174,11 +222,14 @@ class ClockStyle @JvmOverloads constructor(
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 Intent.ACTION_SCREEN_ON -> forceTimeUpdate()
-                Intent.ACTION_TIME_TICK,
                 Intent.ACTION_TIME_CHANGED,
+                Intent.ACTION_TIMEZONE_CHANGED,
+                Intent.ACTION_LOCALE_CHANGED -> forceTimeUpdate()
+                Intent.ACTION_TIME_TICK,
                 DOZE_PULSE_ACTION -> onTimeChanged()
                 Intent.ACTION_POWER_CONNECTED -> {
-                    if (clockWobbleOnChargeEnabled && !isDozing &&
+                    if (clockWobbleOnChargeEnabled && !isDozing && clockContainer?.visibility == View.VISIBLE &&
+                        (!isDynamicFace || layoutClockInteractive) &&
                         (currentClockView !is ClockDesignView || clockAodProgress() == 0f)) {
                         startWobbleAnimation()
                     }
@@ -215,6 +266,7 @@ class ClockStyle @JvmOverloads constructor(
 
     private val statusBarStateListener = object : StatusBarStateController.StateListener {
         override fun onStateChanged(newState: Int) {
+            dynamicClockController?.onHostVisibilityChanged()
             if (newState == StatusBarState.KEYGUARD) handler.post { updatePreviewGeometry() }
         }
 
@@ -225,7 +277,8 @@ class ClockStyle @JvmOverloads constructor(
         }
 
         override fun onDozeAmountChanged(linear: Float, eased: Float) {
-            if (isHomeScreenClock) return
+            if (isHomeScreenClock || isDynamicFace) return
+            dynamicClockController?.onDozeAmountChanged(eased)
             if (currentClockView !is ClockDesignView) return
             (currentClockView as ClockDesignView).setAodProgress(eased)
             applyClockAlpha()
@@ -255,13 +308,126 @@ class ClockStyle @JvmOverloads constructor(
     override fun onFinishInflate() {
         super.onFinishInflate()
         clockStub = findViewById(R.id.clock_view_stub)
+        clockContainer = findViewById(R.id.clock_frame)
         updateClockView()
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val width = if (isDynamicFace && resources.getBoolean(R.bool.config_use_split_notification_shade))
+            MeasureSpec.makeMeasureSpec((MeasureSpec.getSize(widthMeasureSpec) / 2).coerceAtLeast(1),
+                MeasureSpec.getMode(widthMeasureSpec)) else widthMeasureSpec
+        super.onMeasure(width, heightMeasureSpec)
+        val frame = clockContainer
+        val top = (frame?.layoutParams as? ViewGroup.MarginLayoutParams)?.topMargin ?: 0
+        dynamicClockController?.measuredHeight(top + (frame?.measuredHeight ?: 0))?.let {
+            setMeasuredDimension(measuredWidthAndState,
+                resolveSizeAndState(it, heightMeasureSpec, measuredState shl MEASURED_HEIGHT_STATE_SHIFT))
+        }
+    }
+
+    internal val baseClockStyle: Int get() = clockStyle
+    internal val isClockDozing: Boolean get() = isDozing
+    internal val isClockSwitchingVisible: Boolean
+        get() = isShown && windowVisibility == View.VISIBLE && statusBarStateController.state == StatusBarState.KEYGUARD
+    internal val isDynamicClockTransitionRunning: Boolean
+        get() = dynamicClockController?.isAnimating == true
+    internal val isDynamicClockOnLockscreen: Boolean
+        get() = dynamicClockController?.isOnLockscreen == true
+    internal val isDynamicClockLayoutActive: Boolean
+        get() = dynamicClockController?.isLayoutActive == true
+    internal val layoutClockCenterY: Float
+        get() = (clockContainer?.top ?: 0) + (currentClockView?.height ?: 0) / 2f
+
+    fun setNotificationPresence(present: Boolean) {
+        dynamicClockController?.setNotificationPresence(present)
+    }
+
+    fun setClockSwitchingAllowed(allowed: Boolean) {
+        dynamicClockController?.setSwitchingAllowed(allowed)
+    }
+
+    internal fun applyNativeClockConstraints(constraints: ConstraintSet, clock: ClockController?) {
+        dynamicClockController?.applyNativeClockConstraints(constraints, clock)
+    }
+
+    internal fun createLayoutClock(profile: ClockLayoutProfile): ClockStyle {
+        val clock = LayoutInflater.from(context).inflate(R.layout.keyguard_clock_style, this, false) as ClockStyle
+        clock.id = View.generateViewId()
+        clock.isDynamicFace = true
+        clock.layoutProfile = profile
+        clock.visibility = View.INVISIBLE
+        clock.clipChildren = false
+        clock.clipToPadding = false
+        clock.textGlass.wallpaperFlags = WallpaperManager.FLAG_LOCK
+        clock.configureLayout(profile)
+        addView(clock, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        return clock
+    }
+
+    private fun configureLayout(profile: ClockLayoutProfile) {
+        layoutProfile = profile
+        profileGeneration++
+        CLOCK_TUNING_KEYS.filter { it != CLOCK_STYLE_KEY }.forEach {
+            onTuningChanged(it, profile.values[it])
+        }
+        onTuningChanged(CLOCK_STYLE_KEY, profile.style.toString())
+    }
+
+    internal fun setBaselineClockAlpha(value: Float) {
+        clockContainer?.apply {
+            alpha = value
+            visibility = if (value > 0f) View.VISIBLE else View.INVISIBLE
+            importantForAccessibility = if (value > 0f) View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+                else View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+        }
+        (currentClockView as? ClockDesignView)?.animationsEnabled =
+            value > 0f && !isDozing && clockAodProgress() == 0f && clockOpacity > 0
+    }
+
+    internal fun setLayoutClockInteractive(interactive: Boolean) {
+        if (layoutClockInteractive == interactive) return
+        layoutClockInteractive = interactive
+        importantForAccessibility = if (interactive) View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+            else View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+        isEnabled = interactive
+        (currentClockView as? ClockDesignView)?.animationsEnabled = interactive && clockOpacity > 0
+        if (!interactive && (wobbleAnimator != null || wobbleGlowAnimator != null)) cancelWobbleAnimation()
+    }
+
+    override fun onInterceptTouchEvent(event: MotionEvent): Boolean =
+        if (isDynamicFace && !layoutClockInteractive) true else super.onInterceptTouchEvent(event)
+
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        dynamicClockController?.onHostVisibilityChanged()
+    }
+
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        super.onWindowVisibilityChanged(visibility)
+        dynamicClockController?.onHostVisibilityChanged()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (isDynamicFace) {
+            profileGeneration++
+            updateClockView()
+        } else if (dynamicClockController?.enabled == true) {
+            dynamicClockController?.onHostVisibilityChanged()
+            onDynamicClockLayoutChanged?.invoke()
+        }
+    }
+
+    internal fun updateClockVisibility() {
+        visibility = if (clockStyle != 0 || isDynamicFace || isDynamicClockLayoutActive)
+            View.VISIBLE else View.GONE
     }
 
     private fun updatePreviewGeometry() {
         if (!canUpdatePreview()) return
-        val view = currentClockView ?: return
-        val frame = clockContainer ?: return
+        val renderer = dynamicClockController?.activeClock ?: this
+        val view = renderer.currentClockView ?: return
+        val frame = renderer.clockContainer ?: return
         val params = frame.layoutParams as? ViewGroup.MarginLayoutParams ?: return
         if (view.width <= 0 || height <= 0) return
         val matrix = Matrix()
@@ -269,6 +435,12 @@ class ClockStyle @JvmOverloads constructor(
                 excludeTransformOf = parent as? View)) return
         val origin = floatArrayOf((frame.left + view.left).toFloat(),
             (frame.top - params.topMargin + view.top).toFloat())
+        if (renderer !== this) {
+            val faceMatrix = Matrix()
+            if (!ClockViewTransform.toAncestor(renderer, this, faceMatrix,
+                    excludeTransformOf = renderer)) return
+            faceMatrix.mapPoints(origin)
+        }
         matrix.mapPoints(origin)
         val bounds = context.getSystemService(WindowManager::class.java)?.currentWindowMetrics?.bounds
             ?: return
@@ -349,7 +521,9 @@ class ClockStyle @JvmOverloads constructor(
     }
 
     private fun canUpdatePreview() = isAttachedToWindow && isShown && !isHomeScreenClock &&
-        windowVisibility == View.VISIBLE && !isDozing && clockStyle != 0 &&
+        windowVisibility == View.VISIBLE && !isDozing &&
+        (clockStyle != 0 || dynamicClockController?.enabled == true) &&
+        !isDynamicClockTransitionRunning &&
         statusBarStateController.state == StatusBarState.KEYGUARD &&
         !keyguardStateController.isOccluded && !keyguardStateController.isPrimaryBouncerShowing &&
         !keyguardStateController.isKeyguardGoingAway
@@ -416,55 +590,36 @@ class ClockStyle @JvmOverloads constructor(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         if (callbacksRegistered) return
-        if (!isHomeScreenClock) {
+        if (!isHomeScreenClock && !isDynamicFace) {
             lockscreenClocks.add(this)
             viewTreeObserver.addOnGlobalLayoutListener(previewGeometryListener)
             viewTreeObserver.addOnPreDrawListener(previewAppearanceListener)
             observePreviewWallpaperZoom()
             HomeClockProvider.observeKeyguard()
         }
-        isDozing = !isHomeScreenClock && statusBarStateController.isDozing
+        isDozing = !isHomeScreenClock && !isDynamicFace && statusBarStateController.isDozing
         textGlass.wallpaperFlags = if (isHomeScreenClock) WallpaperManager.FLAG_SYSTEM
             else WallpaperManager.FLAG_LOCK
 
-        tunerService.addTunable(
-            this,
-            CLOCK_STYLE_KEY,
-            CLOCK_DESIGN_KEY,
-            CLOCK_MAKER_WEATHER_KEY,
-            CLOCK_COLOR_MODE_KEY,
-            CLOCK_CUSTOM_COLOR_KEY,
-            CLOCK_TEXT_OPACITY_KEY,
-            CLOCK_SHADOW_ENABLED_KEY,
-            CLOCK_SHADOW_COLOR_KEY,
-            CLOCK_SHADOW_SOFTNESS_KEY,
-            CLOCK_SHADOW_OPACITY_KEY,
-            CLOCK_FRAME_MARGIN_TOP_KEY,
-            CLOCK_SIZE_KEY,
-            CLOCK_AOD_ANIM_KEY,
-            CLOCK_ALBUM_ART_COLOR_KEY,
-            CLOCK_WOBBLE_ON_CHARGE_KEY,
-            CLOCK_FRAME_MARGIN_START_KEY,
-            HOME_CLOCK_SIZE_KEY,
-            HOME_CLOCK_MARGIN_TOP_KEY,
-            HOME_CLOCK_MARGIN_START_KEY,
-            CLOCK_GRADIENT_ENABLED_KEY,
-            CLOCK_GRADIENT_COLOR_START_KEY,
-            CLOCK_GRADIENT_COLOR_END_KEY,
-            CLOCK_GRADIENT_ANCHOR_Y_KEY,
-            CLOCK_GRADIENT_RADIUS_KEY,
-            CLOCK_TILT_X_KEY,
-            CLOCK_TILT_Y_KEY,
-            CLOCK_ROTATION_KEY,
-            CLOCK_HYPER_BLUR_KEY,
-            ClockGlass.ENABLED_SETTING,
-            ClockGlass.INTENSITY_SETTING,
-            ClockGlass.LIFT_SETTING,
-            ClockGlassStyle.SETTING,
-            ClockGlassStyle.DATE_SETTING,
-            ClockGlassStyle.SEPARATE_DATE_SETTING,
-        )
-        statusBarStateController.addCallback(statusBarStateListener)
+        if (!isDynamicFace) {
+            if (!isHomeScreenClock) {
+                val controller = dynamicClockController ?: DynamicClockController(this).also {
+                    dynamicClockController = it
+                }
+                controller.attach(statusBarStateController.interpolatedDozeAmount)
+            }
+            val keys = if (isHomeScreenClock) CLOCK_TUNING_KEYS else CLOCK_TUNING_KEYS +
+                arrayOf(DynamicClockSettings.ENABLED, DynamicClockSettings.LAYOUTS)
+            tunerService.addTunable(this, *keys)
+            if (!isHomeScreenClock) {
+                handler.removeCallbacks(updateDynamicLayout)
+                updateDynamicLayout.run()
+            }
+            statusBarStateController.addCallback(statusBarStateListener)
+        } else if (layoutProfile?.font != null) {
+            context.contentResolver.registerContentObserver(ClockFonts.uri, true, layoutFontObserver, UserHandle.USER_ALL)
+            applyLayoutFont()
+        }
         if (albumArtColorEnabled) {
             MediaSessionManager.get().addListener(mediaDataListener)
         }
@@ -481,6 +636,8 @@ class ClockStyle @JvmOverloads constructor(
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_TIME_TICK)
             addAction(Intent.ACTION_TIME_CHANGED)
+            addAction(Intent.ACTION_TIMEZONE_CHANGED)
+            addAction(Intent.ACTION_LOCALE_CHANGED)
             addAction(DOZE_PULSE_ACTION)
             addAction(Intent.ACTION_POWER_CONNECTED)
             addAction(Intent.ACTION_POWER_DISCONNECTED)
@@ -504,7 +661,14 @@ class ClockStyle @JvmOverloads constructor(
         previewScrimView = null
         previewGeometryKey = null
         previewHasWallpaperZoom = false
+        dynamicClockController?.detach()
+        handler.removeCallbacks(updateDynamicLayout)
+        profileGeneration++
         if (!callbacksRegistered) return
+
+        if (isDynamicFace && layoutProfile?.font != null) {
+            context.contentResolver.unregisterContentObserver(layoutFontObserver)
+        }
 
         statusBarStateController.removeCallback(statusBarStateListener)
         tunerService.removeTunable(this)
@@ -519,6 +683,7 @@ class ClockStyle @JvmOverloads constructor(
     }
 
     override fun onTuningChanged(key: String?, newValue: String?) {
+        if (key != null) tuningValues[key] = newValue
         when (key) {
             CLOCK_DESIGN_KEY -> {
                 clockDesign = ClockDesign.parse(newValue) ?: ClockDesign()
@@ -534,7 +699,7 @@ class ClockStyle @JvmOverloads constructor(
             }
             CLOCK_STYLE_KEY -> {
                 clockStyle = TunerService.parseInteger(newValue, DEFAULT_STYLE)
-                if (clockStyle != 0) {
+                if (clockStyle != 0 && !isDynamicFace) {
                     Settings.Secure.putIntForUser(
                         context.contentResolver,
                         Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_FACE,
@@ -691,10 +856,15 @@ class ClockStyle @JvmOverloads constructor(
                 applyClockTransform()
             }
         }
+        if (!isHomeScreenClock && !isDynamicFace) {
+            handler.removeCallbacks(updateDynamicLayout)
+            handler.post(updateDynamicLayout)
+        }
     }
 
     private fun applyDozing(dozing: Boolean) {
         isDozing = dozing
+        dynamicClockController?.onDozingChanged()
         if (currentClockView is ClockDesignView) cancelWobbleAnimation()
         animateAodTransition(dozing)
         applyClockAlpha()
@@ -773,6 +943,30 @@ class ClockStyle @JvmOverloads constructor(
     }
 
     internal fun clockBounds(rootTransform: Matrix? = null, bounds: RectF = RectF()): RectF? {
+        val controller = dynamicClockController?.takeIf { it.enabled }
+            ?: return baseClockBounds(rootTransform, bounds)
+        val combined = RectF()
+        val faceBounds = RectF()
+        var found = false
+        fun include(value: RectF?) {
+            if (value == null) return
+            if (found) combined.union(value) else combined.set(value)
+            found = true
+        }
+        controller.visibleClocks.forEach { renderer ->
+            if (rootTransform == null) include(renderer.clockBounds(bounds = faceBounds)) else {
+                val matrix = Matrix()
+                if (ClockViewTransform.toAncestor(renderer, this, matrix)) {
+                    matrix.postConcat(rootTransform)
+                    include(renderer.clockBounds(matrix, faceBounds))
+                }
+            }
+        }
+        if (controller.isBaselineVisible) include(baseClockBounds(rootTransform, faceBounds))
+        return if (found) bounds.apply { set(combined) } else null
+    }
+
+    private fun baseClockBounds(rootTransform: Matrix?, bounds: RectF): RectF? {
         val view = currentClockView ?: return null
         if (!view.isAttachedToWindow || !view.isLaidOut || view.visibility != View.VISIBLE) return null
         val matrix = clockBoundsMatrix
@@ -788,16 +982,31 @@ class ClockStyle @JvmOverloads constructor(
     }
 
     internal val transitionPadding: Float
-        get() = (if (shadowEnabled) shadowSoftness * 2f + 4f else 8f) *
-            resources.displayMetrics.density
+        get() {
+            val controller = dynamicClockController
+            val baseline = if (controller?.isBaselineVisible != false)
+                (if (shadowEnabled) shadowSoftness * 2f + 4f else 8f) * resources.displayMetrics.density else 0f
+            return maxOf(baseline, controller?.visibleClocks?.maxOfOrNull { it.transitionPadding } ?: 0f)
+        }
 
     internal val hasGlassEffects: Boolean
-        get() = textGlass.hasGlassElements ||
-            (hyperBlurEnabled && !gradientEnabled && hyperClocks.isNotEmpty()) ||
-            (currentClockView as? ClockDesignView)?.hasGlassElements == true
+        get() {
+            val controller = dynamicClockController
+            val baseline = controller?.isBaselineVisible != false && (textGlass.hasGlassElements ||
+                (hyperBlurEnabled && !gradientEnabled && hyperClocks.isNotEmpty()) ||
+                (currentClockView as? ClockDesignView)?.hasGlassElements == true)
+            return baseline || controller?.visibleClocks?.any { it.hasGlassEffects } == true
+        }
 
     private fun forceTimeUpdate() {
         if (currentClockView == null) return
+        stockClockController?.let {
+            it.events.onTimeZoneChanged(android.icu.util.TimeZone.getDefault())
+            it.events.onLocaleChanged(java.util.Locale.getDefault())
+            it.events.onTimeFormatChanged(TimeFormatKind.getFromContext(context, ActivityManager.getCurrentUser()))
+            it.smallClock.events.onTimeTick()
+            it.largeClock.events.onTimeTick()
+        }
         (currentClockView as? ClockDesignView)?.refreshTime()
         for (i in styledTextViews.indices) {
             val tv = styledTextViews[i]
@@ -820,11 +1029,51 @@ class ClockStyle @JvmOverloads constructor(
         removePendingLayoutListener()
         currentClockView?.let { (it.parent as? ViewGroup)?.removeView(it) }
         currentClockView = null
+        stockClockController = null
         textClocks.clear()
         styledTextViews.clear()
         hyperClocks.clear()
 
-        if (clockStyle in 1 until CLOCK_LAYOUTS.size) {
+        if (clockStyle == 0 && isDynamicFace) {
+            val profile = layoutProfile ?: return
+            val baseSettings = runCatching {
+                ClockSettings.fromJson(org.json.JSONObject(Settings.Secure.getStringForUser(
+                    context.contentResolver, Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_FACE,
+                    UserHandle.USER_CURRENT) ?: "{}"))
+            }.getOrDefault(ClockSettings(DEFAULT_CLOCK_ID))
+            val axes = profile.preset?.let { preset ->
+                val (weight, width) = STOCK_PRESETS[preset.coerceIn(0, STOCK_PRESETS.lastIndex)]
+                ClockAxisStyle(mapOf("wght" to weight, "wdth" to width,
+                    "ROND" to if (profile.rounded) 100f else 0f, "slnt" to 0f))
+            } ?: if (profile.inheritStockSettings) baseSettings.axes else ClockAxisStyle(
+                profile.stockAxes ?: mapOf("wght" to 500f, "wdth" to 100f)).apply {
+                put("ROND", if (profile.rounded) 100f else 0f)
+            }
+            val seedColor = if (profile.inheritStockSettings) baseSettings.seedColor else profile.color
+            val controller = DefaultClockProvider(LayoutInflater.from(context), resources,
+                com.android.systemui.shared.Flags.clockReactiveVariants(),
+                context.getSystemService(Vibrator::class.java))
+                .createClock(context, ClockSettings(DEFAULT_CLOCK_ID, seedColor, axes))
+            stockClockController = controller
+            controller.initialize(true, 0f, 0f)
+            val face = if (profile.small) controller.smallClock else controller.largeClock
+            face.events.onFontSettingChanged(resources.getDimension(
+                if (profile.small) ClocksR.dimen.small_clock_text_size else ClocksR.dimen.large_clock_text_size))
+            val view = face.view.apply {
+                id = View.generateViewId()
+                layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT)
+            }
+            currentClockView = view
+            clockStub?.let { clockContainer?.removeView(it) }
+            clockStub = null
+            clockContainer?.addView(view)
+            cacheClockViews(view)
+            applyLayoutFont()
+            updateClockAppearance()
+            updateClockFrameMargin()
+            attachClockSizeListener(view)
+        } else if (clockStyle in 1 until CLOCK_LAYOUTS.size) {
             val stub = clockStub
             if (stub != null) {
                 stub.layoutResource = CLOCK_LAYOUTS[clockStyle]
@@ -861,6 +1110,7 @@ class ClockStyle @JvmOverloads constructor(
                     }
                 }
                 cacheClockViews(view)
+                applyLayoutFont()
                 disableClippingOnParents(view)
 
                 view.findViewById<ImageView?>(R.id.user_profile_icon)?.setImageDrawable(
@@ -878,8 +1128,26 @@ class ClockStyle @JvmOverloads constructor(
         }
 
         forceTimeUpdate()
-        visibility = if (clockStyle != 0) View.VISIBLE else View.GONE
+        updateClockVisibility()
         if (isDozing && clockStyle != 0) startAodTick()
+    }
+
+    private fun applyLayoutFont() {
+        val font = layoutProfile?.font ?: return
+        if (currentClockView is ClockDesignView) return
+        val generation = profileGeneration
+        val user = ActivityManager.getCurrentUser()
+        clockFontExecutor.execute {
+            val face = ClockFonts.load(context, user, font)
+            handler.post {
+                if (profileGeneration != generation || layoutProfile?.font != font) return@post
+                styledTextViews.forEach { view ->
+                    view.typeface = face
+                    view.setTag(R.id.original_typeface, face)
+                }
+                requestLayout()
+            }
+        }
     }
 
     private fun cacheClockViews(root: View) {
@@ -953,7 +1221,8 @@ class ClockStyle @JvmOverloads constructor(
         if (view is ClockDesignView) {
             val progress = clockAodProgress()
             view.alpha = ClockViewTransform.alpha(clockOpacity, progress)
-            view.animationsEnabled = view.alpha > 0f && !isDozing && progress == 0f
+            view.animationsEnabled = view.alpha > 0f && !isDozing && progress == 0f &&
+                clockContainer?.visibility != View.INVISIBLE && (!isDynamicFace || layoutClockInteractive)
         } else view.alpha = ClockViewTransform.alpha(clockOpacity, isDozing)
     }
 
@@ -1047,6 +1316,15 @@ class ClockStyle @JvmOverloads constructor(
     }
 
     private fun applyClockColors() {
+        stockClockController?.let { controller ->
+            val color = if (colorMode == COLOR_MODE_DEFAULT && !albumArtColorEnabled) {
+                if (layoutProfile?.inheritStockSettings == true) controller.smallClock.theme.seedColor
+                else layoutProfile?.color
+            } else resolveClockColor()
+            val face = if (layoutProfile?.small == true) controller.smallClock else controller.largeClock
+            face.events.onThemeChanged(face.theme.copy(isDarkTheme = true, seedColor = color))
+            return
+        }
         textGlass.enabled = !isDozing
         textGlass.beginUpdate()
         textGlass.userId = ActivityManager.getCurrentUser()
@@ -1187,7 +1465,7 @@ class ClockStyle @JvmOverloads constructor(
         (if (isHomeScreenClock) homeClockSizeScale ?: clockSizeScale else clockSizeScale) / 100f
 
     private fun clockAodProgress(): Float = when {
-        isHomeScreenClock -> 0f
+        isHomeScreenClock || isDynamicFace -> 0f
         !aodAnimEnabled -> if (isDozing) 1f else 0f
         else -> statusBarStateController.interpolatedDozeAmount.coerceIn(0f, 1f)
     }
@@ -1398,21 +1676,21 @@ class ClockStyle @JvmOverloads constructor(
         for (i in textClocks.indices) {
             val tc = textClocks[i]
             val origAlpha = tc.getTag(R.id.original_alpha) as? Float ?: 1f
-            tc.alpha = (clockOpacity / 100f) * origAlpha
+            tc.alpha = origAlpha
             tc.setShadowLayer(0f, 0f, 0f, 0)
         }
         for (i in styledTextViews.indices) {
             val tv = styledTextViews[i]
             if (tv !is android.widget.TextClock) {
                 val origAlpha = tv.getTag(R.id.original_alpha) as? Float ?: 1f
-                tv.alpha = (clockOpacity / 100f) * origAlpha
+                tv.alpha = origAlpha
                 tv.setShadowLayer(0f, 0f, 0f, 0)
             }
         }
         for (i in hyperClocks.indices) {
             val hv = hyperClocks[i]
             val origAlpha = hv.getTag(R.id.original_alpha) as? Float ?: 1f
-            hv.alpha = (clockOpacity / 100f) * origAlpha
+            hv.alpha = origAlpha
         }
     }
 
@@ -1573,6 +1851,23 @@ class ClockStyle @JvmOverloads constructor(
         @JvmField val CLOCK_TILT_Y_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_TILT_Y
         @JvmField val CLOCK_ROTATION_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_ROTATION
         @JvmField val CLOCK_HYPER_BLUR_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_HYPER_BLUR
+
+        private val CLOCK_TUNING_KEYS = arrayOf(
+            CLOCK_STYLE_KEY, CLOCK_DESIGN_KEY, CLOCK_MAKER_WEATHER_KEY,
+            CLOCK_COLOR_MODE_KEY, CLOCK_CUSTOM_COLOR_KEY, CLOCK_TEXT_OPACITY_KEY,
+            CLOCK_SHADOW_ENABLED_KEY, CLOCK_SHADOW_COLOR_KEY, CLOCK_SHADOW_SOFTNESS_KEY,
+            CLOCK_SHADOW_OPACITY_KEY, CLOCK_FRAME_MARGIN_TOP_KEY, CLOCK_SIZE_KEY,
+            CLOCK_AOD_ANIM_KEY, CLOCK_ALBUM_ART_COLOR_KEY, CLOCK_WOBBLE_ON_CHARGE_KEY,
+            CLOCK_FRAME_MARGIN_START_KEY, HOME_CLOCK_SIZE_KEY, HOME_CLOCK_MARGIN_TOP_KEY,
+            HOME_CLOCK_MARGIN_START_KEY, CLOCK_GRADIENT_ENABLED_KEY, CLOCK_GRADIENT_COLOR_START_KEY,
+            CLOCK_GRADIENT_COLOR_END_KEY, CLOCK_GRADIENT_ANCHOR_Y_KEY, CLOCK_GRADIENT_RADIUS_KEY,
+            CLOCK_TILT_X_KEY, CLOCK_TILT_Y_KEY, CLOCK_ROTATION_KEY, CLOCK_HYPER_BLUR_KEY,
+            ClockGlass.ENABLED_SETTING, ClockGlass.INTENSITY_SETTING, ClockGlass.LIFT_SETTING,
+            ClockGlassStyle.SETTING, ClockGlassStyle.DATE_SETTING, ClockGlassStyle.SEPARATE_DATE_SETTING,
+        )
+        private val STOCK_PRESETS = listOf(800f to 30f, 700f to 55f, 600f to 80f,
+            500f to 100f, 400f to 108f, 300f to 116f, 200f to 120f)
+        private val clockFontExecutor = Executors.newSingleThreadExecutor()
 
         const val COLOR_MODE_DEFAULT = "default"
         const val COLOR_MODE_ACCENT = "accent"

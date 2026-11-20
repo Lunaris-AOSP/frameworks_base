@@ -15,6 +15,7 @@
  */
 package com.android.systemui.keyguard.ui.view.layout.sections
 
+import com.android.systemui.dagger.SysUISingleton
 import android.content.Context
 import android.view.View
 import android.view.ViewGroup
@@ -27,6 +28,7 @@ import com.android.systemui.lockscreen.ExtraInfoWidgetsController
 import javax.inject.Inject
 import org.lunaris.extrainfowidgets.ExtraInfoFreeformView
 
+@SysUISingleton
 class InfoWidgetsSection
 @Inject
 constructor(

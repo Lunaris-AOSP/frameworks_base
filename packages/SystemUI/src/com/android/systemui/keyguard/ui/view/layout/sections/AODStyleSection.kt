@@ -15,6 +15,7 @@
  */
 package com.android.systemui.keyguard.ui.view.layout.sections
 
+import com.android.systemui.dagger.SysUISingleton
 import android.content.Context
 import android.view.LayoutInflater
 import android.view.View
@@ -26,6 +27,7 @@ import com.android.systemui.keyguard.shared.model.KeyguardSection
 import com.android.systemui.res.R
 import javax.inject.Inject
 
+@SysUISingleton
 class AODStyleSection
 @Inject
 constructor(

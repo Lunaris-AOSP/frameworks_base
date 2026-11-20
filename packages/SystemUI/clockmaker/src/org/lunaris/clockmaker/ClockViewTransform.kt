@@ -55,9 +55,10 @@ object ClockViewTransform {
         return append(view, matrix, excludeAnimationOf, excludeTransformOf = excludeTransformOf)
     }
 
-    fun toAncestor(view: View, ancestor: View, matrix: Matrix): Boolean {
+    fun toAncestor(view: View, ancestor: View, matrix: Matrix,
+        excludeAnimationOf: View? = null, excludeTransformOf: View? = null): Boolean {
         matrix.reset()
-        return append(view, matrix, null, ancestor)
+        return append(view, matrix, excludeAnimationOf, ancestor, excludeTransformOf)
     }
 
     private fun append(view: View, matrix: Matrix, excludeAnimationOf: View?,

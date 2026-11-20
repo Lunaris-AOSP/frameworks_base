@@ -66,6 +66,7 @@ import com.android.systemui.log.dagger.KeyguardBlueprintLog
 import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.plugins.keyguard.ui.clocks.ClockViewIds
 import com.android.systemui.res.R
+import com.android.systemui.clocks.DynamicClockLayout
 import com.android.systemui.scene.shared.flag.SceneContainerFlag
 import com.android.systemui.shade.domain.interactor.ShadeInteractor
 import com.android.systemui.shared.R as sharedR
@@ -329,7 +330,8 @@ object KeyguardRootViewBinder {
                                     viewModel.onNotificationContainerBoundsChanged(
                                         notificationListPlaceholder.top.toFloat(),
                                         notificationListPlaceholder.bottom.toFloat(),
-                                        animate = true,
+                                        animate = DynamicClockLayout.findClock(childViews)
+                                            ?.isDynamicClockTransitionRunning != true,
                                     )
                                 }
                             }
@@ -490,7 +492,9 @@ object KeyguardRootViewBinder {
             childViews[nsslPlaceholderId]?.let { notificationListPlaceholder ->
                 // Do not update a second time while a blueprint transition is running
                 val transition = blueprintViewModel.currentTransition.value
-                val shouldAnimate = transition != null && transition.config.type.animateNotifChanges
+                val dynamicClockTransition = DynamicClockLayout.findClock(childViews)
+                    ?.isDynamicClockTransitionRunning == true
+                val shouldAnimate = !dynamicClockTransition && transition != null && transition.config.type.animateNotifChanges
                 if (prevTransition == transition && shouldAnimate && !smartspaceVisibilityChanged) {
                     logger.w("Skipping onNotificationContainerBoundsChanged during transition")
                     return
@@ -500,7 +504,7 @@ object KeyguardRootViewBinder {
                 viewModel.onNotificationContainerBoundsChanged(
                     notificationListPlaceholder.top.toFloat(),
                     notificationListPlaceholder.bottom.toFloat(),
-                    animate = (shouldAnimate || smartspaceVisibilityChanged),
+                    animate = !dynamicClockTransition && (shouldAnimate || smartspaceVisibilityChanged),
                 )
             }
 
