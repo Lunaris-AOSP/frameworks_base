@@ -31,9 +31,11 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Bolt
@@ -49,26 +51,40 @@ import androidx.compose.material.icons.filled.WifiTethering
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.android.compose.ui.graphics.painter.rememberDrawablePainter
 import com.android.systemui.common.shared.model.Icon as IconModel
@@ -78,6 +94,7 @@ import com.android.systemui.statusbar.featurepods.popups.ui.model.BluetoothBatte
 import com.android.systemui.statusbar.featurepods.popups.ui.model.BluetoothBatteryModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.ChargingDetailModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentModel
+import com.android.systemui.statusbar.featurepods.popups.shared.model.PopupActionModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.SystemEventKind
 
 @Composable
@@ -85,6 +102,7 @@ fun SystemEventPopup(
     model: PopupContentModel.SystemEvent,
     modifier: Modifier = Modifier,
     onDismissNotification: () -> Unit = {},
+    onReplyInputExpanded: (Boolean) -> Unit = {},
 ) {
     if (model.kind == SystemEventKind.Call) {
         CallPopup(model, modifier, onDismissNotification)
@@ -94,6 +112,8 @@ fun SystemEventPopup(
     val settings = LocalLunarisBarState.current.settings
     val message =
         model.kind == SystemEventKind.Notification || model.kind == SystemEventKind.Ongoing
+    val messageShape = LunarisBarSquircle(24.dp)
+    val messageBackground = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f)
     val bluetooth = model.kind == SystemEventKind.Bluetooth
     val compact = model.kind == SystemEventKind.Unlock
     val showBattery = !bluetooth || settings.enabled("feature_bluetooth_show_battery", true)
@@ -158,10 +178,8 @@ fun SystemEventPopup(
                         modifier =
                             Modifier.fillMaxWidth()
                                 .heightIn(max = 180.dp)
-                                .clip(LunarisBarSquircle(24.dp))
-                                .background(
-                                    MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f)
-                                )
+                                .clip(messageShape)
+                                .background(messageBackground)
                                 .verticalScroll(rememberScrollState())
                                 .padding(16.dp),
                     )
@@ -180,7 +198,121 @@ fun SystemEventPopup(
         if (model.kind == SystemEventKind.Charging && model.chargingDetails.isNotEmpty()) {
             LunarisBarChargingDetails(model.chargingDetails)
         }
-        PopupActionChips(model.actions, colors.accent)
+        val reply = model.reply?.takeIf { it.isAvailable() }
+        var replyExpanded by remember { mutableStateOf(false) }
+        var replyText by remember { mutableStateOf("") }
+        val focusRequester = remember { FocusRequester() }
+        val keyboardController = LocalSoftwareKeyboardController.current
+        val currentReplyInputExpanded by rememberUpdatedState(onReplyInputExpanded)
+        DisposableEffect(Unit) {
+            onDispose {
+                currentReplyInputExpanded(false)
+                if (replyExpanded) keyboardController?.hide()
+            }
+        }
+        LaunchedEffect(replyExpanded, reply != null) {
+            if (replyExpanded && reply == null) {
+                replyExpanded = false
+                replyText = ""
+                currentReplyInputExpanded(false)
+                keyboardController?.hide()
+            } else if (replyExpanded) {
+                withFrameNanos { }
+                focusRequester.requestFocus()
+                keyboardController?.show()
+            }
+        }
+        if (replyExpanded && reply != null) {
+            val replyLabel = stringResource(R.string.lunaris_bar_reply)
+            val textStyle = MaterialTheme.typography.bodyMedium
+            val canSend = replyText.isNotBlank()
+            Row(
+                modifier =
+                    Modifier.fillMaxWidth()
+                        .background(messageBackground, messageShape)
+                        .padding(end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                BasicTextField(
+                    value = replyText,
+                    onValueChange = { replyText = it },
+                    modifier =
+                        Modifier.weight(1f)
+                            .focusRequester(focusRequester)
+                            .semantics { contentDescription = replyLabel },
+                    textStyle = textStyle.copy(color = colors.content),
+                    cursorBrush = SolidColor(colors.accent),
+                    singleLine = true,
+                    decorationBox = { innerTextField ->
+                        Box(
+                            modifier =
+                                Modifier.fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .padding(start = 16.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
+                            if (replyText.isEmpty()) {
+                                Text(
+                                    text = replyLabel,
+                                    modifier = Modifier.clearAndSetSemantics {},
+                                    style = textStyle,
+                                    color = colors.content.copy(alpha = 0.70f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            innerTextField()
+                        }
+                    },
+                )
+                IconButton(
+                    onClick = {
+                        if (reply.submit(replyText)) {
+                            replyText = ""
+                            replyExpanded = false
+                            onReplyInputExpanded(false)
+                            keyboardController?.hide()
+                        }
+                    },
+                    enabled = canSend,
+                    modifier = Modifier.size(48.dp),
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.Send,
+                        contentDescription = stringResource(R.string.lunaris_bar_send_reply),
+                        modifier = Modifier.size(20.dp),
+                        tint = if (canSend) colors.accent else colors.content.copy(alpha = 0.38f),
+                    )
+                }
+            }
+        }
+        val popupActions =
+            when {
+                reply == null -> model.actions
+                replyExpanded ->
+                    listOf(
+                        PopupActionModel(
+                            label = stringResource(android.R.string.cancel),
+                            onClick = {
+                                replyExpanded = false
+                                onReplyInputExpanded(false)
+                                replyText = ""
+                                keyboardController?.hide()
+                            },
+                        )
+                    ) + model.actions
+                else ->
+                    listOf(
+                        PopupActionModel(
+                            label = reply.label,
+                            onClick = {
+                                replyExpanded = true
+                                onReplyInputExpanded(true)
+                            },
+                        )
+                    ) + model.actions
+            }
+        PopupActionChips(popupActions, colors.accent)
     }
 }
 

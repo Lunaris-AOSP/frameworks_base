@@ -2,12 +2,14 @@ package com.android.systemui.statusbar.featurepods.popups.ui.viewmodel
 
 import android.app.Notification
 import android.app.PendingIntent
+import android.app.RemoteInput
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import android.media.AudioManager
 import android.os.BatteryManager
+import android.os.Bundle
 import android.os.UserHandle
 import android.service.notification.StatusBarNotification
 import com.android.settingslib.fuelgauge.BatteryStatus
@@ -31,6 +33,7 @@ import com.android.systemui.statusbar.featurepods.popups.ui.model.ColorsModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentModel
+import com.android.systemui.statusbar.featurepods.popups.ui.model.NotificationReplyModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.SystemEventKind
 import com.android.systemui.statusbar.policy.KeyguardStateController
 import javax.inject.Inject
@@ -63,6 +66,38 @@ constructor(
         } catch (_: PackageManager.NameNotFoundException) {
             null
         }
+
+    private fun notificationReply(event: IslandEvent.Notification): NotificationReplyModel? {
+        fun canReply(): Boolean =
+            !keyguardStateController.isShowing &&
+                !lockscreenUserManager.isLockscreenPublicMode(event.sbn.userId) &&
+                (event.sbn.userId == UserHandle.USER_ALL ||
+                    lockscreenUserManager.isCurrentProfile(event.sbn.userId))
+        val replyAction = event.replyAction ?: return null
+        val remoteInputs = replyAction.action.remoteInputs ?: return null
+        val remoteInput = remoteInputs.firstOrNull { it.allowFreeFormInput } ?: return null
+        val pendingIntent = replyAction.action.actionIntent ?: return null
+        return NotificationReplyModel(replyAction.label.toString(), isAvailable = ::canReply) { text ->
+            if (text.isBlank() || !canReply()) {
+                return@NotificationReplyModel false
+            }
+            val fillInIntent = Intent().addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+            RemoteInput.addResultsToIntent(
+                remoteInputs,
+                fillInIntent,
+                Bundle().apply { putCharSequence(remoteInput.resultKey, text) },
+            )
+            RemoteInput.setResultsSource(fillInIntent, RemoteInput.SOURCE_FREE_FORM_INPUT)
+            try {
+                pendingIntent.send(context, 0, fillInIntent)
+                true
+            } catch (_: PendingIntent.CanceledException) {
+                false
+            } catch (_: SecurityException) {
+                false
+            }
+        }
+    }
 
     fun toChargingDetails(intent: Intent): List<ChargingDetailModel> {
         val status = BatteryStatus(intent)
@@ -637,6 +672,7 @@ constructor(
                     bluetoothBatteries = bluetoothBatteries,
                     chargingDetails =
                         chargingDetails.takeIf { event is IslandEvent.Charging }.orEmpty(),
+                    reply = (event as? IslandEvent.Notification)?.let(::notificationReply),
                 ),
         )
     }

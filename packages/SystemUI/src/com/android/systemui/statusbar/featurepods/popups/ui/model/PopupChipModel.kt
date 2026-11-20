@@ -80,6 +80,12 @@ data class BluetoothBatteryModel(
 
 data class ChargingDetailModel(val label: String, val value: String, val unit: String)
 
+data class NotificationReplyModel(
+    val label: String,
+    val isAvailable: () -> Boolean = { true },
+    val submit: (String) -> Boolean,
+)
+
 /** Rich popup contents associated with a status bar chip. */
 sealed interface PopupContentModel {
     data class Utility(val card: LunarisBarSettings.Card) : PopupContentModel
@@ -106,6 +112,7 @@ sealed interface PopupContentModel {
         val bluetoothBatteries: List<BluetoothBatteryModel> = emptyList(),
         val chargingDetails: List<ChargingDetailModel> = emptyList(),
         val appIcon: Icon? = null,
+        val reply: NotificationReplyModel? = null,
     ) : PopupContentModel
 
     data object None : PopupContentModel
@@ -169,6 +176,7 @@ sealed class PopupChipModel {
         val sourceNotificationKey: String? = null,
         val dismissNotification: (() -> Unit)? = null,
         val notificationCount: Int? = null,
+        val onNotificationPopupReplyChanged: (Boolean) -> Unit = {},
     ) : PopupChipModel() {
         override val logName = "Shown(id=$chipId, toggled=$isPopupShown)"
     }

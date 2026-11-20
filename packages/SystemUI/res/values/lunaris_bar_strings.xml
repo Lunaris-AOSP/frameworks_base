@@ -20,6 +20,8 @@
     <string name="lunaris_bar_settings">Settings</string>
     <string name="lunaris_bar_answer">Answer</string>
     <string name="lunaris_bar_end_call">End call</string>
+    <string name="lunaris_bar_reply">Reply</string>
+    <string name="lunaris_bar_send_reply">Send reply</string>
     <plurals name="lunaris_bar_notification_count_a11y">
         <item quantity="one">%1$d notification</item>
         <item quantity="other">%1$d notifications</item>
