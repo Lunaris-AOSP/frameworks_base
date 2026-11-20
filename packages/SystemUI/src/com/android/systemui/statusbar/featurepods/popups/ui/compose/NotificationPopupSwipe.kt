@@ -35,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.util.VelocityTracker
@@ -55,6 +56,7 @@ internal class NotificationPopupSwipe(
     private val sideTravel: Float,
     private val upTravel: Float,
     val dismiss: () -> Unit,
+    val onTouchChanged: (Boolean) -> Unit,
 ) {
     var offset by mutableStateOf(Offset.Zero)
     private var returnJob: Job? = null
@@ -96,12 +98,14 @@ internal fun rememberNotificationPopupSwipe(
     chipId: PopupChipId?,
     visible: Boolean,
     onDismiss: () -> Unit,
+    onTouchChanged: (Boolean) -> Unit,
 ): NotificationPopupSwipe? {
     if (chipId == null) return null
     val settings = LocalLunarisBarState.current.settings
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
     val currentDismiss by rememberUpdatedState(onDismiss)
+    val currentTouchChanged by rememberUpdatedState(onTouchChanged)
     val swipe = remember(chipId, density, settings.isReducedMotion, settings.animationSpeed) {
         NotificationPopupSwipe(
             scope,
@@ -110,6 +114,7 @@ internal fun rememberNotificationPopupSwipe(
             with(density) { 100.dp.toPx() },
             with(density) { 80.dp.toPx() },
             dismiss = { currentDismiss() },
+            onTouchChanged = { currentTouchChanged(it) },
         )
     }
     LaunchedEffect(swipe, visible) {
@@ -128,6 +133,19 @@ internal fun Modifier.notificationPopupSwipe(
     if (swipe == null || !visible) return this
     val currentFrame by rememberUpdatedState(frame)
     return pointerInput(swipe) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            if (!currentFrame.contains(down.position)) return@awaitEachGesture
+            swipe.onTouchChanged(true)
+            try {
+                do {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                } while (event.changes.any { it.pressed })
+            } finally {
+                swipe.onTouchChanged(false)
+            }
+        }
+    }.pointerInput(swipe) {
         val sideThreshold = 48.dp.toPx()
         val upThreshold = 32.dp.toPx()
         val flickDistance = 12.dp.toPx()
@@ -138,11 +156,12 @@ internal fun Modifier.notificationPopupSwipe(
             var horizontal = false
             var displacement = Offset.Zero
             var startOffset = Offset.Zero
+            var slopOffset = Offset.Zero
             fun updateSwipe() {
-                val offset = startOffset + displacement
+                val drag = displacement - slopOffset
                 swipe.offset =
-                    if (horizontal) Offset(offset.x, 0f)
-                    else Offset(0f, offset.y.coerceAtMost(0f))
+                    if (horizontal) startOffset + Offset(drag.x, 0f)
+                    else startOffset.copy(y = (startOffset.y + drag.y).coerceAtMost(0f))
             }
             val velocityTracker = VelocityTracker().apply {
                 addPointerInputChange(down)
@@ -152,7 +171,11 @@ internal fun Modifier.notificationPopupSwipe(
                     horizontal = abs(overSlop.x) >= abs(overSlop.y)
                     if (horizontal || overSlop.y < 0f) {
                         startOffset = swipe.startDrag()
-                        displacement = change.position - down.position
+                        displacement =
+                            if (change.id == down.id) change.position - down.position
+                            else overSlop
+                        slopOffset = displacement - overSlop
+                        if (change.id != down.id) velocityTracker.resetTracking()
                         velocityTracker.addPointerInputChange(change)
                         updateSwipe()
                         change.consume()

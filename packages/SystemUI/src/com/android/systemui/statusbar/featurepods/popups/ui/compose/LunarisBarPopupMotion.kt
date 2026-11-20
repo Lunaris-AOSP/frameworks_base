@@ -69,13 +69,19 @@ internal fun LunarisBarPopupMotion(
     allowOutsideInteraction: Boolean = false,
     notificationChipId: PopupChipId? = null,
     onNotificationSwipeDismiss: () -> Unit = {},
+    onNotificationTouchChanged: (Boolean) -> Unit = {},
     secondaryContent: @Composable () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     val state = LocalLunarisBarState.current
     val notification = notificationChipId != null
     val swipe =
-        rememberNotificationPopupSwipe(notificationChipId, isVisible, onNotificationSwipeDismiss)
+        rememberNotificationPopupSwipe(
+            notificationChipId,
+            isVisible,
+            onNotificationSwipeDismiss,
+            onNotificationTouchChanged,
+        )
     if (state.alternativeAnimation && !state.settings.isReducedMotion) {
         IslandPopupMorph(
             isVisible,

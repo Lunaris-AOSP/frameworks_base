@@ -197,6 +197,7 @@ constructor(
         autoPopupJob = null
         if (currentShownPopupChipId != id) {
             replyingNotificationPopupId = null
+            touchedNotificationPopupId = null
             systemEventChips.chips
                 .firstOrNull { it.chipId == currentShownPopupChipId }
                 ?.onPopupHidden
@@ -209,6 +210,7 @@ constructor(
     /** The ID of the current chip that is showing its popup, or `null` if no chip is shown. */
     private var currentShownPopupChipId by mutableStateOf<PopupChipId?>(null)
     private var replyingNotificationPopupId by mutableStateOf<PopupChipId?>(null)
+    private var touchedNotificationPopupId by mutableStateOf<PopupChipId?>(null)
 
     private val incomingPopupChipBundle: PopupChipBundle by derivedStateOf {
         PopupChipBundle(
@@ -396,6 +398,13 @@ constructor(
                         replyingNotificationPopupId = null
                     }
                 },
+                onNotificationPopupTouchChanged = { touching ->
+                    if (touching && currentShownPopupChipId == chip.chipId) {
+                        touchedNotificationPopupId = chip.chipId
+                    } else if (!touching && touchedNotificationPopupId == chip.chipId) {
+                        touchedNotificationPopupId = null
+                    }
+                },
             )
         }
     }
@@ -561,6 +570,7 @@ constructor(
                             .firstOrNull {
                                 it.chipId == currentShownPopupChipId &&
                                     it.chipId != replyingNotificationPopupId &&
+                                    it.chipId != touchedNotificationPopupId &&
                                     it.popupContent.isNotificationPopup
                             }
                             ?.let { Triple(it.chipId, it.autoPopupRequest, it.autoPopupDurationMs) }
@@ -570,7 +580,8 @@ constructor(
                             delay(popup.third)
                             if (
                                 currentShownPopupChipId == popup.first &&
-                                    replyingNotificationPopupId != popup.first
+                                    replyingNotificationPopupId != popup.first &&
+                                    touchedNotificationPopupId != popup.first
                             ) {
                                 showPopup(null)
                             }

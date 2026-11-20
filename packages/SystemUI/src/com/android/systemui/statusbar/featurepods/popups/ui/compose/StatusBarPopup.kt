@@ -196,6 +196,7 @@ private fun LunarisBarPopupWindow(
             allowOutsideInteraction = notification,
             notificationChipId = viewModel.chipId.takeIf { notification },
             onNotificationSwipeDismiss = dismissNotification,
+            onNotificationTouchChanged = viewModel.onNotificationPopupTouchChanged,
             fastEnter =
                 (viewModel.popupContent as? PopupContentModel.SystemEvent)?.kind ==
                     SystemEventKind.Unlock,
