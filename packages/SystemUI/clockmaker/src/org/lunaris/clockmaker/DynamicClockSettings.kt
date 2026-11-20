@@ -83,6 +83,7 @@ data class ClockLayoutProfile(
             "rotation" to "lock_screen_custom_clock_rotation",
             "tiltX" to "lock_screen_custom_clock_tilt_x",
             "tiltY" to "lock_screen_custom_clock_tilt_y",
+            "parallaxIntensity" to ClockParallaxSettings.INTENSITY,
             "glassIntensity" to ClockGlass.INTENSITY_SETTING,
             "glassLift" to ClockGlass.LIFT_SETTING,
             "gradientStart" to "lock_screen_custom_clock_gradient_color_start",
@@ -99,6 +100,7 @@ data class ClockLayoutProfile(
             "albumArtColour" to "lock_screen_custom_clock_album_art_color",
             "wobbleOnCharge" to "lock_screen_custom_clock_wobble_on_charge",
             "weather" to "custom_clock_weather",
+            "parallaxEnabled" to ClockParallaxSettings.ENABLED,
         )
 
         fun parse(value: String?, small: Boolean): ClockLayoutProfile? = runCatching {

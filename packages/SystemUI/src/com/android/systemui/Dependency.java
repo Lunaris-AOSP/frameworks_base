@@ -33,6 +33,7 @@ import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.fragments.FragmentService;
+import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.media.NotificationMediaManager;
 import com.android.systemui.model.SysUiState;
 import com.android.systemui.navigationbar.NavigationBarController;
@@ -134,6 +135,7 @@ public class Dependency {
     @Inject Lazy<BroadcastDispatcher> mBroadcastDispatcher;
     @Inject Lazy<BluetoothController> mBluetoothController;
     @Inject Lazy<KeyguardStateController> mKeyguardStateController;
+    @Inject Lazy<WakefulnessLifecycle> mWakefulnessLifecycle;
     @Inject Lazy<KeyguardUpdateMonitor> mKeyguardUpdateMonitor;
     @Inject Lazy<DeviceProvisionedController> mDeviceProvisionedController;
     @Inject Lazy<PluginManager> mPluginManager;
@@ -196,6 +198,7 @@ public class Dependency {
         mProviders.put(BroadcastDispatcher.class, mBroadcastDispatcher::get);
         mProviders.put(BluetoothController.class, mBluetoothController::get);
         mProviders.put(KeyguardStateController.class, mKeyguardStateController::get);
+        mProviders.put(WakefulnessLifecycle.class, mWakefulnessLifecycle::get);
         mProviders.put(KeyguardUpdateMonitor.class, mKeyguardUpdateMonitor::get);
         mProviders.put(DeviceProvisionedController.class, mDeviceProvisionedController::get);
         mProviders.put(PluginManager.class, mPluginManager::get);

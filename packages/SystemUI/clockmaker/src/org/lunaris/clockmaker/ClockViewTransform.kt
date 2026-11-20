@@ -38,6 +38,10 @@ object ClockViewTransform {
     }
 
     fun applyClockTransform(view: View, rotation: Int, tiltX: Int, tiltY: Int) {
+        applyClockTransform(view, rotation, tiltX.toFloat(), tiltY.toFloat())
+    }
+
+    fun applyClockTransform(view: View, rotation: Int, tiltX: Float, tiltY: Float) {
         view.pivotX = view.width / 2f
         view.pivotY = (view as? ClockDesignView)?.transformPivotY ?: (view.height / 2f)
         if (view.width > 0 && view.height > 0) {
@@ -45,8 +49,8 @@ object ClockViewTransform {
                 view.resources.displayMetrics.density, view is ClockDesignView)
         }
         view.rotation = rotation.coerceIn(-180, 180).toFloat()
-        view.rotationX = tiltX.coerceIn(-75, 75).toFloat()
-        view.rotationY = tiltY.coerceIn(-75, 75).toFloat()
+        view.rotationX = tiltX.coerceIn(-75f, 75f)
+        view.rotationY = tiltY.coerceIn(-75f, 75f)
     }
 
     fun toGlobal(view: View, matrix: Matrix, excludeAnimationOf: View? = null,

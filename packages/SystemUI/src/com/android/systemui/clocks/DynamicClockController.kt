@@ -272,7 +272,10 @@ internal class DynamicClockController(private val host: ClockStyle) {
 
     private fun applyFrame() {
         host.setBaselineClockAlpha(if (enabled) dozeAmount else 1f)
-        if (!enabled) return
+        if (!enabled) {
+            host.configureClockParallax(null, null, 0f, false)
+            return
+        }
         val dynamicAlpha = 1f - dozeAmount
         val small = smallClock
         val large = largeClock
@@ -307,6 +310,7 @@ internal class DynamicClockController(private val host: ClockStyle) {
                     (nativeClockAlphas[it] ?: 1f) * dozeAmount * host.alpha else 0f
             }
         } else restoreNativeClock()
+        host.configureClockParallax(small, large, fraction, isAnimating)
     }
 
     private fun updateNativeClockHeight() {

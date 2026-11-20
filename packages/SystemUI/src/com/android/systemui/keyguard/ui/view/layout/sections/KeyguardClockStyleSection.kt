@@ -68,6 +68,7 @@ constructor(
         clockStyleView = (LayoutInflater.from(context)
             .inflate(R.layout.keyguard_clock_style, constraintLayout, false) as ClockStyle).apply {
             id = installedClockId
+            setClockSwitchingAllowed(false)
             clipChildren = false
             clipToPadding = false
             onDynamicClockLayoutChanged = {

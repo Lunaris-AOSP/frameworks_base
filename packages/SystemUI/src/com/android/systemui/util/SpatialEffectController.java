@@ -19,31 +19,17 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.Context;
-import android.hardware.Sensor;
-import android.hardware.SensorEvent;
-import android.hardware.SensorEventListener;
-import android.hardware.SensorManager;
 import android.util.DisplayMetrics;
 import android.view.Choreographer;
-import android.view.Surface;
 import android.view.View;
-import android.view.WindowManager;
 
 import com.android.systemui.Dependency;
 import com.android.systemui.tuner.TunerService;
 
-public final class SpatialEffectController implements SensorEventListener {
+public final class SpatialEffectController implements ParallaxTiltSensor.Listener {
 
     private static final String SPATIAL_SENSITIVITY_KEY = "system:depth_wallpaper_spatial_sensitivity";
 
-    private static final int SENSOR_DELAY = SensorManager.SENSOR_DELAY_GAME;
-
-    private static final float LOW_PASS_ALPHA = 0.15f;
-    private static final float STABLE_SPEED_THRESHOLD = 0.08f;
-    private static final float ADAPT_ALPHA_STABLE = 0.05f;
-    private static final float ADAPT_ALPHA_MOVING = 0.003f;
-    private static final float DEAD_ZONE_DEGREES = 0.4f;
-    private static final float MAX_TILT_DEGREES = 18.0f;
     private static final float MAX_X_DP = 24f;
     private static final float MAX_Y_DP = 18f;
     private static final float BACKGROUND_MULTIPLIER = 0.50f;
@@ -53,14 +39,8 @@ public final class SpatialEffectController implements SensorEventListener {
     private static final float SETTLE_THRESHOLD_PX = 0.25f;
     private static final long RESET_DURATION_MS = 300;
 
-    private static final int SENSOR_MODE_GAME_ROTATION_VECTOR = 0;
-    private static final int SENSOR_MODE_ROTATION_VECTOR = 1;
-    private static final int SENSOR_MODE_ACCELEROMETER = 2;
-    private static final int SENSOR_MODE_NONE = 3;
-
     private final Context mContext;
-    private final SensorManager mSensorManager;
-    private final WindowManager mWindowManager;
+    private final ParallaxTiltSensor mTiltSensor;
     private final TunerService mTunerService;
     private boolean mTunableRegistered;
 
@@ -73,26 +53,9 @@ public final class SpatialEffectController implements SensorEventListener {
     private float mSpatialScale = 1f;
     private final int[] mParentLocation = new int[2];
 
-    private Sensor mActiveSensor;
-    private int mSensorMode = SENSOR_MODE_NONE;
-
     private boolean mActive = false;
     private boolean mSensorRegistered = false;
     private boolean mFrameScheduled = false;
-
-    private final float[] mRotationMatrix = new float[9];
-    private final float[] mOrientationOut = new float[3];
-
-    private float mReferenceTiltXDeg = 0f;
-    private float mReferenceTiltYDeg = 0f;
-    private float mLastTiltXDeg = 0f;
-    private float mLastTiltYDeg = 0f;
-    private boolean mFirstSampleReady = false;
-
-    private float mFilteredTiltXDeg = 0f;
-    private float mFilteredTiltYDeg = 0f;
-
-    private int mCachedDisplayRotation = Surface.ROTATION_0;
 
     private int mSensitivityPercent = 100;
     private float mSensitivityScale = 0.50f;
@@ -145,12 +108,10 @@ public final class SpatialEffectController implements SensorEventListener {
 
     public SpatialEffectController(Context context) {
         mContext = context.getApplicationContext();
-        mSensorManager = (SensorManager) mContext.getSystemService(Context.SENSOR_SERVICE);
-        mWindowManager = (WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE);
+        mTiltSensor = ParallaxTiltSensor.getInstance(mContext);
         mTunerService = Dependency.get(TunerService.class);
         updateSensitivityScale();
         recalculateMaxOffsets();
-        selectBestSensor();
     }
 
     private void updateSensitivityScale() {
@@ -188,7 +149,7 @@ public final class SpatialEffectController implements SensorEventListener {
     }
 
     public void onDisplayRotationChanged(int rotation) {
-        mCachedDisplayRotation = rotation;
+        mTiltSensor.onDisplayRotationChanged(rotation);
     }
 
     public void setActive(boolean active) {
@@ -205,7 +166,6 @@ public final class SpatialEffectController implements SensorEventListener {
             mTargetTransX = 0f;
             mTargetTransY = 0f;
             applyTranslations();
-            refreshCachedDisplayRotation();
             mSpatialScale = OVERSCAN_SCALE;
             applyScale();
             startSensing();
@@ -234,52 +194,14 @@ public final class SpatialEffectController implements SensorEventListener {
         mSubjectView = null;
     }
 
-    private void selectBestSensor() {
-        if (mSensorManager == null) {
-            mActiveSensor = null;
-            mSensorMode = SENSOR_MODE_NONE;
-            return;
-        }
-        Sensor gameRv = mSensorManager.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR);
-        if (gameRv != null) {
-            mActiveSensor = gameRv;
-            mSensorMode = SENSOR_MODE_GAME_ROTATION_VECTOR;
-            return;
-        }
-        Sensor rv = mSensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
-        if (rv != null) {
-            mActiveSensor = rv;
-            mSensorMode = SENSOR_MODE_ROTATION_VECTOR;
-            return;
-        }
-        Sensor accel = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-        if (accel != null) {
-            mActiveSensor = accel;
-            mSensorMode = SENSOR_MODE_ACCELEROMETER;
-            return;
-        }
-        mActiveSensor = null;
-        mSensorMode = SENSOR_MODE_NONE;
-    }
-
     private void startSensing() {
-        if (mSensorRegistered || mSensorMode == SENSOR_MODE_NONE || mActiveSensor == null) {
-            return;
-        }
-        boolean registered = mSensorManager.registerListener(this, mActiveSensor, SENSOR_DELAY);
-        if (registered) {
-            mSensorRegistered = true;
-            mFirstSampleReady = false;
-        }
+        if (!mSensorRegistered) mSensorRegistered = mTiltSensor.addListener(this);
     }
 
     private void stopSensing() {
-        if (!mSensorRegistered || mSensorManager == null) {
-            return;
-        }
-        mSensorManager.unregisterListener(this);
+        if (!mSensorRegistered) return;
+        mTiltSensor.removeListener(this);
         mSensorRegistered = false;
-        mFirstSampleReady = false;
     }
 
     private void stopSensingAndReset() {
@@ -353,16 +275,6 @@ public final class SpatialEffectController implements SensorEventListener {
         view.setScaleY(scale);
     }
 
-    private void refreshCachedDisplayRotation() {
-        if (mWindowManager == null) {
-            return;
-        }
-        try {
-            mCachedDisplayRotation = mWindowManager.getDefaultDisplay().getRotation();
-        } catch (Exception ignored) {
-        }
-    }
-
     private void recalculateMaxOffsets() {
         DisplayMetrics dm = mContext.getResources().getDisplayMetrics();
         mMaxXPx = MAX_X_DP * dm.density;
@@ -370,123 +282,33 @@ public final class SpatialEffectController implements SensorEventListener {
     }
 
     @Override
-    public void onSensorChanged(SensorEvent event) {
+    public void onTiltChanged(float normalizedX, float normalizedY) {
         if (!mActive || mResetAnimator != null) {
             return;
         }
         if (mBackgroundView == null && mSubjectView == null) {
             return;
         }
-        float rawTiltXDeg;
-        float rawTiltYDeg;
-        if (mSensorMode == SENSOR_MODE_GAME_ROTATION_VECTOR
-                || mSensorMode == SENSOR_MODE_ROTATION_VECTOR) {
-            SensorManager.getRotationMatrixFromVector(mRotationMatrix, event.values);
-            SensorManager.getOrientation(mRotationMatrix, mOrientationOut);
-            rawTiltXDeg = extractTiltX(mOrientationOut);
-            rawTiltYDeg = extractTiltY(mOrientationOut);
-        } else {
-            rawTiltXDeg = extractAccelTiltX(event.values);
-            rawTiltYDeg = extractAccelTiltY(event.values);
-        }
-        if (!mFirstSampleReady) {
-            mFilteredTiltXDeg = rawTiltXDeg;
-            mFilteredTiltYDeg = rawTiltYDeg;
-            mReferenceTiltXDeg = rawTiltXDeg;
-            mReferenceTiltYDeg = rawTiltYDeg;
-            mLastTiltXDeg = rawTiltXDeg;
-            mLastTiltYDeg = rawTiltYDeg;
-            mFirstSampleReady = true;
-            return;
-        }
-        mFilteredTiltXDeg += LOW_PASS_ALPHA * (rawTiltXDeg - mFilteredTiltXDeg);
-        mFilteredTiltYDeg += LOW_PASS_ALPHA * (rawTiltYDeg - mFilteredTiltYDeg);
-
-        float speedX = Math.abs(mFilteredTiltXDeg - mLastTiltXDeg);
-        float speedY = Math.abs(mFilteredTiltYDeg - mLastTiltYDeg);
-        mLastTiltXDeg = mFilteredTiltXDeg;
-        mLastTiltYDeg = mFilteredTiltYDeg;
-
-        float speed = (float) Math.hypot(speedX, speedY);
-        float adaptAlpha = speed < STABLE_SPEED_THRESHOLD ? ADAPT_ALPHA_STABLE : ADAPT_ALPHA_MOVING;
-
-        mReferenceTiltXDeg += adaptAlpha * (mFilteredTiltXDeg - mReferenceTiltXDeg);
-        mReferenceTiltYDeg += adaptAlpha * (mFilteredTiltYDeg - mReferenceTiltYDeg);
-
-        float deltaTiltX = mFilteredTiltXDeg - mReferenceTiltXDeg;
-        float deltaTiltY = mFilteredTiltYDeg - mReferenceTiltYDeg;
-
-        float effectiveX = Math.abs(deltaTiltX) < DEAD_ZONE_DEGREES
-                ? 0f
-                : (deltaTiltX - Math.signum(deltaTiltX) * DEAD_ZONE_DEGREES);
-        float effectiveY = Math.abs(deltaTiltY) < DEAD_ZONE_DEGREES
-                ? 0f
-                : (deltaTiltY - Math.signum(deltaTiltY) * DEAD_ZONE_DEGREES);
-
-        float normalizedX = clamp(effectiveX / MAX_TILT_DEGREES);
-        float normalizedY = clamp(effectiveY / MAX_TILT_DEGREES);
-
         float effMaxX = mMaxXPx * mSensitivityScale;
         float effMaxY = mMaxYPx * mSensitivityScale;
 
         mTargetTransX = clamp(normalizedX * effMaxX, -mMaxXPx, mMaxXPx);
         mTargetTransY = clamp(normalizedY * effMaxY, -mMaxYPx, mMaxYPx);
 
-        scheduleFrame();
-    }
-
-    private float extractTiltX(float[] orientation) {
-        switch (mCachedDisplayRotation) {
-            case Surface.ROTATION_90:
-                return (float) Math.toDegrees(-orientation[1]);
-            case Surface.ROTATION_180:
-                return (float) Math.toDegrees(-orientation[2]);
-            case Surface.ROTATION_270:
-                return (float) Math.toDegrees(orientation[1]);
-            default:
-                return (float) Math.toDegrees(orientation[2]);
+        if (Math.abs(mTargetTransX * BACKGROUND_MULTIPLIER - mBgCurrentTransX)
+                    > SETTLE_THRESHOLD_PX
+                || Math.abs(mTargetTransY * BACKGROUND_MULTIPLIER - mBgCurrentTransY)
+                    > SETTLE_THRESHOLD_PX
+                || Math.abs(mTargetTransX * FOREGROUND_MULTIPLIER - mFgCurrentTransX)
+                    > SETTLE_THRESHOLD_PX
+                || Math.abs(mTargetTransY * FOREGROUND_MULTIPLIER - mFgCurrentTransY)
+                    > SETTLE_THRESHOLD_PX) {
+            scheduleFrame();
         }
-    }
-
-    private float extractTiltY(float[] orientation) {
-        switch (mCachedDisplayRotation) {
-            case Surface.ROTATION_90:
-                return (float) Math.toDegrees(orientation[2]);
-            case Surface.ROTATION_180:
-                return (float) Math.toDegrees(-orientation[1]);
-            case Surface.ROTATION_270:
-                return (float) Math.toDegrees(-orientation[2]);
-            default:
-                return (float) Math.toDegrees(orientation[1]);
-        }
-    }
-
-    private float extractAccelTiltX(float[] values) {
-        float ax = values[0];
-        float az = values[2];
-        float norm = (float) Math.sqrt(ax * ax + az * az);
-        if (norm < 0.01f) return 0f;
-        return (float) Math.toDegrees(Math.asin(clamp(ax / norm)));
-    }
-
-    private float extractAccelTiltY(float[] values) {
-        float ay = values[1];
-        float az = values[2];
-        float norm = (float) Math.sqrt(ay * ay + az * az);
-        if (norm < 0.01f) return 0f;
-        return (float) Math.toDegrees(Math.asin(clamp(-ay / norm)));
-    }
-
-    private static float clamp(float v) {
-        return Math.max(-1f, Math.min(1f, v));
     }
 
     private static float clamp(float v, float min, float max) {
         return Math.max(min, Math.min(max, v));
-    }
-
-    @Override
-    public void onAccuracyChanged(Sensor sensor, int accuracy) {
     }
 
     private void scheduleFrame() {

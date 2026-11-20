@@ -29,6 +29,7 @@ import android.graphics.Typeface
 import android.media.session.PlaybackState
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.os.UserHandle
 import android.os.Vibrator
 import android.provider.Settings
@@ -52,6 +53,7 @@ import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintSet
 import androidx.core.graphics.ColorUtils
 import com.android.systemui.Dependency
+import com.android.systemui.keyguard.WakefulnessLifecycle
 import com.android.systemui.media.MediaSessionManager
 import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.plugins.statusbar.StatusBarStateController
@@ -81,6 +83,7 @@ import org.lunaris.clockmaker.ClockGlass
 import org.lunaris.clockmaker.ClockGlassController
 import org.lunaris.clockmaker.ClockGlassStyle
 import org.lunaris.clockmaker.ClockPreviewGeometry
+import org.lunaris.clockmaker.ClockParallaxSettings
 import org.lunaris.clockmaker.ClockViewTransform
 import org.lunaris.clockmaker.ClockLayoutProfile
 import org.lunaris.clockmaker.DynamicClockSettings
@@ -102,10 +105,14 @@ class ClockStyle @JvmOverloads constructor(
     private var layoutProfile: ClockLayoutProfile? = null
     private var stockClockController: ClockController? = null
     private var dynamicClockController: DynamicClockController? = null
+    private var parallaxController: ClockParallaxController? = null
+    private var parallaxHost: ClockStyle? = null
     internal var onDynamicClockLayoutChanged: (() -> Unit)? = null
     private val tuningValues = mutableMapOf<String, String?>()
     private var profileGeneration = 0
     private var layoutClockInteractive = true
+    private var parallaxSwitchingAllowed = true
+    private var parallaxStateManaged = false
     private val updateDynamicLayout = Runnable {
         if (!isHomeScreenClock && !isDynamicFace) {
             val controller = dynamicClockController ?: DynamicClockController(this).also {
@@ -128,6 +135,8 @@ class ClockStyle @JvmOverloads constructor(
         Dependency.get(StatusBarStateController::class.java) as SysuiStatusBarStateController
     private val keyguardStateController: KeyguardStateController =
         Dependency.get(KeyguardStateController::class.java)
+    private val wakefulnessLifecycle = Dependency.get(WakefulnessLifecycle::class.java)
+    private val powerManager = context.getSystemService(PowerManager::class.java)
     private val handler = Handler(Looper.getMainLooper())
     private val layoutFontObserver = object : ContentObserver(handler) {
         override fun onChange(selfChange: Boolean) {
@@ -165,6 +174,10 @@ class ClockStyle @JvmOverloads constructor(
     private var homeClockMarginStart: Int? = null
     private var clockTiltX = DEFAULT_TILT
     private var clockTiltY = DEFAULT_TILT
+    private var parallaxEnabled = false
+    private var parallaxIntensityPercent = ClockParallaxSettings.DEFAULT_INTENSITY
+    private var parallaxRotationX = 0f
+    private var parallaxRotationY = 0f
     private var clockRotation = DEFAULT_ROTATION
 
     private var gradientEnabled = false
@@ -191,6 +204,8 @@ class ClockStyle @JvmOverloads constructor(
 
     private var lastUpdateTimeMillis = 0L
     private var isDozing = false
+    private var screenInteractive = false
+    private var parallaxDozeAmount = 0f
     private var callbacksRegistered = false
 
     private var currentShiftX = 0
@@ -221,7 +236,15 @@ class ClockStyle @JvmOverloads constructor(
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
-                Intent.ACTION_SCREEN_ON -> forceTimeUpdate()
+                Intent.ACTION_SCREEN_ON -> {
+                    screenInteractive = powerManager?.isInteractive == true
+                    updateClockParallax()
+                    forceTimeUpdate()
+                }
+                Intent.ACTION_SCREEN_OFF -> {
+                    screenInteractive = false
+                    updateClockParallax()
+                }
                 Intent.ACTION_TIME_CHANGED,
                 Intent.ACTION_TIMEZONE_CHANGED,
                 Intent.ACTION_LOCALE_CHANGED -> forceTimeUpdate()
@@ -267,6 +290,7 @@ class ClockStyle @JvmOverloads constructor(
     private val statusBarStateListener = object : StatusBarStateController.StateListener {
         override fun onStateChanged(newState: Int) {
             dynamicClockController?.onHostVisibilityChanged()
+            updateClockParallax()
             if (newState == StatusBarState.KEYGUARD) handler.post { updatePreviewGeometry() }
         }
 
@@ -278,12 +302,33 @@ class ClockStyle @JvmOverloads constructor(
 
         override fun onDozeAmountChanged(linear: Float, eased: Float) {
             if (isHomeScreenClock || isDynamicFace) return
+            parallaxDozeAmount = maxOf(linear, eased).coerceIn(0f, 1f)
+            updateClockParallax()
             dynamicClockController?.onDozeAmountChanged(eased)
             if (currentClockView !is ClockDesignView) return
             (currentClockView as ClockDesignView).setAodProgress(eased)
             applyClockAlpha()
             applyClockShadow()
             applyClockScale()
+        }
+    }
+
+    private val parallaxKeyguardCallback = object : KeyguardStateController.Callback {
+        override fun onKeyguardShowingChanged() = updateClockParallax()
+        override fun onPrimaryBouncerShowingChanged() = updateClockParallax()
+        override fun onKeyguardFadingAwayChanged() = updateClockParallax()
+        override fun onKeyguardGoingAwayChanged() = updateClockParallax()
+    }
+
+    private val parallaxWakefulnessObserver = object : WakefulnessLifecycle.Observer {
+        override fun onStartedGoingToSleep() {
+            screenInteractive = false
+            updateClockParallax()
+        }
+
+        override fun onFinishedWakingUp() {
+            screenInteractive = powerManager?.isInteractive == true
+            updateClockParallax()
         }
     }
 
@@ -337,13 +382,49 @@ class ClockStyle @JvmOverloads constructor(
         get() = dynamicClockController?.isLayoutActive == true
     internal val layoutClockCenterY: Float
         get() = (clockContainer?.top ?: 0) + (currentClockView?.height ?: 0) / 2f
+    internal val canRenderParallax: Boolean
+        get() = parallaxEnabled && !isHomeScreenClock && parallaxIntensityPercent > 0 &&
+            clockOpacity > 0 && currentClockView != null
+    internal val parallaxIntensity: Float
+        get() = if (parallaxEnabled) parallaxIntensityPercent / 100f else 0f
+    internal val isClockParallaxSuspended: Boolean
+        get() = !isAttachedToWindow || !screenInteractive || isDozing || parallaxDozeAmount > 0f
+    internal val canSenseClockParallax: Boolean
+        get() = !isHomeScreenClock && !isDynamicFace && !isClockParallaxSuspended &&
+            parallaxSwitchingAllowed && isClockSwitchingVisible && alpha > 0f &&
+            (parallaxStateManaged || keyguardStateController.isShowing &&
+                !keyguardStateController.isOccluded && !keyguardStateController.isPrimaryBouncerShowing &&
+                !keyguardStateController.isKeyguardGoingAway && !keyguardStateController.isKeyguardFadingAway)
+
+    internal fun configureClockParallax(small: ClockStyle?, large: ClockStyle?,
+        fraction: Float, transitioning: Boolean) {
+        parallaxController?.configure(small, large, fraction, transitioning)
+    }
+
+    private fun updateClockParallax() {
+        if (isDynamicFace) parallaxHost?.updateClockParallax()
+        else parallaxController?.updateState()
+    }
+
+    internal fun setParallaxRotation(rotationX: Float, rotationY: Float) {
+        if (parallaxRotationX == rotationX && parallaxRotationY == rotationY) return
+        parallaxRotationX = rotationX
+        parallaxRotationY = rotationY
+        if (parallaxEnabled && !isHomeScreenClock && isShown) {
+            currentClockView?.rotationX = rotationX
+            currentClockView?.rotationY = rotationY
+        }
+    }
 
     fun setNotificationPresence(present: Boolean) {
         dynamicClockController?.setNotificationPresence(present)
     }
 
     fun setClockSwitchingAllowed(allowed: Boolean) {
+        parallaxStateManaged = true
+        parallaxSwitchingAllowed = allowed
         dynamicClockController?.setSwitchingAllowed(allowed)
+        updateClockParallax()
     }
 
     internal fun applyNativeClockConstraints(constraints: ConstraintSet, clock: ClockController?) {
@@ -354,6 +435,7 @@ class ClockStyle @JvmOverloads constructor(
         val clock = LayoutInflater.from(context).inflate(R.layout.keyguard_clock_style, this, false) as ClockStyle
         clock.id = View.generateViewId()
         clock.isDynamicFace = true
+        clock.parallaxHost = this
         clock.layoutProfile = profile
         clock.visibility = View.INVISIBLE
         clock.clipChildren = false
@@ -400,11 +482,14 @@ class ClockStyle @JvmOverloads constructor(
     override fun onVisibilityChanged(changedView: View, visibility: Int) {
         super.onVisibilityChanged(changedView, visibility)
         dynamicClockController?.onHostVisibilityChanged()
+        updateClockParallax()
+        if (visibility == View.VISIBLE && parallaxEnabled) applyClockTransform()
     }
 
     override fun onWindowVisibilityChanged(visibility: Int) {
         super.onWindowVisibilityChanged(visibility)
         dynamicClockController?.onHostVisibilityChanged()
+        updateClockParallax()
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -598,6 +683,13 @@ class ClockStyle @JvmOverloads constructor(
             HomeClockProvider.observeKeyguard()
         }
         isDozing = !isHomeScreenClock && !isDynamicFace && statusBarStateController.isDozing
+        screenInteractive = powerManager?.isInteractive == true
+        parallaxDozeAmount = if (isHomeScreenClock || isDynamicFace) 0f
+            else maxOf(statusBarStateController.dozeAmount, statusBarStateController.interpolatedDozeAmount)
+                .coerceIn(0f, 1f)
+        if (!isHomeScreenClock && !isDynamicFace) {
+            parallaxController = ClockParallaxController(this)
+        }
         textGlass.wallpaperFlags = if (isHomeScreenClock) WallpaperManager.FLAG_SYSTEM
             else WallpaperManager.FLAG_LOCK
 
@@ -616,6 +708,10 @@ class ClockStyle @JvmOverloads constructor(
                 updateDynamicLayout.run()
             }
             statusBarStateController.addCallback(statusBarStateListener)
+            if (!isHomeScreenClock) {
+                keyguardStateController.addCallback(parallaxKeyguardCallback)
+                wakefulnessLifecycle.addObserver(parallaxWakefulnessObserver)
+            }
         } else if (layoutProfile?.font != null) {
             context.contentResolver.registerContentObserver(ClockFonts.uri, true, layoutFontObserver, UserHandle.USER_ALL)
             applyLayoutFont()
@@ -634,6 +730,7 @@ class ClockStyle @JvmOverloads constructor(
 
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
             addAction(Intent.ACTION_TIME_TICK)
             addAction(Intent.ACTION_TIME_CHANGED)
             addAction(Intent.ACTION_TIMEZONE_CHANGED)
@@ -644,10 +741,14 @@ class ClockStyle @JvmOverloads constructor(
         }
         context.registerReceiver(screenReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         callbacksRegistered = true
+        updateClockParallax()
     }
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
+        parallaxController?.destroy()
+        parallaxController = null
+        setParallaxRotation(0f, 0f)
         lockscreenClocks.remove(this)
         viewTreeObserver.removeOnGlobalLayoutListener(previewGeometryListener)
         viewTreeObserver.removeOnPreDrawListener(previewAppearanceListener)
@@ -671,6 +772,10 @@ class ClockStyle @JvmOverloads constructor(
         }
 
         statusBarStateController.removeCallback(statusBarStateListener)
+        if (!isHomeScreenClock && !isDynamicFace) {
+            keyguardStateController.removeCallback(parallaxKeyguardCallback)
+            wakefulnessLifecycle.removeObserver(parallaxWakefulnessObserver)
+        }
         tunerService.removeTunable(this)
         runCatching { MediaSessionManager.get().removeListener(mediaDataListener) }
         handler.removeCallbacks(burnInProtectionRunnable)
@@ -721,6 +826,7 @@ class ClockStyle @JvmOverloads constructor(
                 clockOpacity = TunerService.parseInteger(newValue, DEFAULT_OPACITY)
                     .coerceIn(0, 100)
                 applyClockAlpha()
+                updateClockParallax()
             }
             CLOCK_SHADOW_ENABLED_KEY -> {
                 shadowEnabled = TunerService.parseInteger(newValue, 0) != 0
@@ -850,6 +956,16 @@ class ClockStyle @JvmOverloads constructor(
                     .coerceIn(MIN_TILT, MAX_TILT)
                 applyClockTransform()
             }
+            ClockParallaxSettings.ENABLED -> {
+                parallaxEnabled = TunerService.parseInteger(newValue, 0) != 0
+                updateClockParallax()
+                applyClockTransform()
+            }
+            ClockParallaxSettings.INTENSITY -> {
+                parallaxIntensityPercent = TunerService.parseInteger(newValue,
+                    ClockParallaxSettings.DEFAULT_INTENSITY).coerceIn(0, 100)
+                updateClockParallax()
+            }
             CLOCK_ROTATION_KEY -> {
                 clockRotation = TunerService.parseInteger(newValue, DEFAULT_ROTATION)
                     .coerceIn(MIN_ROTATION, MAX_ROTATION)
@@ -864,6 +980,7 @@ class ClockStyle @JvmOverloads constructor(
 
     private fun applyDozing(dozing: Boolean) {
         isDozing = dozing
+        updateClockParallax()
         dynamicClockController?.onDozingChanged()
         if (currentClockView is ClockDesignView) cancelWobbleAnimation()
         animateAodTransition(dozing)
@@ -1129,6 +1246,7 @@ class ClockStyle @JvmOverloads constructor(
 
         forceTimeUpdate()
         updateClockVisibility()
+        updateClockParallax()
         if (isDozing && clockStyle != 0) startAodTick()
     }
 
@@ -1496,7 +1614,10 @@ class ClockStyle @JvmOverloads constructor(
 
     private fun applyClockTransform() {
         val view = currentClockView ?: return
-        ClockViewTransform.applyClockTransform(view, clockRotation, clockTiltX, clockTiltY)
+        val overrideTilt = parallaxEnabled && !isHomeScreenClock
+        ClockViewTransform.applyClockTransform(view, clockRotation,
+            if (overrideTilt) parallaxRotationX else clockTiltX.toFloat(),
+            if (overrideTilt) parallaxRotationY else clockTiltY.toFloat())
         disableClippingOnParents(view)
     }
 
@@ -1862,6 +1983,7 @@ class ClockStyle @JvmOverloads constructor(
             HOME_CLOCK_MARGIN_START_KEY, CLOCK_GRADIENT_ENABLED_KEY, CLOCK_GRADIENT_COLOR_START_KEY,
             CLOCK_GRADIENT_COLOR_END_KEY, CLOCK_GRADIENT_ANCHOR_Y_KEY, CLOCK_GRADIENT_RADIUS_KEY,
             CLOCK_TILT_X_KEY, CLOCK_TILT_Y_KEY, CLOCK_ROTATION_KEY, CLOCK_HYPER_BLUR_KEY,
+            ClockParallaxSettings.ENABLED, ClockParallaxSettings.INTENSITY,
             ClockGlass.ENABLED_SETTING, ClockGlass.INTENSITY_SETTING, ClockGlass.LIFT_SETTING,
             ClockGlassStyle.SETTING, ClockGlassStyle.DATE_SETTING, ClockGlassStyle.SEPARATE_DATE_SETTING,
         )
