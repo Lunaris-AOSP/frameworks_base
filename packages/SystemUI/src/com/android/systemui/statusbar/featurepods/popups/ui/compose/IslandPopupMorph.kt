@@ -162,9 +162,11 @@ internal fun IslandPopupMorph(
     useRedesignedMediaBackground: Boolean = false,
     allowOutsideInteraction: Boolean = false,
     secondaryContent: @Composable () -> Unit = {},
+    swipe: NotificationPopupSwipe? = null,
     content: @Composable () -> Unit,
 ) {
     val settings = LocalLunarisBarState.current.settings
+    val blurNotification = swipe != null && settings.enabled("capsule_blur", false)
     val popupShape = lunarisBarExpandedShape(settings)
     val density = LocalDensity.current
     val view = LocalView.current
@@ -211,7 +213,9 @@ internal fun IslandPopupMorph(
         )
     val destination =
         Rect(targetLeft, targetTop, targetLeft + contentSize.width, targetTop + contentSize.height)
-    val ready = screenOffset != null && contentSize.width > 0 && contentSize.height > 0
+    val ready =
+        screenOffset != null && contentSize.width > 0 && contentSize.height > 0 &&
+            (swipe == null || chipBoundsInScreen?.isEmpty == false)
     val currentOrigin by rememberUpdatedState(origin)
 
     LaunchedEffect(ready) { if (ready && motion == null) motion = IslandPopupGeometry(origin) }
@@ -364,7 +368,20 @@ internal fun IslandPopupMorph(
     }
 
     val geometry = motion
-    val rawFrame = geometry?.bounds ?: Rect.Zero
+    val animatedFrame = geometry?.bounds ?: Rect.Zero
+    val rawFrame =
+        if (swipe != null && geometry != null) {
+            val remaining = 1f - swipe.collapseFraction
+            val follow =
+                ((animatedFrame.height - origin.height) /
+                    (destination.height - origin.height).coerceAtLeast(1f)).coerceIn(0f, 1f)
+            Rect(
+                origin.left + (animatedFrame.left - origin.left) * remaining,
+                origin.top + (animatedFrame.top - origin.top) * remaining,
+                origin.right + (animatedFrame.right - origin.right) * remaining,
+                origin.bottom + (animatedFrame.bottom - origin.bottom) * remaining,
+            ).translate(swipe.translation * follow)
+        } else animatedFrame
     val frameWidth = rawFrame.width.coerceIn(0f, rootSize.width.toFloat())
     val frameHeight = rawFrame.height.coerceIn(0f, rootSize.height.toFloat())
     val frameLeft = lunarisBarPopupLeft(rawFrame.center.x, frameWidth, rootSize.width.toFloat(), 0f)
@@ -377,7 +394,7 @@ internal fun IslandPopupMorph(
     val bodyAlpha =
         contentFade.value *
             if (isVisible && !fastEnter) DynamicIslandMotion.contentReveal(expansion) else 1f
-    val currentBodyAlpha by rememberUpdatedState(bodyAlpha)
+    val currentBodyAlpha by rememberUpdatedState(if (swipe != null) contentFade.value else bodyAlpha)
     val currentBounds by rememberUpdatedState(frame)
     val secondaryLeft =
         lunarisBarPopupLeft(
@@ -478,12 +495,13 @@ internal fun IslandPopupMorph(
                             }
                         }
                     }
-                },
+                }
+                .notificationPopupSwipe(swipe, isVisible, frame),
         content = {
             Box(
                 Modifier.drawWithContent {
                     drawContent()
-                    if (geometry != null) {
+                    if (geometry != null && !blurNotification) {
                         drawOutline(
                             popupShape.createOutline(size, layoutDirection, this),
                             Color(0xFF0E0E10),
@@ -497,6 +515,7 @@ internal fun IslandPopupMorph(
                     CompositionLocalProvider(LocalIslandPopupRevealMillis provides 260f) {
                         LunarisBarSurface(
                             shape = popupShape,
+                            blurAlpha = if (swipe != null) surfaceFade.value else 1f,
                             background =
                                 if (useRedesignedMediaBackground) {
                                     { RedesignedMediaPopupBackground(popupShape) }

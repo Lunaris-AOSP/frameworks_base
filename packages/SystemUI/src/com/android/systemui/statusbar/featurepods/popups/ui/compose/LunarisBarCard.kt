@@ -60,11 +60,12 @@ internal fun LunarisBarCard(
     compact: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val scrollState = rememberScrollState()
     Column(
         modifier
             .widthIn(max = if (compact) 240.dp else 480.dp)
             .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState, enabled = scrollState.maxValue > 0)
             .padding(if (compact) 12.dp else 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         content = content,

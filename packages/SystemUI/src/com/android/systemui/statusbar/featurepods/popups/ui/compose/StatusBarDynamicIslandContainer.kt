@@ -76,6 +76,7 @@ import com.android.systemui.statusbar.featurepods.popups.data.repository.Lunaris
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipModel
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentModel
+import com.android.systemui.statusbar.featurepods.popups.ui.model.isNotificationPopup
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
@@ -176,7 +177,9 @@ private fun LunarisBarContainer(
     var popupVisible by remember { mutableStateOf(false) }
     var knownChipIds by remember { mutableStateOf<List<PopupChipId>>(emptyList()) }
     var mainChipBounds by remember { mutableStateOf<Rect?>(null) }
+    var measuredMainChipId by remember { mutableStateOf<PopupChipId?>(null) }
     var companionChipBounds by remember { mutableStateOf<Rect?>(null) }
+    var measuredCompanionChipId by remember { mutableStateOf<PopupChipId?>(null) }
     var popupOriginBounds by remember { mutableStateOf<Rect?>(null) }
     var lastDirection by remember { mutableIntStateOf(1) }
     var squishTrigger by remember { mutableIntStateOf(0) }
@@ -217,6 +220,10 @@ private fun LunarisBarContainer(
         popupAnchorChip = null
         popupVisible = false
         popupOriginBounds = null
+        measuredMainChipId = null
+        mainChipBounds = null
+        measuredCompanionChipId = null
+        companionChipBounds = null
         selectedChipId = null
         knownChipIds = emptyList()
         mediaArrival = false
@@ -267,22 +274,37 @@ private fun LunarisBarContainer(
     val selectedIndex = chips.indexOfFirst { it.chipId == selectedChipId }.coerceAtLeast(0)
     val selectedChip = chips.getOrNull(selectedIndex)
     val shownChip = chips.firstOrNull { it.isPopupShown }
+    val visiblePillBounds =
+        mainChipBounds
+            ?.takeUnless { it.isEmpty }
+            ?.takeIf { chips.any { it.chipId == measuredMainChipId } }
     val isPopupAnchorRedacted =
         chips.any {
             it.chipId == popupAnchorChip?.chipId && it.popupContent == PopupContentModel.None
         }
 
-    LaunchedEffect(shownChip, isPopupAnchorRedacted) {
+    LaunchedEffect(shownChip, visiblePillBounds, isPopupAnchorRedacted) {
         if (isPopupAnchorRedacted) {
             popupAnchorChip = null
             popupVisible = false
             popupOriginBounds = null
         } else if (shownChip != null) {
-            if (popupAnchorChip == null) {
-                val fromPeek = shownChip.chipId != selectedChipId
+            if (
+                popupAnchorChip == null ||
+                    (shownChip.popupContent.isNotificationPopup && popupOriginBounds == null)
+            ) {
                 popupOriginBounds =
-                    if (fromPeek && companionChipBounds != null) companionChipBounds
-                    else mainChipBounds
+                    if (
+                        shownChip.chipId != selectedChipId &&
+                            shownChip.chipId == measuredCompanionChipId &&
+                            companionChipBounds?.isEmpty == false
+                    ) {
+                        companionChipBounds
+                    } else if (shownChip.popupContent.isNotificationPopup) {
+                        visiblePillBounds
+                    } else {
+                        mainChipBounds
+                    }
             }
             popupAnchorChip = shownChip
             popupVisible = true
@@ -475,6 +497,7 @@ private fun LunarisBarContainer(
                             onCard = ::selectCard,
                             onTap = { companionChip.showPopup() },
                             onChipBoundsChanged = {
+                                measuredCompanionChipId = companionChip.chipId
                                 companionChipBounds = it
                                 publishIslandBounds()
                             },
@@ -591,6 +614,7 @@ private fun LunarisBarContainer(
                         cutoutSpec = cutoutSpec,
                         onChipBoundsChanged = { bounds ->
                             if (chipId == selectedChip.chipId) {
+                                measuredMainChipId = chipId
                                 mainChipBounds = bounds
                                 publishIslandBounds()
                             }
@@ -726,6 +750,7 @@ private fun LunarisBarContainer(
                                 onCard = ::selectCard,
                                 onTap = { companionChip.showPopup() },
                                 onChipBoundsChanged = {
+                                    measuredCompanionChipId = companionChip.chipId
                                     companionChipBounds = it
                                     publishIslandBounds()
                                 },

@@ -109,6 +109,7 @@ internal fun LunarisBarSurface(
     resting: Boolean = false,
     shape: Shape = lunarisBarExpandedShape(LocalLunarisBarState.current.settings),
     background: (@Composable BoxScope.() -> Unit)? = null,
+    blurAlpha: Float = 1f,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val settings = LocalLunarisBarState.current.settings
@@ -144,6 +145,7 @@ internal fun LunarisBarSurface(
                     overlayColor = surfaceColor.copy(alpha = surfaceColor.alpha * 0.55f).toArgb(),
                     fallbackColor = surfaceColor.toArgb(),
                     modifier = Modifier.matchParentSize(),
+                    blurAlpha = blurAlpha,
                 )
             }
             CompositionLocalProvider(LocalContentColor provides foreground) { content() }

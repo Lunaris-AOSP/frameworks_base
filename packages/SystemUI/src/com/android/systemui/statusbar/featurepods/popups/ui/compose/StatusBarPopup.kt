@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -181,6 +182,11 @@ private fun LunarisBarPopupWindow(
                 }
             }
         }
+        val currentDismissNotification by rememberUpdatedState(viewModel.dismissNotification)
+        val dismissNotification: () -> Unit = {
+            currentHidePopup()
+            currentDismissNotification?.invoke()
+        }
         LunarisBarPopupMotion(
             isVisible = isVisible,
             chipBoundsInScreen = chipBoundsInScreen,
@@ -188,6 +194,8 @@ private fun LunarisBarPopupWindow(
             onDismissRequest = { currentHidePopup() },
             onHidden = onHidden,
             allowOutsideInteraction = notification,
+            notificationChipId = viewModel.chipId.takeIf { notification },
+            onNotificationSwipeDismiss = dismissNotification,
             fastEnter =
                 (viewModel.popupContent as? PopupContentModel.SystemEvent)?.kind ==
                     SystemEventKind.Unlock,
@@ -211,7 +219,6 @@ private fun LunarisBarPopupWindow(
             var pageAccumulator by remember(viewModel.chipId) { mutableFloatStateOf(0f) }
             var followJob by
                 remember(viewModel.chipId) { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-            val currentDismissNotification by rememberUpdatedState(viewModel.dismissNotification)
             val dismissLabel = stringResource(R.string.lunaris_bar_swipe_dismiss)
             val pageThresholdPx = with(density) { 56.dp.toPx() }
             val maxFollowPx = with(density) { 40.dp.toPx() }
@@ -221,8 +228,8 @@ private fun LunarisBarPopupWindow(
                 Box(
                     modifier =
                         Modifier.then(
-                                if (notification || canPage) {
-                                    Modifier.pointerInput(viewModel.chipId, notification, canPage) {
+                                if (!notification && canPage) {
+                                    Modifier.pointerInput(viewModel.chipId) {
                                         detectHorizontalDragGestures(
                                             onDragEnd = {
                                                 val direction =
@@ -244,12 +251,7 @@ private fun LunarisBarPopupWindow(
                                                             ),
                                                         )
                                                     }
-                                                if (direction != 0) {
-                                                    if (notification) {
-                                                        currentHidePopup()
-                                                        currentDismissNotification?.invoke()
-                                                    } else currentOnPage(direction)
-                                                }
+                                                if (direction != 0) currentOnPage(direction)
                                             },
                                             onDragCancel = {
                                                 pageAccumulator = 0f
@@ -289,8 +291,7 @@ private fun LunarisBarPopupWindow(
                                     Modifier.semantics {
                                         stateDescription = dismissLabel
                                         dismiss {
-                                            currentHidePopup()
-                                            currentDismissNotification?.invoke()
+                                            dismissNotification()
                                             true
                                         }
                                     }
@@ -301,7 +302,10 @@ private fun LunarisBarPopupWindow(
                     AnimatedContent(
                         targetState = viewModel,
                         contentAlignment = Alignment.TopCenter,
-                        contentKey = { it.chipId },
+                        contentKey = {
+                            if (it.popupContent.isNotificationPopup) SystemEventKind.Notification
+                            else it.chipId
+                        },
                         transitionSpec = {
                             val dir = if (pageDirection >= 0) 1 else -1
                             (slideInHorizontally(
@@ -340,9 +344,11 @@ private fun LunarisBarPopupWindow(
                         },
                         label = "island_popup_pager",
                     ) { chip ->
-                        IslandPopupContent(chip) { expanded ->
-                            if (chip.chipId == currentChipId) notificationReplyExpanded = expanded
-                            chip.onNotificationPopupReplyChanged(expanded)
+                        key(chip.chipId) {
+                            IslandPopupContent(chip) { expanded ->
+                                if (chip.chipId == currentChipId) notificationReplyExpanded = expanded
+                                chip.onNotificationPopupReplyChanged(expanded)
+                            }
                         }
                     }
                 }

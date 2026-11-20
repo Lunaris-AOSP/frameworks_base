@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.changedToDownIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
@@ -68,6 +69,7 @@ internal fun ColorOsPopupMotion(
     useRedesignedMediaBackground: Boolean,
     allowOutsideInteraction: Boolean,
     secondaryContent: @Composable () -> Unit,
+    swipe: NotificationPopupSwipe? = null,
     content: @Composable () -> Unit,
 ) {
     val settings = LocalLunarisBarState.current.settings
@@ -110,7 +112,9 @@ internal fun ColorOsPopupMotion(
         )
     val destination =
         Rect(targetLeft, targetTop, targetLeft + contentSize.width, targetTop + contentSize.height)
-    val ready = screenOffset != null && contentSize.width > 0 && contentSize.height > 0
+    val ready =
+        screenOffset != null && contentSize.width > 0 && contentSize.height > 0 &&
+            (swipe == null || chipBoundsInScreen?.isEmpty == false)
 
     LaunchedEffect(ready, isVisible, settings.animationSpeed, settings.bounce, fastEnter) {
         if (!ready) {
@@ -164,18 +168,34 @@ internal fun ColorOsPopupMotion(
         remember(settings.expandedShape, settings.cornerRadius) {
             lunarisBarExpandedShape(settings)
         }
-    val revealShape = ColorOsRevealShape(reveal.value, popupShape)
-    val revealBounds =
-        revealShape.bounds(Size(contentSize.width.toFloat(), contentSize.height.toFloat()))
+    val contentBounds = Size(contentSize.width.toFloat(), contentSize.height.toFloat())
+    val startScale =
+        if (swipe != null && ready) {
+            maxOf(0.4f, origin.width / contentBounds.width, origin.height / contentBounds.height)
+        } else 0.4f
+    val adjustedScale =
+        if (swipe == null) scale.value
+        else startScale + (scale.value - 0.4f) * (1f - startScale) / 0.6f
+    val dragFraction = swipe?.collapseFraction ?: 0f
+    val revealFraction = reveal.value * (1f - dragFraction)
+    val revealShape =
+        ColorOsRevealShape(
+            revealFraction,
+            popupShape,
+            startSize = if (swipe != null && ready) origin.size / startScale else null,
+        )
+    val revealBounds = revealShape.bounds(contentBounds)
     val cardScale =
         if (ready)
             minOf(
-                scale.value,
+                adjustedScale,
                 rootSize.width.toFloat() / contentSize.width,
                 rootSize.height.toFloat() / contentSize.height,
             )
-        else scale.value
-    val center = origin.center + (destination.center - origin.center) * position.value
+        else adjustedScale
+    val center =
+        origin.center + (destination.center - origin.center) * (position.value * (1f - dragFraction)) +
+            (swipe?.translation ?: Offset.Zero) * position.value
     val frameWidth = revealBounds.width * cardScale
     val frameHeight = revealBounds.height * cardScale
     val frameLeft = lunarisBarPopupLeft(center.x, frameWidth, rootSize.width.toFloat(), 0f)
@@ -188,8 +208,16 @@ internal fun ColorOsPopupMotion(
     val currentFrame by rememberUpdatedState(frame)
     val currentSecondary by rememberUpdatedState(secondaryBounds)
     val bodyAlpha = alpha.value * (1f - veil.value)
+    val blurNotification = swipe != null && settings.enabled("capsule_blur", false)
     val currentBodyAlpha by rememberUpdatedState(bodyAlpha)
     val canInteract = isVisible && bodyAlpha >= 0.5f
+    val surfaceAlpha =
+        when {
+            !ready -> 0f
+            swipe == null -> alpha.value
+            isVisible -> alpha.value * (position.value / 0.16f).coerceIn(0f, 1f)
+            else -> alpha.value * ((position.value - 0.16f) / 0.32f).coerceIn(0f, 1f)
+        }
     LunarisBarPopupTouchRegion(
         enabled = allowOutsideInteraction,
         bounds = if (isVisible && ready) frame else Rect.Zero,
@@ -222,12 +250,13 @@ internal fun ColorOsPopupMotion(
                             }
                         }
                     }
-                },
+                }
+                .notificationPopupSwipe(swipe, isVisible, frame),
         content = {
             Box(
                 Modifier.drawWithContent {
                         drawContent()
-                        if (veil.value > 0f) {
+                        if (!blurNotification && veil.value > 0f) {
                             drawOutline(
                                 popupShape.createOutline(size, layoutDirection, this),
                                 Color.Black,
@@ -240,6 +269,7 @@ internal fun ColorOsPopupMotion(
             ) {
                 LunarisBarSurface(
                     shape = popupShape,
+                    blurAlpha = if (swipe != null) surfaceAlpha else 1f,
                     background =
                         if (useRedesignedMediaBackground) {
                             {
@@ -253,7 +283,13 @@ internal fun ColorOsPopupMotion(
                         LocalIslandPopupContentOnly provides true,
                         LocalIslandPopupRevealMillis provides Float.POSITIVE_INFINITY,
                     ) {
-                        content()
+                        if (blurNotification) {
+                            Box(Modifier.graphicsLayer { this.alpha = 1f - veil.value }) {
+                                content()
+                            }
+                        } else {
+                            content()
+                        }
                     }
                 }
             }
@@ -309,9 +345,9 @@ internal fun ColorOsPopupMotion(
                 scaleY = cardScale
                 translationX = frame.center.x - destination.center.x
                 translationY = frame.center.y - destination.center.y
-                this.alpha = if (ready) alpha.value else 0f
+                this.alpha = surfaceAlpha
                 shape = revealShape
-                clip = reveal.value < 1f
+                clip = revealFraction < 1f
             }
             secondary.placeWithLayer(
                 secondaryLeft.roundToInt(),
@@ -327,11 +363,17 @@ private val ColorOsCardEase = CubicBezierEasing(0.33f, 0f, 0.67f, 1f)
 private val ColorOsCardMove = CubicBezierEasing(0.6f, 0f, 0.1f, 1f)
 private val ColorOsCardGrow = CubicBezierEasing(0.3f, 0f, 0.1f, 1f)
 
-private class ColorOsRevealShape(private val fraction: Float, private val shape: Shape) : Shape {
+private class ColorOsRevealShape(
+    private val fraction: Float,
+    private val shape: Shape,
+    private val startSize: Size? = null,
+) : Shape {
     fun bounds(size: Size): Rect {
         val start = minOf(size.width * 0.12f, size.height)
-        val width = start + (size.width - start) * fraction
-        val height = start + (size.height - start) * fraction
+        val startWidth = startSize?.width ?: start
+        val startHeight = startSize?.height ?: start
+        val width = startWidth + (size.width - startWidth) * fraction
+        val height = startHeight + (size.height - startHeight) * fraction
         val left = (size.width - width) / 2f
         val top = (size.height - height) / 2f
         return Rect(left, top, left + width, top + height)
