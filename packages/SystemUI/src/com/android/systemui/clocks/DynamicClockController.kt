@@ -38,6 +38,7 @@ internal class DynamicClockController(private val host: ClockStyle) {
     private var initialized = false
     private var nativeClockHeight = 0
     private var managesNativeClock = false
+    private var rendersAodTransition = false
     private val nativeClockAlphas = linkedMapOf<View, Float>()
     private var attached = false
     private var userId = -1
@@ -45,7 +46,7 @@ internal class DynamicClockController(private val host: ClockStyle) {
         updateNativeClockHeight()
         val ready = applyPendingSelection()
         applyFrame()
-        ready
+        ready && (!enabled || !host.isShown || !host.isLayoutRequested)
     }
 
     val activeClock: ClockStyle?
@@ -64,12 +65,14 @@ internal class DynamicClockController(private val host: ClockStyle) {
             else smallFraction / 0.6f).coerceIn(0f, 1f)
 
     val isAnimating: Boolean
-        get() = animator != null || selectionPending && animateSelection && enabled && switchingAllowed &&
+        get() = enabled && dozeAmount > 0f && dozeAmount < 1f ||
+            animator != null || selectionPending && animateSelection && enabled && switchingAllowed &&
             dozeAmount == 0f && smallFraction != if (hasNotifications) 1f else 0f
     val visibleClocks: List<ClockStyle>
         get() = if (enabled) listOfNotNull(smallClock, largeClock).filter { it.alpha > 0f }
             else emptyList()
-    val isBaselineVisible: Boolean get() = !enabled || dozeAmount > 0f
+    val isBaselineVisible: Boolean
+        get() = !enabled || dozeAmount == 1f || !rendersAodTransition && dozeAmount > 0f
     val isOnLockscreen: Boolean
         get() = enabled && dozeAmount == 0f && !host.isClockDozing
     val isLayoutActive: Boolean get() = enabled && dozeAmount < 1f
@@ -136,8 +139,14 @@ internal class DynamicClockController(private val host: ClockStyle) {
         if (hasNotifications == present) return
         hasNotifications = present
         if (!enabled) return
-        if (dozeAmount >= 1f) {
+        if (dozeAmount > 0f || host.isClockDozing || !switchingAllowed) {
+            cancelAnimation()
             smallFraction = if (present) 1f else 0f
+            selectionPending = false
+            animateSelection = false
+            initialized = false
+            applyFrame()
+            host.requestLayout()
         } else {
             selectionPending = true
             animateSelection = initialized && switchingAllowed && host.isClockSwitchingVisible && dozeAmount == 0f
@@ -153,6 +162,11 @@ internal class DynamicClockController(private val host: ClockStyle) {
             selectionPending = true
             animateSelection = false
             initialized = false
+        } else {
+            smallFraction = if (hasNotifications) 1f else 0f
+            selectionPending = false
+            animateSelection = false
+            initialized = false
         }
         applyFrame()
         host.invalidate()
@@ -160,6 +174,9 @@ internal class DynamicClockController(private val host: ClockStyle) {
 
     fun onDozingChanged() {
         cancelAnimation()
+        smallFraction = if (hasNotifications) 1f else 0f
+        selectionPending = false
+        initialized = false
         applyFrame()
         if (enabled) host.onDynamicClockLayoutChanged?.invoke()
     }
@@ -175,9 +192,8 @@ internal class DynamicClockController(private val host: ClockStyle) {
         val next = amount.coerceIn(0f, 1f)
         if (next == dozeAmount) return
         val wasLayoutActive = isLayoutActive
-        val wasOnLockscreen = isOnLockscreen
         if (next > 0f) cancelAnimation()
-        if (next == 1f || dozeAmount == 1f) {
+        if (next > 0f || dozeAmount == 1f) {
             smallFraction = if (hasNotifications) 1f else 0f
             selectionPending = false
         }
@@ -185,7 +201,7 @@ internal class DynamicClockController(private val host: ClockStyle) {
         applyFrame()
         host.updateClockVisibility()
         host.requestLayout()
-        if (wasLayoutActive != isLayoutActive || wasOnLockscreen != isOnLockscreen)
+        if (wasLayoutActive != isLayoutActive)
             host.onDynamicClockLayoutChanged?.invoke()
     }
 
@@ -207,7 +223,8 @@ internal class DynamicClockController(private val host: ClockStyle) {
         if (!enabled) return null
         val small = smallClock ?: return null
         val large = largeClock ?: return null
-        val dynamicHeight = lerp(large.measuredHeight.toFloat(), small.measuredHeight.toFloat(), layoutFraction)
+        val dynamicHeight = lerp(large.layoutClockHeight.toFloat(), small.layoutClockHeight.toFloat(), layoutFraction)
+        if (rendersAodTransition && dozeAmount < 1f) return dynamicHeight.roundToInt().coerceAtLeast(0)
         val aodHeight = if (host.baseClockStyle == 0) nativeClockHeight else baselineHeight
         return lerp(dynamicHeight, aodHeight.toFloat(), dozeAmount).roundToInt().coerceAtLeast(0)
     }
@@ -271,15 +288,26 @@ internal class DynamicClockController(private val host: ClockStyle) {
     }
 
     private fun applyFrame() {
-        host.setBaselineClockAlpha(if (enabled) dozeAmount else 1f)
         if (!enabled) {
+            rendersAodTransition = false
+            host.setBaselineClockAlpha(1f)
             host.configureClockParallax(null, null, 0f, false)
             return
         }
-        val dynamicAlpha = 1f - dozeAmount
         val small = smallClock
         val large = largeClock
         val fraction = faceFraction
+        val smallAodTransition = small?.setLayoutClockAodProgress(host,
+            if (fraction > 0f) dozeAmount else 0f) == true
+        val largeAodTransition = large?.setLayoutClockAodProgress(host,
+            if (fraction < 1f) dozeAmount else 0f) == true
+        rendersAodTransition = when (fraction) {
+            0f -> largeAodTransition
+            1f -> smallAodTransition
+            else -> smallAodTransition && largeAodTransition
+        }
+        val dynamicAlpha = if (rendersAodTransition && dozeAmount < 1f) 1f else 1f - dozeAmount
+        host.setBaselineClockAlpha(if (rendersAodTransition && dozeAmount < 1f) 0f else dozeAmount)
         val distance = (small?.layoutClockCenterY ?: 0f) - (large?.layoutClockCenterY ?: 0f)
         small?.apply {
             alpha = fraction * dynamicAlpha

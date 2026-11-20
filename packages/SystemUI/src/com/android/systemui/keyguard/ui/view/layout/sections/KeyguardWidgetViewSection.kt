@@ -122,7 +122,7 @@ class KeyguardWidgetViewSection @Inject constructor(
         splitShade = context.resources.getBoolean(R.bool.config_use_split_notification_shade)
         val content = contentIds.filter { id ->
             id != R.id.dynamic_clock_ls || widgetView?.rootView?.let {
-                DynamicClockLayout.findClock(it)?.isDynamicClockOnLockscreen == true
+                DynamicClockLayout.findClock(it)?.isDynamicClockLayoutActive == true
             } == true
         }.toIntArray()
         constraintSet.apply {

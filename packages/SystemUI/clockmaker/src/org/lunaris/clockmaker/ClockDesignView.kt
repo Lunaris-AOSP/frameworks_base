@@ -118,6 +118,12 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
     var appearance = ClockDesignAppearance()
         private set
     private var aodProgress = 0f
+    var retainAnimationBounds = false
+        set(value) {
+            if (field == value) return
+            field = value
+            requestLayout()
+        }
     private val renderProgress: Float
         get() = if (appearance.aodAnimation) aodProgress else if (appearance.dozing) 1f else 0f
     var animationsEnabled = true
@@ -408,7 +414,8 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
             }
             if (element.kind != ClockElementKind.WEATHER || appearance.weather) {
                 val extent = (frame.y * w + child.measuredHeight / 2f + w * 0.04f).coerceAtLeast(0f)
-                bottom = maxOf(bottom, extent * frame.visibility)
+                val visibility = if (retainAnimationBounds && frame.visibility > 0f) 1f else frame.visibility
+                bottom = maxOf(bottom, extent * visibility)
             }
         }
         val h = if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY) {

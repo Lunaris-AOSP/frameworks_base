@@ -76,7 +76,10 @@ import kotlin.math.cos
 import kotlin.math.sin
 import org.lunaris.clockmaker.ClockDesign
 import org.lunaris.clockmaker.ClockDesignAppearance
+import org.lunaris.clockmaker.ClockDesignTransition
 import org.lunaris.clockmaker.ClockDesignView
+import org.lunaris.clockmaker.ClockElementAnimation
+import org.lunaris.clockmaker.ClockElementKind
 import org.lunaris.clockmaker.ClockEffects
 import org.lunaris.clockmaker.ClockFonts
 import org.lunaris.clockmaker.ClockGlass
@@ -103,6 +106,20 @@ class ClockStyle @JvmOverloads constructor(
 
     private var isDynamicFace = false
     private var layoutProfile: ClockLayoutProfile? = null
+    private var layoutAodSource: ClockStyle? = null
+    private var layoutAodProgress = 0f
+    private var layoutAodView: ClockDesignView? = null
+    private var layoutAodSourceDesign: ClockDesign? = null
+    private var layoutAodTargetDesign: ClockDesign? = null
+    private var layoutAodOptions = -1
+    private data class ClockLayoutGeometry(val width: Int, val x: Float, val y: Float)
+    private data class ClockAodGeometry(
+        val layout: ClockLayoutGeometry,
+        val scale: Float,
+        val cameraDistance: Float,
+    )
+    private var layoutAodGeometry: ClockAodGeometry? = null
+    private var layoutClockGeometry: ClockLayoutGeometry? = null
     private var stockClockController: ClockController? = null
     private var dynamicClockController: DynamicClockController? = null
     private var parallaxController: ClockParallaxController? = null
@@ -361,12 +378,21 @@ class ClockStyle @JvmOverloads constructor(
         val width = if (isDynamicFace && resources.getBoolean(R.bool.config_use_split_notification_shade))
             MeasureSpec.makeMeasureSpec((MeasureSpec.getSize(widthMeasureSpec) / 2).coerceAtLeast(1),
                 MeasureSpec.getMode(widthMeasureSpec)) else widthMeasureSpec
-        super.onMeasure(width, heightMeasureSpec)
+        val height = if (isDynamicFace || dynamicClockController?.enabled == true)
+            MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED) else heightMeasureSpec
+        super.onMeasure(width, height)
         val frame = clockContainer
         val top = (frame?.layoutParams as? ViewGroup.MarginLayoutParams)?.topMargin ?: 0
         dynamicClockController?.measuredHeight(top + (frame?.measuredHeight ?: 0))?.let {
             setMeasuredDimension(measuredWidthAndState,
                 resolveSizeAndState(it, heightMeasureSpec, measuredState shl MEASURED_HEIGHT_STATE_SHIFT))
+        }
+    }
+
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
+        if (isDynamicFace && layoutAodSource != null && currentLayoutGeometry() != layoutClockGeometry) {
+            applyClockScale()
         }
     }
 
@@ -378,10 +404,16 @@ class ClockStyle @JvmOverloads constructor(
         get() = dynamicClockController?.isAnimating == true
     internal val isDynamicClockOnLockscreen: Boolean
         get() = dynamicClockController?.isOnLockscreen == true
+    internal val isDynamicClockEnabled: Boolean
+        get() = dynamicClockController?.enabled == true
     internal val isDynamicClockLayoutActive: Boolean
         get() = dynamicClockController?.isLayoutActive == true
     internal val layoutClockCenterY: Float
         get() = (clockContainer?.top ?: 0) + (currentClockView?.height ?: 0) / 2f
+    internal val layoutClockHeight: Int
+        get() = (measuredHeight + if (layoutAodSource != null && clockAodProgress() > 0f)
+            currentClockView?.translationY ?: 0f else 0f).roundToInt()
+            .coerceAtLeast(0)
     internal val canRenderParallax: Boolean
         get() = parallaxEnabled && !isHomeScreenClock && parallaxIntensityPercent > 0 &&
             clockOpacity > 0 && currentClockView != null
@@ -446,6 +478,83 @@ class ClockStyle @JvmOverloads constructor(
         return clock
     }
 
+    internal fun setLayoutClockAodProgress(source: ClockStyle, amount: Float): Boolean {
+        val view = currentClockView as? ClockDesignView ?: return false
+        val sourceView = source.currentClockView as? ClockDesignView
+        if (!isDynamicFace || sourceView == null) {
+            if (layoutAodSource != null) {
+                layoutAodSource = null
+                layoutAodProgress = 0f
+                layoutAodView = null
+                layoutAodGeometry = null
+                layoutClockGeometry = null
+                isDozing = false
+                view.retainAnimationBounds = false
+                view.setDesign(clockDesign)
+                updateClockAppearance()
+            }
+            return false
+        }
+        val options = (if (makerWeather) 1 else 0) or
+            (if (source.makerWeather) 2 else 0) or (if (source.aodAnimEnabled) 4 else 0)
+        val changed = layoutAodSource !== source || layoutAodView !== view ||
+            layoutAodSourceDesign != source.clockDesign || layoutAodTargetDesign != clockDesign ||
+            layoutAodOptions != options
+        val dozingChanged = isDozing != source.isDozing
+        val progressChanged = layoutAodProgress != amount
+        val sourceLayout = source.currentLayoutGeometry()
+        var sourceGeometryChanged = false
+        if (sourceLayout != null &&
+            (changed || layoutAodGeometry == null || source.clockAodProgress() == 1f || amount == 1f)) {
+            val geometry = ClockAodGeometry(
+                sourceLayout.copy(x = sourceLayout.x + source.currentShiftX,
+                    y = sourceLayout.y + source.currentShiftY),
+                ClockViewTransform.renderScale(source.getScaleFactor(), true, source.aodAnimEnabled),
+                sourceView.cameraDistance,
+            )
+            sourceGeometryChanged = layoutAodGeometry != geometry
+            layoutAodGeometry = geometry
+        }
+        val geometryChanged = currentLayoutGeometry() != layoutClockGeometry
+        layoutAodSource = source
+        layoutAodProgress = amount
+        isDozing = source.isDozing
+        if (changed) {
+            layoutAodView = view
+            layoutAodSourceDesign = source.clockDesign
+            layoutAodTargetDesign = clockDesign
+            layoutAodOptions = options
+            view.retainAnimationBounds = true
+            val aod = source.clockDesign.copy(elements = source.clockDesign.elements.map {
+                if (it.kind == ClockElementKind.WEATHER && !source.makerWeather)
+                    it.configureAod(it.aodStyle.copy(visible = false)) else it
+            })
+            val target = clockDesign.copy(elements = clockDesign.elements.map {
+                if (it.kind == ClockElementKind.WEATHER && !makerWeather) it.copy(visible = false) else it
+            })
+            view.setDesign(ClockDesignTransition.fromAod(aod, target))
+        }
+        if (changed || dozingChanged) applyClockColors()
+        if (changed || dozingChanged || progressChanged || sourceGeometryChanged || geometryChanged || amount > 0f) {
+            applyClockAlpha()
+            applyClockShadow()
+            applyClockScale()
+        }
+        return layoutAodGeometry != null
+    }
+
+    private fun currentLayoutGeometry(): ClockLayoutGeometry? {
+        val view = currentClockView ?: return null
+        val frame = clockContainer ?: return null
+        if (!view.isLaidOut || !frame.isLaidOut || view.width <= 0) return null
+        return ClockLayoutGeometry(
+            view.width,
+            (if (isDynamicFace) left else 0) + frame.left + frame.translationX + view.left + view.width / 2f,
+            (if (isDynamicFace) top else 0) + frame.top + frame.translationY + view.top +
+                ((view as? ClockDesignView)?.transformPivotY ?: view.height / 2f),
+        )
+    }
+
     private fun configureLayout(profile: ClockLayoutProfile) {
         layoutProfile = profile
         profileGeneration++
@@ -496,6 +605,8 @@ class ClockStyle @JvmOverloads constructor(
         super.onConfigurationChanged(newConfig)
         if (isDynamicFace) {
             profileGeneration++
+            layoutAodGeometry = null
+            layoutClockGeometry = null
             updateClockView()
         } else if (dynamicClockController?.enabled == true) {
             dynamicClockController?.onHostVisibilityChanged()
@@ -1146,6 +1257,7 @@ class ClockStyle @JvmOverloads constructor(
         removePendingLayoutListener()
         currentClockView?.let { (it.parent as? ViewGroup)?.removeView(it) }
         currentClockView = null
+        layoutAodView = null
         stockClockController = null
         textClocks.clear()
         styledTextViews.clear()
@@ -1338,7 +1450,10 @@ class ClockStyle @JvmOverloads constructor(
         val view = currentClockView ?: return
         if (view is ClockDesignView) {
             val progress = clockAodProgress()
-            view.alpha = ClockViewTransform.alpha(clockOpacity, progress)
+            view.alpha = layoutAodSource?.let { source ->
+                ClockElementAnimation.lerp(ClockViewTransform.alpha(clockOpacity),
+                    ClockViewTransform.alpha(source.clockOpacity, true), progress)
+            } ?: ClockViewTransform.alpha(clockOpacity, progress)
             view.animationsEnabled = view.alpha > 0f && !isDozing && progress == 0f &&
                 clockContainer?.visibility != View.INVISIBLE && (!isDynamicFace || layoutClockInteractive)
         } else view.alpha = ClockViewTransform.alpha(clockOpacity, isDozing)
@@ -1457,7 +1572,8 @@ class ClockStyle @JvmOverloads constructor(
         (currentClockView as? ClockDesignView)?.let {
             it.setAppearance(ClockDesignAppearance(resolveClockColor(), gradientEnabled,
                 gradientColorStart, gradientColorEnd, gradientAnchorY, gradientRadius,
-                makerWeather, isDozing, aodAnimation = aodAnimEnabled))
+                makerWeather || layoutAodSource != null, isDozing,
+                aodAnimation = layoutAodSource?.aodAnimEnabled ?: aodAnimEnabled))
             it.setAodProgress(clockAodProgress())
             return
         }
@@ -1583,7 +1699,9 @@ class ClockStyle @JvmOverloads constructor(
         (if (isHomeScreenClock) homeClockSizeScale ?: clockSizeScale else clockSizeScale) / 100f
 
     private fun clockAodProgress(): Float = when {
-        isHomeScreenClock || isDynamicFace -> 0f
+        isHomeScreenClock -> 0f
+        isDynamicFace -> if (layoutAodSource?.aodAnimEnabled == false)
+            (if (isDozing) 1f else 0f) else layoutAodProgress
         !aodAnimEnabled -> if (isDozing) 1f else 0f
         else -> statusBarStateController.interpolatedDozeAmount.coerceIn(0f, 1f)
     }
@@ -1593,7 +1711,8 @@ class ClockStyle @JvmOverloads constructor(
         val scale = if (view is ClockDesignView) {
             val progress = clockAodProgress()
             view.setAodProgress(progress)
-            if (!isHomeScreenClock && (progress > 0f || currentShiftX != 0 || currentShiftY != 0)) {
+            if (!isHomeScreenClock && !isDynamicFace &&
+                (progress > 0f || currentShiftX != 0 || currentShiftY != 0)) {
                 view.translationX = currentShiftX * progress
                 view.translationY = currentShiftY * progress
                 if (progress == 0f) {
@@ -1601,7 +1720,10 @@ class ClockStyle @JvmOverloads constructor(
                     currentShiftY = 0
                 }
             }
-            ClockViewTransform.renderScale(getScaleFactor(), progress, aodAnimEnabled)
+            layoutAodGeometry?.takeIf { view.width > 0 }?.let { geometry ->
+                val aodScale = geometry.scale * geometry.layout.width / view.width
+                ClockElementAnimation.lerp(getScaleFactor(), aodScale, progress)
+            } ?: ClockViewTransform.renderScale(getScaleFactor(), progress, aodAnimEnabled)
         } else getScaleFactor()
         view.scaleX = scale
         view.scaleY = scale
@@ -1610,6 +1732,13 @@ class ClockStyle @JvmOverloads constructor(
         clockContainer?.clockScale = scale
         disableClippingOnParents(view)
         applyClockTransform()
+        layoutAodGeometry?.let { geometry ->
+            val target = currentLayoutGeometry() ?: return@let
+            val progress = clockAodProgress()
+            view.translationX = (geometry.layout.x - target.x) * progress
+            view.translationY = (geometry.layout.y - target.y) * progress
+            layoutClockGeometry = target
+        }
     }
 
     private fun applyClockTransform() {
@@ -1618,6 +1747,20 @@ class ClockStyle @JvmOverloads constructor(
         ClockViewTransform.applyClockTransform(view, clockRotation,
             if (overrideTilt) parallaxRotationX else clockTiltX.toFloat(),
             if (overrideTilt) parallaxRotationY else clockTiltY.toFloat())
+        layoutAodSource?.let { source ->
+            val progress = clockAodProgress()
+            val sourceRotation = source.clockRotation.toFloat()
+            view.rotation = if (progress == 1f) sourceRotation else clockRotation +
+                ((sourceRotation - clockRotation + 540f) % 360f - 180f) * progress
+            view.rotationX = ClockElementAnimation.lerp(view.rotationX,
+                if (source.parallaxEnabled) source.parallaxRotationX else source.clockTiltX.toFloat(), progress)
+            view.rotationY = ClockElementAnimation.lerp(view.rotationY,
+                if (source.parallaxEnabled) source.parallaxRotationY else source.clockTiltY.toFloat(), progress)
+            layoutAodGeometry?.takeIf { view.width > 0 }?.let { geometry ->
+                view.cameraDistance = ClockElementAnimation.lerp(view.cameraDistance,
+                    geometry.cameraDistance * view.width / geometry.layout.width, progress)
+            }
+        }
         disableClippingOnParents(view)
     }
 

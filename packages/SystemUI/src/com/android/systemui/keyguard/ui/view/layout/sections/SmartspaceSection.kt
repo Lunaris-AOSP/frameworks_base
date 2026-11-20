@@ -141,7 +141,7 @@ constructor(
 
         val dynamicClock = (smartspaceView?.parent as? View)?.let(DynamicClockLayout::findClock)
         val isLargeClockVisible = keyguardClockViewModel.isLargeClockVisible.value &&
-            dynamicClock?.isDynamicClockOnLockscreen != true
+            dynamicClock?.isDynamicClockLayoutActive != true
 
         if (clockReactiveSmartspaceLayout()) {
             if (dateWeatherBelowSmallClock) {

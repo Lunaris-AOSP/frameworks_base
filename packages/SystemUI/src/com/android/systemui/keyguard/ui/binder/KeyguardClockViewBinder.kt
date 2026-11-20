@@ -126,7 +126,7 @@ object KeyguardClockViewBinder {
                             updateBurnInLayer(keyguardRootView, viewModel, clockSize, isCustomClockEnabled)
                             val customClock = DynamicClockLayout.findClock(keyguardRootView)
                             blueprintInteractor.refreshBlueprint(
-                                if (customClock?.isDynamicClockOnLockscreen == true)
+                                if (customClock?.isDynamicClockLayoutActive == true)
                                     Type.DynamicClockSize else Type.ClockSize)
                         }
                     }
@@ -134,7 +134,7 @@ object KeyguardClockViewBinder {
                     launch {
                         viewModel.clockShouldBeCentered.collect {
                             viewModel.currentClock.value?.let {
-                                if (DynamicClockLayout.findClock(keyguardRootView)?.isDynamicClockOnLockscreen == true) {
+                                if (DynamicClockLayout.findClock(keyguardRootView)?.isDynamicClockLayoutActive == true) {
                                     blueprintInteractor.refreshBlueprint(Type.DynamicClockSize)
                                 } else if (it.largeClock.config.hasCustomPositionUpdatedAnimation) {
                                     blueprintInteractor.refreshBlueprint(Type.DefaultClockStepping)
@@ -191,7 +191,9 @@ object KeyguardClockViewBinder {
                             viewModel.shouldDateWeatherBeBelowSmallClock.collect {
                                 blueprintInteractor.refreshBlueprint(
                                     Config(
-                                        Type.SmartspaceVisibility,
+                                        if (DynamicClockLayout.findClock(keyguardRootView)
+                                            ?.isDynamicClockTransitionRunning == true) Type.DynamicClockSize
+                                        else Type.SmartspaceVisibility,
                                         checkPriority = false,
                                         terminatePrevious = false,
                                     )
@@ -203,7 +205,9 @@ object KeyguardClockViewBinder {
                             viewModel.shouldDateWeatherBeBelowLargeClock.collect {
                                 blueprintInteractor.refreshBlueprint(
                                     Config(
-                                        Type.SmartspaceVisibility,
+                                        if (DynamicClockLayout.findClock(keyguardRootView)
+                                            ?.isDynamicClockTransitionRunning == true) Type.DynamicClockSize
+                                        else Type.SmartspaceVisibility,
                                         checkPriority = false,
                                         terminatePrevious = false,
                                     )
@@ -308,7 +312,7 @@ object KeyguardClockViewBinder {
         val constraintSet = ConstraintSet().apply { clone(rootView) }
         clockSection.applyConstraints(constraintSet)
         DynamicClockLayout.applyConstraints(rootView, constraintSet, clockSection.currentClock)
-        if (animated && DynamicClockLayout.findClock(rootView)?.isDynamicClockOnLockscreen != true) {
+        if (animated && DynamicClockLayout.findClock(rootView)?.isDynamicClockLayoutActive != true) {
             set?.let { TransitionManager.beginDelayedTransition(rootView, it) }
                 ?: run { TransitionManager.beginDelayedTransition(rootView, defaultTransition) }
         }

@@ -78,7 +78,9 @@ object KeyguardSmartspaceViewBinder {
                         updateBCSmartspaceInBurnInLayer(keyguardRootView, clockViewModel)
                         blueprintInteractor.refreshBlueprint(
                             Config(
-                                Type.SmartspaceVisibility,
+                                if (DynamicClockLayout.findClock(keyguardRootView)
+                                    ?.isDynamicClockTransitionRunning == true) Type.DynamicClockSize
+                                else Type.SmartspaceVisibility,
                                 checkPriority = false,
                                 terminatePrevious = false,
                             )
@@ -107,7 +109,7 @@ object KeyguardSmartspaceViewBinder {
                             )
                             .collect { (isLargeClock, belowLargeclock) ->
                                 if (isLargeClock && belowLargeclock &&
-                                    DynamicClockLayout.findClock(keyguardRootView)?.isDynamicClockOnLockscreen != true) {
+                                    DynamicClockLayout.findClock(keyguardRootView)?.isDynamicClockLayoutActive != true) {
                                     // hide small clock date/weather
                                     keyguardRootView.findViewById<View>(smallViewId)?.let {
                                         it.visibility = View.GONE
@@ -139,7 +141,7 @@ object KeyguardSmartspaceViewBinder {
                                 ::Triple,
                             )
                             .collect { (isLargeClock, belowLarge, largeBounds) ->
-                                if (DynamicClockLayout.findClock(keyguardRootView)?.isDynamicClockOnLockscreen == true)
+                                if (DynamicClockLayout.findClock(keyguardRootView)?.isDynamicClockLayoutActive == true)
                                     return@collect
                                 if (!isLargeClock) return@collect
                                 keyguardRootView.findViewById<View>(smallViewId)?.let {
@@ -170,7 +172,7 @@ object KeyguardSmartspaceViewBinder {
                                 ::Triple,
                             )
                             .collect { (isLargeClock, belowSmall, smallBounds) ->
-                                if (DynamicClockLayout.findClock(keyguardRootView)?.isDynamicClockOnLockscreen == true)
+                                if (DynamicClockLayout.findClock(keyguardRootView)?.isDynamicClockLayoutActive == true)
                                     return@collect
                                 if (isLargeClock) return@collect
                                 keyguardRootView.findViewById<View>(largeViewId)?.let {

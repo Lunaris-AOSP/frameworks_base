@@ -24,7 +24,15 @@ internal object DynamicClockLayout {
     fun applyConstraints(root: ConstraintLayout, constraints: ConstraintSet, nativeClock: ClockController?) {
         val host = findClock(root) ?: return
         host.applyNativeClockConstraints(constraints, nativeClock)
-        if (!host.isDynamicClockOnLockscreen) return
+        if (!host.isDynamicClockEnabled) return
+        constraints.apply {
+            clear(host.id, ConstraintSet.BOTTOM)
+            connect(host.id, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP,
+                (root.resources.getDimensionPixelSize(R.dimen.status_bar_height) * 1.25f).toInt())
+            setVerticalBias(host.id, 0f)
+            setVisibilityMode(host.id, ConstraintSet.VISIBILITY_MODE_IGNORE)
+        }
+        if (!host.isDynamicClockLayoutActive) return
         val nativeIds = nativeClock?.let {
             (it.smallClock.layout.views + it.largeClock.layout.views).map { view -> view.id }
         }.orEmpty() + listOf(ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL,
@@ -35,9 +43,6 @@ internal object DynamicClockLayout {
             SharedR.id.weather_smartspace_view, SharedR.id.date_smartspace_view_large,
             SharedR.id.weather_smartspace_view_large).filter { root.findViewById<View>(it) != null }
         constraints.apply {
-            connect(host.id, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP,
-                (root.resources.getDimensionPixelSize(R.dimen.status_bar_height) * 1.25f).toInt())
-            setVisibilityMode(host.id, ConstraintSet.VISIBILITY_MODE_IGNORE)
             followers.forEach { id ->
                 val layout = getConstraint(id)?.layout ?: return@forEach
                 if (layout.topToBottom in nativeIds || layout.topToTop in nativeIds) {

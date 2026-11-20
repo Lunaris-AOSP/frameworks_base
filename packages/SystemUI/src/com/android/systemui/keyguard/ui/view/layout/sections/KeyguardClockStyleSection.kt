@@ -73,7 +73,7 @@ constructor(
             clipToPadding = false
             onDynamicClockLayoutChanged = {
                 blueprintInteractor.get().refreshBlueprint(Config(Type.NoTransition,
-                    checkPriority = false, terminatePrevious = false))
+                    checkPriority = false))
             }
             layoutParams = ConstraintLayout.LayoutParams(
                 ConstraintLayout.LayoutParams.MATCH_PARENT,
@@ -116,7 +116,9 @@ constructor(
             connect(clockId, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START)
             connect(clockId, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
             val topMargin = (context.resources.getDimensionPixelSize(R.dimen.status_bar_height) * 1.25f).toInt()
+            clear(clockId, ConstraintSet.BOTTOM)
             connect(clockId, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP, topMargin)
+            setVerticalBias(clockId, 0f)
             constrainHeight(clockId, ConstraintSet.WRAP_CONTENT)
             constrainWidth(clockId, ConstraintSet.MATCH_CONSTRAINT)
             setMargin(clockId, ConstraintSet.START, 0)

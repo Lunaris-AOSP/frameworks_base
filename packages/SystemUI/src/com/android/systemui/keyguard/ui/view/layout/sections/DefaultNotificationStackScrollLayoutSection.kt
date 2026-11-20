@@ -108,7 +108,7 @@ constructor(
                         0,
                         UserHandle.USER_CURRENT,
                     ) != 0 || keyguardRoot?.let {
-                        DynamicClockLayout.findClock(it)?.isDynamicClockOnLockscreen == true
+                        DynamicClockLayout.findClock(it)?.isDynamicClockLayoutActive == true
                     } == true)
             if (notificationsAboveClock) {
                 val normalClockBottom =
