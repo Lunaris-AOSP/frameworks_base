@@ -203,7 +203,6 @@ fun AxMediaPanel(
     val gesturesEnabled = interactive && !viewModel.hasVisibleGuts()
     val carouselScrollingEnabled =
         gesturesEnabled && (surface != AxMediaSurface.LOCKSCREEN || sessions.size > 1)
-    var isFalseTouchDetected by remember(surface) { mutableStateOf(false) }
     val behavior =
         remember(viewModel, surface, carouselScrollingEnabled) {
             MediaUiBehavior(
@@ -214,7 +213,7 @@ fun AxMediaPanel(
                     if (surface == AxMediaSurface.LOCKSCREEN) {
                         null
                     } else {
-                        { viewModel.isSwipeFalseTouch().also { isFalseTouchDetected = it } }
+                        { viewModel.isSwipeFalseTouch() }
                     },
             )
         }
@@ -226,7 +225,7 @@ fun AxMediaPanel(
                 .clip(shape)
                 .mediaOverscrollToDismiss(
                     enabled = gesturesEnabled,
-                    dismissAllowed = !isFalseTouchDetected,
+                    canDismiss = { !viewModel.isSwipeFalseTouch() },
                     onDismissed = onDismissed,
                 )
         } else {

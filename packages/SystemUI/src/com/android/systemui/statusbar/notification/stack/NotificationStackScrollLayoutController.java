@@ -69,6 +69,7 @@ import com.android.systemui.classifier.FalsingCollector;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.media.controls.ui.controller.KeyguardMediaController;
+import com.android.systemui.media.remedia.shared.flag.MediaControlsInComposeFlag;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
@@ -679,6 +680,11 @@ public class NotificationStackScrollLayoutController implements Dumpable {
                             true /* requireMinHeight */,
                             false /* ignoreDecors */,
                             !confineNotificationTouchToViewWidth() /* ignoreWidth */);
+
+                    if (child instanceof MediaContainerView
+                            && MediaControlsInComposeFlag.isEnabled()) {
+                        return null;
+                    }
 
                     // Verify the MotionEvent x,y are actually inside the touch area of the shelf,
                     // since the shelf may be animated down to a collapsed size on keyguard.

@@ -17,13 +17,17 @@
 package com.android.compose.gesture
 
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.SuspendingPointerInputModifierNode
 import androidx.compose.ui.layout.Measurable
 import androidx.compose.ui.layout.MeasureResult
 import androidx.compose.ui.layout.MeasureScope
@@ -62,19 +66,33 @@ fun Modifier.overscrollToDismiss(
     orientation: Orientation = Orientation.Horizontal,
     enabled: Boolean = true,
     onDismissed: () -> Unit,
-) = this.then(OverscrollToDismissElement(orientation, enabled, onDismissed))
+) =
+    overscrollToDismiss(
+        orientation = orientation,
+        enabled = enabled,
+        canDismiss = { true },
+        onDismissed = onDismissed,
+    )
+
+fun Modifier.overscrollToDismiss(
+    orientation: Orientation = Orientation.Horizontal,
+    enabled: Boolean = true,
+    canDismiss: () -> Boolean,
+    onDismissed: () -> Unit,
+) = this.then(OverscrollToDismissElement(orientation, enabled, canDismiss, onDismissed))
 
 private data class OverscrollToDismissElement(
     val orientation: Orientation,
     val enabled: Boolean,
+    val canDismiss: () -> Boolean,
     val onDismissed: () -> Unit,
 ) : ModifierNodeElement<OverscrollToDismissNode>() {
     override fun create(): OverscrollToDismissNode {
-        return OverscrollToDismissNode(orientation, enabled, onDismissed)
+        return OverscrollToDismissNode(orientation, enabled, canDismiss, onDismissed)
     }
 
     override fun update(node: OverscrollToDismissNode) {
-        node.update(orientation, enabled, onDismissed)
+        node.update(orientation, enabled, canDismiss, onDismissed)
     }
 
     override fun InspectorInfo.inspectableProperties() {
@@ -87,6 +105,7 @@ private data class OverscrollToDismissElement(
 private class OverscrollToDismissNode(
     orientation: Orientation,
     enabled: Boolean,
+    var canDismiss: () -> Boolean,
     var onDismissed: () -> Unit,
 ) :
     DelegatingNode(),
@@ -117,9 +136,43 @@ private class OverscrollToDismissNode(
 
     private var delegateNode =
         delegate(NestedDraggableRootNode(this, orientation, null, enabled, true))
+    private var isGestureReleased = false
+    private var touchObserver = if (enabled) createTouchObserver() else null
 
-    fun update(orientation: Orientation, enabled: Boolean, onDismissed: () -> Unit) {
+    private fun createTouchObserver(): SuspendingPointerInputModifierNode =
+        delegate(
+            SuspendingPointerInputModifierNode {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    isGestureReleased = false
+                    var released = false
+                    try {
+                        do {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                        } while (event.changes.any { it.pressed })
+                        released = true
+                    } finally {
+                        isGestureReleased = released
+                    }
+                }
+            }
+        )
+
+    fun update(
+        orientation: Orientation,
+        enabled: Boolean,
+        canDismiss: () -> Boolean,
+        onDismissed: () -> Unit,
+    ) {
+        this.canDismiss = canDismiss
         this.onDismissed = onDismissed
+        if (enabled) {
+            if (touchObserver == null) touchObserver = createTouchObserver()
+        } else {
+            touchObserver?.let { undelegate(it) }
+            touchObserver = null
+            isGestureReleased = false
+        }
         delegateNode.update(this, orientation, null, enabled, true)
     }
 
@@ -161,6 +214,7 @@ private class OverscrollToDismissNode(
     }
 
     override fun onDetach() {
+        isGestureReleased = false
         motionValueJob?.cancel()
     }
 
@@ -212,7 +266,9 @@ private class OverscrollToDismissNode(
                 currentState == MagneticDetach.State.Attached ||
                     (currentState == MagneticDetach.State.Detached && isFlingInOppositeDirection)
 
-            dragState = if (settleAttached) DragState.Idle else DragState.Dismissed
+            dragState =
+                if (!isGestureReleased || settleAttached || !canDismiss()) DragState.Idle
+                else DragState.Dismissed
         }
         return velocity
     }

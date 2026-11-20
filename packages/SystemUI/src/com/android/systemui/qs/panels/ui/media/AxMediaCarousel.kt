@@ -19,8 +19,6 @@
 package com.android.systemui.qs.panels.ui.media
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -40,11 +38,10 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.android.systemui.compose.modifiers.sysuiResTag
 import com.android.systemui.media.remedia.ui.compose.MediaUiBehavior
+import com.android.systemui.media.remedia.ui.compose.mediaCarouselScroll
 import com.android.systemui.media.remedia.ui.viewmodel.MediaCardViewModel
 import com.android.systemui.media.remedia.ui.viewmodel.MediaViewModel
 import kotlinx.coroutines.flow.filterNotNull
@@ -98,24 +95,15 @@ fun AxMediaCarousel(
                 .filterNotNull()
                 .collect { viewModel.onCardSelected(it) }
         }
-        var isFalseTouchDetected: Boolean by
-            remember(behavior.isCarouselScrollFalseTouch) { mutableStateOf(false) }
-        val isSwipingEnabled = behavior.isCarouselScrollingEnabled && !isFalseTouchDetected
+        val isSwipingEnabled = behavior.isCarouselScrollingEnabled
 
-        Box(
-            modifier =
-                Modifier.clip(carouselShape).pointerInput(behavior) {
-                    if (behavior.isCarouselScrollFalseTouch != null) {
-                        awaitEachGesture {
-                            awaitFirstDown(false, PointerEventPass.Initial)
-                            isFalseTouchDetected = behavior.isCarouselScrollFalseTouch.invoke()
-                        }
-                    }
-                }
-        ) {
+        Box(modifier = Modifier.clip(carouselShape)) {
             HorizontalPager(
                 state = pagerState,
-                modifier = Modifier.fillMaxWidth().clip(carouselShape),
+                modifier =
+                    Modifier.fillMaxWidth()
+                        .clip(carouselShape)
+                        .mediaCarouselScroll(pagerState, behavior.isCarouselScrollFalseTouch),
                 userScrollEnabled = isSwipingEnabled,
                 pageSpacing = 8.dp,
                 beyondViewportPageCount = 1,

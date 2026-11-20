@@ -25,8 +25,22 @@ fun Modifier.mediaOverscrollToDismiss(
     dismissAllowed: Boolean = true,
     onDismissed: () -> Unit,
 ): Modifier =
+    mediaOverscrollToDismiss(
+        enabled = enabled,
+        dismissAllowed = dismissAllowed,
+        canDismiss = { true },
+        onDismissed = onDismissed,
+    )
+
+fun Modifier.mediaOverscrollToDismiss(
+    enabled: Boolean = true,
+    dismissAllowed: Boolean = true,
+    canDismiss: () -> Boolean,
+    onDismissed: () -> Unit,
+): Modifier =
     overscrollToDismiss(
         orientation = Orientation.Horizontal,
         enabled = enabled && dismissAllowed,
+        canDismiss = canDismiss,
         onDismissed = onDismissed,
     )

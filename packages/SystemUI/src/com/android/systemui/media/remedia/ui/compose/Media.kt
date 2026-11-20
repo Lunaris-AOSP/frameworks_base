@@ -42,8 +42,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.DragInteraction
@@ -257,9 +255,7 @@ private fun CardCarouselContent(
             viewModel.onCardSelected(pagerState.currentPage)
         }
     }
-    var isFalseTouchDetected: Boolean by
-        remember(behavior.isCarouselScrollFalseTouch) { mutableStateOf(false) }
-    val isSwipingEnabled = behavior.isCarouselScrollingEnabled && !isFalseTouchDetected
+    val isSwipingEnabled = behavior.isCarouselScrollingEnabled
 
     val roundedCornerShape = RoundedCornerShape(32.dp)
 
@@ -270,21 +266,15 @@ private fun CardCarouselContent(
                     shape = roundedCornerShape
                     clip = true
                 }
-                .pointerInput(behavior) {
-                    if (behavior.isCarouselScrollFalseTouch != null) {
-                        awaitEachGesture {
-                            awaitFirstDown(false, PointerEventPass.Initial)
-                            isFalseTouchDetected = behavior.isCarouselScrollFalseTouch.invoke()
-                        }
-                    }
-                }
     ) {
         @Composable
         fun PagerContent(overscrollEffect: OverscrollEffect? = null) {
             Box(modifier = Modifier.sysuiResTag(MediaRes.MEDIA_CAROUSEL_SCROLLER)) {
                 HorizontalPager(
                     state = pagerState,
-                    modifier = Modifier.sysuiResTag(MediaRes.MEDIA_CAROUSEL),
+                    modifier =
+                        Modifier.sysuiResTag(MediaRes.MEDIA_CAROUSEL)
+                            .mediaCarouselScroll(pagerState, behavior.isCarouselScrollFalseTouch),
                     userScrollEnabled = isSwipingEnabled,
                     pageSpacing = 8.dp,
                     beyondViewportPageCount = 1,
@@ -318,6 +308,7 @@ private fun CardCarouselContent(
                     Modifier.overscrollToDismiss(
                         orientation = Orientation.Horizontal,
                         enabled = isSwipingEnabled,
+                        canDismiss = { behavior.isCarouselScrollFalseTouch?.invoke() != true },
                         onDismissed = onDismissed,
                     )
             ) {
@@ -1571,9 +1562,9 @@ data class MediaUiBehavior(
     val isCarouselScrollingEnabled: Boolean = true,
     val carouselVisibility: MediaCarouselVisibility = MediaCarouselVisibility.WhenNotEmpty,
     /**
-     * If provided, this callback will be consulted at the beginning of each carousel scroll gesture
-     * to see if the falsing system thinks that it's a false touch. If it then returns `true`, the
-     * scroll will be canceled.
+     * If provided, this callback is consulted after a carousel drag ends, once its motion events
+     * are available to the falsing system. A false touch restores the original page or prevents
+     * dismissal. Taps are handled separately by the card's action callbacks.
      */
     val isCarouselScrollFalseTouch: (() -> Boolean)? = null,
 )
