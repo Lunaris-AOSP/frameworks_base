@@ -161,6 +161,14 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
     private val glass = ClockGlassController(this)
     val hasGlassElements: Boolean
         get() = glass.hasGlassElements
+    var glassBlurAmount = 1f
+        set(value) {
+            if (!value.isFinite()) return
+            val amount = value.coerceIn(0f, 1f)
+            if (field == amount) return
+            field = amount
+            glass.blurAmount = minOf(1f - renderProgress, amount)
+        }
     var wallpaperFlags: Int
         get() = glass.wallpaperFlags
         set(value) { glass.wallpaperFlags = value }
@@ -308,6 +316,7 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
         val progress = renderProgress
         glass.enabled = progress < 1f
         glass.aodProgress = progress
+        glass.blurAmount = minOf(1f - progress, glassBlurAmount)
         design.elements.forEachIndexed { index, element ->
             val view = getChildAt(index)
             val frame = ClockElementAnimation.frame(element, progress, appearance.color)

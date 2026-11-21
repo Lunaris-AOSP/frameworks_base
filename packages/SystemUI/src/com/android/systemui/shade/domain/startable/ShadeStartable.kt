@@ -17,8 +17,10 @@
 package com.android.systemui.shade.domain.startable
 
 import android.content.Context
+import android.view.Display
 import com.android.app.tracing.coroutines.launchTraced as launch
 import com.android.systemui.CoreStartable
+import com.android.systemui.clocks.HomeClockProvider
 import com.android.systemui.common.ui.data.repository.ConfigurationRepository
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
@@ -72,6 +74,19 @@ constructor(
         hydrateShadeLayoutWidth()
         hydrateFullWidth()
         hydrateShadeExpansionStateManager()
+        applicationScope.launch {
+            val shadeInteractor = shadeInteractorProvider.get()
+            combine(
+                shadeInteractor.shadeExpansion,
+                shadeInteractor.qsExpansion,
+                shadeRepository.legacyShadeExpansion,
+            ) { shade, qs, panel ->
+                if (SceneContainerFlag.isEnabled) (shade + qs).coerceIn(0f, 1f)
+                else if (shade > 0f || qs > 0f) panel else 0f
+            }.collect {
+                HomeClockProvider.setShadeExpansion(context.display?.displayId ?: Display.DEFAULT_DISPLAY, it)
+            }
+        }
         logTouchesTo(touchLog)
         scrimShadeTransitionController.init()
         pulseExpansionHandler.setUp(nsslc)

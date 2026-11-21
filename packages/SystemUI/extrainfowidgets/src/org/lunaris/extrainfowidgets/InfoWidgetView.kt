@@ -97,6 +97,9 @@ class InfoWidgetView(context: Context, val widget: InfoWidget) : View(context) {
 
     private val blurs = mutableMapOf<String, AxBlurBackgroundRenderer>()
     private val glass = GlassSurfaceRenderer(this)
+    var glassBlurAmount: Float
+        get() = glass.blurAmount
+        set(value) { glass.blurAmount = value }
     private var blurSource: View? = null
     private val paint =
         TextPaint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG or Paint.FILTER_BITMAP_FLAG)

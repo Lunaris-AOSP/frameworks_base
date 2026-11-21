@@ -49,6 +49,15 @@ class GlassSurfaceRenderer(private val host: View) : ViewTreeObserver.OnPreDrawL
             host.invalidate()
         }
 
+    var blurAmount = 1f
+        set(value) {
+            if (!value.isFinite()) return
+            val amount = value.coerceIn(0f, 1f)
+            if (field == amount) return
+            field = amount
+            if (enabled && host.isShown && host.windowVisibility == View.VISIBLE && host.alpha > 0f) host.invalidate()
+        }
+
     var userId = host.context.userId
         set(value) {
             if (field == value) return
@@ -175,6 +184,7 @@ class GlassSurfaceRenderer(private val host: View) : ViewTreeObserver.OnPreDrawL
             if (!map(entry.material)) return false
             transform.getValues(values)
             entry.shader.apply {
+                setFloatUniform("blurAmount", blurAmount)
                 setFloatUniform("mapX", values[0], values[1], values[2])
                 setFloatUniform("mapY", values[3], values[4], values[5])
                 setFloatUniform("mapW", values[6], values[7], values[8])

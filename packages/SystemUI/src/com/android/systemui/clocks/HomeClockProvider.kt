@@ -39,7 +39,9 @@ import android.os.UserHandle
 import android.provider.Settings
 import android.util.Log
 import android.view.ContextThemeWrapper
+import android.view.Display
 import android.view.LayoutInflater
+import android.view.SurfaceControl
 import android.view.SurfaceControlViewHost
 import android.view.View
 import android.view.ViewGroup
@@ -130,6 +132,13 @@ class HomeClockProvider : ContentProvider() {
                     }?.setUnlockTiming(request)
                     null
                 }
+                "visibility" -> {
+                    sessions.firstOrNull {
+                        it.uid == uid && it.lifetime == lifetime &&
+                            it.renderer == request.getBinder("renderer")
+                    }?.setContentVisible(request.getBoolean("visible", true))
+                    null
+                }
                 "release" -> {
                     val releasing = sessions.toList().filter {
                         it.uid == uid && it.lifetime == lifetime
@@ -214,6 +223,7 @@ class HomeClockProvider : ContentProvider() {
                 PixelFormat.TRANSLUCENT,
             ))
             created.surfacePackage = host.surfacePackage
+            created.setContentVisible(request.getBoolean("visible", true))
             created.setUnlockTiming(request)
             Bundle().apply {
                 putParcelable("surface_package", created.surfacePackage)
@@ -404,6 +414,7 @@ class HomeClockProvider : ContentProvider() {
         }
 
         fun updateSource(request: UnlockTransition) {
+            source.view.get()?.setGlassTransitionAmount(unlockBlurAmount(request))
             if (!closed && !sourceHidden && request.started) sourceTransform.apply(bounds, 1f)
         }
 
@@ -445,6 +456,8 @@ class HomeClockProvider : ContentProvider() {
         fun updateOverlay(request: UnlockTransition) {
             if (closed || transition !== request) return
             val layer = overlay ?: return
+            layer.alpha = getShadeAlpha(layer.displayId)
+            layer.clock.setGlassTransitionAmount(unlockBlurAmount(request))
             if (overlayTarget == null) {
                 ClockSnapshot.capture(layer.clock, alpha = 1f)?.let {
                     overlayTarget = ClockTransform(it)
@@ -573,7 +586,7 @@ class HomeClockProvider : ContentProvider() {
             overlayTarget = null
         }
 
-        fun close() {
+        fun close(animateSourceBlur: Boolean = false) {
             if (closed) return
             closed = true
             closeOverlay()
@@ -581,6 +594,7 @@ class HomeClockProvider : ContentProvider() {
             sourceTree = null
             sourceTransform.restore()
             if (sourceHidden) source.view.get()?.alpha = source.alpha
+            source.view.get()?.restoreGlassBlur(animateSourceBlur)
             sourceHidden = false
             pictures.forEach { it.bitmap.recycle() }
             pictures.clear()
@@ -599,6 +613,7 @@ class HomeClockProvider : ContentProvider() {
         private val clock: ClockStyle,
     ) : IBinder.DeathRecipient {
         val displayId = viewport.displayId
+        private val shadeAlpha: Float get() = getShadeAlpha(displayId)
         val renderer = Binder()
         var surfacePackage: SurfaceControlViewHost.SurfacePackage? = null
         private val clockAlpha = clock.alpha
@@ -606,6 +621,10 @@ class HomeClockProvider : ContentProvider() {
         private var target: ClockTransform? = null
         private var attached = false
         private var closed = false
+        private var interactive = true
+        private var contentVisible = true
+        private val shadeTransaction = SurfaceControl.Transaction()
+        private var appliedShadeAlpha = Float.NaN
         private val preDraw = ViewTreeObserver.OnPreDrawListener {
             syncTransition()
             true
@@ -641,8 +660,31 @@ class HomeClockProvider : ContentProvider() {
         }
 
         fun setScreenInteractive(interactive: Boolean) {
+            this.interactive = interactive
             if (!interactive) resetTransition()
-            root.visibility = if (interactive) View.VISIBLE else View.INVISIBLE
+            updateVisibility()
+        }
+
+        fun setContentVisible(visible: Boolean) {
+            contentVisible = visible
+            updateVisibility()
+            if (!visible) clock.restoreGlassBlur(animate = false)
+        }
+
+        private fun updateVisibility() {
+            surfacePackage?.surfaceControl?.takeIf { it.isValid }?.let {
+                if (appliedShadeAlpha != shadeAlpha) {
+                    shadeTransaction.setAlpha(it, shadeAlpha).apply()
+                    appliedShadeAlpha = shadeAlpha
+                }
+            }
+            root.visibility = if (interactive && contentVisible && shadeAlpha > 0f)
+                View.VISIBLE else View.INVISIBLE
+        }
+
+        fun refreshVisibility() {
+            updateVisibility()
+            if (shadeAlpha <= 0f) clock.restoreGlassBlur(animate = false)
         }
 
         fun syncTransition() {
@@ -652,6 +694,7 @@ class HomeClockProvider : ContentProvider() {
                 request = transition
             }
             val current = request ?: return
+            clock.setGlassTransitionAmount(unlockBlurAmount(current))
             val movement = current.clocks[displayId] ?: return
             if (target == null) {
                 clock.alpha = 0f
@@ -662,7 +705,8 @@ class HomeClockProvider : ContentProvider() {
             }
             val visible = movement.home === this || movement.pendingHome === this
             target?.apply(movement.bounds, if (visible) 1f else 0f)
-            if (attached && current.started && current.keyguardGone &&
+            if (attached && interactive && contentVisible && shadeAlpha > 0f &&
+                current.started && current.keyguardGone &&
                 current.timing?.unlocked != false &&
                 current.amount >= APPEARANCE_HANDOFF && movement.home == null &&
                 movement.pendingHome == null && movement.overlay?.ready == true &&
@@ -698,11 +742,12 @@ class HomeClockProvider : ContentProvider() {
         fun capturePicture(): HomeClockPicture? =
             ClockSnapshot.capture(clock, viewport.x, viewport.y, clockAlpha)?.capturePicture()
 
-        fun resetTransition() {
+        fun resetTransition(animateBlur: Boolean = false) {
             target?.restore()
             target = null
             request = null
             clock.alpha = clockAlpha
+            clock.restoreGlassBlur(animateBlur)
         }
 
         override fun binderDied() {
@@ -719,6 +764,7 @@ class HomeClockProvider : ContentProvider() {
             runCatching { lifetime.unlinkToDeath(this, 0) }
             surfacePackage?.release()
             surfacePackage = null
+            shadeTransaction.close()
             host.release()
         }
     }
@@ -737,6 +783,8 @@ class HomeClockProvider : ContentProvider() {
         private var providerContext: Context? = null
         private var keyguardStateController: KeyguardStateController? = null
         private var transition: UnlockTransition? = null
+        private var shadeAlpha = 1f
+        private var shadeDisplayId = Display.DEFAULT_DISPLAY
         private var animator: ValueAnimator? = null
         private var observingTasks = false
         private val timeout = Runnable { resetUnlock() }
@@ -828,8 +876,10 @@ class HomeClockProvider : ContentProvider() {
                 observingTasks = false
                 TaskStackChangeListeners.getInstance().unregisterTaskStackListener(taskCallback)
             }
-            sessions.toList().forEach { it.resetTransition() }
-            current?.clocks?.values?.forEach { it.close() }
+            val restoreBlur = current?.let { it.keyguardGone && it.amount >= 1f } == true
+            sessions.toList().forEach { it.resetTransition(restoreBlur) }
+            val restoreSourceBlur = current?.let { it.started && !it.keyguardGone } == true
+            current?.clocks?.values?.forEach { it.close(restoreSourceBlur) }
         }
 
         private fun syncUnlock(request: UnlockTransition) {
@@ -846,6 +896,27 @@ class HomeClockProvider : ContentProvider() {
             }
             if (request.started && request.amount >= 1f && request.keyguardGone &&
                 request.clocks.values.all { it.home != null && it.pendingHome == null }) resetUnlock()
+        }
+
+        private fun unlockBlurAmount(request: UnlockTransition): Float {
+            val progress = (request.amount / APPEARANCE_HANDOFF).coerceIn(0f, 1f)
+            return 1f - progress * progress * (3f - 2f * progress)
+        }
+
+        private fun getShadeAlpha(displayId: Int): Float =
+            if (displayId == shadeDisplayId) shadeAlpha else 1f
+
+        fun setShadeExpansion(displayId: Int, value: Float): Unit = onMain {
+            if (!value.isFinite()) return@onMain
+            val progress = value.coerceIn(0f, 1f)
+            val alpha = 1f - progress * progress * (3f - 2f * progress)
+            if (shadeDisplayId == displayId && shadeAlpha == alpha) return@onMain
+            shadeDisplayId = displayId
+            shadeAlpha = alpha
+            sessions.forEach { it.refreshVisibility() }
+            transition?.clocks?.values?.forEach {
+                it.overlay?.let { layer -> layer.alpha = getShadeAlpha(layer.displayId) }
+            }
         }
 
         private fun setTiming(request: UnlockTransition, timing: UnlockTiming) {

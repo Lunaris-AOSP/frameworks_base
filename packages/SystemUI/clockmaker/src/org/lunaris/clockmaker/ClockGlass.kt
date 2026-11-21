@@ -58,8 +58,10 @@ class ClockGlass private constructor(val clear: Bitmap, private val referenceWid
             (mask.height / 4).coerceAtLeast(1), true)
         val angle = Math.toRadians(s.rimRotation.toDouble())
         return RuntimeShader(ClockGlassShader.SOURCE).apply {
+            setInputShader("clear", bitmapShader(clear))
             setInputShader("blurred", bitmapShader(blur.bitmap))
             setInputShader("blurSides", bitmapShader(blur.sides))
+            setFloatUniform("blurAmount", 1f)
             setInputShader("glyph", maskShader(mask))
             setInputShader("shadowGlyph", maskShader(shadowMask))
             setFloatUniform("refraction", (if (s.separateRefraction) s.clockRefraction else s.refraction) / 1000f)
@@ -118,8 +120,10 @@ class ClockGlass private constructor(val clear: Bitmap, private val referenceWid
             }
         val angle = Math.toRadians(s.rimRotation.toDouble())
         return RuntimeShader(GlassSurfaceShader.SOURCE).apply {
+            setInputShader("clear", bitmapShader(clear))
             setInputShader("blurred", bitmapShader(blur.bitmap))
             setInputShader("blurSides", bitmapShader(blur.sides))
+            setFloatUniform("blurAmount", 1f)
             setFloatUniform("refraction", s.refraction / 1000f)
             setFloatUniform("refractionWidth", s.refractionWidth / 1000f)
             setFloatUniform("chromatic", s.chromaticAberration / 1000f)

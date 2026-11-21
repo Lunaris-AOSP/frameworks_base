@@ -20,6 +20,7 @@ import com.android.systemui.res.R
 import com.android.systemui.settings.UserTracker
 import com.android.systemui.statusbar.NotificationLockscreenUserManager
 import com.android.systemui.statusbar.StatusBarState
+import com.android.systemui.statusbar.SysuiStatusBarStateController
 import com.android.systemui.statusbar.connectivity.NetworkController
 import com.android.systemui.statusbar.notification.collection.NotifPipeline
 import com.android.systemui.statusbar.notification.collection.NotificationEntry
@@ -42,7 +43,7 @@ class ExtraInfoWidgetsController
 @Inject
 constructor(
     private val users: UserTracker,
-    private val status: StatusBarStateController,
+    private val status: SysuiStatusBarStateController,
     private val notifications: NotifPipeline,
     private val privacy: NotificationLockscreenUserManager,
     private val starter: ActivityStarter,
@@ -107,6 +108,10 @@ constructor(
             object : StatusBarStateController.StateListener {
                 override fun onDozingChanged(dozing: Boolean) {
                     updateSettings()
+                }
+
+                override fun onDozeAmountChanged(linear: Float, eased: Float) {
+                    updateGlassBlur(eased)
                 }
 
                 override fun onStateChanged(newState: Int) {
@@ -208,6 +213,7 @@ constructor(
 
         private fun updateSettings() {
             if (!attached || switchingUser) return
+            updateGlassBlur(status.interpolatedDozeAmount)
             enabled = integer(ExtraInfoLayout.ENABLED, 0) == 1
             independent = integer(ExtraInfoFreeformLayout.MODE, 0) == 1
             val oldEnabled = integer("lockscreen_info_widgets_enabled", 0) == 1
@@ -286,6 +292,12 @@ constructor(
             }
             updateAwake()
             render()
+        }
+
+        private fun updateGlassBlur(dozeAmount: Float) {
+            val amount = 1f - dozeAmount.coerceIn(0f, 1f)
+            extra.glassBlurAmount = amount
+            freeform.glassBlurAmount = amount
         }
 
         private fun updateAwake() {

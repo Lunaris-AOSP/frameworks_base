@@ -39,6 +39,7 @@ class ClockGlassController(private val host: View) :
         var background: ClockGlass? = null
         var shader: RuntimeShader? = null
         var aodProgress = 0f
+        var blurAmount = 1f
         private var outlineShader: RuntimeShader? = null
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val maskPaint = TextPaint()
@@ -154,8 +155,16 @@ class ClockGlassController(private val host: View) :
                 !maskPaint.equalsForTextMeasurement(view.paint) ||
                 viewport.left != left || viewport.top != top ||
                 viewport.width() != width || viewport.height() != height
-            val changed = maskChanged || this.background !== background || tint != view.currentTextColor
-            if (!changed && (failed || shader != null)) return !failed && shader != null
+            val changed = maskChanged || this.background !== background
+            if (!changed && (failed || shader != null)) {
+                if (!failed && tint != view.currentTextColor) {
+                    tint = view.currentTextColor
+                    shader?.setColorUniform("tint", tint or 0xFF000000.toInt())
+                    outlineShader?.setColorUniform("tint", tint or 0xFF000000.toInt())
+                    dirty = true
+                }
+                return !failed && shader != null
+            }
             restore()
             paint.shader = null
             shader = null
@@ -221,6 +230,7 @@ class ClockGlassController(private val host: View) :
         fun apply(values: FloatArray, transform: Matrix, width: Int, height: Int) {
             val shaders = listOfNotNull(shader, outlineShader)
             shaders.forEach {
+                it.setFloatUniform("blurAmount", blurAmount)
                 it.setFloatUniform("mapX", values[0], values[1], values[2])
                 it.setFloatUniform("mapY", values[3], values[4], values[5])
                 it.setFloatUniform("mapW", values[6], values[7], values[8])
@@ -260,6 +270,14 @@ class ClockGlassController(private val host: View) :
         fun needsApply(transform: Matrix): Boolean = dirty || !applied || matrix != transform ||
             view.paint.shader !== if (view is ClockOutlineTextView) outlineShader else hidden
 
+        fun setBlur(value: Float, visible: Boolean) {
+            if (blurAmount == value) return
+            blurAmount = value
+            shader?.setFloatUniform("blurAmount", value)
+            outlineShader?.setFloatUniform("blurAmount", value)
+            if (visible && applied && view.visibility == View.VISIBLE && view.alpha > 0f) view.invalidate()
+        }
+
         companion object {
             private const val MAX_MASK_DIMENSION = 4096L
             private const val MAX_MASK_PIXELS = 4L * 1024 * 1024
@@ -297,6 +315,16 @@ class ClockGlassController(private val host: View) :
             if (field == progress) return
             field = progress
             entries.forEach { it.aodProgress = progress; it.view.invalidate() }
+        }
+    var blurAmount = 1f
+        set(value) {
+            if (!value.isFinite()) return
+            val amount = value.coerceIn(0f, 1f)
+            if (field == amount) return
+            field = amount
+            val visible = enabled && (preview || host.isShown &&
+                host.windowVisibility == View.VISIBLE && hasVisibleAlpha())
+            entries.forEach { it.setBlur(amount, visible) }
         }
     var userId = host.context.userId
         set(value) {
@@ -339,7 +367,10 @@ class ClockGlassController(private val host: View) :
         val normalized = style.normalized()
         val cached = previousEntries.firstOrNull { it.matches(view, normalized, date, enabled) }
         if (cached != null) previousEntries.remove(cached)
-        entries.add((cached ?: Entry(view, normalized, date, changed)).also { it.aodProgress = aodProgress })
+        entries.add((cached ?: Entry(view, normalized, date, changed)).also {
+            it.aodProgress = aodProgress
+            it.setBlur(blurAmount, false)
+        })
     }
 
     fun commit() {
@@ -402,7 +433,6 @@ class ClockGlassController(private val host: View) :
 
     fun update() {
         if (entries.isEmpty()) return
-        if (!enabled) return
         val background = if (preview) previewBackground else {
             if (!host.isAttachedToWindow) return
             ClockGlassWallpaper.get(host.context, userId, blurRadii, wallpaperFlags)
@@ -412,6 +442,7 @@ class ClockGlassController(private val host: View) :
             return
         }
         entries.forEach { background.isBlurReady(it.style, changed) }
+        if (!enabled) return
         if (!preview && (!host.isShown || host.windowVisibility != View.VISIBLE)) return
         if (entries.none { it.view.visibility == View.VISIBLE && it.view.alpha > 0f }) return
         val visible = preview || hasVisibleAlpha()

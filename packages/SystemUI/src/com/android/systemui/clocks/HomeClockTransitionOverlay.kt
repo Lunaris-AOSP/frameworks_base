@@ -49,6 +49,7 @@ internal class HomeClockTransitionOverlay(
     context.createWindowContext(display, WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG, null),
     context.applicationInfo.theme,
 )) {
+    val displayId = display.displayId
     val clock: ClockStyle = (LayoutInflater.from(this.context)
         .inflate(R.layout.keyguard_clock_style, this, false) as ClockStyle).apply {
         isHomeScreenClock = true

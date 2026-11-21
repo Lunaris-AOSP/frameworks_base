@@ -46,6 +46,17 @@ class ExtraInfoGridView(context: Context) : ViewGroup(context) {
             children().forEach { it.appearance = value }
         }
 
+    var glassBlurAmount = 1f
+        set(value) {
+            if (!value.isFinite()) return
+            val amount = value.coerceIn(0f, 1f)
+            if (field == amount) return
+            field = amount
+            for (index in 0 until childCount) {
+                (getChildAt(index) as InfoWidgetView).glassBlurAmount = amount
+            }
+        }
+
     var onAction: ((String) -> Unit)? = null
         set(value) {
             field = value
@@ -83,6 +94,7 @@ class ExtraInfoGridView(context: Context) : ViewGroup(context) {
                 InfoWidgetView(context, widget).also {
                     it.data = data
                     it.appearance = appearance
+                    it.glassBlurAmount = glassBlurAmount
                     it.onAction = onAction
                     it.setBlurSource(blurSource)
                     glassSpace?.let { space -> it.setGlassPreview(glassPreview, space, glassOffset) }

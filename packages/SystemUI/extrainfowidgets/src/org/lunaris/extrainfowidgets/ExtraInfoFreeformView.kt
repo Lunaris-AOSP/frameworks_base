@@ -99,6 +99,17 @@ class ExtraInfoFreeformView(context: Context) : ViewGroup(context) {
             children().forEach { it.appearance = value }
         }
 
+    var glassBlurAmount = 1f
+        set(value) {
+            if (!value.isFinite()) return
+            val amount = value.coerceIn(0f, 1f)
+            if (field == amount) return
+            field = amount
+            for (index in 0 until childCount) {
+                (getChildAt(index) as InfoWidgetView).glassBlurAmount = amount
+            }
+        }
+
     private var glassPreview: ClockGlass? = null
     private var glassSpace: View? = null
     private var glassOffset = 0f
@@ -194,6 +205,7 @@ class ExtraInfoFreeformView(context: Context) : ViewGroup(context) {
                 InfoWidgetView(context, design).also {
                     it.data = data
                     it.appearance = appearance
+                    it.glassBlurAmount = glassBlurAmount
                     it.onAction = if (editable) null else onAction
                     it.setBlurSource(blurSource)
                     glassSpace?.let { space -> it.setGlassPreview(glassPreview, space, glassOffset) }

@@ -10,6 +10,7 @@ import android.animation.AnimatorListenerAdapter
 import android.animation.Keyframe
 import android.animation.ObjectAnimator
 import android.animation.PropertyValuesHolder
+import android.animation.ValueAnimator
 import android.app.ActivityManager
 import android.app.WallpaperManager
 import android.content.BroadcastReceiver
@@ -44,6 +45,7 @@ import android.view.ViewTreeObserver
 import android.view.WindowManager
 import android.view.WindowManagerGlobal
 import android.view.animation.AccelerateInterpolator
+import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -211,6 +213,8 @@ class ClockStyle @JvmOverloads constructor(
     private var dateGlassStyle = ClockGlassStyle.DATE_DEFAULT
     private var separateDateGlass = true
     private val textGlass = ClockGlassController(this)
+    private var glassTransitionAmount = 1f
+    private var glassAnimator: ValueAnimator? = null
     private var gradientColorStart = DEFAULT_GRADIENT_COLOR_START
     private var gradientColorEnd = DEFAULT_GRADIENT_COLOR_END
     private var gradientAnchorY = DEFAULT_GRADIENT_ANCHOR_Y
@@ -325,6 +329,7 @@ class ClockStyle @JvmOverloads constructor(
             parallaxDozeAmount = maxOf(linear, eased).coerceIn(0f, 1f)
             updateClockParallax()
             dynamicClockController?.onDozeAmountChanged(eased)
+            updateGlassAmount()
             if (currentClockView !is ClockDesignView) return
             (currentClockView as ClockDesignView).setAodProgress(eased)
             applyClockAlpha()
@@ -860,6 +865,7 @@ class ClockStyle @JvmOverloads constructor(
     }
 
     override fun onDetachedFromWindow() {
+        setGlassTransitionAmount(1f)
         super.onDetachedFromWindow()
         parallaxController?.destroy()
         parallaxController = null
@@ -1236,6 +1242,62 @@ class ClockStyle @JvmOverloads constructor(
             return baseline || controller?.visibleClocks?.any { it.hasGlassEffects } == true
         }
 
+    internal fun setGlassTransitionAmount(value: Float) {
+        if (!value.isFinite()) return
+        val animation = glassAnimator
+        glassAnimator = null
+        animation?.cancel()
+        val amount = value.coerceIn(0f, 1f)
+        if (glassTransitionAmount != amount) {
+            glassTransitionAmount = amount
+            updateGlassAmount()
+        }
+        dynamicClockController?.visibleClocks?.forEach { it.setGlassTransitionAmount(value) }
+    }
+
+    internal fun restoreGlassBlur(animate: Boolean) {
+        if (!animate || !hasGlassEffects || !screenInteractive || !isShown ||
+            windowVisibility != View.VISIBLE || alpha <= 0f ||
+            !ValueAnimator.areAnimatorsEnabled() || glassTransitionAmount >= 1f) {
+            setGlassTransitionAmount(1f)
+            return
+        }
+        val from = glassTransitionAmount
+        setGlassTransitionAmount(from)
+        val animation = ValueAnimator.ofFloat(from, 1f)
+        glassAnimator = animation
+        animation.duration = 180L
+        animation.interpolator = DecelerateInterpolator()
+        animation.addUpdateListener {
+            if (glassAnimator === animation) {
+                glassTransitionAmount = it.animatedValue as Float
+                updateGlassAmount()
+                dynamicClockController?.visibleClocks?.forEach { clock ->
+                    clock.setGlassTransitionAmount(glassTransitionAmount)
+                }
+            }
+        }
+        animation.addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animator: Animator) {
+                if (glassAnimator === animation) {
+                    glassAnimator = null
+                    setGlassTransitionAmount(1f)
+                }
+            }
+        })
+        animation.start()
+    }
+
+    private fun updateGlassAmount() {
+        val doze = when {
+            isHomeScreenClock -> 0f
+            isDynamicFace -> layoutAodProgress
+            else -> statusBarStateController.interpolatedDozeAmount.coerceIn(0f, 1f)
+        }
+        textGlass.blurAmount = (1f - doze) * glassTransitionAmount
+        (currentClockView as? ClockDesignView)?.glassBlurAmount = (1f - doze) * glassTransitionAmount
+    }
+
     private fun forceTimeUpdate() {
         if (currentClockView == null) return
         stockClockController?.let {
@@ -1560,6 +1622,7 @@ class ClockStyle @JvmOverloads constructor(
     }
 
     private fun applyClockColors() {
+        updateGlassAmount()
         stockClockController?.let { controller ->
             val color = if (colorMode == COLOR_MODE_DEFAULT && !albumArtColorEnabled) {
                 if (layoutProfile?.inheritStockSettings == true) controller.smallClock.theme.seedColor
@@ -1720,6 +1783,7 @@ class ClockStyle @JvmOverloads constructor(
 
     private fun applyClockScale() {
         val view = currentClockView ?: return
+        updateGlassAmount()
         val scale = if (view is ClockDesignView) {
             val progress = clockAodProgress()
             view.setAodProgress(progress)
