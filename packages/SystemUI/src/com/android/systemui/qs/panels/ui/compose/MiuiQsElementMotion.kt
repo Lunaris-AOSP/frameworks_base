@@ -16,6 +16,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,20 +37,30 @@ import androidx.compose.ui.node.LayoutAwareModifierNode
 import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntSize
+import com.android.compose.lifecycle.LaunchedEffectWithLifecycle
 import com.android.systemui.qs.MiuiQsMotion
+import com.android.systemui.util.InteractionBoost
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 
+private const val MIUI_QS_BOOST_DURATION_MS = 750
+private const val MIUI_QS_BOOST_REFRESH_MS = 500L
+
 internal class MiuiQsMotionController {
-    private val panels = mutableSetOf<MiuiQsPanelMotion>()
+    private val panels = mutableStateListOf<MiuiQsPanelMotion>()
     private var interacting = false
+    val animationsRunning by derivedStateOf {
+        panels.any { it.animationsRunning && !it.interacting }
+    }
 
     fun registerPanel(motion: MiuiQsPanelMotion) {
+        if (motion in panels) return
         panels.add(motion)
         if (interacting) motion.beginInteraction()
     }
@@ -70,6 +81,21 @@ internal class MiuiQsMotionController {
 }
 
 internal val LocalMiuiQsMotionController = staticCompositionLocalOf<MiuiQsMotionController?> { null }
+
+@Composable
+internal fun MiuiQsAnimationBoost(controller: MiuiQsMotionController) {
+    LaunchedEffectWithLifecycle(controller) {
+        snapshotFlow { controller.animationsRunning }
+            .collectLatest { running ->
+                if (running) {
+                    while (true) {
+                        InteractionBoost.request(MIUI_QS_BOOST_DURATION_MS)
+                        delay(MIUI_QS_BOOST_REFRESH_MS)
+                    }
+                }
+            }
+    }
+}
 
 internal class MiuiQsPanelMotion(
     val expansion: () -> Float,
@@ -352,8 +378,8 @@ private fun Modifier.miuiQsElementMotionLayer(
             else -> 0f
         }
     }
-    val opacity = remember(motion) { Animatable(initial, MiuiQsMotion.VISIBILITY_THRESHOLD) }
-    val scale = remember(motion) { Animatable(initial, MiuiQsMotion.VISIBILITY_THRESHOLD) }
+    val appearanceProgress =
+        remember(motion) { Animatable(initial, MiuiQsMotion.VISIBILITY_THRESHOLD) }
     val horizontal = remember(motion) { Animatable(initial, MiuiQsMotion.VISIBILITY_THRESHOLD) }
     val vertical = remember(motion) { Animatable(initial, MiuiQsMotion.VISIBILITY_THRESHOLD) }
     val swiping by remember(motion) { derivedStateOf { motion.swiping() } }
@@ -374,8 +400,7 @@ private fun Modifier.miuiQsElementMotionLayer(
     val snapProgress: suspend (Float) -> Unit = remember(motion) {
         { value ->
             coroutineScope {
-                launch(start = CoroutineStart.UNDISPATCHED) { opacity.snapTo(value) }
-                launch(start = CoroutineStart.UNDISPATCHED) { scale.snapTo(value) }
+                launch(start = CoroutineStart.UNDISPATCHED) { appearanceProgress.snapTo(value) }
                 launch(start = CoroutineStart.UNDISPATCHED) { horizontal.snapTo(value) }
                 launch(start = CoroutineStart.UNDISPATCHED) { vertical.snapTo(value) }
             }
@@ -384,9 +409,8 @@ private fun Modifier.miuiQsElementMotionLayer(
     val running = remember(motion) {
         derivedStateOf {
             active && currentReady &&
-                (delaying || opacity.isRunning || scale.isRunning ||
-                    horizontal.isRunning || vertical.isRunning || opacity.value != target ||
-                    scale.value != target ||
+                (delaying || appearanceProgress.isRunning || horizontal.isRunning ||
+                    vertical.isRunning || appearanceProgress.value != target ||
                     horizontal.value != target || vertical.value != target)
         }
     }
@@ -409,23 +433,20 @@ private fun Modifier.miuiQsElementMotionLayer(
         if (resetNow) {
             snapProgress(target)
         } else if (ready &&
-            (opacity.value != target || scale.value != target || horizontal.value != target ||
-            vertical.value != target || opacity.isRunning || scale.isRunning ||
+            (appearanceProgress.value != target || horizontal.value != target ||
+            vertical.value != target || appearanceProgress.isRunning ||
             horizontal.isRunning || vertical.isRunning)
         ) {
             delaying = true
             try {
                 val revealing = target == 1f
-                if (revealing && opacity.value == 0f && scale.value == 0f &&
+                if (revealing && appearanceProgress.value == 0f &&
                     horizontal.value == 0f && vertical.value == 0f
                 ) delay(MiuiQsMotion.showDelayMillis(distance))
                 val appearance = MiuiQsMotion.appearanceSpring(distance, revealing).spec()
                 coroutineScope {
                     launch(start = CoroutineStart.UNDISPATCHED) {
-                        opacity.animateTo(target, appearance)
-                    }
-                    launch(start = CoroutineStart.UNDISPATCHED) {
-                        scale.animateTo(target, appearance)
+                        appearanceProgress.animateTo(target, appearance)
                     }
                     launch(start = CoroutineStart.UNDISPATCHED) {
                         horizontal.animateTo(target, MiuiQsMotion.horizontalSpring(distance).spec())
@@ -444,9 +465,9 @@ private fun Modifier.miuiQsElementMotionLayer(
         alpha =
             if (ready && !withinViewport && motion.animationsRunning) 0f
             else if (holdExpanded) 1f
-            else if (ready || initial == 1f) MiuiQsMotion.clamp(opacity.value)
+            else if (ready || initial == 1f) MiuiQsMotion.clamp(appearanceProgress.value)
             else 0f
-        scaleX = if (holdExpanded) 1f else MiuiQsMotion.scale(scale.value)
+        scaleX = if (holdExpanded) 1f else MiuiQsMotion.scale(appearanceProgress.value)
         scaleY = scaleX
         transformOrigin = TransformOrigin.Center
         translationX =

@@ -36,6 +36,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -102,11 +103,6 @@ internal fun ContentScope.AxQsMixedGrid(
     expansionFromLeft: () -> Boolean = { false },
     animationResetSequence: () -> Int = { 0 },
 ) {
-    val tiles = viewModel.containerViewModel.tileGridViewModel.tileViewModels
-    val values = LinkedHashMap<String, AxQsGridValue>()
-    tiles.forEach { tile -> values[tile.spec.spec] = AxQsGridValue.Tile(tile) }
-    AxQsControl.entries.forEach { control -> values[control.id] = AxQsGridValue.Control(control) }
-
     val splitShade = viewModel.isInSplitShade
     val landscapeLayout = !qqs && !splitShade && axQsViewModel.useLandscapeLayout
     val compactStyle = axQsViewModel.useCompactStyle && !splitShade
@@ -131,136 +127,167 @@ internal fun ContentScope.AxQsMixedGrid(
     val allowCircleCells =
         controlColumns >= axQsViewModel.defaultColumns(controlGridLayout) &&
             (splitShade || tileColumns >= axQsViewModel.defaultColumns(tileGridLayout))
-    val controlPositions = axQsViewModel.controlPositions(layout)
-    val stacks = axQsViewModel.stacks(layout)
-    val folders = axQsViewModel.folders(layout)
-    val stackedSpecs = stacks.values.flatten().toSet() + folders.values.flatMap { it.tileSpecs }
-    val tilesBySpec = tiles.associateBy { it.spec.spec }
-    stacks.forEach { (id, specs) ->
-        values[id] = AxQsGridValue.Stack(specs.mapNotNull(tilesBySpec::get))
-    }
-    folders.forEach { (id, folder) ->
-        values[id] = AxQsGridValue.Folder(folder, folder.tileSpecs.mapNotNull(tilesBySpec::get))
-    }
-    stackedSpecs.forEach(values::remove)
-    val controlIds =
-        axQsViewModel.orderedIds(
-            layout = layout,
-            section = AxQsGridSection.CONTROLS,
-            availableIds = values.keys.toList(),
-            defaultIds = tiles.map { it.spec.spec },
-        )
-    val tileIds =
-        axQsViewModel.orderedIds(
-            layout = layout,
-            section = AxQsGridSection.TILES,
-            availableIds =
-                tiles.map { it.spec.spec }.filterNot(stackedSpecs::contains) +
-                    AxQsControl.entries.filter { it.canUseTileGrid }.map(AxQsControl::id),
-            defaultIds = tiles.map { it.spec.spec },
-        )
-    val controlItems: List<AxQsGridItem<AxQsGridValue>> =
-        controlIds.map { id ->
-            when (val value = values.getValue(id)) {
-                is AxQsGridValue.Folder ->
+    val grid by remember(
+        viewModel, axQsViewModel, layout, sharedLayout, controlColumns, tileColumns, tileRowLimit,
+    ) {
+        derivedStateOf {
+            val tiles = viewModel.containerViewModel.tileGridViewModel.tileViewModels
+            val values = LinkedHashMap<String, AxQsGridValue>()
+            tiles.forEach { tile -> values[tile.spec.spec] = AxQsGridValue.Tile(tile) }
+            AxQsControl.entries.forEach { control -> values[control.id] = AxQsGridValue.Control(control) }
+
+            val controlPositions = axQsViewModel.controlPositions(layout)
+            val stacks = axQsViewModel.stacks(layout)
+            val folders = axQsViewModel.folders(layout)
+            val stackedSpecs = stacks.values.flatten().toSet() + folders.values.flatMap { it.tileSpecs }
+            val tilesBySpec = tiles.associateBy { it.spec.spec }
+            stacks.forEach { (id, specs) ->
+                values[id] = AxQsGridValue.Stack(specs.mapNotNull(tilesBySpec::get))
+            }
+            folders.forEach { (id, folder) ->
+                values[id] = AxQsGridValue.Folder(folder, folder.tileSpecs.mapNotNull(tilesBySpec::get))
+            }
+            stackedSpecs.forEach(values::remove)
+            val controlIds =
+                axQsViewModel.orderedIds(
+                    layout = layout,
+                    section = AxQsGridSection.CONTROLS,
+                    availableIds = values.keys.toList(),
+                    defaultIds = tiles.map { it.spec.spec },
+                )
+            val tileIds =
+                axQsViewModel.orderedIds(
+                    layout = layout,
+                    section = AxQsGridSection.TILES,
+                    availableIds =
+                        tiles.map { it.spec.spec }.filterNot(stackedSpecs::contains) +
+                            AxQsControl.entries.filter { it.canUseTileGrid }.map(AxQsControl::id),
+                    defaultIds = tiles.map { it.spec.spec },
+                )
+            val controlItems: List<AxQsGridItem<AxQsGridValue>> =
+                controlIds.map { id ->
+                    when (val value = values.getValue(id)) {
+                        is AxQsGridValue.Folder ->
+                            AxQsGridItem<AxQsGridValue>(
+                                id = id,
+                                span =
+                                    LunarisQsTileFolderController.coerceSpan(
+                                        axQsViewModel.span(id, layout, LunarisQsTileFolderController.Span),
+                                        controlColumns,
+                                    ),
+                                minSpan = LunarisQsTileFolderController.MinSpan,
+                                maxSpan = LunarisQsTileFolderController.maxSpan(controlColumns),
+                                value = value,
+                                position = controlPositions[id],
+                            )
+                        is AxQsGridValue.Stack ->
+                            AxQsGridItem<AxQsGridValue>(
+                                id = id,
+                                span = AxQsTileStacks.Span,
+                                minSpan = AxQsTileStacks.Span,
+                                maxSpan = AxQsTileStacks.Span,
+                                value = value,
+                                position = controlPositions[id],
+                            )
+                        is AxQsGridValue.Tile ->
+                            AxQsGridItem<AxQsGridValue>(
+                                id = id,
+                                span =
+                                    axQsViewModel
+                                        .span(id, layout, AxQsSpan.TileDefault)
+                                        .coerceForControlTile(controlColumns),
+                                minSpan = AxQsSpan.ControlTileMin,
+                                maxSpan = AxQsSpan.controlTileMax(controlColumns),
+                                value = value,
+                                position = controlPositions[id],
+                            )
+                        is AxQsGridValue.Control -> {
+                            val spans = value.control.spans(controlColumns)
+                            AxQsGridItem<AxQsGridValue>(
+                                id = id,
+                                span =
+                                    axQsViewModel.span(id, layout, spans.default).let {
+                                        value.control.coerceSpan(it, controlColumns)
+                                    },
+                                minSpan = spans.min,
+                                maxSpan = spans.max,
+                                value = value,
+                                position = controlPositions[id],
+                            )
+                        }
+                    }
+                }
+            val tileItems: List<AxQsGridItem<AxQsGridValue>> =
+                tileIds.map { id ->
                     AxQsGridItem<AxQsGridValue>(
                         id = id,
-                        span =
-                            LunarisQsTileFolderController.coerceSpan(
-                                axQsViewModel.span(id, layout, LunarisQsTileFolderController.Span),
-                                controlColumns,
-                            ),
-                        minSpan = LunarisQsTileFolderController.MinSpan,
-                        maxSpan = LunarisQsTileFolderController.maxSpan(controlColumns),
-                        value = value,
-                        position = controlPositions[id],
-                    )
-                is AxQsGridValue.Stack ->
-                    AxQsGridItem<AxQsGridValue>(
-                        id = id,
-                        span = AxQsTileStacks.Span,
-                        minSpan = AxQsTileStacks.Span,
-                        maxSpan = AxQsTileStacks.Span,
-                        value = value,
-                        position = controlPositions[id],
-                    )
-                is AxQsGridValue.Tile ->
-                    AxQsGridItem<AxQsGridValue>(
-                        id = id,
-                        span =
-                            axQsViewModel
-                                .span(id, layout, AxQsSpan.TileDefault)
-                                .coerceForControlTile(controlColumns),
-                        minSpan = AxQsSpan.ControlTileMin,
-                        maxSpan = AxQsSpan.controlTileMax(controlColumns),
-                        value = value,
-                        position = controlPositions[id],
-                    )
-                is AxQsGridValue.Control -> {
-                    val spans = value.control.spans(controlColumns)
-                    AxQsGridItem<AxQsGridValue>(
-                        id = id,
-                        span =
-                            axQsViewModel.span(id, layout, spans.default).let {
-                                value.control.coerceSpan(it, controlColumns)
-                            },
-                        minSpan = spans.min,
-                        maxSpan = spans.max,
-                        value = value,
-                        position = controlPositions[id],
+                        span = AxQsSpan.TileDefault,
+                        minSpan = AxQsSpan.TileDefault,
+                        maxSpan = AxQsSpan.TileDefault,
+                        value = values.getValue(id),
                     )
                 }
-            }
-        }
-    val tileItems: List<AxQsGridItem<AxQsGridValue>> =
-        tileIds.map { id ->
-            AxQsGridItem<AxQsGridValue>(
-                id = id,
-                span = AxQsSpan.TileDefault,
-                minSpan = AxQsSpan.TileDefault,
-                maxSpan = AxQsSpan.TileDefault,
-                value = values.getValue(id),
+            val rows =
+                if (layout == AxQsLayout.QS) {
+                    AxQsGridRows(
+                        controls = AX_QS_CONTROL_MAX_ROWS,
+                        tiles = axQsVisibleTileRows(tileItems.size, tileColumns, tileRowLimit),
+                    )
+                } else {
+                    axQsSharedGridRows(
+                        controlItems,
+                        controlColumns,
+                        tileItems.size,
+                        tileColumns,
+                        maxTileRows = tileRowLimit,
+                    )
+                }
+            val fittedControlItems: List<AxQsGridItem<AxQsGridValue>> =
+                if (sharedLayout) {
+                    positionAxQsGridItems(controlItems, controlColumns, rows.controls)
+                } else {
+                    fitAxQsGridItems<AxQsGridValue>(controlItems, controlColumns, rows.controls)
+                }
+            val collapsedControlRows =
+                if (sharedLayout) axQsCollapsedControlRows(fittedControlItems, axQsViewModel.sharedQqsRows)
+                else 0
+            val controlRowCount = axQsGridRowCount(fittedControlItems, controlColumns, rows.controls)
+            val collapsedTileRows =
+                if (sharedLayout) (axQsViewModel.sharedQqsRows - controlRowCount).coerceIn(0, rows.tiles)
+                else 0
+            AxQsMixedGridContent(
+                fittedControlItems = fittedControlItems,
+                tileItems = tileItems,
+                rows = rows,
+                collapsedControlRows = collapsedControlRows,
+                controlRowCount = controlRowCount,
+                collapsedTileRows = collapsedTileRows,
             )
         }
-    val rows =
-        if (layout == AxQsLayout.QS) {
-            AxQsGridRows(
-                controls = AX_QS_CONTROL_MAX_ROWS,
-                tiles = axQsVisibleTileRows(tileItems.size, tileColumns, tileRowLimit),
-            )
-        } else {
-            axQsSharedGridRows(
-                controlItems,
-                controlColumns,
-                tileItems.size,
-                tileColumns,
-                maxTileRows = tileRowLimit,
-            )
-        }
-    val fittedControlItems: List<AxQsGridItem<AxQsGridValue>> =
-        if (sharedLayout) {
-            positionAxQsGridItems(controlItems, controlColumns, rows.controls)
-        } else {
-            fitAxQsGridItems<AxQsGridValue>(controlItems, controlColumns, rows.controls)
-        }
-    val collapsedControlRows =
-        if (sharedLayout) axQsCollapsedControlRows(fittedControlItems, axQsViewModel.sharedQqsRows)
-        else 0
-    val controlRowCount = axQsGridRowCount(fittedControlItems, controlColumns, rows.controls)
-    val collapsedTileRows =
-        if (sharedLayout) (axQsViewModel.sharedQqsRows - controlRowCount).coerceIn(0, rows.tiles)
-        else 0
-    val expandedItemsVisible by remember(viewModel, sharedLayout) {
-        derivedStateOf { !sharedLayout || viewModel.expansionState.progress > 0f }
     }
-    val listeningItems =
+    val fittedControlItems = grid.fittedControlItems
+    val tileItems = grid.tileItems
+    val rows = grid.rows
+    val collapsedControlRows = grid.collapsedControlRows
+    val controlRowCount = grid.controlRowCount
+    val collapsedTileRows = grid.collapsedTileRows
+    val expandedItemsVisible by remember(viewModel, sharedLayout) {
+        derivedStateOf {
+            !sharedLayout || sharedQsRevealAlpha(viewModel.expansionState.progress) > 0f
+        }
+    }
+    val listeningItems = remember(grid, expandedItemsVisible, tileColumns) {
         if (expandedItemsVisible) fittedControlItems + tileItems
         else {
             fittedControlItems.filter {
                 (it.position?.row ?: 0) + it.span.rows <= collapsedControlRows
             } + tileItems.take(collapsedTileRows * tileColumns)
         }
-    val visibleTiles =
+    }
+    val collapsedTileIds = remember(grid, tileColumns) {
+        tileItems.take(collapsedTileRows * tileColumns).map { it.id }.toSet()
+    }
+    val visibleTiles = remember(listeningItems) {
         listeningItems
             .flatMap {
                 when (val value = it.value) {
@@ -271,6 +298,7 @@ internal fun ContentScope.AxQsMixedGrid(
                 }
             }
             .distinctBy { it.spec.spec }
+    }
     val rowHeight = AxTileDefaults.TileHeight * LocalTileScale.current
     val spacing = axQsViewModel.spacing.tileGap.dp * LocalTileScale.current
     val qsEntranceProgress = {
@@ -311,6 +339,7 @@ internal fun ContentScope.AxQsMixedGrid(
             contentVisible &&
                 (expandedItemsVisible ||
                     (item.position?.row ?: 0) + item.span.rows <= collapsedControlRows)
+        val itemListening = { listening() && (!sharedLayout || itemVisible) }
         when (val value = item.value) {
             is AxQsGridValue.Folder ->
                 this@AxQsMixedGrid.LunarisQsTileFolder(
@@ -320,7 +349,7 @@ internal fun ContentScope.AxQsMixedGrid(
                     tiles = value.tiles,
                     layout = layout,
                     viewModel = axQsViewModel,
-                    listening = listening,
+                    listening = itemListening,
                 )
             is AxQsGridValue.Stack ->
                 AxTileStack(
@@ -341,7 +370,7 @@ internal fun ContentScope.AxQsMixedGrid(
                         iconOnly = false,
                         qqs = qqs,
                         separateQqs = separateQqs,
-                        listening = listening,
+                        listening = itemListening,
                         detailsViewModel = detailsViewModel,
                         axQsViewModel = axQsViewModel,
                         modifier = Modifier.fillMaxSize(),
@@ -354,7 +383,7 @@ internal fun ContentScope.AxQsMixedGrid(
                     iconOnly = false,
                     qqs = qqs,
                     separateQqs = separateQqs,
-                    listening = listening,
+                    listening = itemListening,
                     detailsViewModel = detailsViewModel,
                     axQsViewModel = axQsViewModel,
                     modifier = Modifier.fillMaxSize(),
@@ -381,6 +410,8 @@ internal fun ContentScope.AxQsMixedGrid(
         }
     }
     val tileContent: @Composable (AxQsGridItem<AxQsGridValue>) -> Unit = { item ->
+        val itemVisible =
+            contentVisible && (expandedItemsVisible || item.id in collapsedTileIds)
         when (val value = item.value) {
             is AxQsGridValue.Stack,
             is AxQsGridValue.Folder -> Unit
@@ -391,7 +422,7 @@ internal fun ContentScope.AxQsMixedGrid(
                     iconOnly = true,
                     qqs = qqs,
                     separateQqs = separateQqs,
-                    listening = listening,
+                    listening = { listening() && (!sharedLayout || itemVisible) },
                     detailsViewModel = detailsViewModel,
                     axQsViewModel = axQsViewModel,
                     modifier = Modifier.fillMaxSize(),
@@ -402,8 +433,8 @@ internal fun ContentScope.AxQsMixedGrid(
                     span = item.span,
                     axQsViewModel = axQsViewModel,
                     layout = layout,
-                    contentVisible = contentVisible,
-                    contentPlaying = contentPlaying,
+                    contentVisible = if (sharedLayout) itemVisible else contentVisible,
+                    contentPlaying = contentPlaying && (!sharedLayout || itemVisible),
                     mediaViewModel = mediaViewModel,
                     mediaViewModelFactory = viewModel.mediaViewModelFactory,
                     brightnessSliderViewModel = brightnessSliderViewModel,
@@ -517,6 +548,7 @@ internal fun ContentScope.AxQsMixedGrid(
                             compactStyle = compactStyle,
                             autoHideTilePageIndicator = axQsViewModel.autoHideTilePageIndicator,
                             collapsedHeaderOffset = collapsedHeaderOffset,
+                            keepItemComposed = { it.value !is AxQsGridValue.Control },
                             scrollState = scrollState,
                             expansionProgress = { viewModel.expansionState.progress },
                             isFullyVisible = { contentVisible && viewModel.isQsFullyExpanded },
@@ -648,18 +680,27 @@ internal fun ContentScope.AxQsMixedGrid(
         }
     }
     val tilesListening = !separateQqs && !(qqs && splitShade) && listening()
-    DisposableEffect(visibleTiles, tilesListening) {
-        val token = Any()
-        if (tilesListening) {
-            visibleTiles.forEach { it.startListening(token) }
-        }
-        onDispose {
-            if (tilesListening) {
-                visibleTiles.forEach { it.stopListening(token) }
+    visibleTiles.forEach { tile ->
+        key(tile) {
+            DisposableEffect(tilesListening) {
+                val token = Any()
+                if (tilesListening) tile.startListening(token)
+                onDispose {
+                    if (tilesListening) tile.stopListening(token)
+                }
             }
         }
     }
 }
+
+private data class AxQsMixedGridContent(
+    val fittedControlItems: List<AxQsGridItem<AxQsGridValue>>,
+    val tileItems: List<AxQsGridItem<AxQsGridValue>>,
+    val rows: AxQsGridRows,
+    val collapsedControlRows: Int,
+    val controlRowCount: Int,
+    val collapsedTileRows: Int,
+)
 
 @Composable
 private fun ContentScope.AxLiveTile(

@@ -73,6 +73,7 @@ internal fun <T> ContentScope.AxQsSharedPanel(
     controlContent: @Composable (AxQsGridItem<T>) -> Unit,
     tileContent: @Composable (AxQsGridItem<T>) -> Unit,
     tileLabel: @Composable (AxQsGridItem<T>) -> Unit,
+    keepItemComposed: (AxQsGridItem<T>) -> Boolean,
 ) {
     val pagerState = rememberPagerState {
         axQsTileGridPageCount(tileItems.size, tileColumns, tileRows)
@@ -173,6 +174,7 @@ internal fun <T> ContentScope.AxQsSharedPanel(
                         val row = item.position?.row ?: 0
                         AxQsSharedItem(
                             isCollapsedItem = row + item.span.rows <= collapsedControlRows,
+                            keepComposed = keepItemComposed(item),
                             row = row,
                             expandedInteraction = expandedInteraction,
                             scrollState = scrollState,
@@ -206,8 +208,10 @@ internal fun <T> ContentScope.AxQsSharedPanel(
                                     ),
                             itemWrapper = { page, index, content ->
                                 val row = index / tileColumns
+                                val item = tileItems[page * tileColumns * tileRows + index]
                                 AxQsSharedItem(
                                     isCollapsedItem = page == 0 && row < collapsedTileRows,
+                                    keepComposed = keepItemComposed(item),
                                     row = controlRows + row,
                                     expandedInteraction = expandedInteraction,
                                     scrollState = scrollState,
@@ -250,11 +254,14 @@ private fun AxQsSharedItem(
     progress: () -> Float,
     modifier: Modifier = Modifier.fillMaxSize(),
     parentCollapseTranslationY: () -> Float = { 0f },
+    keepComposed: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val currentProgress by rememberUpdatedState(progress)
     val visible by
-        remember(isCollapsedItem) { derivedStateOf { isCollapsedItem || currentProgress() > 0f } }
+        remember(isCollapsedItem) {
+            derivedStateOf { isCollapsedItem || sharedQsRevealAlpha(currentProgress()) > 0f }
+        }
     val interactionModifier =
         if (isCollapsedItem || expandedInteraction) Modifier
         else {
@@ -279,7 +286,7 @@ private fun AxQsSharedItem(
             translationY -= parentCollapseTranslationY()
         }
     ) {
-        if (visible) content()
+        if (keepComposed || visible) content()
     }
 }
 

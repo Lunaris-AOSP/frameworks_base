@@ -24,8 +24,11 @@ import android.view.VelocityTracker;
 import android.view.ViewConfiguration;
 
 import com.android.systemui.qs.LunarisQsMotion;
+import com.android.systemui.util.InteractionBoost;
 
 final class LunarisQsPanelSwipeController {
+    private static final int DRAG_BOOST_DURATION_MS = 300;
+
     interface Callback {
         boolean canStart(MotionEvent event);
         boolean isShowingQs();
@@ -76,6 +79,9 @@ final class LunarisQsPanelSwipeController {
                 }
                 boolean catchingAnimation = mActive;
                 stopAnimator();
+                if (catchingAnimation) {
+                    InteractionBoost.request(DRAG_BOOST_DURATION_MS);
+                }
                 if (!mActive) {
                     mOriginalQs = mCallback.isShowingQs();
                     mSettlingToQs = mOriginalQs;
@@ -114,6 +120,7 @@ final class LunarisQsPanelSwipeController {
                         mDownX += Math.copySign(mTouchSlop, dx);
                         mActive = true;
                         mDragging = true;
+                        InteractionBoost.request(DRAG_BOOST_DURATION_MS);
                         mCallback.onStarted(mProgress);
                         if (mActive) updateProgress(event);
                     }
@@ -218,6 +225,7 @@ final class LunarisQsPanelSwipeController {
                 finish(showQs);
             }
         });
+        InteractionBoost.request((int) duration);
         mAnimator.start();
     }
 

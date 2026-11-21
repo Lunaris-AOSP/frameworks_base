@@ -212,6 +212,7 @@ import com.android.systemui.qs.panels.ui.compose.LocalQsScrollGestureStart
 import com.android.systemui.qs.panels.ui.compose.LocalMiuiQsHeaderMotion
 import com.android.systemui.qs.panels.ui.compose.LocalMiuiQsMotionController
 import com.android.systemui.qs.panels.ui.compose.MiuiQsMotionController
+import com.android.systemui.qs.panels.ui.compose.MiuiQsAnimationBoost
 import com.android.systemui.qs.panels.ui.compose.miuiQsMotionBounds
 import com.android.systemui.qs.panels.ui.compose.rememberMiuiQsPanelMotion
 import com.android.systemui.qs.panels.ui.compose.LocalShowQsSliderPercentage
@@ -400,6 +401,7 @@ constructor(
 
     @Composable
     private fun Content(modifier: Modifier = Modifier) {
+        MiuiQsAnimationBoost(miuiQsMotionController)
         val isBlurCurrentlySupported by
             windowRootViewBlurInteractor.isShadeBlurCurrentlySupported.collectAsStateWithLifecycle()
         val blurEnabled = notificationShadeBlur() && isBlurCurrentlySupported
@@ -1125,7 +1127,8 @@ constructor(
         val topPadding =
             if (overlayShadeHeader) {
                 quickSettingsContentTopPadding(
-                    expansionProgress = if (sharedLayout) viewModel.expansionState.progress else 1f
+                    expansionProgress =
+                        if (sharedLayout && compactStyle) viewModel.expansionState.progress else 1f
                 )
             } else qsExtraPadding
         val collapsedTopPadding =
