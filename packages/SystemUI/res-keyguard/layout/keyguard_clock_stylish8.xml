@@ -38,7 +38,7 @@
                 android:orientation="vertical"
                 android:layout_gravity="center">
 
-                <TextClock
+                <com.android.systemui.clocks.AlignedTextClock
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:format12Hour="hh : mm | MMM dd"

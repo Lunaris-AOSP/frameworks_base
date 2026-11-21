@@ -8,7 +8,7 @@
     android:layout_height="match_parent">
 
     <!-- Hour Text (Dynamic) -->
-    <TextClock
+    <com.android.systemui.clocks.AlignedTextClock
         android:id="@+id/hour_text"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -20,7 +20,7 @@
         android:format24Hour="HH"/>
 
     <!-- Minute Text (Dynamic) -->
-    <TextClock
+    <com.android.systemui.clocks.AlignedTextClock
         android:id="@+id/minute_text"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

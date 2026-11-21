@@ -33,7 +33,7 @@
         android:layout_marginBottom="7dp" />
 
     <!-- Time Layout -->
-    <TextClock
+    <com.android.systemui.clocks.AlignedTextClock
         android:id="@+id/clock"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

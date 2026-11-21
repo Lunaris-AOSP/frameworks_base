@@ -9,6 +9,16 @@ object ClockDesignTransition {
     fun fromAod(source: ClockDesign, target: ClockDesign): ClockDesign =
         fromAod(source, target, mergeElements = true)
 
+    fun fromAod(source: ClockDesign, target: ClockDesign, sourceAlignment: ClockDigitAlignment,
+        targetAlignment: ClockDigitAlignment): ClockDesign {
+        fun configured(design: ClockDesign, alignment: ClockDigitAlignment) =
+            design.copy(elements = design.elements.map {
+                if (it.kind == ClockElementKind.TIME) it.copy(digitAlignmentOverride = alignment) else it
+            })
+        return fromAod(configured(source, sourceAlignment), configured(target, targetAlignment),
+            mergeElements = true)
+    }
+
     private fun fromAod(source: ClockDesign, target: ClockDesign, mergeElements: Boolean): ClockDesign {
         val remaining = source.elements.toMutableList()
         val ids = target.elements.mapTo(mutableSetOf()) { it.id }
@@ -31,7 +41,8 @@ object ClockDesignTransition {
             } else {
                 remaining.remove(match)
                 if (mergeElements && sameContent(match, element) && match.font == element.font &&
-                    match.weight == element.weight && match.italic == element.italic) {
+                    match.weight == element.weight && match.italic == element.italic &&
+                    match.digitAlignmentOverride == element.digitAlignmentOverride) {
                     element.configureAod(match.aodStyle).also { aodElements[match.id] = it }
                 } else {
                     aodElements[match.id] = match.copy(

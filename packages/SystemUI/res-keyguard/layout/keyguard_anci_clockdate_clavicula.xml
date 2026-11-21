@@ -67,7 +67,7 @@
             android:format12Hour="MMM"
             android:format24Hour="MMM" />
 
-        <TextClock
+        <com.android.systemui.clocks.AlignedTextClock
             android:textSize="40.0dip"
             android:textColor="@android:color/system_accent1_100"
             android:id="@+id/lsclock10_e"

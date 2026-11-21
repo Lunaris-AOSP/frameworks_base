@@ -78,6 +78,8 @@ import org.lunaris.clockmaker.ClockDesign
 import org.lunaris.clockmaker.ClockDesignAppearance
 import org.lunaris.clockmaker.ClockDesignTransition
 import org.lunaris.clockmaker.ClockDesignView
+import org.lunaris.clockmaker.ClockDigitAlignment
+import org.lunaris.clockmaker.ClockDigits
 import org.lunaris.clockmaker.ClockElementAnimation
 import org.lunaris.clockmaker.ClockElementKind
 import org.lunaris.clockmaker.ClockEffects
@@ -176,6 +178,7 @@ class ClockStyle @JvmOverloads constructor(
     private var clockStyle = DEFAULT_STYLE
     private var clockDesign = ClockDesign()
     private var makerWeather = true
+    private var digitAlignment = ClockDigitAlignment.FONT
     private var colorMode = COLOR_MODE_DEFAULT
     private var customColor = DEFAULT_CUSTOM_COLOR
     private var clockOpacity = DEFAULT_OPACITY
@@ -496,7 +499,8 @@ class ClockStyle @JvmOverloads constructor(
             return false
         }
         val options = (if (makerWeather) 1 else 0) or
-            (if (source.makerWeather) 2 else 0) or (if (source.aodAnimEnabled) 4 else 0)
+            (if (source.makerWeather) 2 else 0) or (if (source.aodAnimEnabled) 4 else 0) or
+            (source.digitAlignment.ordinal shl 3) or (digitAlignment.ordinal shl 5)
         val changed = layoutAodSource !== source || layoutAodView !== view ||
             layoutAodSourceDesign != source.clockDesign || layoutAodTargetDesign != clockDesign ||
             layoutAodOptions != options
@@ -532,7 +536,7 @@ class ClockStyle @JvmOverloads constructor(
             val target = clockDesign.copy(elements = clockDesign.elements.map {
                 if (it.kind == ClockElementKind.WEATHER && !makerWeather) it.copy(visible = false) else it
             })
-            view.setDesign(ClockDesignTransition.fromAod(aod, target))
+            view.setDesign(ClockDesignTransition.fromAod(aod, target, source.digitAlignment, digitAlignment))
         }
         if (changed || dozingChanged) applyClockColors()
         if (changed || dozingChanged || progressChanged || sourceGeometryChanged || geometryChanged || amount > 0f) {
@@ -911,6 +915,12 @@ class ClockStyle @JvmOverloads constructor(
             }
             CLOCK_MAKER_WEATHER_KEY -> {
                 makerWeather = TunerService.parseInteger(newValue, 1) != 0
+                applyClockColors()
+            }
+            ClockDigits.SETTING -> {
+                digitAlignment = ClockDigitAlignment.parse(newValue)
+                textClocks.filterIsInstance<AlignedTextClock>().forEach { it.digitAlignment = digitAlignment }
+                textGlass.clear()
                 applyClockColors()
             }
             CLOCK_STYLE_KEY -> {
@@ -1384,6 +1394,7 @@ class ClockStyle @JvmOverloads constructor(
         if (root is ClockDesignView) return
         when (root) {
             is TextClock -> {
+                (root as? AlignedTextClock)?.digitAlignment = digitAlignment
                 root.setTag(R.id.original_typeface, root.typeface)
                 root.setTag(R.id.original_text_color, root.currentTextColor)
                 root.setTag(R.id.original_alpha, root.alpha)
@@ -1573,7 +1584,8 @@ class ClockStyle @JvmOverloads constructor(
             it.setAppearance(ClockDesignAppearance(resolveClockColor(), gradientEnabled,
                 gradientColorStart, gradientColorEnd, gradientAnchorY, gradientRadius,
                 makerWeather || layoutAodSource != null, isDozing,
-                aodAnimation = layoutAodSource?.aodAnimEnabled ?: aodAnimEnabled))
+                aodAnimation = layoutAodSource?.aodAnimEnabled ?: aodAnimEnabled,
+                digitAlignment = digitAlignment))
             it.setAodProgress(clockAodProgress())
             return
         }
@@ -2117,7 +2129,7 @@ class ClockStyle @JvmOverloads constructor(
         @JvmField val CLOCK_HYPER_BLUR_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_HYPER_BLUR
 
         private val CLOCK_TUNING_KEYS = arrayOf(
-            CLOCK_STYLE_KEY, CLOCK_DESIGN_KEY, CLOCK_MAKER_WEATHER_KEY,
+            CLOCK_STYLE_KEY, CLOCK_DESIGN_KEY, CLOCK_MAKER_WEATHER_KEY, ClockDigits.SETTING,
             CLOCK_COLOR_MODE_KEY, CLOCK_CUSTOM_COLOR_KEY, CLOCK_TEXT_OPACITY_KEY,
             CLOCK_SHADOW_ENABLED_KEY, CLOCK_SHADOW_COLOR_KEY, CLOCK_SHADOW_SOFTNESS_KEY,
             CLOCK_SHADOW_OPACITY_KEY, CLOCK_FRAME_MARGIN_TOP_KEY, CLOCK_SIZE_KEY,

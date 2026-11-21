@@ -19,7 +19,7 @@
             android:layout_height="wrap_content"
             android:layout_gravity="top|center">
 
-            <TextClock
+            <com.android.systemui.clocks.AlignedTextClock
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"

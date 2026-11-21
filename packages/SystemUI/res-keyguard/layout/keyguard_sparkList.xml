@@ -15,7 +15,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content">
 
-        <TextClock
+        <com.android.systemui.clocks.AlignedTextClock
             android:textSize="120.0sp"
             android:textStyle="normal"
             android:textColor="#d9ffffff"
@@ -40,7 +40,7 @@
             android:src="@drawable/sparkls1_bg1"
             android:alpha="0.5" />
 
-        <TextClock
+        <com.android.systemui.clocks.AlignedTextClock
             android:textSize="120.0sp"
             android:textStyle="normal"
             android:textColor="#d9ffffff"

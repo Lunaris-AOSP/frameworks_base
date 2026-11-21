@@ -35,7 +35,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content">
             
-            <TextClock
+            <com.android.systemui.clocks.AlignedTextClock
                 android:textSize="54.0dip"
                 android:textColor="@android:color/white"
                 android:layout_width="match_parent"
@@ -45,7 +45,7 @@
                 android:format12Hour="hh:mm"
                 android:format24Hour="HH:mm"/>
             
-            <TextClock
+            <com.android.systemui.clocks.AlignedTextClock
                 android:textSize="54.0dip"
                 android:textColor="@android:color/system_accent1_300"
                 android:layout_width="match_parent"

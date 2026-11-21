@@ -123,6 +123,7 @@ data class ClockLayoutProfile(
                 }
                 put(ClockGlassStyle.SETTING, tuning.optJSONObject("glassStyle")?.toString())
                 put(ClockGlassStyle.DATE_SETTING, tuning.optJSONObject("dateGlassStyle")?.toString())
+                put(ClockDigits.SETTING, ClockDigitAlignment.parse(tuning.optString("digitAlignment")).name)
                 put(COLOR, color?.toString())
                 put(COLOR_MODE, when {
                     tuning.optBoolean("gradient") -> "custom"
@@ -144,7 +145,8 @@ data class ClockLayoutProfile(
 
         fun fallback(values: Map<String, String?>, small: Boolean): ClockLayoutProfile {
             val keys = integerFields.values + booleanFields.values + listOf(STYLE, COLOR_MODE,
-                COLOR, ClockDesign.SETTING, ClockGlassStyle.SETTING, ClockGlassStyle.DATE_SETTING)
+                COLOR, ClockDesign.SETTING, ClockGlassStyle.SETTING, ClockGlassStyle.DATE_SETTING,
+                ClockDigits.SETTING)
             val layoutValues = values.filterKeys { it in keys }.toMutableMap()
             val stock = (values[STYLE]?.toIntOrNull() ?: 0) == 0
             if (stock) {

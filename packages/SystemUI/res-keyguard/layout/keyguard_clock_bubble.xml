@@ -22,7 +22,7 @@
             android:background="@drawable/clock_bubble_1"
             android:gravity="center">
 
-            <TextClock
+            <com.android.systemui.clocks.AlignedTextClock
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/general_sans"
@@ -32,7 +32,7 @@
                 android:textSize="111sp"
                 android:textStyle="bold" />
 
-            <TextClock
+            <com.android.systemui.clocks.AlignedTextClock
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:format12Hour="mm"
@@ -75,7 +75,7 @@
             android:background="@drawable/clock_bubble_2"
             android:gravity="center">
 
-            <TextClock
+            <com.android.systemui.clocks.AlignedTextClock
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/general_sans"

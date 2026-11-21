@@ -49,7 +49,7 @@
                     android:format12Hour="   "
                     android:format24Hour="   " />
 
-                <TextClock
+                <com.android.systemui.clocks.AlignedTextClock
                     android:textSize="17.0dip"
                     android:textStyle="bold"
                     android:textColor="@android:color/system_accent1_100"

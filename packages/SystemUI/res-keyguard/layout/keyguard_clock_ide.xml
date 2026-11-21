@@ -155,7 +155,7 @@
                     android:textSize="16sp"
                     android:textStyle="bold" />
 
-                <TextClock
+                <com.android.systemui.clocks.AlignedTextClock
                     android:id="@+id/clockTime"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"

@@ -49,7 +49,7 @@
 
     </LinearLayout>
 
-    <TextClock
+    <com.android.systemui.clocks.AlignedTextClock
         android:id="@+id/hour_text"
         android:layout_width="wrap_content"
 	    android:layout_height="wrap_content"
@@ -62,7 +62,7 @@
         android:format12Hour="hh"
         android:format24Hour="HH"/>
 
-    <TextClock
+    <com.android.systemui.clocks.AlignedTextClock
         android:id="@+id/minute_text"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

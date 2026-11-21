@@ -35,7 +35,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content">
 
-                <TextClock
+                <com.android.systemui.clocks.AlignedTextClock
                     android:textSize="40.0dip"
                     android:textStyle="bold"
                     android:textColor="@android:color/system_accent1_100"
@@ -55,7 +55,7 @@
                     android:layout_width="30.0dip"
                     android:layout_height="wrap_content" />
 
-                <TextClock
+                <com.android.systemui.clocks.AlignedTextClock
                     android:textSize="40.0dip"
                     android:textColor="@android:color/system_accent1_100"
                     android:gravity="center"

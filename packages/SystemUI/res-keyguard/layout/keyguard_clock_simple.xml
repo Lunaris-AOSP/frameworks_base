@@ -7,7 +7,7 @@
     android:orientation="horizontal"
     android:gravity="center">
 
-    <TextClock
+    <com.android.systemui.clocks.AlignedTextClock
         android:id="@+id/clock"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

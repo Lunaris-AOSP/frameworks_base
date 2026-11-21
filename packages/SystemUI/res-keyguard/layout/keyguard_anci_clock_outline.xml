@@ -22,7 +22,7 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="0.0dip">
 
-            <TextClock
+            <com.android.systemui.clocks.AlignedTextClock
                 android:textSize="40.0dip"
                 android:textColor="@android:color/system_accent1_100"
                 android:gravity="center"
@@ -38,7 +38,7 @@
                 android:format12Hour=" hh "
                 android:format24Hour=" HH " />
 
-            <TextClock
+            <com.android.systemui.clocks.AlignedTextClock
                 android:textSize="20.0dip"
                 android:textColor="@android:color/system_accent1_100"
                 android:gravity="end"

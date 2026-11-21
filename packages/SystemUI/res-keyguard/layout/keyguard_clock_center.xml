@@ -48,7 +48,7 @@
                 android:textSize="20dp"
                 android:visibility="gone" />
         </LinearLayout>
-        <TextClock
+        <com.android.systemui.clocks.AlignedTextClock
             android:id="@+id/clock"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

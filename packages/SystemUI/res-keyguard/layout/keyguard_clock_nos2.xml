@@ -60,7 +60,7 @@
             android:gravity="center">
 
             <!-- Hour TextClock -->
-            <TextClock
+            <com.android.systemui.clocks.AlignedTextClock
                 android:id="@+id/clock_hour"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -87,7 +87,7 @@
                 android:textSize="94dp" />
 
             <!-- Minute TextClock -->
-            <TextClock
+            <com.android.systemui.clocks.AlignedTextClock
                 android:id="@+id/clock_minute"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"

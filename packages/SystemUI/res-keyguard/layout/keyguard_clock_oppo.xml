@@ -30,7 +30,7 @@
         android:textSize="19dp"
         android:visibility="gone" />
 
-    <TextClock
+    <com.android.systemui.clocks.AlignedTextClock
         android:id="@+id/time"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

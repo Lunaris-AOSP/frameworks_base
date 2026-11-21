@@ -114,7 +114,7 @@
                 android:background="#FFFFFF"
                 android:tag="text1" />
 
-            <TextClock
+            <com.android.systemui.clocks.AlignedTextClock
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="16dp"

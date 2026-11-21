@@ -55,7 +55,7 @@
         android:orientation="horizontal"
         android:gravity="center">
 
-        <TextClock
+        <com.android.systemui.clocks.AlignedTextClock
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:fontFamily="@font/Delirium"
@@ -67,7 +67,7 @@
             android:textColor="@android:color/white"
             android:textSize="280dp" />
 
-        <TextClock
+        <com.android.systemui.clocks.AlignedTextClock
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:fontFamily="@font/DeliriumNeon"

@@ -31,7 +31,7 @@
         android:orientation="horizontal"
         android:gravity="center">
 
-        <TextClock
+        <com.android.systemui.clocks.AlignedTextClock
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:fontFamily="@font/Heathergreen"
@@ -44,7 +44,7 @@
             android:includeFontPadding="false"
             android:textSize="340dp" />
 
-        <TextClock
+        <com.android.systemui.clocks.AlignedTextClock
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:fontFamily="@font/Heathergreen"

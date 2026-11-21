@@ -238,16 +238,18 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
         }
         applyElements()
         updateQuickLook()
-        refreshTime()
+        refreshTime(forceAlignment = true)
         scheduleTick()
     }
 
     fun setAppearance(value: ClockDesignAppearance) {
         if (appearance == value) return
+        val alignmentChanged = appearance.digitAlignment != value.digitAlignment
+        if (alignmentChanged) glass.clear()
         appearance = value
         applyElements()
         updateQuickLook()
-        refreshTime()
+        refreshTime(forceAlignment = alignmentChanged)
         scheduleTick()
     }
 
@@ -342,7 +344,9 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
         invalidate()
     }
 
-    fun refreshTime() {
+    fun refreshTime() = refreshTime(forceAlignment = false)
+
+    private fun refreshTime(forceAlignment: Boolean) {
         val now = Date()
         val locale = resources.configuration.locales[0]
         design.elements.forEachIndexed { index, element ->
@@ -371,7 +375,13 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
                     runCatching { SimpleDateFormat(pattern, locale).format(now) }.getOrDefault("")
                 }
             }
-            if (view.text.toString() != text) view.text = text
+            if (ClockDigits.sourceText(view.text).toString() != text ||
+                (forceAlignment && element.kind == ClockElementKind.TIME)) {
+                view.text = if (element.kind == ClockElementKind.TIME) {
+                    ClockDigits.align(text, element.digitAlignmentOverride ?: appearance.digitAlignment,
+                        element.timePart)
+                } else text
+            }
         }
         if (System.currentTimeMillis() - lastWeatherRequest > 15 * 60000L) queryWeather()
     }

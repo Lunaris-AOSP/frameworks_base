@@ -57,7 +57,7 @@
         android:layout_gravity="end|top"
         android:gravity="end|top">
 
-        <TextClock
+        <com.android.systemui.clocks.AlignedTextClock
             android:textSize="100.0dip"
             android:textColor="@android:color/system_accent1_100"
             android:id="@+id/lsclock9_a"
@@ -79,7 +79,7 @@
             android:format12Hour=":"
             android:format24Hour=":" />
 
-        <TextClock
+        <com.android.systemui.clocks.AlignedTextClock
             android:textSize="100.0dip"
             android:textColor="@android:color/system_accent1_100"
             android:id="@+id/lsclock9_c"

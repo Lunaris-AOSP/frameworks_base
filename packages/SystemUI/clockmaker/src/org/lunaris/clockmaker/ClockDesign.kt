@@ -63,6 +63,7 @@ data class ClockElement(
     val hourFormat: ClockHourFormat = ClockHourFormat.SYSTEM,
     val aod: ClockElementAodStyle? = null,
     val aodLayoutConfigured: Boolean = aod != null,
+    internal val digitAlignmentOverride: ClockDigitAlignment? = null,
 ) {
     val aodStyle: ClockElementAodStyle
         get() {
@@ -266,4 +267,5 @@ data class ClockDesignAppearance(
     val weather: Boolean = true,
     val dozing: Boolean = false,
     val aodAnimation: Boolean = true,
+    val digitAlignment: ClockDigitAlignment = ClockDigitAlignment.FONT,
 )

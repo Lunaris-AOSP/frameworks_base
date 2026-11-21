@@ -14,7 +14,7 @@
         android:layout_gravity="center_horizontal"
         android:orientation="vertical">
         
-        <TextClock
+        <com.android.systemui.clocks.AlignedTextClock
             android:id="@+id/clock"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

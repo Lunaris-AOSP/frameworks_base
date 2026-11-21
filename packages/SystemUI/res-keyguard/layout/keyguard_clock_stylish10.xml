@@ -21,7 +21,7 @@
             android:background="@drawable/lockscreen_clock_49_bg"
             android:tag="text1">
 
-            <TextClock
+            <com.android.systemui.clocks.AlignedTextClock
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"

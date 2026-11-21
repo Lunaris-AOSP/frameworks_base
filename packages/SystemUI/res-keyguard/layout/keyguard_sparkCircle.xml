@@ -106,7 +106,7 @@
                 android:format12Hour="yyyy"
                 android:format24Hour="yyyy" />
 
-            <TextClock
+            <com.android.systemui.clocks.AlignedTextClock
                 android:textSize="23.0sp"
                 android:textStyle="bold"
                 android:textColor="@android:color/system_accent2_100"
