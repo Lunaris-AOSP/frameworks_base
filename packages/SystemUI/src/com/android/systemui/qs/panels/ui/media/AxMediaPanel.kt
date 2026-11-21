@@ -85,6 +85,7 @@ import com.android.systemui.qs.panels.shared.model.AxMediaSurface
 import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.LunarisQsMediaStyle
+import com.android.systemui.qs.panels.shared.model.LunarisQsNotificationMediaStyle
 import com.android.systemui.qs.panels.ui.compose.AxNotificationMediaCornerRadius
 import com.android.systemui.qs.panels.ui.compose.AxQsControlCornerRadius
 import com.android.systemui.qs.panels.ui.compose.AxTileDefaults
@@ -145,6 +146,8 @@ fun AxMediaPanel(
 ) {
     val showOnLockscreen by viewModel.showOnLockscreen.collectAsStateWithLifecycle()
     if (surface == AxMediaSurface.LOCKSCREEN && !showOnLockscreen) return
+    val notificationMediaStyle by viewModel.notificationMediaStyle.collectAsStateWithLifecycle()
+    if (surface == AxMediaSurface.SEPARATE_QQS && !notificationMediaStyle.isEnabled) return
 
     val isShadeExpanded by viewModel.isShadeExpanded.collectAsStateWithLifecycle()
     val keyguardState by viewModel.currentKeyguardState.collectAsStateWithLifecycle()
@@ -263,10 +266,17 @@ fun AxMediaPanel(
         },
         pagerIndicator = { pagerState ->
             if (span != AxQsSpan.MediaMin) {
+                val useSurfaceColors =
+                    surface == AxMediaSurface.SEPARATE_QQS &&
+                        notificationMediaStyle == LunarisQsNotificationMediaStyle.ALBUM_COVER
                 PagerDots(
                     pagerState = pagerState,
-                    activeColor = Color(0xffdee0ff),
-                    nonActiveColor = Color(0xffa7a9ca),
+                    activeColor =
+                        if (useSurfaceColors) MaterialTheme.colorScheme.onSurface
+                        else Color(0xffdee0ff),
+                    nonActiveColor =
+                        if (useSurfaceColors) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                        else Color(0xffa7a9ca),
                     dotSize = 5.dp,
                     spaceSize = 5.dp,
                     modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 5.dp),
@@ -293,6 +303,7 @@ private fun AxMediaCard(
 ) {
     val mediaStyle by viewModel.mediaStyle.collectAsStateWithLifecycle()
     val mediaWideStyle by viewModel.mediaWideStyle.collectAsStateWithLifecycle()
+    val notificationMediaStyle by viewModel.notificationMediaStyle.collectAsStateWithLifecycle()
     val shape =
         mediaCardShape(
             span,
@@ -306,7 +317,13 @@ private fun AxMediaCard(
     val keyguardState by viewModel.currentKeyguardState.collectAsStateWithLifecycle()
     val layout =
         when {
-            surface == AxMediaSurface.SEPARATE_QQS -> AxMediaLayout.Notification
+            surface == AxMediaSurface.SEPARATE_QQS ->
+                when (notificationMediaStyle) {
+                    LunarisQsNotificationMediaStyle.NONE -> return
+                    LunarisQsNotificationMediaStyle.ONE_UI -> AxMediaLayout.Notification
+                    LunarisQsNotificationMediaStyle.ALBUM_COVER -> AxMediaLayout.Wide
+                    LunarisQsNotificationMediaStyle.ARTWORK -> AxMediaLayout.Expanded
+                }
             span == AxQsSpan.MediaMin -> AxMediaLayout.SingleTile
             surface == AxMediaSurface.CONTROL &&
                 span == AxQsSpan.MediaWide &&
@@ -349,7 +366,9 @@ private fun AxMediaCard(
             keyguardState != KeyguardState.AOD
     val glowCornerRadius =
         when {
-            layout == AxMediaLayout.Notification || layout == AxMediaLayout.OneUiCompact ->
+            surface == AxMediaSurface.SEPARATE_QQS ||
+                layout == AxMediaLayout.Notification ||
+                layout == AxMediaLayout.OneUiCompact ->
                 AxNotificationMediaCornerRadius
             surface == AxMediaSurface.CONTROL && span == AxQsSpan.MediaDefault -> 28.dp
             else -> AxQsControlCornerRadius
@@ -629,6 +648,7 @@ private fun AxMediaCard(
                                         colors = colors,
                                         interactive = interactive,
                                         hasMultipleSessions = hasMultipleSessions,
+                                        fitToNotification = surface == AxMediaSurface.SEPARATE_QQS,
                                     )
                             }
                         }
@@ -870,6 +890,7 @@ private fun ExpandedMediaContent(
     colors: AxMediaColors,
     interactive: Boolean,
     hasMultipleSessions: Boolean = false,
+    fitToNotification: Boolean = false,
 ) {
     val title = session?.title?.takeIf { it.isNotBlank() } ?: "No media playing"
     val subtitle = session?.subtitle.orEmpty()
@@ -881,6 +902,7 @@ private fun ExpandedMediaContent(
             remember(maxWidth, maxHeight, span) {
                 AxMediaSizing.from(maxWidth, maxHeight, span)
             }
+        val availableWidth = maxWidth
         val verticalPadding = sizing.verticalPadding
         val bottomPadding = if (hasMultipleSessions) 16.dp else verticalPadding
 
@@ -916,6 +938,19 @@ private fun ExpandedMediaContent(
                     showLabel = true,
                     label = outputDeviceName,
                     compact = sizing.outputChipCompact,
+                    modifier =
+                        if (fitToNotification) {
+                            Modifier.widthIn(
+                                max =
+                                    (availableWidth -
+                                            sizing.horizontalPadding * 2 -
+                                            sizing.headerIconSize -
+                                            8.dp)
+                                        .coerceAtLeast(0.dp)
+                            )
+                        } else {
+                            Modifier
+                        },
                 )
             }
 
@@ -964,14 +999,44 @@ private fun ExpandedMediaContent(
 
             Spacer(Modifier.height(6.dp))
 
-            val maxActions = mediaActionLimit(span.columns)
+            val contentWidth = (availableWidth - sizing.horizontalPadding * 2).coerceAtLeast(0.dp)
+            val actionTouchSize = sizing.actionSize.coerceAtLeast(48.dp)
+            val heroTouchSize = sizing.heroActionSize.coerceAtLeast(48.dp)
+            val maxActions =
+                if (fitToNotification) {
+                    when {
+                        contentWidth >= actionTouchSize * 4 + heroTouchSize + 56.dp -> 5
+                        contentWidth >= actionTouchSize * 3 + heroTouchSize + 42.dp -> 4
+                        else -> 3
+                    }
+                } else {
+                    mediaActionLimit(span.columns)
+                }
             val additionalActions =
-                session?.additionalActions.orEmpty().take((maxActions - 3).coerceAtLeast(0))
+                session
+                    ?.additionalActions
+                    .orEmpty()
+                    .take(if (fitToNotification && !showCoreActions) maxActions else maxActions - 3)
             val leftSecondary = additionalActions.firstOrNull()
             val rightSecondary = additionalActions.drop(1).firstOrNull()
             val totalActionCount =
                 if (showCoreActions) 3 + additionalActions.size else additionalActions.size
-            val actionSpacing = if (totalActionCount > 3) 14.dp else sizing.actionSpacing
+            val preferredActionSpacing = if (totalActionCount > 3) 14.dp else sizing.actionSpacing
+            val actionSpacing =
+                if (fitToNotification && totalActionCount > 1) {
+                    val actionWidth =
+                        if (showCoreActions) {
+                            actionTouchSize * (totalActionCount - 1) + heroTouchSize
+                        } else {
+                            actionTouchSize * totalActionCount
+                        }
+                    minOf(
+                        preferredActionSpacing,
+                        ((contentWidth - actionWidth) / (totalActionCount - 1)).coerceAtLeast(0.dp),
+                    )
+                } else {
+                    preferredActionSpacing
+                }
 
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                 with(Icons.Filled) {

@@ -58,6 +58,7 @@ import com.android.systemui.qs.panels.shared.model.LunarisQsWidgetKey
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderKey
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsMediaStyle
+import com.android.systemui.qs.panels.shared.model.LunarisQsNotificationMediaStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolder
 import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolderController
 import com.android.systemui.qs.panels.ui.edit.LunarisQsPhotoActivity
@@ -494,12 +495,14 @@ constructor(
             initialValue = repository.autoHideTilePageIndicator.value,
             source = repository.autoHideTilePageIndicator,
         )
-    val showNotificationMedia by
+    val notificationMediaStyle by
         hydrator.hydratedStateOf(
-            traceName = "showNotificationMedia",
-            initialValue = repository.showNotificationMedia.value,
-            source = repository.showNotificationMedia,
+            traceName = "notificationMediaStyle",
+            initialValue = repository.notificationMediaStyle.value,
+            source = repository.notificationMediaStyle,
         )
+    val showNotificationMedia: Boolean
+        get() = notificationMediaStyle.isEnabled
     val notificationMediaStatusGlow by
         hydrator.hydratedStateOf(
             traceName = "notificationMediaStatusGlow",
@@ -841,7 +844,8 @@ constructor(
     fun setAutoHideTilePageIndicator(enabled: Boolean) =
         repository.setAutoHideTilePageIndicator(enabled)
 
-    fun setShowNotificationMedia(show: Boolean) = repository.setShowNotificationMedia(show)
+    fun setNotificationMediaStyle(style: LunarisQsNotificationMediaStyle) =
+        repository.setNotificationMediaStyle(style)
 
     fun setNotificationMediaStatusGlow(enabled: Boolean) =
         repository.setNotificationMediaStatusGlow(enabled)

@@ -571,13 +571,17 @@ internal fun ContentScope.AxQsMixedGrid(
                                         .padding(
                                             horizontal = dimensionResource(R.dimen.qs_horizontal_margin)
                                         )
-                                        .layoutHeight(notificationMediaHeight())
+                                        .layoutHeight(
+                                            notificationMediaHeight(
+                                                axQsViewModel.notificationMediaStyle
+                                            )
+                                        )
                                         .miuiQsHeaderMotion(motion = miuiMotion),
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     AxMediaPanel(
                                         viewModel = mediaViewModel,
-                                        span = AxQsSpan(controlColumns, 2),
+                                        span = AxQsSpan.MediaWide,
                                         mediaViewModelFactory = viewModel.mediaViewModelFactory,
                                         modifier = Modifier.fillMaxSize(),
                                         surface = AxMediaSurface.SEPARATE_QQS,

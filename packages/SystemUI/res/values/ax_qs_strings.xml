@@ -75,6 +75,7 @@
     <string name="lunaris_qs_bluetooth_style_hint">Swipe to change the 2×2 style</string>
     <string name="ax_qs_settings_media_style">2×2 media player style</string>
     <string name="ax_qs_settings_media_wide_style">4×2 media player style</string>
+    <string name="ax_qs_settings_style_none">None</string>
     <string name="ax_qs_settings_style_artwork">Artwork</string>
     <string name="ax_qs_settings_style_album_cover">Album cover</string>
     <string name="ax_qs_settings_style_one_ui">One UI</string>

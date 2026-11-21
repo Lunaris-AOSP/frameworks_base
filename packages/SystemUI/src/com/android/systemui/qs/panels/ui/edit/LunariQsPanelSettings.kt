@@ -113,6 +113,7 @@ import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsBluetoothTileStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsMediaStyle
+import com.android.systemui.qs.panels.shared.model.LunarisQsNotificationMediaStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsSpacing
 import com.android.systemui.qs.panels.shared.model.LunarisQsStrokeWidths
 import com.android.systemui.qs.panels.ui.compose.AxTileDefaults
@@ -586,11 +587,30 @@ fun LunariQsPanelSettings(
                     )
                 }
                 item("notification_media") {
-                    SettingsSwitch(
+                    SettingsChoice(
                         title = stringResource(R.string.ax_qs_settings_notification_media),
-                        summary = stringResource(R.string.ax_qs_settings_notification_media_summary),
-                        checked = viewModel.showNotificationMedia,
-                        onCheckedChange = viewModel::setShowNotificationMedia,
+                        selected = viewModel.notificationMediaStyle.settingValue,
+                        options =
+                            LunarisQsNotificationMediaStyle.entries.map { style ->
+                                style.settingValue to
+                                    stringResource(
+                                        when (style) {
+                                            LunarisQsNotificationMediaStyle.NONE ->
+                                                R.string.ax_qs_settings_style_none
+                                            LunarisQsNotificationMediaStyle.ONE_UI ->
+                                                R.string.ax_qs_settings_style_one_ui
+                                            LunarisQsNotificationMediaStyle.ALBUM_COVER ->
+                                                R.string.ax_qs_settings_style_album_cover
+                                            LunarisQsNotificationMediaStyle.ARTWORK ->
+                                                R.string.ax_qs_settings_style_artwork
+                                        }
+                                    )
+                            },
+                        onSelect = {
+                            viewModel.setNotificationMediaStyle(
+                                LunarisQsNotificationMediaStyle.fromSetting(it)
+                            )
+                        },
                         enabled = separate,
                     )
                 }

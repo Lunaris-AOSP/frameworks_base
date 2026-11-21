@@ -91,6 +91,7 @@ constructor(
     val lastMediaPackage = mediaHistoryRepository.lastMediaPackage
     val mediaStyle = qsSettingsRepository.mediaStyle
     val mediaWideStyle = qsSettingsRepository.mediaWideStyle
+    val notificationMediaStyle = qsSettingsRepository.notificationMediaStyle
     val mediaMotionArt = qsSettingsRepository.mediaMotionArt
     val notificationMediaStatusGlow = qsSettingsRepository.notificationMediaStatusGlow
     val mediaTileStatusGlow = qsSettingsRepository.mediaTileStatusGlow

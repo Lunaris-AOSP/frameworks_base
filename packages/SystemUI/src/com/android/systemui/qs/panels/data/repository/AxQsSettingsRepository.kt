@@ -34,6 +34,7 @@ import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsBluetoothTileStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsGradientSettings
 import com.android.systemui.qs.panels.shared.model.LunarisQsMediaStyle
+import com.android.systemui.qs.panels.shared.model.LunarisQsNotificationMediaStyle
 import com.android.systemui.qs.panels.shared.model.LunarisQsPhotoFrame
 import com.android.systemui.qs.panels.shared.model.LunarisQsWidget
 import com.android.systemui.qs.panels.shared.model.LunarisQsWidgetKey
@@ -217,7 +218,21 @@ constructor(
     val showWeather: StateFlow<Boolean> = boolSetting(SHOW_WEATHER, true)
     val autoHideTilePageIndicator: StateFlow<Boolean> =
         boolSetting(AUTO_HIDE_TILE_PAGE_INDICATOR, false)
-    val showNotificationMedia: StateFlow<Boolean> = boolSetting(SHOW_NOTIFICATION_MEDIA, true)
+    val notificationMediaStyle: StateFlow<LunarisQsNotificationMediaStyle> =
+        intSetting(SHOW_NOTIFICATION_MEDIA, LunarisQsNotificationMediaStyle.ONE_UI.settingValue)
+            .map(LunarisQsNotificationMediaStyle::fromSetting)
+            .distinctUntilChanged()
+            .stateIn(
+                applicationScope,
+                SharingStarted.Eagerly,
+                LunarisQsNotificationMediaStyle.fromSetting(
+                    secureSettings.getIntForUser(
+                        SHOW_NOTIFICATION_MEDIA,
+                        LunarisQsNotificationMediaStyle.ONE_UI.settingValue,
+                        userRepository.getSelectedUserInfo().id,
+                    )
+                ),
+            )
     val notificationMediaStatusGlow: StateFlow<Boolean> =
         boolSetting(
             NOTIFICATION_MEDIA_STATUS_GLOW,
@@ -545,7 +560,8 @@ constructor(
     fun setAutoHideTilePageIndicator(enabled: Boolean) =
         putInt(AUTO_HIDE_TILE_PAGE_INDICATOR, enabled.toSetting())
 
-    fun setShowNotificationMedia(show: Boolean) = putInt(SHOW_NOTIFICATION_MEDIA, show.toSetting())
+    fun setNotificationMediaStyle(style: LunarisQsNotificationMediaStyle) =
+        putInt(SHOW_NOTIFICATION_MEDIA, style.settingValue)
 
     fun setNotificationMediaStatusGlow(enabled: Boolean) =
         putInt(NOTIFICATION_MEDIA_STATUS_GLOW, enabled.toSetting())

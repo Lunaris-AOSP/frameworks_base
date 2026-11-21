@@ -60,15 +60,31 @@ import com.android.systemui.common.ui.compose.Icon as DeviceIcon
 import com.android.systemui.media.remedia.domain.model.MediaSessionModel
 import com.android.systemui.media.remedia.shared.model.MediaCardActionButtonLayout
 import com.android.systemui.media.remedia.shared.model.MediaSessionState
+import com.android.systemui.qs.panels.shared.model.LunarisQsNotificationMediaStyle
 import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.res.R
 
 @Composable
-internal fun notificationMediaHeight(): Dp =
+internal fun notificationMediaHeight(style: LunarisQsNotificationMediaStyle): Dp =
     with(LocalDensity.current) {
-        nonQsGridMediaHeight +
-            (20.sp.toDp() - 20.dp).coerceAtLeast(0.dp) +
-            (16.sp.toDp() - 32.dp).coerceAtLeast(0.dp)
+        when (style) {
+            LunarisQsNotificationMediaStyle.NONE -> 0.dp
+            LunarisQsNotificationMediaStyle.ONE_UI ->
+                nonQsGridMediaHeight +
+                    (20.sp.toDp() - 20.dp).coerceAtLeast(0.dp) +
+                    (16.sp.toDp() - 32.dp).coerceAtLeast(0.dp)
+            LunarisQsNotificationMediaStyle.ALBUM_COVER ->
+                nonQsGridMediaHeight +
+                    8.dp +
+                    (18.sp.toDp() - 18.dp).coerceAtLeast(0.dp) +
+                    (16.sp.toDp() - 16.dp).coerceAtLeast(0.dp) +
+                    (12.sp.toDp() - 12.dp).coerceAtLeast(0.dp)
+            LunarisQsNotificationMediaStyle.ARTWORK ->
+                nonQsGridMediaHeight +
+                    56.dp +
+                    (18.sp.toDp() - 18.dp).coerceAtLeast(0.dp) +
+                    (16.sp.toDp() - 16.dp).coerceAtLeast(0.dp) * 3
+        }
     }
 
 @Composable
