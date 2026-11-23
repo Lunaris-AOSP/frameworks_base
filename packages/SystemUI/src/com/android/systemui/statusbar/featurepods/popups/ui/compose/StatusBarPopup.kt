@@ -84,6 +84,7 @@ fun StatusBarPopup(
     pageDirection: Int = 1,
     onPage: (Int) -> Unit = {},
     onHidden: () -> Unit = {},
+    chipIsCompanion: Boolean = false,
 ) {
     LunarisBarContentTheme(viewModel.popupContent, viewModel.chipId) {
         LunarisBarPopupWindow(
@@ -94,6 +95,7 @@ fun StatusBarPopup(
             pageDirection,
             onPage,
             onHidden,
+            chipIsCompanion,
         )
     }
 }
@@ -107,6 +109,7 @@ private fun LunarisBarPopupWindow(
     pageDirection: Int,
     onPage: (Int) -> Unit,
     onHidden: () -> Unit,
+    chipIsCompanion: Boolean,
 ) {
     val density = LocalDensity.current
     val settings = LocalLunarisBarState.current.settings
@@ -195,6 +198,8 @@ private fun LunarisBarPopupWindow(
             onHidden = onHidden,
             allowOutsideInteraction = notification,
             notificationChipId = viewModel.chipId.takeIf { notification },
+            chipId = viewModel.chipId,
+            compactOrigin = chipIsCompanion,
             onNotificationSwipeDismiss = dismissNotification,
             onNotificationTouchChanged = viewModel.onNotificationPopupTouchChanged,
             fastEnter =
@@ -347,7 +352,8 @@ private fun LunarisBarPopupWindow(
                     ) { chip ->
                         key(chip.chipId) {
                             IslandPopupContent(chip) { expanded ->
-                                if (chip.chipId == currentChipId) notificationReplyExpanded = expanded
+                                if (chip.chipId == currentChipId)
+                                    notificationReplyExpanded = expanded
                                 chip.onNotificationPopupReplyChanged(expanded)
                             }
                         }

@@ -27,10 +27,14 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
@@ -48,7 +52,11 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
@@ -64,9 +72,11 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -80,6 +90,9 @@ import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupContentMo
 import com.android.systemui.statusbar.featurepods.popups.ui.model.SystemEventKind
 import com.android.systemui.statusbar.featurepods.screenrecord.shared.model.ScreenRecordPopupModel
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 internal fun LunarisBarChip(
@@ -96,6 +109,9 @@ internal fun LunarisBarChip(
     measuring: Boolean = false,
     collapseForShade: Boolean = false,
     shadeReveal: State<Float>? = null,
+    originalExpansion: State<Float>? = null,
+    originalHidden: Boolean = false,
+    onMainSizeChanged: (IntSize) -> Unit = {},
 ) {
     LunarisBarContentTheme(viewModel.popupContent, viewModel.chipId) {
         LunarisBarChipContent(
@@ -112,6 +128,9 @@ internal fun LunarisBarChip(
             measuring,
             collapseForShade,
             shadeReveal,
+            originalExpansion,
+            originalHidden,
+            onMainSizeChanged,
         )
     }
 }
@@ -131,15 +150,43 @@ private fun LunarisBarChipContent(
     measuring: Boolean,
     collapseForShade: Boolean,
     shadeReveal: State<Float>?,
+    originalExpansion: State<Float>?,
+    originalHidden: Boolean,
+    onMainSizeChanged: (IntSize) -> Unit,
 ) {
     val state = LocalLunarisBarState.current
     val settings = state.settings
+    val original = state.useOriginalMotion && !measuring
+    val originalPopup = LocalLunarisBarOriginalPopupState.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scope = rememberCoroutineScope()
+    var tapStretch by remember { mutableStateOf(false) }
+    var tapJob by remember { mutableStateOf<Job?>(null) }
+    var tapVersion by remember { mutableIntStateOf(0) }
+    val press by
+        animateFloatAsState(
+            if (original && (isPressed || tapStretch)) 1f else 0f,
+            lunarisBarOriginalSpring(settings, if (isPressed || tapStretch) 1100f else 500f, 0.78f),
+            label = "lunarisbar_original_press",
+        )
+    val arrival = remember { LunarisBarOriginalSpring(if (original) 0f else 1f) }
+    LaunchedEffect(original, settings.animationSpeed, settings.bounce) {
+        if (original) arrival.animateTo(1f, lunarisBarOriginalSpring(settings, 500f, 0.72f))
+        else arrival.snapTo(1f)
+    }
     val isShadeCollapsed by remember(shadeReveal) { derivedStateOf { shadeReveal?.value == 0f } }
+    val mainContentVisible by
+        remember(originalExpansion) {
+            derivedStateOf { originalExpansion == null || originalExpansion.value > 0.35f }
+        }
     val alignment = LunarisBarAlignment.fromSetting(settings.alignment)
     val layoutDirection = LocalLayoutDirection.current
     val colors = LocalLunarisBarColors.current
     val context = LocalContext.current
     val view = LocalView.current
+    val screenLocation = remember { IntArray(2) }
+    val windowLocation = remember { IntArray(2) }
     val media = (viewModel.popupContent as? PopupContentModel.Media)?.model
     val utility = (viewModel.popupContent as? PopupContentModel.Utility)?.card
     val resting =
@@ -193,13 +240,18 @@ private fun LunarisBarChipContent(
     }
     val hideForPopup =
         viewModel.isPopupShown ||
+            (original && (popupAttached || originalHidden)) ||
             (!state.alternativeAnimation &&
                 settings.animationStyle == LunarisBarSettings.ANIMATION_STYLE_COLOR_OS &&
                 !settings.isReducedMotion &&
                 popupAttached)
+    val originalContentActive = !original || (!hideForPopup && !resting)
+    val chipInteractive = !collapseForShade && (!original || !hideForPopup)
+    val compactGlow = original && resting && originalExpansion != null
     val collapse by
         animateFloatAsState(
-            if (hideForPopup) 0f else 1f,
+            if (hideForPopup && !(original && (popupAttached || viewModel.isPopupShown))) 0f
+            else 1f,
             tween(if (settings.isReducedMotion) 0 else (240 / settings.animationSpeed).toInt()),
             label = "lunarisbar_compact",
         )
@@ -211,10 +263,14 @@ private fun LunarisBarChipContent(
         popupAttached,
         measuring,
         isShadeCollapsed,
+        mainContentVisible,
+        originalContentActive,
     ) {
         if (
             measuring ||
                 isShadeCollapsed ||
+                !mainContentVisible ||
+                !originalContentActive ||
                 media?.isPlaying != true ||
                 !settings.isArtworkRotating ||
                 settings.isReducedMotion ||
@@ -229,10 +285,33 @@ private fun LunarisBarChipContent(
             }
         }
     }
+    val currentPerform by
+        rememberUpdatedState<(String) -> Unit>({ action ->
+            lunarisBarAction(action, context, viewModel, onTap, onPage, onCard)
+        })
     fun perform(action: String) {
         if (settings.isHapticsEnabled)
             view.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK)
-        lunarisBarAction(action, context, viewModel, onTap, onPage, onCard)
+        if (!original) {
+            currentPerform(action)
+            return
+        }
+        tapJob?.cancel()
+        tapVersion++
+        val version = tapVersion
+        tapStretch = true
+        tapJob =
+            scope.launch {
+                try {
+                    delay((55 / settings.animationSpeed).roundToInt().toLong())
+                    originalPopup.launchChipId = viewModel.chipId
+                    originalPopup.launchScaleX = 1f + 0.028f * press
+                    originalPopup.launchScaleY = 1f - 0.018f * press
+                    currentPerform(action)
+                } finally {
+                    if (version == tapVersion) tapStretch = false
+                }
+            }
     }
     val ownMedia = media != null && settings.enabled("media_mini_custom", false)
     val event = viewModel.popupContent as? PopupContentModel.SystemEvent
@@ -246,10 +325,12 @@ private fun LunarisBarChipContent(
                 val batteries = bluetoothEvent.bluetoothBatteries.filter { it.level in 0..100 }
                 val earbuds = batteries.filter { it.component != BluetoothBatteryComponent.Case }
                 earbuds.takeIf { it.isNotEmpty() }?.let { it.sumOf { it.level } / it.size }
-                    ?: batteries.firstOrNull { it.component == BluetoothBatteryComponent.Case }?.level
-                    ?: bluetoothEvent.progress?.takeIf { it in 0f..1f }?.let {
-                        (it * 100).roundToInt()
-                    }
+                    ?: batteries
+                        .firstOrNull { it.component == BluetoothBatteryComponent.Case }
+                        ?.level
+                    ?: bluetoothEvent.progress
+                        ?.takeIf { it in 0f..1f }
+                        ?.let { (it * 100).roundToInt() }
             }
     val bluetoothBatteryText = bluetoothBatteryLevel?.let { "$it%" }
     val progress =
@@ -264,6 +345,7 @@ private fun LunarisBarChipContent(
         }
     val pulseIcon =
         !settings.isReducedMotion &&
+            (!original || !originalHidden) &&
             !measuring &&
             !isShadeCollapsed &&
             !viewModel.isPopupShown &&
@@ -317,10 +399,68 @@ private fun LunarisBarChipContent(
             heightScale *
             scale
     val iconSize = (if (companion) 18.dp else 20.dp) * heightScale * scale
-    LunarisBarSurface(
-        mini = true,
-        resting = resting,
-        shape = if (companion) CircleShape else LunarisBarSquircle(settings.cornerRadius.dp),
+    @Composable
+    fun ChipSurface(modifier: Modifier, content: @Composable BoxScope.() -> Unit) {
+        if (original && originalExpansion != null) {
+            LunarisBarOriginalChipSurface(
+                progress = originalExpansion,
+                diameter = DynamicIslandCompanionDiameter * heightScale * scale,
+                resting = resting,
+                modifier = modifier,
+                onMainSizeChanged = onMainSizeChanged,
+                compactContent = {
+                    Box(
+                        Modifier.fillMaxSize()
+                            .combinedClickable(
+                                enabled = chipInteractive && originalExpansion.value < 0.5f,
+                                interactionSource = interactionSource,
+                                indication = LocalIndication.current,
+                                onClick = { perform("expand") },
+                            ),
+                        contentAlignment = androidx.compose.ui.Alignment.Center,
+                    ) {
+                        if (utility != null) {
+                            androidx.compose.material3.Icon(
+                                lunarisBarUtilityGlyph(utility.type),
+                                null,
+                                Modifier.size(18.dp * heightScale * scale)
+                                    .lunarisBarStatusPulse(pulseIcon && !mainContentVisible)
+                                    .clip(shape),
+                                tint = colors.miniContent,
+                            )
+                        } else if (artwork != null) {
+                            Icon(
+                                artwork,
+                                Modifier.size(18.dp * heightScale * scale)
+                                    .lunarisBarStatusPulse(pulseIcon && !mainContentVisible)
+                                    .clip(shape),
+                                tint =
+                                    if (statusIconTint != null) statusIconTint
+                                    else if (
+                                        media != null ||
+                                            viewModel.icons.firstOrNull()?.tint == false
+                                    )
+                                        Color.Unspecified
+                                    else colors.miniContent,
+                            )
+                        }
+                    }
+                },
+            ) {
+                Box { content() }
+            }
+        } else {
+            LunarisBarSurface(
+                mini = true,
+                resting = resting,
+                shape =
+                    if (companion) CircleShape else LunarisBarSquircle(settings.cornerRadius.dp),
+                modifier = modifier,
+                content = content,
+            )
+        }
+    }
+    ChipSurface(
         modifier =
             modifier
                 .then(
@@ -329,28 +469,41 @@ private fun LunarisBarChipContent(
                     else Modifier
                 )
                 .onGloballyPositioned { coordinates ->
-                    val location = IntArray(2)
-                    view.getLocationOnScreen(location)
-                    val rootLocation = IntArray(2)
-                    view.getLocationInWindow(rootLocation)
+                    view.getLocationOnScreen(screenLocation)
+                    view.getLocationInWindow(windowLocation)
                     onChipBoundsChanged(
                         coordinates
                             .boundsInWindow()
                             .translate(
                                 androidx.compose.ui.geometry.Offset(
-                                    (location[0] - rootLocation[0]).toFloat(),
-                                    (location[1] - rootLocation[1]).toFloat(),
+                                    (screenLocation[0] - windowLocation[0]).toFloat(),
+                                    (screenLocation[1] - windowLocation[1]).toFloat(),
                                 )
                             )
                     )
                 }
                 .graphicsLayer {
+                    val returning =
+                        if (original) originalPopup.returningChip(viewModel.chipId) else 0f
+                    val reveal = if (original && popupAttached) returning else collapse
                     alpha =
                         if (legacy != null) 1f
-                        else if (settings.enabled("mini_fade", true)) collapse
+                        else if (original && popupAttached) returning
+                        else if (settings.enabled("mini_fade", true)) reveal
                         else if (hideForPopup) 0f else 1f
-                    scaleX = appear.value * (if (legacy != null) 1f else 0.78f + 0.22f * collapse)
-                    scaleY = scaleX
+                    if (original) {
+                        val rebound = 4f * returning * (1f - returning)
+                        scaleX =
+                            (0.84f + 0.16f * arrival.value) *
+                                (1f + 0.028f * press + 0.024f * rebound)
+                        scaleY =
+                            (0.76f + 0.24f * arrival.value) *
+                                (1f - 0.018f * press - 0.012f * rebound)
+                    } else {
+                        scaleX =
+                            appear.value * (if (legacy != null) 1f else 0.78f + 0.22f * collapse)
+                        scaleY = scaleX
+                    }
                     transformOrigin =
                         TransformOrigin(
                             0.5f,
@@ -368,26 +521,44 @@ private fun LunarisBarChipContent(
                 )
                 .cosStatusGlow(
                     trigger = viewModel.statusGlowKey(),
-                    cornerRadius = if (companion) 100.dp else settings.cornerRadius.dp,
+                    cornerRadius =
+                        if (originalExpansion != null) {
+                            val compactRadius =
+                                DynamicIslandCompanionDiameter * heightScale * scale / 2f
+                            compactRadius +
+                                (settings.cornerRadius.dp - compactRadius) *
+                                    originalExpansion.value.coerceIn(0f, 1f)
+                        } else if (companion) 100.dp else settings.cornerRadius.dp,
                     enabled =
                         settings.enabled("status_glow", true) &&
                             !settings.isReducedMotion &&
                             !measuring &&
-                            !resting,
-                    visible = !collapseForShade && !viewModel.isPopupShown && !popupAttached,
+                            (!resting || compactGlow),
+                    visible =
+                        !collapseForShade &&
+                            !viewModel.isPopupShown &&
+                            !popupAttached &&
+                            (!original || !originalHidden) &&
+                            (!compactGlow || originalExpansion!!.value < 0.995f),
                     alpha = {
-                        (legacy?.surfaceAlpha ?: collapse) * (shadeReveal?.value ?: 1f)
+                        (legacy?.surfaceAlpha ?: collapse) *
+                            (shadeReveal?.value ?: 1f) *
+                            if (compactGlow) 1f - originalExpansion!!.value.coerceIn(0f, 1f) else 1f
                     },
                 )
-                .semantics {
-                    contentDescription =
-                        if (event?.kind == SystemEventKind.Bluetooth)
-                            listOfNotNull(event.title, event.text, bluetoothBatteryText)
-                                .distinct()
-                                .filter { it.isNotBlank() }
-                                .joinToString(": ")
-                        else viewModel.contentDescription ?: viewModel.chipText.orEmpty()
-                },
+                .then(
+                    if (original && hideForPopup) Modifier.clearAndSetSemantics {}
+                    else
+                        Modifier.semantics {
+                            contentDescription =
+                                if (event?.kind == SystemEventKind.Bluetooth)
+                                    listOfNotNull(event.title, event.text, bluetoothBatteryText)
+                                        .distinct()
+                                        .filter { it.isNotBlank() }
+                                        .joinToString(": ")
+                                else viewModel.contentDescription ?: viewModel.chipText.orEmpty()
+                        }
+                )
     ) {
         LunarisBarChipRow(
             centerCamera = !companion && !resting && alignment == LunarisBarAlignment.CENTER,
@@ -407,7 +578,11 @@ private fun LunarisBarChipContent(
                     )
                     .widthIn(max = 240.dp * widthScale + cameraGap)
                     .combinedClickable(
-                        enabled = !collapseForShade,
+                        enabled =
+                            chipInteractive &&
+                                (originalExpansion == null || originalExpansion.value >= 0.5f),
+                        interactionSource = if (original) interactionSource else null,
+                        indication = LocalIndication.current,
                         onClick = {
                             perform(
                                 if (companion) "expand" else settings.text("gesture_tap", "expand")
@@ -456,7 +631,9 @@ private fun LunarisBarChipContent(
                     Icon(
                         artwork,
                         modifier =
-                            Modifier.size(iconSize).lunarisBarStatusPulse(pulseIcon).clip(shape),
+                            Modifier.size(iconSize)
+                                .lunarisBarStatusPulse(pulseIcon && mainContentVisible)
+                                .clip(shape),
                         tint =
                             if (statusIconTint != null) statusIconTint
                             else if (media != null || viewModel.icons.firstOrNull()?.tint == false)
@@ -473,7 +650,7 @@ private fun LunarisBarChipContent(
                         artwork,
                         modifier =
                             Modifier.size(iconSize)
-                                .lunarisBarStatusPulse(pulseIcon)
+                                .lunarisBarStatusPulse(pulseIcon && mainContentVisible)
                                 .graphicsLayer { rotationZ = if (media != null) rotation else 0f }
                                 .clip(shape)
                                 .then(
@@ -508,14 +685,13 @@ private fun LunarisBarChipContent(
                             settings.isEqualizerEnabled &&
                             media.isPlaying
                     ) {
-                        if (!isShadeCollapsed) {
+                        if (!isShadeCollapsed && mainContentVisible && originalContentActive) {
                             AudioReactiveBars(
                                 isPlaying = !settings.isReducedMotion && !measuring,
                                 color = if (ownMedia) rightPalette.second else colors.miniContent,
-                                artworkDrawable =
-                                    (media.artworkIcon as? IconModel.Loaded)?.drawable,
+                                artworkDrawable = (media.artworkIcon as? IconModel.Loaded)?.drawable,
                             )
-                        }
+                        } else if (original) Spacer(Modifier.size(width = 14.8.dp, height = 13.dp))
                     } else if (appIcon != null) {
                         Icon(
                             appIcon,
@@ -553,7 +729,7 @@ private fun LunarisBarChipContent(
                             it,
                             modifier =
                                 Modifier.size(iconSize)
-                                    .lunarisBarStatusPulse(pulseIcon)
+                                    .lunarisBarStatusPulse(pulseIcon && mainContentVisible)
                                     .clip(rightShape)
                                     .then(
                                         if (ownRight) Modifier.background(rightPalette.first)
@@ -651,10 +827,7 @@ private fun Modifier.lunarisBarStatusPulse(enabled: Boolean): Modifier {
             initialValue = 1f,
             targetValue = 0.45f,
             animationSpec =
-                infiniteRepeatable(
-                    tween(800, easing = FastOutSlowInEasing),
-                    RepeatMode.Reverse,
-                ),
+                infiniteRepeatable(tween(800, easing = FastOutSlowInEasing), RepeatMode.Reverse),
             label = "lunarisbar_status_icon_alpha",
         )
     return graphicsLayer { alpha = pulseAlpha }

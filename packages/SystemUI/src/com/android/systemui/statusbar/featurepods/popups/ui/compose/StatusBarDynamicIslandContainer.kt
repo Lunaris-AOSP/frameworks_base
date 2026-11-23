@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -102,16 +103,19 @@ fun StatusBarDynamicIslandContainer(
     collapseForShade: Boolean = false,
 ) {
     LunarisBarTheme {
-        LunarisBarContainer(
-            chips,
-            onMediaControlPopupVisibilityChanged,
-            onIslandBoundsChanged,
-            modifier,
-            onIslandActiveChanged,
-            onIslandMotionChanged,
-            mediaTransitionChip,
-            collapseForShade,
-        )
+        val originalPopup = remember { LunarisBarOriginalPopupState() }
+        CompositionLocalProvider(LocalLunarisBarOriginalPopupState provides originalPopup) {
+            LunarisBarContainer(
+                chips,
+                onMediaControlPopupVisibilityChanged,
+                onIslandBoundsChanged,
+                modifier,
+                onIslandActiveChanged,
+                onIslandMotionChanged,
+                mediaTransitionChip,
+                collapseForShade,
+            )
+        }
     }
 }
 
@@ -321,12 +325,17 @@ private fun LunarisBarContainer(
 
     val switchScaleAnim = remember { Animatable(1f) }
     var switchInitialized by remember { mutableStateOf(false) }
-    LaunchedEffect(selectedChipId, settings.isReducedMotion, mediaArrival) {
+    LaunchedEffect(
+        selectedChipId,
+        settings.isReducedMotion,
+        mediaArrival,
+        state.useOriginalMotion,
+    ) {
         if (!switchInitialized) {
             switchInitialized = true
             return@LaunchedEffect
         }
-        if (settings.isReducedMotion) {
+        if (settings.isReducedMotion || state.useOriginalMotion) {
             switchScaleAnim.snapTo(1f)
             return@LaunchedEffect
         }
@@ -443,22 +452,31 @@ private fun LunarisBarContainer(
                 }
             }
         }
-        popupAnchorChip?.takeUnless { isPopupAnchorRedacted }?.let { anchoredChip ->
-            StatusBarPopup(
-                viewModel = withIslandLaunch(shownChip ?: anchoredChip),
-                isVisible = popupVisible,
-                chipBoundsInScreen = popupOriginBounds,
-                canPage = chips.size > 1,
-                pageDirection = lastDirection,
-                onPage = { direction -> selectRelative(direction) },
-                onHidden = {
-                    if (shownChip == null) {
-                        popupAnchorChip = null
-                        popupOriginBounds = null
-                    }
-                },
-            )
-        }
+        popupAnchorChip
+            ?.takeUnless { isPopupAnchorRedacted }
+            ?.let { anchoredChip ->
+                StatusBarPopup(
+                    viewModel = withIslandLaunch(shownChip ?: anchoredChip),
+                    isVisible = popupVisible,
+                    chipIsCompanion =
+                        anchoredChip.chipId == measuredCompanionChipId &&
+                            anchoredChip.chipId != measuredMainChipId,
+                    chipBoundsInScreen =
+                        if (state.useOriginalMotion && !popupVisible) {
+                            (if (anchoredChip.chipId == measuredCompanionChipId) companionChipBounds
+                            else mainChipBounds) ?: popupOriginBounds
+                        } else popupOriginBounds,
+                    canPage = chips.size > 1,
+                    pageDirection = lastDirection,
+                    onPage = { direction -> selectRelative(direction) },
+                    onHidden = {
+                        if (shownChip == null) {
+                            popupAnchorChip = null
+                            popupOriginBounds = null
+                        }
+                    },
+                )
+            }
 
         if (selectedChip == null) return@Box
 
@@ -470,6 +488,67 @@ private fun LunarisBarContainer(
             reveal = shadeReveal.value,
             collapseBounds = displayCutout.cutoutBounds,
         ) {
+            if (state.useOriginalMotion) {
+                val threshold = with(LocalDensity.current) { 36.dp.toPx() }
+                LunarisBarOriginalChips(
+                    chips = chips,
+                    selectedChip = selectedChip,
+                    companionChip = companionChip,
+                    companionOnRight = companionOnRight,
+                    balanceCompanion = balanceCompanion,
+                    diameter = companionDiameter,
+                    collapseForShade = collapseForShade,
+                    onGesture = { x, y ->
+                        val gesture =
+                            when {
+                                abs(y) >= threshold && abs(y) > abs(x) ->
+                                    if (y < 0f) "gesture_swipe_up" to "expand"
+                                    else "gesture_swipe_down" to "notifications"
+                                x <= -threshold -> "gesture_swipe_left" to "next_card"
+                                x >= threshold -> "gesture_swipe_right" to "previous_card"
+                                else -> null
+                            }
+                        if (gesture != null) {
+                            val launchableChip = withIslandLaunch(selectedChip)
+                            lunarisBarAction(
+                                settings.text(gesture.first, gesture.second),
+                                context,
+                                launchableChip,
+                                launchableChip.showPopup,
+                                ::selectRelative,
+                                ::selectCard,
+                            )
+                        }
+                    },
+                ) { chip, expansion, peek, onMainSizeChanged ->
+                    LunarisBarChip(
+                        viewModel = withIslandLaunch(chip),
+                        pageCount = effectivePageCount,
+                        cutoutSpec = cutoutSpec,
+                        onTap = { if (chip.isPopupShown) chip.hidePopup() else chip.showPopup() },
+                        onPage = ::selectRelative,
+                        onCard = ::selectCard,
+                        popupAttached = popupAnchorChip?.chipId == chip.chipId,
+                        collapseForShade = collapseForShade,
+                        shadeReveal = shadeReveal,
+                        originalExpansion = expansion,
+                        originalHidden =
+                            peek && !showCompanionChip && popupAnchorChip?.chipId != chip.chipId,
+                        onMainSizeChanged = onMainSizeChanged,
+                        onChipBoundsChanged = { bounds ->
+                            if (chip.chipId == selectedChip.chipId) {
+                                measuredMainChipId = chip.chipId
+                                mainChipBounds = bounds
+                            } else if (chip.chipId == companionChip?.chipId) {
+                                measuredCompanionChipId = chip.chipId
+                                companionChipBounds = bounds
+                            }
+                            publishIslandBounds()
+                        },
+                    )
+                }
+                return@LunarisBarPositionedContent
+            }
             Row(
                 modifier =
                     Modifier.graphicsLayer {

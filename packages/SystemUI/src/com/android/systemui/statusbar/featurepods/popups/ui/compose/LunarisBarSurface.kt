@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
@@ -110,6 +111,7 @@ internal fun LunarisBarSurface(
     shape: Shape = lunarisBarExpandedShape(LocalLunarisBarState.current.settings),
     background: (@Composable BoxScope.() -> Unit)? = null,
     blurAlpha: Float = 1f,
+    restingProgress: Float? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val settings = LocalLunarisBarState.current.settings
@@ -120,17 +122,33 @@ internal fun LunarisBarSurface(
     val foreground = if (mini) colors.miniContent else colors.content
     val blur = !mini && settings.enabled("capsule_blur", false)
     val elevation = if (settings.shadow(colors.dark)) settings.shadowElevation.dp else 0.dp
+    val restBlend = restingProgress?.coerceIn(0f, 1f)?.takeIf { resting && mini }
+    val blendedBorder =
+        restBlend?.let {
+            val floatingBorder = if (settings.outline(colors.dark)) settings.outlineWidth else 0f
+            floatingBorder + (settings.collapsedBorder - floatingBorder) * it
+        }
     Surface(
         modifier = modifier,
         shape = shape,
         color =
-            if (background != null || blur || (resting && settings.collapsedBorder > 0))
-                Color.Transparent
-            else surfaceColor,
+            if (background != null || blur) Color.Transparent
+            else if (restBlend != null)
+                lerp(
+                    colors.miniSurface,
+                    if (settings.collapsedBorder > 0) Color.Transparent else surfaceColor,
+                    restBlend,
+                )
+            else if (resting && settings.collapsedBorder > 0) Color.Transparent else surfaceColor,
         contentColor = foreground,
-        shadowElevation = if (resting) 0.dp else if (mini) minOf(elevation, 4.dp) else elevation,
+        shadowElevation =
+            if (restBlend != null) minOf(elevation, 4.dp) * (1f - restBlend)
+            else if (resting) 0.dp else if (mini) minOf(elevation, 4.dp) else elevation,
         border =
-            if (resting && settings.collapsedBorder > 0)
+            if (blendedBorder != null && blendedBorder > 0f)
+                BorderStroke(blendedBorder.dp, lerp(colors.outline, surfaceColor, restBlend!!))
+            else if (restBlend != null) null
+            else if (resting && settings.collapsedBorder > 0)
                 BorderStroke(settings.collapsedBorder.dp, surfaceColor)
             else if (!resting && settings.outline(colors.dark) && settings.outlineWidth > 0f)
                 BorderStroke(settings.outlineWidth.dp, colors.outline)

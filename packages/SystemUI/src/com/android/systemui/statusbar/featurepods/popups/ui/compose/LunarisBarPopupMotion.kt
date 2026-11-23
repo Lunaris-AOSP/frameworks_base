@@ -24,7 +24,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,9 +56,19 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.android.internal.util.lunaris.LunarisBarSettings
 import com.android.systemui.statusbar.featurepods.popups.ui.model.PopupChipId
+import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+
+private class OriginalPopupGeometry(origin: Rect, radius: Float, roundness: Float) {
+    val width = LunarisBarOriginalSpring(origin.width)
+    val height = LunarisBarOriginalSpring(origin.height)
+    val centerX = LunarisBarOriginalSpring(origin.center.x)
+    val top = LunarisBarOriginalSpring(origin.top)
+    val radius = LunarisBarOriginalSpring(radius)
+    val roundness = LunarisBarOriginalSpring(roundness)
+}
 
 @Composable
 internal fun LunarisBarPopupMotion(
@@ -68,6 +81,8 @@ internal fun LunarisBarPopupMotion(
     useRedesignedMediaBackground: Boolean = false,
     allowOutsideInteraction: Boolean = false,
     notificationChipId: PopupChipId? = null,
+    chipId: PopupChipId? = notificationChipId,
+    compactOrigin: Boolean = false,
     onNotificationSwipeDismiss: () -> Unit = {},
     onNotificationTouchChanged: (Boolean) -> Unit = {},
     secondaryContent: @Composable () -> Unit = {},
@@ -99,6 +114,8 @@ internal fun LunarisBarPopupMotion(
         return
     }
     val settings = state.settings
+    val original = state.useOriginalMotion
+    val originalPopup = LocalLunarisBarOriginalPopupState.current
     if (
         settings.animationStyle == LunarisBarSettings.ANIMATION_STYLE_COLOR_OS &&
             !settings.isReducedMotion
@@ -129,6 +146,7 @@ internal fun LunarisBarPopupMotion(
     val widthProgress = remember(notification) { Animatable(0f) }
     val heightProgress = remember(notification) { Animatable(0f) }
     val alpha = remember(notification) { Animatable(0f) }
+    var originalGeometry by remember { mutableStateOf<OriginalPopupGeometry?>(null) }
     val currentHidden by rememberUpdatedState(onHidden)
     val currentDismiss by rememberUpdatedState(onDismissRequest)
     val visible by rememberUpdatedState(isVisible)
@@ -156,6 +174,16 @@ internal fun LunarisBarPopupMotion(
             contentSize.width > 0 &&
             contentSize.height > 0 &&
             (!notification || (chipBoundsInScreen != null && !chipBoundsInScreen.isEmpty))
+    val originRadius =
+        if (original && compactOrigin) origin.height / 2f
+        else with(density) { minOf(settings.cornerRadius.dp.toPx(), origin.height / 2f) }
+    val targetRadius =
+        if (settings.expandedShape == 0)
+            minOf(with(density) { 48.dp.toPx() }, minOf(contentSize.width, contentSize.height) / 2f)
+        else with(density) { settings.cornerRadius.dp.toPx() }
+    val originRoundness = if (compactOrigin) 1f else 0f
+    val destination =
+        Rect(targetLeft, targetTop, targetLeft + contentSize.width, targetTop + contentSize.height)
     LaunchedEffect(
         ready,
         isVisible,
@@ -165,6 +193,12 @@ internal fun LunarisBarPopupMotion(
         settings.isReducedMotion,
         fastEnter,
         notification,
+        original,
+        if (original) origin else null,
+        if (original) destination else null,
+        if (original) settings.expandedShape else null,
+        if (original) settings.cornerRadius else null,
+        if (original) compactOrigin else null,
     ) {
         if (!ready) {
             if (!isVisible) currentHidden()
@@ -175,6 +209,100 @@ internal fun LunarisBarPopupMotion(
             widthProgress.snapTo(target)
             heightProgress.snapTo(target)
             alpha.snapTo(target)
+        } else if (original) {
+            val geometry =
+                originalGeometry
+                    ?: run {
+                        val sx =
+                            if (originalPopup.launchChipId == chipId) originalPopup.launchScaleX
+                            else 1f
+                        val sy =
+                            if (originalPopup.launchChipId == chipId) originalPopup.launchScaleY
+                            else 1f
+                        val launchWidth = origin.width * sx
+                        val launchHeight = origin.height * sy
+                        val launchTop =
+                            when (settings.scaleAlignment) {
+                                1 -> origin.top
+                                2 -> origin.bottom - launchHeight
+                                else -> origin.center.y - launchHeight / 2f
+                            }
+                        val launchOrigin =
+                            Rect(
+                                origin.center.x - launchWidth / 2f,
+                                launchTop,
+                                origin.center.x + launchWidth / 2f,
+                                launchTop + launchHeight,
+                            )
+                        originalPopup.launchChipId = null
+                        OriginalPopupGeometry(launchOrigin, originRadius, originRoundness).also {
+                            originalGeometry = it
+                        }
+                    }
+            val widthSpec =
+                lunarisBarOriginalSpring(
+                    settings,
+                    if (fastEnter) 900f else if (isVisible) 400f else 530f,
+                    if (fastEnter) 1f else if (isVisible) 0.78f else 0.86f,
+                    0.3f,
+                )
+            val heightSpec =
+                lunarisBarOriginalSpring(
+                    settings,
+                    if (fastEnter) 900f else if (isVisible) 340f else 480f,
+                    if (fastEnter) 1f else if (isVisible) 0.82f else 0.88f,
+                    0.3f,
+                )
+            coroutineScope {
+                launch {
+                    geometry.width.animateTo(
+                        if (isVisible) destination.width else origin.width,
+                        widthSpec,
+                    )
+                }
+                launch {
+                    geometry.height.animateTo(
+                        if (isVisible) destination.height else origin.height,
+                        heightSpec,
+                    )
+                }
+                launch {
+                    geometry.centerX.animateTo(
+                        if (isVisible) destination.center.x else origin.center.x,
+                        lunarisBarOriginalSpring(settings, 460f, 1f, 0.3f),
+                    )
+                }
+                launch {
+                    geometry.top.animateTo(
+                        if (isVisible) destination.top else origin.top,
+                        lunarisBarOriginalSpring(settings, 420f, 1f, 0.3f),
+                    )
+                }
+                launch {
+                    geometry.radius.animateTo(
+                        if (isVisible) targetRadius else originRadius,
+                        lunarisBarOriginalSpring(settings, 430f, 1f, 0.1f),
+                    )
+                }
+                launch {
+                    geometry.roundness.animateTo(
+                        if (isVisible) {
+                            if (settings.expandedShape == 2) 0f else 1f
+                        } else originRoundness,
+                        lunarisBarOriginalSpring(settings, 430f, 1f),
+                    )
+                }
+                launch {
+                    alpha.animateTo(
+                        target,
+                        tween(
+                            ((if (isVisible) 170 else 100) / settings.animationSpeed).roundToInt(),
+                            delayMillis =
+                                if (isVisible) (70 / settings.animationSpeed).roundToInt() else 0,
+                        ),
+                    )
+                }
+            }
         } else {
             if (notification && isVisible && widthProgress.value == 0f) withFrameNanos {}
             fun duration(value: Int) = (value / settings.animationSpeed).roundToInt()
@@ -241,45 +369,131 @@ internal fun LunarisBarPopupMotion(
     }
     val followOffset = swipe?.translation ?: Offset.Zero
     val dragCollapse = swipe?.collapseFraction ?: 0f
-    val widthFraction = widthProgress.value * (1f - dragCollapse)
-    val heightFraction = heightProgress.value * (1f - dragCollapse)
+    val currentGeometry by rememberUpdatedState(originalGeometry)
+    val currentOrigin by rememberUpdatedState(origin)
+    val currentDestination by rememberUpdatedState(destination)
+    val originalWidth = remember {
+        derivedStateOf {
+            val difference = currentDestination.width - currentOrigin.width
+            if (abs(difference) < 1f) {
+                val heightDifference = currentDestination.height - currentOrigin.height
+                if (abs(heightDifference) < 1f) {
+                    if (visible) 1f else 0f
+                } else
+                    ((currentGeometry?.height?.value ?: currentOrigin.height) -
+                        currentOrigin.height) / heightDifference
+            } else
+                ((currentGeometry?.width?.value ?: currentOrigin.width) - currentOrigin.width) /
+                    difference
+        }
+    }
+    val originalHeight = remember {
+        derivedStateOf {
+            val difference = currentDestination.height - currentOrigin.height
+            if (abs(difference) < 1f) originalWidth.value
+            else
+                ((currentGeometry?.height?.value ?: currentOrigin.height) - currentOrigin.height) /
+                    difference
+        }
+    }
+    val handoffFraction =
+        (with(density) { 3.dp.toPx() } /
+                maxOf(
+                    abs(destination.width - origin.width),
+                    abs(destination.height - origin.height),
+                    1f,
+                ))
+            .coerceIn(0.005f, 0.12f)
+    SideEffect {
+        if (original) {
+            val previousReturn =
+                if (originalPopup.chipId == chipId && !originalPopup.visible)
+                    originalPopup.returnProgress
+                else 0f
+            originalPopup.chipId = chipId
+            originalPopup.visible = isVisible
+            originalPopup.width = originalWidth
+            originalPopup.height = originalHeight
+            originalPopup.handoffFraction = handoffFraction
+            originalPopup.returnProgress =
+                if (isVisible) 0f
+                else
+                    maxOf(
+                        previousReturn,
+                        lunarisBarOriginalReturnFraction(
+                            originalWidth.value,
+                            originalHeight.value,
+                            handoffFraction,
+                        ),
+                    )
+        }
+    }
+    DisposableEffect(originalPopup, originalWidth) {
+        onDispose {
+            if (originalPopup.width === originalWidth) {
+                originalPopup.chipId = null
+                originalPopup.width = null
+                originalPopup.height = null
+                originalPopup.visible = false
+                originalPopup.returnProgress = 0f
+            }
+        }
+    }
+    val widthExpansion = if (original) originalWidth.value else widthProgress.value
+    val heightExpansion = if (original) originalHeight.value else heightProgress.value
+    val widthFraction = widthExpansion * (1f - dragCollapse)
+    val heightFraction = heightExpansion * (1f - dragCollapse)
     val contentAlpha =
-        if (notification) {
+        if (notification || original) {
             alpha.value * ((minOf(widthFraction, heightFraction) - 0.48f) / 0.4f).coerceIn(0f, 1f)
         } else alpha.value
     val surfaceAlpha =
         when {
             !ready -> 0f
+            original && !isVisible ->
+                1f -
+                    maxOf(
+                        originalPopup.returnProgress,
+                        lunarisBarOriginalReturnFraction(
+                            widthExpansion,
+                            heightExpansion,
+                            handoffFraction,
+                        ),
+                    )
+            original -> if (notification) (widthExpansion / 0.16f).coerceIn(0f, 1f) else 1f
             !notification -> 1f
             isVisible -> (widthProgress.value / 0.16f).coerceIn(0f, 1f)
             else -> ((widthProgress.value - 0.16f) / 0.32f).coerceIn(0f, 1f)
         }
     val w =
-        (origin.width + (contentSize.width - origin.width) * widthFraction).coerceIn(
-            1f,
-            rootSize.width.coerceAtLeast(1).toFloat(),
-        )
+        (if (original && originalGeometry != null)
+                origin.width + (originalGeometry!!.width.value - origin.width) * (1f - dragCollapse)
+            else origin.width + (contentSize.width - origin.width) * widthFraction)
+            .coerceIn(1f, rootSize.width.coerceAtLeast(1).toFloat())
     val h =
-        (origin.height + (contentSize.height - origin.height) * heightFraction).coerceIn(
-            1f,
-            (rootSize.height - targetTop).coerceAtLeast(1f),
-        )
+        (if (original && originalGeometry != null)
+                origin.height +
+                    (originalGeometry!!.height.value - origin.height) * (1f - dragCollapse)
+            else origin.height + (contentSize.height - origin.height) * heightFraction)
+            .coerceIn(1f, (rootSize.height - targetTop).coerceAtLeast(1f))
     val centerX =
-        origin.center.x +
-            (targetLeft + contentSize.width / 2f - origin.center.x) *
-                widthFraction.coerceIn(0f, 1f)
+        if (original && originalGeometry != null) originalGeometry!!.centerX.value
+        else
+            origin.center.x +
+                (targetLeft + contentSize.width / 2f - origin.center.x) *
+                    widthFraction.coerceIn(0f, 1f)
     val x =
         lunarisBarPopupLeft(centerX, w, rootSize.width.toFloat(), 0f) +
-            followOffset.x * widthProgress.value.coerceIn(0f, 1f)
+            followOffset.x * widthExpansion.coerceIn(0f, 1f)
     val baseY =
-        (origin.top + (targetTop - origin.top) * heightFraction.coerceIn(0f, 1f)).coerceIn(
-            0f,
-            (rootSize.height - h).coerceAtLeast(0f),
-        )
+        (if (original && originalGeometry != null) originalGeometry!!.top.value
+            else origin.top + (targetTop - origin.top) * heightFraction.coerceIn(0f, 1f))
+            .coerceIn(0f, (rootSize.height - h).coerceAtLeast(0f))
     val y =
         if (notification && followOffset.y < 0f) {
-            (baseY + followOffset.y * widthProgress.value.coerceIn(0f, 1f))
-                .coerceAtLeast(origin.center.y - h / 2f)
+            (baseY + followOffset.y * widthExpansion.coerceIn(0f, 1f)).coerceAtLeast(
+                origin.center.y - h / 2f
+            )
         } else baseY
     val frame = Rect(x, y, x + w, y + h)
     val currentFrame by rememberUpdatedState(frame)
@@ -290,18 +504,16 @@ internal fun LunarisBarPopupMotion(
         bounds = if (isVisible && ready) frame else Rect.Zero,
         secondaryBounds = if (isVisible) secondaryBounds else Rect.Zero,
     )
-    val originRadius = with(density) { minOf(settings.cornerRadius.dp.toPx(), origin.height / 2f) }
-    val targetRadius =
-        if (settings.expandedShape == 0)
-            minOf(with(density) { 48.dp.toPx() }, minOf(contentSize.width, contentSize.height) / 2f)
-        else with(density) { settings.cornerRadius.dp.toPx() }
     val radius =
         with(density) {
-            (originRadius + (targetRadius - originRadius) * heightFraction.coerceIn(0f, 1f))
+            (if (original && originalGeometry != null) originalGeometry!!.radius.value
+                else originRadius + (targetRadius - originRadius) * heightFraction.coerceIn(0f, 1f))
                 .toDp()
         }
     val shape =
-        if (settings.expandedShape == 2) LunarisBarSquircle(radius)
+        if (original)
+            LunarisBarOriginalShape(radius, originalGeometry?.roundness?.value ?: originRoundness)
+        else if (settings.expandedShape == 2) LunarisBarSquircle(radius)
         else androidx.compose.foundation.shape.RoundedCornerShape(radius)
     Layout(
         modifier =
@@ -386,28 +598,40 @@ internal fun LunarisBarPopupMotion(
             )
         val secondaryLeft =
             lunarisBarPopupLeft(
-                targetLeft + card.width / 2f,
+                if (original) x + w / 2f else targetLeft + card.width / 2f,
                 secondary.width.toFloat(),
                 constraints.maxWidth.toFloat(),
                 margin.toFloat(),
             )
+        val secondaryTop = if (original) y + h + gap else targetTop + card.height + gap
         secondaryBounds =
             Rect(
                 secondaryLeft,
-                targetTop + card.height + gap,
+                secondaryTop,
                 secondaryLeft + secondary.width,
-                targetTop + card.height + gap + secondary.height,
+                secondaryTop + secondary.height,
             )
         layout(constraints.maxWidth, constraints.maxHeight) {
             if (surfaceAlpha > 0f) {
                 background.placeWithLayer(x.roundToInt(), y.roundToInt()) {
                     this.alpha = surfaceAlpha
+                    if (original) {
+                        transformOrigin = TransformOrigin(0f, 0f)
+                        translationX = x - x.roundToInt()
+                        translationY = y - y.roundToInt()
+                        scaleX = w / background.width.coerceAtLeast(1)
+                        scaleY = h / background.height.coerceAtLeast(1)
+                    }
                 }
             }
             card.placeWithLayer(x.roundToInt(), y.roundToInt()) {
                 transformOrigin = TransformOrigin(0f, 0f)
+                if (original) {
+                    translationX = x - x.roundToInt()
+                    translationY = y - y.roundToInt()
+                }
                 this.alpha = contentAlpha
-                if (notification) {
+                if (notification && !original) {
                     this.shape =
                         object : Shape {
                             override fun createOutline(
@@ -423,11 +647,12 @@ internal fun LunarisBarPopupMotion(
                 }
                 clip = true
             }
-            secondary.placeWithLayer(
-                secondaryLeft.roundToInt(),
-                (targetTop + card.height + gap).roundToInt(),
-            ) {
+            secondary.placeWithLayer(secondaryLeft.roundToInt(), secondaryTop.roundToInt()) {
                 this.alpha = contentAlpha
+                if (original) {
+                    translationX = secondaryLeft - secondaryLeft.roundToInt()
+                    translationY = secondaryTop - secondaryTop.roundToInt()
+                }
             }
         }
     }
