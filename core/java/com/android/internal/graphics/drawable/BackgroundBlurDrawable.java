@@ -67,6 +67,10 @@ public final class BackgroundBlurDrawable extends Drawable {
     private float mCornerRadiusBL;
     private float mCornerRadiusBR;
     private int mAlpha = 255;
+    private boolean mUseDrawableAlphaForTint;
+    private int mOriginalColor = Color.TRANSPARENT;
+    private boolean mTintOverridden;
+    private int mOverrideTint;
     private boolean mApplyRenderNodeAlpha;
 
     // Do not update from UiThread. This holds the latest position for this drawable. It is used
@@ -131,15 +135,65 @@ public final class BackgroundBlurDrawable extends Drawable {
         if (!mCanvasClip.intersect(getBounds())) mCanvasClip.setEmpty();
         mCanvasClip.offset(-getBounds().left, -getBounds().top);
         mRenderNode.setClipRect(mCanvasClip);
-        canvas.drawPath(mRectPath, mPaint);
+        if (mUseDrawableAlphaForTint) {
+            final int tintAlpha = mPaint.getAlpha();
+            mPaint.setAlpha(Math.round(tintAlpha * getAlpha() / 255f));
+            try {
+                canvas.drawPath(mRectPath, mPaint);
+            } finally {
+                mPaint.setAlpha(tintAlpha);
+            }
+        } else {
+            canvas.drawPath(mRectPath, mPaint);
+        }
         canvas.drawRenderNode(mRenderNode);
     }
 
     /**
      * Color that will be alpha blended on top of the blur.
      */
+    public int getColor() {
+        return mPaint.getColor();
+    }
+
+    public int getOriginalColor() {
+        return mOriginalColor;
+    }
+
+    public int getBlurRadius() {
+        return mBlurRadius;
+    }
+
+    public static boolean supportsRenderNodeAlpha() {
+        return true;
+    }
+
     public void setColor(@ColorInt int color) {
+        mOriginalColor = color;
+        updateColor();
+    }
+
+    public void setTintOverride(boolean enabled, @ColorInt int color) {
+        mTintOverridden = enabled;
+        mOverrideTint = color;
+        updateColor();
+    }
+
+    private void updateColor() {
+        final int color = mTintOverridden ? mOverrideTint : mOriginalColor;
+        if (mPaint.getColor() == color) return;
         mPaint.setColor(color);
+        invalidateSelf();
+    }
+
+    public boolean isUsingDrawableAlphaForTint() {
+        return mUseDrawableAlphaForTint;
+    }
+
+    public void setUseDrawableAlphaForTint(boolean useDrawableAlpha) {
+        if (mUseDrawableAlphaForTint == useDrawableAlpha) return;
+        mUseDrawableAlphaForTint = useDrawableAlpha;
+        invalidateSelf();
     }
 
     @Override

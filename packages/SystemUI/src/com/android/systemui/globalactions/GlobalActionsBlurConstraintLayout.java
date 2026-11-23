@@ -57,10 +57,18 @@ public class GlobalActionsBlurConstraintLayout extends LaunchableConstraintLayou
 
     @Override
     public void draw(Canvas canvas) {
-        mBackdropBlur.drawBackground(
+        if (!isDrawingWithoutBackground() && mBackdropBlur.isTintOverrideEnabled()
+                && mBackdropBlur.drawBackground(
                 canvas,
                 getBackground(),
-                AxBlurColors.surfaceContainerTint(getContext()));
-        super.draw(canvas);
+                AxBlurColors.surfaceContainerTint(getContext()))) {
+            drawWithoutBackground(canvas);
+        } else {
+            if (!mBackdropBlur.isTintOverrideEnabled()) {
+                mBackdropBlur.drawBackground(canvas, getBackground(),
+                        AxBlurColors.surfaceContainerTint(getContext()));
+            }
+            super.draw(canvas);
+        }
     }
 }

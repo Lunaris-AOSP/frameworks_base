@@ -35,6 +35,7 @@ import android.view.WindowManager;
 
 import com.android.internal.R;
 import com.android.internal.app.AlertActivity;
+import com.android.internal.graphics.drawable.AxBlurCustomization;
 import com.android.internal.graphics.drawable.BackgroundBlurDrawable;
 import com.android.internal.util.ArrayUtils;
 
@@ -66,6 +67,9 @@ public final class AxDialogBlurController {
     private final ArraySet<BackgroundRenderer> mActiveRenderers = new ArraySet<>();
     private final ContentObserver mSettingsObserver;
     private final Consumer<Boolean> mBlurListener;
+    private final AxBlurCustomization mCustomization;
+    private final Runnable mCustomizationListener = this::updateSettings;
+    private AxBlurCustomization.State mCustomizationState;
     private final ViewTreeObserver.OnPreDrawListener mPreDrawListener = () -> {
         updateBackgrounds();
         return true;
@@ -84,6 +88,7 @@ public final class AxDialogBlurController {
             };
     private boolean mStarted;
     private boolean mCrossWindowBlurEnabled;
+    private boolean mBlurEnabled;
     private int mRadius;
     private int mGeneration;
 
@@ -125,6 +130,8 @@ public final class AxDialogBlurController {
         mResolver = context.getContentResolver();
         mHandler = new Handler(Looper.myLooper());
         mWindowManager = windowManager;
+        mCustomization = AxBlurCustomization.getInstance(context);
+        mCustomizationState = mCustomization.getState();
         mSettingsObserver = new ContentObserver(mHandler) {
             @Override
             public void onChange(boolean selfChange) {
@@ -154,6 +161,7 @@ public final class AxDialogBlurController {
     public void start() {
         if (mStarted) return;
         mStarted = true;
+        mCustomization.addListener(mCustomizationListener);
         mCrossWindowBlurEnabled = mWindowManager.isCrossWindowBlurEnabled();
         mResolver.registerContentObserver(
                 Settings.Global.getUriFor(Settings.Global.DISABLE_WINDOW_BLURS), false,
@@ -172,6 +180,7 @@ public final class AxDialogBlurController {
         mRootView.removeOnAttachStateChangeListener(mAttachListener);
         if (mStarted) {
             mStarted = false;
+            mCustomization.removeListener(mCustomizationListener);
             mResolver.unregisterContentObserver(mSettingsObserver);
             mWindowManager.removeCrossWindowBlurEnabledListener(mBlurListener);
             if (mRootView.getViewTreeObserver().isAlive()) {
@@ -179,6 +188,7 @@ public final class AxDialogBlurController {
             }
         }
         mRadius = 0;
+        mBlurEnabled = false;
         updateBackgrounds();
         for (int i = mActiveRenderers.size() - 1; i >= 0; i--) {
             final BackgroundRenderer renderer = mActiveRenderers.valueAt(i);
@@ -207,23 +217,27 @@ public final class AxDialogBlurController {
     }
 
     private void readSettings() {
+        mCustomizationState = mCustomization.getState();
         final int defaultDisabled =
                 SystemProperties.getBoolean("ro.custom.blur.enable", true) ? 0 : 1;
         final boolean enabled = mCrossWindowBlurEnabled
                 && Settings.Global.getInt(mResolver, Settings.Global.DISABLE_WINDOW_BLURS,
                         defaultDisabled) == 0
                 && Settings.System.getInt(mResolver, Settings.System.DIALOG_BLUR_ENABLED, 1) != 0;
+        mBlurEnabled = enabled;
         final float maxRadius = MAX_BLUR_RADIUS_DP
                 * mContext.getResources().getDisplayMetrics().density;
         final float radius = Settings.Secure.getFloat(mResolver, BLUR_RADIUS, maxRadius);
-        mRadius = enabled ? Math.round(Float.isFinite(radius)
-                ? Math.max(0f, Math.min(radius, maxRadius)) : maxRadius) : 0;
+        final float originalRadius = Float.isFinite(radius)
+                ? Math.max(0f, Math.min(radius, maxRadius)) : maxRadius;
+        mRadius = enabled
+                ? Math.round(mCustomizationState.resolveRadius(mContext, originalRadius)) : 0;
     }
 
     private void updateBackgrounds() {
         final boolean hadBackgrounds = hasBlurBackgrounds();
         mGeneration++;
-        if (mRadius > 0) {
+        if (mRadius > 0 || (mBlurEnabled && mCustomizationState.tintEnabled)) {
             addBackgrounds(mRootView);
         }
         for (int i = mBackgrounds.size() - 1; i >= 0; i--) {
@@ -324,7 +338,8 @@ public final class AxDialogBlurController {
 
         public void draw(Canvas canvas, Drawable background) {
             final ViewRootImpl root = mView.getViewRootImpl();
-            if (mRadius <= 0 || !canvas.isHardwareAccelerated() || root == null
+            if ((mRadius <= 0 && !(mBlurEnabled && mCustomizationState.tintEnabled))
+                    || !canvas.isHardwareAccelerated() || root == null
                     || background.getAlpha() == 0
                     || Boolean.TRUE.equals(mView.getTag(R.id.ax_dialog_blur_owned))) {
                 clear();
@@ -349,6 +364,9 @@ public final class AxDialogBlurController {
             }
             mBlur.setBounds(surface.getBounds());
             mBlur.setBlurRadius(mRadius);
+            final int tint = mCustomizationState.resolveTint(mContext, Color.TRANSPARENT);
+            mBlur.setColor((tint & 0x00ffffff)
+                    | (Math.round(Color.alpha(tint) * background.getAlpha() / 255f) << 24));
             final float windowAlpha =
                     mWindow != null ? mWindow.getAttributes().alpha : mToastParams.alpha;
             mBlur.setAlpha(Float.isFinite(windowAlpha)
@@ -368,6 +386,7 @@ public final class AxDialogBlurController {
                 mBlur.setCornerRadius(0f);
             }
             mBlur.draw(canvas);
+            if (mCustomizationState.tintEnabled) return;
             final Rect bounds = background.getBounds();
             final int save = canvas.saveLayerAlpha(bounds.left, bounds.top,
                     bounds.right, bounds.bottom, SURFACE_ALPHA);

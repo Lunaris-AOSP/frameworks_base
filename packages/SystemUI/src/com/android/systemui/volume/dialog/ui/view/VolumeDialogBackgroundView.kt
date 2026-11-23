@@ -50,9 +50,18 @@ class VolumeDialogBackgroundView @JvmOverloads constructor(
         blurRenderer.onVisibilityAggregated(isVisible)
     }
 
+    override fun draw(canvas: Canvas) {
+        if (!isDrawingWithoutBackground && blurRenderer.isTintOverrideEnabled() &&
+            blurRenderer.drawBackground(canvas, background)
+        ) {
+            drawWithoutBackground(canvas)
+        } else {
+            super.draw(canvas)
+        }
+    }
+
     override fun onDraw(canvas: Canvas) {
-        // Try to draw blur; if blur is unavailable, fall through to the normal background drawable
-        if (!blurRenderer.drawBackground(canvas, background)) {
+        if (!isDrawingWithoutBackground && !blurRenderer.drawBackground(canvas, background)) {
             super.onDraw(canvas)
         }
     }

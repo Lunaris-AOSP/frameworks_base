@@ -5122,6 +5122,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @ViewDebug.ExportedProperty(deepExport = true, prefix = "bg_")
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     private Drawable mBackground;
+    private boolean mSkipBackgroundDrawing;
     private AxDialogBlurController.BackgroundRenderer mAxDialogBlurRenderer;
     private TintInfo mBackgroundTint;
 
@@ -25487,12 +25488,38 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
+     * Returns whether the view is being drawn without its background.
+     *
+     * @hide
+     */
+    protected final boolean isDrawingWithoutBackground() {
+        return mSkipBackgroundDrawing;
+    }
+
+    /**
+     * Draws the view without its background onto the specified canvas.
+     *
+     * @param canvas Canvas on which to draw the view
+     * @hide
+     */
+    protected final void drawWithoutBackground(@NonNull Canvas canvas) {
+        final boolean previous = mSkipBackgroundDrawing;
+        mSkipBackgroundDrawing = true;
+        try {
+            draw(canvas);
+        } finally {
+            mSkipBackgroundDrawing = previous;
+        }
+    }
+
+    /**
      * Draws the background onto the specified canvas.
      *
      * @param canvas Canvas on which to draw the background
      */
     @UnsupportedAppUsage
     private void drawBackground(@NonNull Canvas canvas) {
+        if (mSkipBackgroundDrawing) return;
         final Drawable background = mBackground;
         if (background == null) {
             return;
