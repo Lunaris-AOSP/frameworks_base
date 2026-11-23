@@ -1,6 +1,6 @@
 android_library {
     name: "LunarisClockMaker",
-    srcs: ["src/**/*.kt"],
+    srcs: ["src/**/*.kt", "src/**/*.java"],
     manifest: "AndroidManifest.xml",
     platform_apis: true,
     static_libs: [

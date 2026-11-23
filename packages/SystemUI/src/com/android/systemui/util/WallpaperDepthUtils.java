@@ -62,6 +62,8 @@ import com.android.systemui.tuner.TunerService;
 
 import java.io.File;
 
+import org.lunaris.clockmaker.spatial.SpatialWallpaperScene;
+
 public class WallpaperDepthUtils {
 
     private static final String WALLPAPER_DEPTH_KEY = "system:depth_wallpaper_subject_image_uri";
@@ -118,6 +120,8 @@ public class WallpaperDepthUtils {
     private boolean mGlanceableHubShowing;
     private boolean mDynamicBarExpanded;
     private boolean mWallpaperLoaded = false;
+    private Rect mLoadedBounds;
+    private String mLoadedSubjectPath;
     private LoadWallpaperTask mLoadWallpaperTask;
     private int mOffsetX;
     private int mOffsetY;
@@ -172,6 +176,23 @@ public class WallpaperDepthUtils {
                 if (parent != null && mLockScreenBackground.getParent() == null) {
                     parent.addView(mLockScreenBackground, 0);
                 }
+            }
+
+            @Override
+            protected void onConfigurationChanged(Configuration configuration) {
+                super.onConfigurationChanged(configuration);
+                mMainHandler.post(() -> {
+                    if (!mTunableRegistered) return;
+                    Rect bounds = getDepthWallpaperBounds();
+                    if (mWallpaperLoaded && mLoadedBounds != null && !bounds.equals(mLoadedBounds)) {
+                        updateDepthWallpaper(true);
+                    } else if (mLoadWallpaperTask != null
+                            && !bounds.equals(mLoadWallpaperTask.mDisplayBounds)) {
+                        updateDepthWallpaper(true);
+                    } else {
+                        updateDepthWallpaperVisibility();
+                    }
+                });
             }
 
             @Override
@@ -404,7 +425,7 @@ public class WallpaperDepthUtils {
                 case WALLPAPER_DEPTH_SPATIAL_KEY:
                     mSpatialEffectEnabled =
                             TunerService.parseIntegerSwitch(newValue, false);
-                    updateSpatialEffectActive();
+                    updateDepthWallpaper(true);
                     break;
 
                 default:
@@ -426,8 +447,8 @@ public class WallpaperDepthUtils {
             return;
         }
         Drawable background = mLockScreenSubject.getBackground();
-        if (background instanceof FadeBottomDrawable) {
-            ((FadeBottomDrawable) background)
+        if (background instanceof org.lunaris.clockmaker.spatial.FadeBottomDrawable) {
+            ((org.lunaris.clockmaker.spatial.FadeBottomDrawable) background)
                     .setFadeHeightPx(dpToPx(mBottomFadeDp));
         }
     }
@@ -437,8 +458,8 @@ public class WallpaperDepthUtils {
             return;
         }
         Drawable background = mLockScreenSubject.getBackground();
-        if (background instanceof FadeBottomDrawable) {
-            ((FadeBottomDrawable) background)
+        if (background instanceof org.lunaris.clockmaker.spatial.FadeBottomDrawable) {
+            ((org.lunaris.clockmaker.spatial.FadeBottomDrawable) background)
                     .setBottomInsetPx(dpToPx(mBottomInsetDp));
         }
     }
@@ -448,8 +469,8 @@ public class WallpaperDepthUtils {
             return;
         }
         Drawable background = mLockScreenSubject.getBackground();
-        if (background instanceof FadeBottomDrawable) {
-            ((FadeBottomDrawable) background)
+        if (background instanceof org.lunaris.clockmaker.spatial.FadeBottomDrawable) {
+            ((org.lunaris.clockmaker.spatial.FadeBottomDrawable) background)
                     .setFadeCurveExponent(computeFadeCurveExponent());
         }
     }
@@ -675,7 +696,11 @@ public class WallpaperDepthUtils {
         }
 
         boolean active = mSpatialEffectEnabled && canShowDepthWallpaper();
-        mSpatialEffectController.setActive(active);
+        boolean animate = !mDozing && !mBouncerShowing && !mGlanceableHubShowing
+                && !mDynamicBarExpanded && mScrimController.getState() == ScrimState.KEYGUARD
+                && mContext.getResources().getConfiguration().orientation
+                        != Configuration.ORIENTATION_LANDSCAPE;
+        mSpatialEffectController.setActive(active, animate);
     }
 
     private Rect getDepthWallpaperBounds() {
@@ -718,7 +743,14 @@ public class WallpaperDepthUtils {
         }
 
         if (forced || (!mWallpaperLoaded && mLoadWallpaperTask == null)) {
-            clearDepthWallpaper();
+            boolean keepLayers = mWallpaperLoaded && mSubjectUserId == mUserTracker.getUserId()
+                    && mSubjectWallpaperId == getLockWallpaperId(mSubjectUserId)
+                    && java.util.Objects.equals(mLoadedSubjectPath, mWallpaperSubjectPath);
+            if (keepLayers) {
+                if (mLoadWallpaperTask != null) mLoadWallpaperTask.cancelLoading();
+            } else {
+                clearDepthWallpaper();
+            }
             mLoadWallpaperTask = new LoadWallpaperTask(mWallpaperSubjectPath, mOffsetX, mOffsetY,
                     mSubjectUserId);
             mLoadWallpaperTask.execute();
@@ -729,10 +761,12 @@ public class WallpaperDepthUtils {
 
     private void clearDepthWallpaper() {
         if (mLoadWallpaperTask != null) {
-            mLoadWallpaperTask.cancel(false);
+            mLoadWallpaperTask.cancelLoading();
             mLoadWallpaperTask = null;
         }
         mWallpaperLoaded = false;
+        mLoadedBounds = null;
+        mLoadedSubjectPath = null;
         mLockScreenSubject.animate().cancel();
         mLockScreenSubject.setVisibility(View.GONE);
         mLockScreenSubject.setAlpha(1f);
@@ -818,14 +852,18 @@ public class WallpaperDepthUtils {
         }
     }
 
-    private class AmbientSubjectDrawable extends FadeBottomDrawable {
+    private class AmbientSubjectDrawable extends SpatialWallpaperDrawable {
         private final Paint mScrimPaint = new Paint();
         private final Matrix mSubjectMatrix = new Matrix();
         private final Matrix mScrimMatrix = new Matrix();
         private final Matrix mScrimToSubjectMatrix = new Matrix();
 
         AmbientSubjectDrawable(Bitmap bitmap) {
-            super(bitmap, 0);
+            this(bitmap, null, 0, 0);
+        }
+
+        AmbientSubjectDrawable(Bitmap bitmap, float[] depth, int width, int height) {
+            super(bitmap, depth, width, height);
             mScrimPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC_ATOP));
         }
 
@@ -867,6 +905,10 @@ public class WallpaperDepthUtils {
         private final int mUserId;
         private final Rect mDisplayBounds;
         private final float mDensity;
+        private final boolean mSpatial;
+        private final int mWallpaperId;
+        private volatile ParcelFileDescriptor mSpatialDescriptor;
+        private volatile boolean mPreviewPublished;
 
         LoadWallpaperTask(String subjectPath, int offsetX, int offsetY, int userId) {
             mSubjectPath = subjectPath;
@@ -875,6 +917,66 @@ public class WallpaperDepthUtils {
             mUserId = userId;
             mDisplayBounds = getDepthWallpaperBounds();
             mDensity = mContext.getResources().getDisplayMetrics().density;
+            mSpatial = mSpatialEffectEnabled;
+            mWallpaperId = mSubjectWallpaperId;
+        }
+
+        void cancelLoading() {
+            cancel(false);
+            ParcelFileDescriptor descriptor = mSpatialDescriptor;
+            if (descriptor != null) {
+                try {
+                    descriptor.closeWithError("Spatial request superseded");
+                } catch (java.io.IOException ignored) { }
+            }
+        }
+
+        private SpatialWallpaperScene loadSpatialScene() {
+            if (!mSpatial || isCancelled()) return null;
+            try {
+                Context userContext = mContext.createContextAsUser(UserHandle.of(mUserId), 0);
+                mSpatialDescriptor = userContext.getContentResolver().openFileDescriptor(
+                        SpatialWallpaperScene.request(mSubjectPath, mWallpaperId,
+                                mDisplayBounds.width(), mDisplayBounds.height(), mDensity,
+                                mSubjectOffsetX, mSubjectOffsetY), "r");
+                if (mSpatialDescriptor == null) return null;
+                if (isCancelled()) {
+                    mSpatialDescriptor.closeWithError("Spatial request superseded");
+                    return null;
+                }
+                return SpatialWallpaperScene.read(mSpatialDescriptor);
+            } catch (Exception e) {
+                if (!isCancelled()) Log.w("WallpaperDepthUtils", "Spatial scene unavailable; using still layers", e);
+                return null;
+            } finally {
+                ParcelFileDescriptor descriptor = mSpatialDescriptor;
+                mSpatialDescriptor = null;
+                if (descriptor != null) {
+                    try {
+                        descriptor.close();
+                    } catch (java.io.IOException ignored) { }
+                }
+            }
+        }
+
+        private void publishStillPreview(Bitmap bitmap) {
+            if (!mSpatial) return;
+            mMainHandler.post(() -> {
+                if (mLoadWallpaperTask != this || isCancelled() || mWallpaperLoaded
+                        || mUserId != mUserTracker.getUserId()
+                        || mWallpaperId != getLockWallpaperId(mUserId)) return;
+                mPreviewPublished = true;
+                mLockScreenSubject.setBackground(new AmbientSubjectDrawable(bitmap));
+                mLockScreenSubject.getBackground().setAlpha(mDWallOpacity);
+                mLockScreenBackground.setBackground(null);
+                applyBottomFade();
+                applyFadeCurve();
+                applyBottomInset();
+                mWallpaperLoaded = true;
+                mLoadedBounds = new Rect(mDisplayBounds);
+                mLoadedSubjectPath = mSubjectPath;
+                updateDepthWallpaperVisibility();
+            });
         }
 
         @Override
@@ -898,12 +1000,30 @@ public class WallpaperDepthUtils {
                 Bitmap resizedBitmap =
                         getResizedBitmap(bitmap, mSubjectOffsetX, mSubjectOffsetY,
                                 mDisplayBounds, mDensity);
+                if (bitmap != resizedBitmap) bitmap.recycle();
 
                 if (resizedBitmap == null) {
                     Log.d(
                             "LoadWallpaperTask",
                             "Failed to decode resized bitmap from file");
                     return null;
+                }
+
+                publishStillPreview(resizedBitmap);
+                SpatialWallpaperScene scene = loadSpatialScene();
+                if (isCancelled()) {
+                    if (!mPreviewPublished) resizedBitmap.recycle();
+                    if (scene != null) scene.background.recycle();
+                    return null;
+                }
+                if (scene != null) {
+                    SpatialWallpaperDrawable background = new SpatialWallpaperDrawable(
+                            scene.background, scene.backgroundDepth, scene.depthWidth,
+                            scene.depthHeight);
+                    background.setSubjectUnderlay(resizedBitmap, scene.subjectDepth,
+                            scene.depthWidth, scene.depthHeight);
+                    return new WallpaperLayers(background, new AmbientSubjectDrawable(
+                            resizedBitmap, scene.subjectDepth, scene.depthWidth, scene.depthHeight));
                 }
 
                 Drawable bitmapDrawable = new AmbientSubjectDrawable(resizedBitmap);
@@ -977,8 +1097,11 @@ public class WallpaperDepthUtils {
             applyFadeCurve();
             applyBottomInset();
             mWallpaperLoaded = true;
+            mLoadedBounds = new Rect(mDisplayBounds);
+            mLoadedSubjectPath = mSubjectPath;
             updateDepthWallpaperVisibility();
             updateSpatialEffectActive();
+            mSpatialEffectController.onLayersChanged();
         }
     }
 
