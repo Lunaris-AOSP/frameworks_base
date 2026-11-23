@@ -26,18 +26,22 @@ import com.android.systemui.media.controls.data.model.MediaSortKeyModel
 import com.android.systemui.media.controls.shared.areIconsEqual
 import com.android.systemui.media.controls.shared.model.MediaData
 import com.android.systemui.media.remedia.data.model.UpdateArtInfoModel
+import com.android.systemui.settings.UserTracker
 import com.android.systemui.util.settings.SecureSettings
 import com.android.systemui.util.settings.SettingsProxyExt.observerFlow
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -48,6 +52,7 @@ abstract class MediaPipelineRepository(
     @Application applicationScope: CoroutineScope,
     @Background private val backgroundDispatcher: CoroutineDispatcher,
     private val secureSettings: SecureSettings,
+    private val userTracker: UserTracker? = null,
 ) {
 
     protected val mutableUserEntries: MutableStateFlow<Map<InstanceId, MediaData>> =
@@ -140,7 +145,7 @@ abstract class MediaPipelineRepository(
 
     abstract fun clearCurrentUserMedia()
 
-    private fun getUpdateInfoModel(old: MediaData, new: MediaData): UpdateArtInfoModel {
+    protected fun getUpdateInfoModel(old: MediaData, new: MediaData): UpdateArtInfoModel {
         return UpdateArtInfoModel(
             isBackgroundUpdated = !areIconsEqual(applicationContext, new.artwork, old.artwork),
             isAppIconUpdated = !areIconsEqual(applicationContext, new.appIcon, old.appIcon),
@@ -149,8 +154,23 @@ abstract class MediaPipelineRepository(
 
     private fun listenForLockscreenSettingChanges(scope: CoroutineScope): Job {
         return scope.launch {
-            secureSettings
-                .observerFlow(UserHandle.USER_ALL, Settings.Secure.MEDIA_CONTROLS_LOCK_SCREEN)
+            val userChanges = callbackFlow {
+                val callback =
+                    object : UserTracker.Callback {
+                        override fun onUserChanged(newUser: Int, userContext: Context) {
+                            trySend(Unit)
+                        }
+                    }
+                userTracker?.addCallback(callback, applicationContext.mainExecutor)
+                awaitClose { userTracker?.removeCallback(callback) }
+            }
+            merge(
+                    secureSettings.observerFlow(
+                        UserHandle.USER_ALL,
+                        Settings.Secure.MEDIA_CONTROLS_LOCK_SCREEN,
+                    ),
+                    userChanges,
+                )
                 .onStart { emit(Unit) }
                 .map { getMediaLockScreenSetting() }
                 .distinctUntilChanged()
@@ -164,7 +184,7 @@ abstract class MediaPipelineRepository(
             secureSettings.getBoolForUser(
                 Settings.Secure.MEDIA_CONTROLS_LOCK_SCREEN,
                 true,
-                UserHandle.USER_CURRENT,
+                userTracker?.userId ?: UserHandle.USER_CURRENT,
             )
         }
     }

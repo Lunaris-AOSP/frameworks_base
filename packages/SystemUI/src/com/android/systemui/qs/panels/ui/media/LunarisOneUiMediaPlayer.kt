@@ -26,25 +26,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredWidth
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 import com.android.systemui.media.remedia.domain.model.MediaSessionModel
-import com.android.systemui.media.remedia.shared.model.MediaCardActionButtonLayout
-import com.android.systemui.media.remedia.shared.model.MediaSessionState
 import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.res.R
 
@@ -55,6 +48,7 @@ internal fun LunarisOneUiMediaPlayer(
     colors: AxMediaColors,
     interactive: Boolean,
     hasMultipleSessions: Boolean,
+    lockscreen: Boolean = false,
 ) {
     val title =
         session?.title?.takeIf { it.isNotBlank() }
@@ -69,13 +63,18 @@ internal fun LunarisOneUiMediaPlayer(
         val preferredTopPadding = (maxHeight * 0.04f).coerceIn(4.dp, 10.dp)
         val preferredBottomPadding = if (hasMultipleSessions) 16.dp else 10.dp
         val metadataHeight = with(LocalDensity.current) { 20.sp.toDp().coerceAtLeast(20.dp) }
+        val configuredSeekBarStyle by viewModel.seekBarStyle.collectAsStateWithLifecycle()
+        val seekBarStyle = if (lockscreen) configuredSeekBarStyle else MediaSeekBarStyle.GLOWING
+        val seekBarHeight =
+            mediaSeekBarHeight(seekBarStyle, dense = true) +
+                if (lockscreen) with(LocalDensity.current) { 12.sp.toDp() } else 0.dp
         val useCompactSpacing =
             maxHeight <
                 preferredTopPadding +
                     preferredBottomPadding +
                     metadataHeight +
                     32.dp +
-                    34.dp +
+                    seekBarHeight +
                     48.dp
         val topPadding = if (useCompactSpacing) 0.dp else preferredTopPadding
         val bottomPadding =
@@ -135,78 +134,20 @@ internal fun LunarisOneUiMediaPlayer(
                     dense = true,
                     interactive = interactive,
                     modifier = Modifier.requiredWidth(seekBarWidth),
-                    styleOverride = MediaSeekBarStyle.GLOWING,
+                    styleOverride = if (lockscreen) null else MediaSeekBarStyle.GLOWING,
+                    showTimestamps = lockscreen,
+                    timestampsBelow = lockscreen,
                 )
             }
-            OneUiCompactActions(
+            CompactMediaActions(
                 session = session,
                 viewModel = viewModel,
-                colors = colors,
+                foreground = colors.foreground,
                 interactive = interactive,
-                actionSize = actionSize,
+                buttonBackground = colors.foreground.copy(alpha = 0.12f),
+                playPauseSize = actionSize,
+                playPauseIconSize = 26.dp,
             )
-        }
-    }
-}
-
-@Composable
-private fun OneUiCompactActions(
-    session: MediaSessionModel?,
-    viewModel: AxMediaViewModel,
-    colors: AxMediaColors,
-    interactive: Boolean,
-    actionSize: Dp,
-) {
-    val buttonBackground = colors.foreground.copy(alpha = 0.12f)
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-        Row(
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (session?.actionButtonLayout == MediaCardActionButtonLayout.SecondaryActionsOnly) {
-                session.additionalActions.take(3).forEach { action ->
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                        MediaAction(
-                            action = action,
-                            viewModel = viewModel,
-                            width = actionSize,
-                            iconSize = minOf(24.dp, actionSize),
-                            tint = colors.foreground,
-                            background = buttonBackground,
-                            interactive = interactive,
-                        )
-                    }
-                }
-            } else {
-                val actions =
-                    listOf(session?.leftAction, session?.playPauseAction, session?.rightAction)
-                val icons =
-                    listOf(Icons.Filled.SkipPrevious, playPauseIcon(session), Icons.Filled.SkipNext)
-                val descriptions =
-                    listOf(
-                        R.string.controls_media_button_prev,
-                        playPauseDescription(session),
-                        R.string.controls_media_button_next,
-                    )
-                actions.forEachIndexed { index, action ->
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                        CoreMediaAction(
-                            action = action,
-                            imageVector = icons[index],
-                            descriptionRes = descriptions[index],
-                            animatedIconRes =
-                                if (index == 1) R.drawable.ic_media_play_button else null,
-                            animatedIconAtEnd = session?.state == MediaSessionState.Playing,
-                            viewModel = viewModel,
-                            width = actionSize,
-                            iconSize = minOf(if (index == 1) 26.dp else 24.dp, actionSize),
-                            tint = colors.foreground,
-                            background = buttonBackground,
-                            interactive = interactive,
-                        )
-                    }
-                }
-            }
         }
     }
 }

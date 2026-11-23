@@ -17,13 +17,36 @@
 package com.android.systemui.media.remedia.ui.viewmodel.factory
 
 import android.content.Context
+import com.android.systemui.keyguard.domain.interactor.keyguardTransitionInteractor
 import com.android.systemui.kosmos.Kosmos
+import com.android.systemui.kosmos.applicationCoroutineScope
+import com.android.systemui.media.controls.domain.pipeline.interactor.mediaCarouselInteractor
+import com.android.systemui.media.remedia.data.repository.LockscreenMediaSettingsRepository
 import com.android.systemui.media.remedia.domain.interactor.mediaInteractor
 import com.android.systemui.media.remedia.ui.viewmodel.MediaCarouselVisibility
 import com.android.systemui.media.remedia.ui.viewmodel.MediaViewModel
 import com.android.systemui.media.remedia.ui.viewmodel.mediaFalsingSystem
+import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.shared.settings.data.repository.systemSettingsRepository
 import com.android.systemui.statusbar.notification.collection.provider.visualStabilityProvider
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.whenever
+
+val Kosmos.lockscreenMediaSettingsRepository by
+    Kosmos.Fixture {
+        LockscreenMediaSettingsRepository(systemSettingsRepository, applicationCoroutineScope)
+    }
+
+val Kosmos.lockscreenMediaViewModel by
+    Kosmos.Fixture {
+        mock<AxMediaViewModel>().also {
+            whenever(it.showOnLockscreen).thenReturn(mediaCarouselInteractor.allowMediaOnLockscreen)
+            whenever(it.lockscreenTransition)
+                .thenReturn(keyguardTransitionInteractor.startedKeyguardTransitionStep)
+            whenever(it.lockscreenStyle).thenReturn(lockscreenMediaSettingsRepository.style)
+            whenever(it.seekBarStyle).thenReturn(lockscreenMediaSettingsRepository.seekBarStyle)
+        }
+    }
 
 val Kosmos.mediaViewModelFactory by
     Kosmos.Fixture {
@@ -36,7 +59,7 @@ val Kosmos.mediaViewModelFactory by
                     interactor = mediaInteractor,
                     falsingSystem = mediaFalsingSystem,
                     visualStabilityProvider = visualStabilityProvider,
-                    systemSettingsRepository = systemSettingsRepository,
+                    mediaSettingsRepository = lockscreenMediaSettingsRepository,
                     context = context,
                     carouselVisibility = carouselVisibility,
                 )

@@ -80,6 +80,7 @@ import com.android.systemui.common.shared.model.asImageBitmap
 import com.android.systemui.common.ui.compose.Icon
 import com.android.systemui.media.remedia.domain.model.MediaSessionModel
 import com.android.systemui.media.remedia.motionart.FadingLunarisMotionArtVideo
+import com.android.systemui.media.remedia.ui.compose.LocalMediaAnimationsEnabled
 import com.android.systemui.qs.panels.shared.model.AxMediaSurface
 import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.res.R
@@ -109,27 +110,40 @@ internal fun MediaArtwork(
     motionArtPlaying: Boolean = false,
     scrim: AxMediaArtworkScrim = AxMediaArtworkScrim.Default,
 ) {
+    val animationsEnabled = LocalMediaAnimationsEnabled.current
     Box(modifier.fillMaxSize()) {
         AnimatedContent(
             targetState = artwork,
             transitionSpec = {
                 (fadeIn(
                     animationSpec =
-                        tween(durationMillis = 400, easing = Easings.EmphasizedDecelerate)
+                        tween(
+                            durationMillis = if (animationsEnabled) 400 else 0,
+                            easing = Easings.EmphasizedDecelerate,
+                        )
                 ) +
                     scaleIn(
-                        initialScale = 1.15f,
+                        initialScale = if (animationsEnabled) 1.15f else 1f,
                         animationSpec =
-                            tween(durationMillis = 500, easing = Easings.EmphasizedDecelerate),
+                            tween(
+                                durationMillis = if (animationsEnabled) 500 else 0,
+                                easing = Easings.EmphasizedDecelerate,
+                            ),
                     )) togetherWith
                     (fadeOut(
                         animationSpec =
-                            tween(durationMillis = 350, easing = Easings.EmphasizedAccelerate)
+                            tween(
+                                durationMillis = if (animationsEnabled) 350 else 0,
+                                easing = Easings.EmphasizedAccelerate,
+                            )
                     ) +
                         scaleOut(
-                            targetScale = 0.95f,
+                            targetScale = if (animationsEnabled) 0.95f else 1f,
                             animationSpec =
-                                tween(durationMillis = 350, easing = Easings.EmphasizedAccelerate),
+                                tween(
+                                    durationMillis = if (animationsEnabled) 350 else 0,
+                                    easing = Easings.EmphasizedAccelerate,
+                                ),
                         ))
             },
             label = "AxMediaSongArtwork",
@@ -318,9 +332,13 @@ internal fun AnimatedMediaText(
     modifier: Modifier = Modifier,
     textAlign: TextAlign? = null,
 ) {
+    val animationsEnabled = LocalMediaAnimationsEnabled.current
     AnimatedContent(
         targetState = text,
-        transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(120)) },
+        transitionSpec = {
+            fadeIn(tween(if (animationsEnabled) 180 else 0)) togetherWith
+                fadeOut(tween(if (animationsEnabled) 120 else 0))
+        },
         contentAlignment = Alignment.CenterStart,
         label = "AxMediaText",
         modifier = modifier,
@@ -332,7 +350,8 @@ internal fun AnimatedMediaText(
             maxLines = 1,
             overflow = TextOverflow.Clip,
             textAlign = textAlign,
-            modifier = Modifier.fillMaxWidth().basicMarquee(iterations = 1),
+            modifier =
+                Modifier.fillMaxWidth().basicMarquee(iterations = if (animationsEnabled) 1 else 0),
         )
     }
 }

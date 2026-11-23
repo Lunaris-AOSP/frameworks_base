@@ -69,7 +69,6 @@ import com.android.systemui.classifier.FalsingCollector;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.media.controls.ui.controller.KeyguardMediaController;
-import com.android.systemui.media.remedia.shared.flag.MediaControlsInComposeFlag;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
@@ -681,8 +680,7 @@ public class NotificationStackScrollLayoutController implements Dumpable {
                             false /* ignoreDecors */,
                             !confineNotificationTouchToViewWidth() /* ignoreWidth */);
 
-                    if (child instanceof MediaContainerView
-                            && MediaControlsInComposeFlag.isEnabled()) {
+                    if (child instanceof MediaContainerView) {
                         return null;
                     }
 

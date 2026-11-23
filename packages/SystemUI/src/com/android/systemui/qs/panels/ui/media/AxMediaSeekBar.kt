@@ -27,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
@@ -34,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -43,8 +45,18 @@ import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 import com.android.systemui.media.controls.ui.compose.AndroidMediaSeekBar
 import com.android.systemui.media.remedia.domain.model.MediaSessionModel
 import com.android.systemui.media.remedia.shared.model.MediaSessionState
+import com.android.systemui.media.remedia.ui.compose.LocalMediaAnimationsEnabled
 import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.res.R
+
+internal fun mediaSeekBarHeight(style: MediaSeekBarStyle, dense: Boolean): Dp =
+    when (style) {
+        MediaSeekBarStyle.GLOWING -> if (dense) 34.dp else 40.dp
+        MediaSeekBarStyle.GRADIENT_WAVE -> 40.dp
+        MediaSeekBarStyle.COS -> 34.dp
+        MediaSeekBarStyle.COMET_TRAIL -> 34.dp
+        else -> if (dense) 20.dp else 32.dp
+    }
 
 @Composable
 internal fun MediaSeekBar(
@@ -59,17 +71,19 @@ internal fun MediaSeekBar(
     styleOverride: MediaSeekBarStyle? = null,
 ) {
     val isShadeInteracting by viewModel.isShadeInteracting.collectAsStateWithLifecycle()
-    val configuredStyle by
-        viewModel.seekBarStyle.collectAsStateWithLifecycle(initialValue = MediaSeekBarStyle.DEFAULT)
+    val configuredStyle by viewModel.seekBarStyle.collectAsStateWithLifecycle()
     val seekBarStyle = styleOverride ?: configuredStyle
-    val height =
-        when (seekBarStyle) {
-            MediaSeekBarStyle.GLOWING -> if (dense) 34.dp else 40.dp
-            MediaSeekBarStyle.GRADIENT_WAVE -> 40.dp
-            MediaSeekBarStyle.COS -> 34.dp
-            MediaSeekBarStyle.COMET_TRAIL -> 34.dp
-            else -> if (dense) 20.dp else 32.dp
-        }
+    val height = mediaSeekBarHeight(seekBarStyle, dense)
+    DisposableEffect(
+        viewModel,
+        session?.key,
+        session?.title,
+        session?.subtitle,
+        seekBarStyle,
+        interactive,
+    ) {
+        onDispose { if (interactive) viewModel.cancelScrubbing() }
+    }
     val progress = session?.let(viewModel::progress) ?: 0f
     val durationMs = session?.durationMs ?: 0L
     val elapsedSeconds = (progress * durationMs).toLong() / 1000L
@@ -93,7 +107,7 @@ internal fun MediaSeekBar(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (showTimestamps && !timestampsBelow) MediaTimestamp(elapsedTime, colors)
-                key(session?.key) {
+                key(session?.key, session?.title, session?.subtitle) {
                     AndroidMediaSeekBar(
                         progress = progress,
                         durationMs = durationMs,
@@ -106,7 +120,10 @@ internal fun MediaSeekBar(
                         style = seekBarStyle,
                         artwork = (session?.background as? Icon.Loaded)?.drawable,
                         isPlaying = session?.state == MediaSessionState.Playing,
-                        animationsAllowed = !isShadeInteracting,
+                        animationsAllowed =
+                            interactive &&
+                                !isShadeInteracting &&
+                                LocalMediaAnimationsEnabled.current,
                         enabled = interactive && session?.canBeScrubbed == true,
                         contentDescription = seekDescription,
                         color = colors.primary,

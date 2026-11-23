@@ -20,10 +20,12 @@ import androidx.compose.runtime.getValue
 import com.android.systemui.keyguard.domain.interactor.KeyguardInteractor
 import com.android.systemui.lifecycle.ExclusiveActivatable
 import com.android.systemui.lifecycle.Hydrator
+import com.android.systemui.media.controls.domain.pipeline.MediaDataManager
 import com.android.systemui.media.controls.domain.pipeline.interactor.MediaCarouselInteractor
 import com.android.systemui.media.remedia.ui.compose.MediaUiBehavior
 import com.android.systemui.media.remedia.ui.viewmodel.MediaCarouselVisibility
 import com.android.systemui.media.remedia.ui.viewmodel.MediaViewModel
+import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 
@@ -33,6 +35,8 @@ constructor(
     val mediaViewModelFactory: MediaViewModel.Factory,
     private val mediaCarouselInteractor: MediaCarouselInteractor,
     private val keyguardInteractor: KeyguardInteractor,
+    val lockscreenMediaViewModel: AxMediaViewModel,
+    private val mediaDataManager: MediaDataManager,
 ) : ExclusiveActivatable() {
 
     private val hydrator = Hydrator("KeyguardMediaViewModel.hydrator")
@@ -47,13 +51,14 @@ constructor(
     val isDozing: Boolean by
         hydrator.hydratedStateOf(traceName = "isDozing", source = keyguardInteractor.isDozing)
 
-    fun onSwipeToDismiss() = mediaCarouselInteractor.onSwipeToDismiss()
+    fun onSwipeToDismiss() = mediaDataManager.onSwipeToDismiss()
 
     val mediaUiBehavior =
         MediaUiBehavior(
             isCarouselDismissible = true,
             isCarouselScrollingEnabled = true,
             carouselVisibility = MediaCarouselVisibility.WhenAnyCardIsActive,
+            isCarouselScrollFalseTouch = lockscreenMediaViewModel::isSwipeFalseTouch,
         )
 
     override suspend fun onActivated(): Nothing {

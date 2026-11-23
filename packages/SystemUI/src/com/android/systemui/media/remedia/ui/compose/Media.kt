@@ -19,6 +19,7 @@
 package com.android.systemui.media.remedia.ui.compose
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
@@ -28,8 +29,11 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.graphics.res.animatedVectorResource
 import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
 import androidx.compose.animation.graphics.vector.AnimatedImageVector
@@ -50,6 +54,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -60,6 +65,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -91,6 +97,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -172,10 +179,13 @@ import com.android.systemui.media.remedia.ui.viewmodel.MediaPlayPauseActionViewM
 import com.android.systemui.media.remedia.ui.viewmodel.MediaSecondaryActionViewModel
 import com.android.systemui.media.remedia.ui.viewmodel.MediaSettingsButtonViewModel
 import com.android.systemui.media.remedia.ui.viewmodel.MediaViewModel
+import com.android.systemui.qs.panels.ui.media.LocalMediaButtonSquish
+import com.android.systemui.qs.panels.ui.media.mediaActionPressFeedback
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.filterNotNull
 
 /**
  * Renders a media controls UI element.
@@ -191,6 +201,9 @@ fun Media(
     behavior: MediaUiBehavior,
     onDismissed: () -> Unit,
     modifier: Modifier = Modifier,
+    cardCornerRadius: Dp = 32.dp,
+    pagerIndicator: (@Composable BoxScope.(PagerState) -> Unit)? = null,
+    cardContent: (@Composable (MediaCardViewModel, Modifier, Boolean, Boolean) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val viewModel: MediaViewModel =
@@ -207,6 +220,9 @@ fun Media(
         behavior = behavior,
         onDismissed = onDismissed,
         modifier = modifier,
+        cardCornerRadius = cardCornerRadius,
+        pagerIndicator = pagerIndicator,
+        cardContent = cardContent,
     )
 }
 
@@ -225,6 +241,9 @@ private fun CardCarousel(
     behavior: MediaUiBehavior,
     onDismissed: () -> Unit,
     modifier: Modifier = Modifier,
+    cardCornerRadius: Dp = 32.dp,
+    pagerIndicator: (@Composable BoxScope.(PagerState) -> Unit)? = null,
+    cardContent: (@Composable (MediaCardViewModel, Modifier, Boolean, Boolean) -> Unit)? = null,
 ) {
     AnimatedVisibility(visible = viewModel.isCarouselVisible, modifier = modifier) {
         CardCarouselContent(
@@ -232,6 +251,9 @@ private fun CardCarousel(
             presentationStyle = presentationStyle,
             behavior = behavior,
             onDismissed = onDismissed,
+            cardCornerRadius = cardCornerRadius,
+            pagerIndicator = pagerIndicator,
+            cardContent = cardContent,
         )
     }
 }
@@ -243,25 +265,45 @@ private fun CardCarouselContent(
     behavior: MediaUiBehavior,
     onDismissed: () -> Unit,
     modifier: Modifier = Modifier,
+    cardCornerRadius: Dp = 32.dp,
+    pagerIndicator: (@Composable BoxScope.(PagerState) -> Unit)? = null,
+    cardContent: (@Composable (MediaCardViewModel, Modifier, Boolean, Boolean) -> Unit)? = null,
 ) {
-    val pagerState = rememberPagerState { viewModel.cards.size }
-    LaunchedEffect(viewModel.currentIndex) {
-        if (viewModel.currentIndex != pagerState.currentPage) {
-            pagerState.scrollToPage(viewModel.currentIndex)
+    val cards = rememberLastNonNull(viewModel.cards.takeIf { it.isNotEmpty() }).orEmpty()
+    val cardKeys = cards.map { it.key }
+    val currentCards by rememberUpdatedState(cards)
+    val pagerState = rememberPagerState(
+        initialPage = viewModel.currentIndex.coerceIn(0, cardKeys.lastIndex.coerceAtLeast(0))
+    ) { cards.size }
+    LaunchedEffect(viewModel.currentIndex, cardKeys) {
+        if (viewModel.cards.isNotEmpty() && !pagerState.isScrollInProgress) {
+            val page = viewModel.currentIndex.coerceIn(0, cardKeys.lastIndex)
+            if (page != pagerState.currentPage) pagerState.scrollToPage(page)
         }
     }
-    LaunchedEffect(pagerState.currentPage, viewModel.cards.size) {
-        if (pagerState.currentPage < viewModel.cards.size) {
-            viewModel.onCardSelected(pagerState.currentPage)
-        }
+    LaunchedEffect(pagerState, viewModel) {
+        snapshotFlow {
+            if (pagerState.isScrollInProgress) null
+            else {
+                val selectedKey = pagerState.layoutInfo.visiblePagesInfo
+                    .firstOrNull { it.index == pagerState.settledPage }?.key
+                currentCards.indexOfFirst { it.key == selectedKey }.takeIf { it >= 0 }
+            }
+        }.filterNotNull().collect { viewModel.onCardSelected(it) }
     }
-    val isSwipingEnabled = behavior.isCarouselScrollingEnabled
+    val animationsEnabled = LocalMediaAnimationsEnabled.current
+    val isSwipingEnabled = behavior.isCarouselScrollingEnabled && animationsEnabled
 
-    val roundedCornerShape = RoundedCornerShape(32.dp)
+    val roundedCornerShape = RoundedCornerShape(cardCornerRadius)
 
     Box(
         modifier =
             modifier
+                .then(
+                    if (presentationStyle == MediaPresentationStyle.Lockscreen)
+                        Modifier.animateContentSize(animationSpec = tween(if (animationsEnabled) 220 else 0))
+                    else Modifier
+                )
                 .graphicsLayer {
                     shape = roundedCornerShape
                     clip = true
@@ -278,26 +320,73 @@ private fun CardCarouselContent(
                     userScrollEnabled = isSwipingEnabled,
                     pageSpacing = 8.dp,
                     beyondViewportPageCount = 1,
-                    key = { index: Int -> viewModel.cards[index].key },
+                    key = { index: Int -> cards[index].key },
                     overscrollEffect = overscrollEffect ?: rememberOffsetOverscrollEffect(),
                 ) { pageIndex: Int ->
-                    Card(
-                        viewModel = viewModel.cards[pageIndex],
-                        presentationStyle = presentationStyle,
-                        modifier =
-                            Modifier.clip(roundedCornerShape).sysuiResTag(MediaRes.MEDIA_CONTROLS),
-                    )
+                    val card = cards.getOrNull(pageIndex) ?: return@HorizontalPager
+                    val cardModifier =
+                        Modifier.clip(roundedCornerShape).sysuiResTag(MediaRes.MEDIA_CONTROLS)
+                    CompositionLocalProvider(
+                        LocalMediaAnimationsEnabled provides
+                            (animationsEnabled && pageIndex == pagerState.currentPage)
+                    ) {
+                    val cardAnimationsEnabled = animationsEnabled && pageIndex == pagerState.currentPage
+                    if (presentationStyle == MediaPresentationStyle.Lockscreen) {
+                        val retainedContent = rememberLastNonNull(cardContent)
+                        AnimatedContent(
+                            targetState = cardContent == null,
+                            transitionSpec = {
+                                (fadeIn(tween(if (cardAnimationsEnabled) 180 else 0)) togetherWith
+                                        fadeOut(tween(if (cardAnimationsEnabled) 120 else 0)))
+                                    .using(sizeTransform = null)
+                            },
+                            label = "LockscreenMediaDesign",
+                        ) { defaultStyle ->
+                            if (defaultStyle) {
+                                Card(
+                                    viewModel = card,
+                                    presentationStyle = presentationStyle,
+                                    modifier = cardModifier,
+                                )
+                            } else {
+                                retainedContent?.invoke(
+                                    card,
+                                    cardModifier,
+                                    pageIndex == pagerState.currentPage,
+                                    pageIndex == pagerState.currentPage || pagerState.layoutInfo.visiblePagesInfo.any { it.index == pageIndex },
+                                )
+                            }
+                        }
+                    } else if (cardContent == null) {
+                        Card(
+                            viewModel = card,
+                            presentationStyle = presentationStyle,
+                            modifier = cardModifier,
+                        )
+                    } else {
+                        cardContent(
+                            card,
+                            cardModifier,
+                            pageIndex == pagerState.currentPage,
+                            pageIndex == pagerState.currentPage || pagerState.layoutInfo.visiblePagesInfo.any { it.index == pageIndex },
+                        )
+                    }
+                    }
                 }
 
                 if (pagerState.pageCount > 1) {
-                    PagerDots(
-                        pagerState = pagerState,
-                        activeColor = Color(0xffdee0ff),
-                        nonActiveColor = Color(0xffa7a9ca),
-                        dotSize = 6.dp,
-                        spaceSize = 6.dp,
-                        modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp),
-                    )
+                    if (pagerIndicator != null) {
+                        pagerIndicator.invoke(this, pagerState)
+                    } else {
+                        PagerDots(
+                            pagerState = pagerState,
+                            activeColor = Color(0xffdee0ff),
+                            nonActiveColor = Color(0xffa7a9ca),
+                            dotSize = 6.dp,
+                            spaceSize = 6.dp,
+                            modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp),
+                        )
+                    }
                 }
             }
         }
@@ -332,7 +421,8 @@ private fun CardCarouselContent(
 
     LaunchedEffect(viewModel.scrollToFirst) {
         if (viewModel.scrollToFirst && viewModel.cards.isNotEmpty()) {
-            pagerState.animateScrollToPage(0)
+            if (animationsEnabled) pagerState.animateScrollToPage(0)
+            else pagerState.scrollToPage(0)
             viewModel.onScrollToFirstCard()
         }
     }
@@ -426,12 +516,22 @@ private fun Card(
 
 @Composable
 private fun rememberAnimatedColorScheme(colorScheme: MediaColorScheme?): AnimatedColorScheme {
+    val animationsEnabled = LocalMediaAnimationsEnabled.current
     val primaryColor = colorScheme?.primary ?: MaterialTheme.colorScheme.primaryFixed
     val onPrimaryColor = colorScheme?.onPrimary ?: MaterialTheme.colorScheme.onPrimaryFixed
     val backgroundColor = colorScheme?.background ?: MaterialTheme.colorScheme.onSurface
-    val animatedPrimary by animateColorAsState(targetValue = primaryColor)
-    val animatedOnPrimary by animateColorAsState(targetValue = onPrimaryColor)
-    val animatedBackground by animateColorAsState(targetValue = backgroundColor)
+    val animatedPrimary by animateColorAsState(
+        targetValue = primaryColor,
+        animationSpec = if (animationsEnabled) spring() else snap(),
+    )
+    val animatedOnPrimary by animateColorAsState(
+        targetValue = onPrimaryColor,
+        animationSpec = if (animationsEnabled) spring() else snap(),
+    )
+    val animatedBackground by animateColorAsState(
+        targetValue = backgroundColor,
+        animationSpec = if (animationsEnabled) spring() else snap(),
+    )
 
     return remember {
         object : AnimatedColorScheme {
@@ -817,8 +917,12 @@ private fun CardBackground(
     colorScheme: AnimatedColorScheme,
     modifier: Modifier = Modifier,
 ) {
-    Crossfade(targetState = image, modifier = modifier) { imageOrNull ->
-        val backgroundImage = imageOrNull?.let { (it as Icon.Loaded).asImageBitmap() }
+    Crossfade(
+        targetState = image,
+        animationSpec = if (LocalMediaAnimationsEnabled.current) tween() else snap(),
+        modifier = modifier,
+    ) { imageOrNull ->
+        val backgroundImage = (imageOrNull as? Icon.Loaded)?.asImageBitmap()
         if (backgroundImage != null) {
             // Loaded art.
             val gradientBaseColor = colorScheme.background
@@ -914,7 +1018,8 @@ private fun ContentScope.Navigation(
                                 artwork = (artwork as? Icon.Loaded)?.drawable,
                                 isPlaying = viewModel.isPlaying,
                                 isScrubbing = viewModel.isScrubbing,
-                                enabled = true,
+                                animationsAllowed = LocalMediaAnimationsEnabled.current,
+                                enabled = LocalMediaAnimationsEnabled.current,
                                 contentDescription = viewModel.contentDescription,
                                 color = colors.activeTrackColor,
                                 backgroundColor = colors.inactiveTrackColor,
@@ -930,6 +1035,7 @@ private fun ContentScope.Navigation(
                             }
                         }
                         Slider(
+                            enabled = LocalMediaAnimationsEnabled.current,
                             interactionSource = interactionSource,
                             value = viewModel.progress,
                             onValueChange = { progress -> viewModel.onScrubChange(progress) },
@@ -943,7 +1049,7 @@ private fun ContentScope.Navigation(
                             track = { sliderState ->
                                 SeekBarTrack(
                                     sliderState = sliderState,
-                                    isSquiggly = viewModel.isSquiggly,
+                                    isSquiggly = viewModel.isSquiggly && LocalMediaAnimationsEnabled.current,
                                     colors = colors,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
@@ -1000,6 +1106,24 @@ private fun ContentScope.Navigation(
             }
         }
 
+        is MediaNavigationViewModel.ActionsOnly -> {
+            if (areActionsVisible) {
+                Row(modifier, verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SecondaryAction(
+                        viewModel = viewModel.left,
+                        modifier = Modifier.sysuiResTag(MediaRes.PREV_BTN),
+                        element = Media.Elements.PrevButton,
+                    )
+                    if (isSeekBarVisible) Spacer(Modifier.weight(1f))
+                    SecondaryAction(
+                        viewModel = viewModel.right,
+                        modifier = Modifier.sysuiResTag(MediaRes.NEXT_BTN),
+                        element = Media.Elements.NextButton,
+                    )
+                }
+            }
+        }
         is MediaNavigationViewModel.Hidden -> Unit
     }
 }
@@ -1229,7 +1353,11 @@ private fun ContentScope.Metadata(
     // This element can be animated when switching between scenes inside a media card.
     Element(key = Media.Elements.Metadata, modifier = modifier) {
         // When the title and/or subtitle change, crossfade between the old and the new.
-        Crossfade(targetState = title to subtitle, label = "Labels.crossfade") { (title, subtitle)
+        Crossfade(
+            targetState = title to subtitle,
+            animationSpec = if (LocalMediaAnimationsEnabled.current) tween() else snap(),
+            label = "Labels.crossfade",
+        ) { (title, subtitle)
             ->
             Column {
                 Text(
@@ -1285,6 +1413,7 @@ private fun DeviceChip(
             contentAlignment = if (compactSpacing) Alignment.CenterStart else Alignment.TopStart,
             modifier =
                 Modifier.heightIn(min = 48.dp).clickable(
+                    enabled = LocalMediaAnimationsEnabled.current,
                     interactionSource = clickInteractionSource,
                     indication = null,
                 ) {
@@ -1295,6 +1424,10 @@ private fun DeviceChip(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier =
                     Modifier.clip(RoundedCornerShape(12.dp))
+                        .then(if (LocalMediaButtonSquish.current) Modifier.mediaActionPressFeedback(
+                            clickInteractionSource,
+                            enabled = LocalMediaAnimationsEnabled.current,
+                        ) else Modifier)
                         .background(style.fillColor)
                         .thenIf(style.borderColor != null) {
                             Modifier.border(
@@ -1348,15 +1481,19 @@ private fun ContentScope.PlayPauseAction(
 ) {
     if (viewModel == null) return
 
+    val animationsEnabled = LocalMediaAnimationsEnabled.current
     val buttonSize = DpSize(width = 72.dp, height = 48.dp)
     val cornerRadius: Dp by
         animateDpAsState(
             targetValue = buttonCornerRadius(viewModel.state != MediaSessionState.Paused),
+            animationSpec = if (animationsEnabled) spring() else snap(),
             label = "PlayPauseAction.cornerRadius",
         )
 
     val scaleAnimatable = remember { Animatable(1.0f) }
     val scope = rememberCoroutineScope()
+    val squish = LocalMediaButtonSquish.current
+    val interactionSource = remember { MutableInteractionSource() }
 
     // This element can be animated when switching between scenes inside a media card.
     Element(key = Media.Elements.PlayPauseButton, modifier = modifier) {
@@ -1364,7 +1501,7 @@ private fun ContentScope.PlayPauseAction(
             onClick = {
                 viewModel.onClick?.let {
                     it()
-                    scope.launch {
+                    if (!squish && animationsEnabled) scope.launch {
                         scaleAnimatable.animateTo(
                             targetValue = 1.125f,
                             animationSpec = tween(durationMillis = 250),
@@ -1376,10 +1513,14 @@ private fun ContentScope.PlayPauseAction(
                     }
                 }
             },
-            enabled = viewModel.onClick != null,
+            enabled = animationsEnabled && viewModel.onClick != null,
             colors = ButtonDefaults.buttonColors(containerColor = buttonColor),
             shape = RoundedCornerShape(cornerRadius),
-            modifier = Modifier.size(buttonSize).scale(scaleAnimatable.value),
+            interactionSource = interactionSource,
+            modifier = Modifier.size(buttonSize).then(
+                if (squish) Modifier.mediaActionPressFeedback(interactionSource, viewModel.onClick != null)
+                else Modifier.scale(scaleAnimatable.value)
+            ),
         ) {
             when (viewModel.state) {
                 is MediaSessionState.Playing,
@@ -1389,13 +1530,15 @@ private fun ContentScope.PlayPauseAction(
                             // TODO(b/399860531): load this expensive-to-load animated vector
                             //  drawable off the main thread.
                             is Icon.Resource ->
-                                rememberAnimatedVectorPainter(
-                                    animatedImageVector =
-                                        AnimatedImageVector.animatedVectorResource(
-                                            id = viewModel.icon.resId
-                                        ),
-                                    atEnd = viewModel.state == MediaSessionState.Playing,
-                                )
+                                key(if (animationsEnabled) null else viewModel.state) {
+                                    rememberAnimatedVectorPainter(
+                                        animatedImageVector =
+                                            AnimatedImageVector.animatedVectorResource(
+                                                id = viewModel.icon.resId
+                                            ),
+                                        atEnd = viewModel.state == MediaSessionState.Playing,
+                                    )
+                                }
                             is Icon.Loaded -> rememberDrawablePainter(viewModel.icon.drawable)
                             null -> null
                         }
@@ -1409,7 +1552,15 @@ private fun ContentScope.PlayPauseAction(
                     }
                 }
                 is MediaSessionState.Buffering -> {
-                    CircularProgressIndicator(color = iconColor, modifier = Modifier.size(24.dp))
+                    if (animationsEnabled) {
+                        CircularProgressIndicator(color = iconColor, modifier = Modifier.size(24.dp))
+                    } else {
+                        CircularProgressIndicator(
+                            progress = { 0.5f },
+                            color = iconColor,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
                 }
             }
         }
@@ -1452,7 +1603,13 @@ private fun SecondaryActionContent(
     resId: String,
     modifier: Modifier = Modifier,
 ) {
-    val sharedModifier = modifier.size(48.dp).padding(13.dp)
+    val interactionSource = remember { MutableInteractionSource() }
+    val sharedModifier = modifier.size(48.dp).padding(13.dp).then(
+        if (LocalMediaButtonSquish.current) Modifier.mediaActionPressFeedback(
+            interactionSource,
+            (viewModel as? MediaSecondaryActionViewModel.Action)?.onClick != null,
+        ) else Modifier
+    )
     when (viewModel) {
         is MediaSecondaryActionViewModel.Action ->
             when (viewModel.icon) {
@@ -1460,20 +1617,22 @@ private fun SecondaryActionContent(
                     PlatformIconButton(
                         onClick = viewModel.onClick ?: {},
                         modifier = sharedModifier.sysuiResTag(resId),
-                        enabled = viewModel.onClick != null,
+                        enabled = LocalMediaAnimationsEnabled.current && viewModel.onClick != null,
                         colors = IconButtonDefaults.iconButtonColors(contentColor = iconColor),
                         iconResource = viewModel.icon.resId,
                         contentDescription = viewModel.icon.contentDescription?.load(),
+                        interactionSource = interactionSource,
                     )
 
                 is Icon.Loaded ->
                     PlatformIconButton(
                         onClick = viewModel.onClick ?: {},
                         modifier = sharedModifier.sysuiResTag(resId),
-                        enabled = viewModel.onClick != null,
+                        enabled = LocalMediaAnimationsEnabled.current && viewModel.onClick != null,
                         colors = IconButtonDefaults.iconButtonColors(contentColor = iconColor),
                         iconDrawable = viewModel.icon.drawable,
                         contentDescription = viewModel.icon.contentDescription?.load(),
+                        interactionSource = interactionSource,
                     )
             }
 

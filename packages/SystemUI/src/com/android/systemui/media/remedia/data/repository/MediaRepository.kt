@@ -49,11 +49,11 @@ import com.android.systemui.media.controls.data.model.MediaSortKeyModel
 import com.android.systemui.media.controls.shared.model.MediaData
 import com.android.systemui.media.remedia.data.model.MediaDataModel
 import com.android.systemui.media.remedia.data.model.UpdateArtInfoModel
-import com.android.systemui.media.remedia.shared.flag.MediaControlsInComposeFlag
 import com.android.systemui.media.remedia.shared.model.MediaColorScheme
 import com.android.systemui.media.remedia.shared.model.MediaSessionState
 import com.android.systemui.monet.ColorScheme
 import com.android.systemui.res.R
+import com.android.systemui.settings.UserTracker
 import com.android.systemui.util.settings.SecureSettings
 import com.android.systemui.util.time.SystemClock
 import java.util.TreeMap
@@ -101,6 +101,7 @@ internal constructor(
     private val systemClock: SystemClock,
     secureSettings: SecureSettings,
     private val mediaSessionManager: MediaSessionManager,
+    userTracker: UserTracker? = null,
 ) :
     MediaRepository,
     MediaPipelineRepository(
@@ -108,6 +109,7 @@ internal constructor(
         applicationScope,
         backgroundDispatcher,
         secureSettings,
+        userTracker,
     ) {
 
     @Inject
@@ -117,6 +119,7 @@ internal constructor(
         @Background backgroundDispatcher: CoroutineDispatcher,
         systemClock: SystemClock,
         secureSettings: SecureSettings,
+        userTracker: UserTracker,
     ) : this(
         applicationContext,
         applicationScope,
@@ -124,6 +127,7 @@ internal constructor(
         systemClock,
         secureSettings,
         MediaSessionManager.get(),
+        userTracker,
     )
 
     override val currentMedia: SnapshotStateList<MediaDataModel> = mutableStateListOf()
@@ -134,6 +138,8 @@ internal constructor(
 
     @GuardedBy("mediaMutex")
     private var sortedMedia = TreeMap<MediaSortKeyModel, MediaDataModel>(comparator)
+    private val modelSources = mutableMapOf<InstanceId, MediaData>()
+    private val nativeArtworkOwners = mutableSetOf<InstanceId>()
 
     // To store active controllers and their callbacks
     private val activeControllers = mutableMapOf<InstanceId, MediaController>()
@@ -148,15 +154,11 @@ internal constructor(
 
     @GuardedBy("mediaMutex") private var publishedLockscreenArtworkSource: Drawable? = null
 
-    @GuardedBy("mediaMutex") private var publishedLockscreenArtworkState: MediaSessionState? = null
-
     @GuardedBy("mediaMutex") private var publishedMediaColor: Int? = null
 
     override fun addCurrentUserMediaEntry(data: MediaData): UpdateArtInfoModel? {
-        return super.addCurrentUserMediaEntry(data).also { updateModel ->
-            applicationScope.launch {
-                mediaMutex.withLock { addToSortedMediaLocked(data, updateModel) }
-            }
+        return super.addCurrentUserMediaEntry(data).also {
+            applicationScope.launch { mediaMutex.withLock { addToSortedMediaLocked(data) } }
         }
     }
 
@@ -164,7 +166,8 @@ internal constructor(
         return super.removeCurrentUserMediaEntry(key)?.also {
             applicationScope.launch {
                 mediaMutex.withLock {
-                    removeFromSortedMediaLocked(it)
+                    if (!mutableUserEntries.value.containsKey(it.instanceId))
+                        removeFromSortedMediaLocked(it)
                     publishLockscreenArtworkLocked()
                 }
             }
@@ -176,7 +179,8 @@ internal constructor(
             if (it) {
                 applicationScope.launch {
                     mediaMutex.withLock {
-                        removeFromSortedMediaLocked(data)
+                        if (!mutableUserEntries.value.containsKey(data.instanceId))
+                            removeFromSortedMediaLocked(data)
                         publishLockscreenArtworkLocked()
                     }
                 }
@@ -189,7 +193,10 @@ internal constructor(
         mutableUserEntries.value = LinkedHashMap()
         applicationScope.launch {
             mediaMutex.withLock {
-                userEntries.forEach { removeFromSortedMediaLocked(it.value) }
+                userEntries.forEach {
+                    if (!mutableUserEntries.value.containsKey(it.key))
+                        removeFromSortedMediaLocked(it.value)
+                }
                 publishLockscreenArtworkLocked()
             }
         }
@@ -229,70 +236,87 @@ internal constructor(
     }
 
     @GuardedBy("mediaMutex")
-    private suspend fun addToSortedMediaLocked(data: MediaData, updateModel: UpdateArtInfoModel?) {
+    private suspend fun addToSortedMediaLocked(data: MediaData) {
         val sortedMap = TreeMap<MediaSortKeyModel, MediaDataModel>(comparator)
         val currentModel = sortedMedia.values.find { it.instanceId == data.instanceId }
 
         sortedMap.putAll(sortedMedia.filter { (_, model) -> model.instanceId != data.instanceId })
 
-        mutableUserEntries.value[data.instanceId]?.let { mediaData ->
-            with(mediaData) {
-                val sortKey =
-                    MediaSortKeyModel(
-                        isPlaying,
-                        playbackLocation,
-                        active,
-                        resumption,
-                        lastActive,
-                        notificationKey,
-                        systemClock.currentTimeMillis(),
-                        instanceId,
-                    )
-                val controller =
-                    if (currentModel != null && currentModel.token == token) {
-                        activeControllers[currentModel.instanceId]
-                            ?: token?.let { MediaController(applicationContext, it) }
-                    } else {
-                        // Clear controller state if changed for the same media session.
-                        currentModel?.instanceId?.let { clearControllerState(it) }
-                        token?.let { MediaController(applicationContext, it) }
-                    }
-                val (icon, background) = getIconAndBackground(mediaData, currentModel, updateModel)
-                val mediaModel = toDataModel(controller, icon, background)
-                sortedMap[sortKey] = mediaModel
-                controller?.let { setupController(mediaModel, it) }
+        mutableUserEntries.value[data.instanceId]
+            ?.takeIf { it === data }
+            ?.let { mediaData ->
+                with(mediaData) {
+                    val updateModel =
+                        modelSources[instanceId]?.let { getUpdateInfoModel(it, mediaData) }
+                    val sortKey =
+                        MediaSortKeyModel(
+                            isPlaying,
+                            playbackLocation,
+                            active,
+                            resumption,
+                            lastActive,
+                            notificationKey,
+                            systemClock.currentTimeMillis(),
+                            instanceId,
+                        )
+                    val controller =
+                        if (currentModel != null && currentModel.token == token) {
+                            activeControllers[currentModel.instanceId]
+                                ?: token?.let { MediaController(applicationContext, it) }
+                        } else {
+                            currentModel?.instanceId?.let { clearControllerState(it) }
+                            token?.let { MediaController(applicationContext, it) }
+                        }
+                    val (icon, background, nativeArtwork) =
+                        getIconAndBackground(mediaData, currentModel, updateModel, controller)
+                    val cachedColorScheme =
+                        currentModel
+                            ?.takeIf {
+                                it.background === background && it.packageName == packageName
+                            }
+                            ?.colorScheme
+                    val mediaModel = toDataModel(controller, icon, background, cachedColorScheme)
+                    if (mutableUserEntries.value[instanceId] !== mediaData) return@let
+                    modelSources[instanceId] = mediaData
+                    if (nativeArtwork) nativeArtworkOwners.add(instanceId)
+                    else nativeArtworkOwners.remove(instanceId)
+                    sortedMap[sortKey] = mediaModel
+                    controller?.let { setupController(mediaModel, it) }
 
-                var isNewToCurrentMedia = true
-                val currentList = mutableListOf<MediaDataModel>().apply { addAll(currentMedia) }
-                currentList.forEachIndexed { index, mediaDataModel ->
-                    if (mediaDataModel.instanceId == data.instanceId) {
-                        // When loading an update for an existing media control.
-                        isNewToCurrentMedia = false
-                        if (mediaDataModel != mediaModel) {
-                            // Update media model if changed.
-                            currentList[index] = mediaModel
+                    var isNewToCurrentMedia = true
+                    val currentList = mutableListOf<MediaDataModel>().apply { addAll(currentMedia) }
+                    currentList.forEachIndexed { index, mediaDataModel ->
+                        if (mediaDataModel.instanceId == data.instanceId) {
+                            isNewToCurrentMedia = false
+                            if (mediaDataModel != mediaModel) {
+                                currentList[index] = mediaModel
+                            }
                         }
                     }
-                }
-                currentMedia.clear()
-                if (isNewToCurrentMedia && active) {
-                    // New media added is at the top of the current media given its priority.
-                    // Media carousel should show the first card in the current media list.
-                    shouldScrollToFirst = true
-                    currentMedia.addAll(sortedMap.values.toList())
-                } else {
-                    currentMedia.addAll(currentList)
-                }
+                    currentMedia.clear()
+                    if (isNewToCurrentMedia && active) {
+                        shouldScrollToFirst = true
+                        currentMedia.addAll(sortedMap.values.toList())
+                    } else {
+                        currentMedia.addAll(currentList)
+                    }
 
-                sortedMedia = sortedMap
-                publishLockscreenArtworkLocked()
+                    sortedMedia = sortedMap
+                    publishLockscreenArtworkLocked()
+                }
             }
-        }
     }
 
     @GuardedBy("mediaMutex")
     private fun removeFromSortedMediaLocked(data: MediaData) {
+        val selectedId = currentMedia.getOrNull(currentCarouselIndex)?.instanceId
         currentMedia.removeIf { model -> data.instanceId == model.instanceId }
+        modelSources.remove(data.instanceId)
+        nativeArtworkOwners.remove(data.instanceId)
+        val selectedIndex = currentMedia.indexOfFirst { it.instanceId == selectedId }
+        currentCarouselIndex =
+            if (selectedIndex >= 0) selectedIndex
+            else currentCarouselIndex.coerceIn(0, currentMedia.lastIndex.coerceAtLeast(0))
         sortedMedia =
             TreeMap<MediaSortKeyModel, MediaDataModel>(comparator).apply {
                 putAll(sortedMedia.filter { (_, model) -> model.instanceId != data.instanceId })
@@ -302,13 +326,9 @@ internal constructor(
 
     /**
      * Keeps artwork and album-art color listeners in sync with the highest-priority active session.
-     *
-     * This is intentionally gated to the Compose pipeline. The legacy media panel owns this bridge
-     * when that pipeline is selected.
      */
     @GuardedBy("mediaMutex")
     private suspend fun publishLockscreenArtworkLocked() {
-        if (!MediaControlsInComposeFlag.isEnabled) return
 
         // The carousel can keep its visual order while playback priority changes.
         val activeModel =
@@ -316,13 +336,13 @@ internal constructor(
                 it.isActive && mutableUserEntries.value[it.instanceId]?.active == true
             }
         val sourceData = activeModel?.let { mutableUserEntries.value[it.instanceId] }
+        if (activeModel != null && modelSources[activeModel.instanceId] !== sourceData) return
         val sourceDrawable = (activeModel?.background as? Icon.Loaded)?.drawable
         val mediaColor = activeModel?.colorScheme?.primary?.toArgb()
         if (
             hasPublishedLockscreenArtwork &&
                 publishedLockscreenArtworkInstanceId == activeModel?.instanceId &&
                 publishedLockscreenArtworkSource === sourceDrawable &&
-                publishedLockscreenArtworkState == activeModel?.state &&
                 publishedMediaColor == mediaColor
         ) {
             return
@@ -341,7 +361,6 @@ internal constructor(
         hasPublishedLockscreenArtwork = true
         publishedLockscreenArtworkInstanceId = activeModel?.instanceId
         publishedLockscreenArtworkSource = sourceDrawable
-        publishedLockscreenArtworkState = activeModel?.state
         publishedMediaColor = mediaColor
         mediaSessionManager.onAlbumArtChanged(lockscreenDrawable)
         // Pulse, clock styles and Now Playing also need colors when the legacy panel is absent.
@@ -381,13 +400,16 @@ internal constructor(
         controller: MediaController?,
         icon: Icon,
         background: Icon?,
+        cachedColorScheme: MediaColorScheme?,
     ): MediaDataModel {
         return withContext(backgroundDispatcher) {
             val metadata = controller?.metadata
             val currentPlaybackState = controller?.playbackState
 
-            val duration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
-            val position = currentPlaybackState?.position ?: 0L
+            val duration =
+                (metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L).coerceAtLeast(0L)
+            val position =
+                currentPlaybackState?.computeActualPosition(duration)?.coerceIn(0L, duration) ?: 0L
             val state = currentPlaybackState?.state ?: PlaybackState.STATE_NONE
             MediaDataModel(
                 instanceId = instanceId,
@@ -396,9 +418,25 @@ internal constructor(
                 appName = app.toString(),
                 appIcon = icon,
                 background = background,
-                title = song.toString(),
-                subtitle = artist.toString(),
-                colorScheme = getScheme(artwork, packageName),
+                title =
+                    metadata?.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE)?.takeIf {
+                        it.isNotBlank()
+                    }
+                        ?: metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf {
+                            it.isNotBlank()
+                        }
+                        ?: song?.toString().orEmpty(),
+                subtitle =
+                    metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)?.takeIf {
+                        it.isNotBlank()
+                    }
+                        ?: metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)?.takeIf {
+                            it.isNotBlank()
+                        }
+                        ?: artist?.toString().orEmpty(),
+                colorScheme =
+                    cachedColorScheme
+                        ?: getScheme(artwork, packageName, (background as? Icon.Loaded)?.drawable),
                 notificationActions = actions,
                 playbackStateActions = semanticActions,
                 outputDevice = device,
@@ -412,7 +450,11 @@ internal constructor(
                     },
                 durationMs = duration,
                 positionMs = position,
-                canBeScrubbed = state != PlaybackState.STATE_NONE && duration > 0L,
+                canBeScrubbed =
+                    state != PlaybackState.STATE_NONE &&
+                        duration > 0L &&
+                        ((currentPlaybackState?.actions ?: 0L) and PlaybackState.ACTION_SEEK_TO) !=
+                            0L,
                 canBeDismissed = isClearable,
                 isActive = active,
                 isResume = resumption,
@@ -428,33 +470,73 @@ internal constructor(
         currentData: MediaData,
         currentModel: MediaDataModel?,
         updateModel: UpdateArtInfoModel?,
-    ): Pair<Icon, Icon?> {
-        return with(currentData) {
-            val icon =
-                if (currentModel != null && updateModel?.isAppIconUpdated == false) {
-                    currentModel.appIcon
-                } else {
-                    appIcon?.loadDrawable(applicationContext)?.let { drawable ->
-                        Icon.Loaded(drawable, contentDescription = ContentDescription.Loaded(app))
-                    } ?: getAltIcon(packageName)
-                }
-            val background =
-                if (currentModel != null && updateModel?.isBackgroundUpdated == false) {
-                    currentModel.background
-                } else {
-                    artwork?.loadDrawable(applicationContext)?.let { drawable ->
-                        Icon.Loaded(drawable, contentDescription = null)
+        controller: MediaController?,
+    ): Triple<Icon, Icon?, Boolean> {
+        return withContext(backgroundDispatcher) {
+            with(currentData) {
+                val icon =
+                    if (currentModel != null && updateModel?.isAppIconUpdated == false) {
+                        currentModel.appIcon
+                    } else {
+                        appIcon?.loadDrawable(applicationContext)?.let { drawable ->
+                            Icon.Loaded(
+                                drawable,
+                                contentDescription = ContentDescription.Loaded(app),
+                            )
+                        } ?: getAltIcon(packageName)
                     }
-                }
-            Pair(icon, background)
+                val metadata = controller?.metadata
+                val nativeArtwork =
+                    (metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+                            ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART)
+                            ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON))
+                        ?.takeUnless { it.isRecycled }
+                val oldBitmap =
+                    ((currentModel?.background as? Icon.Loaded)?.drawable as? BitmapDrawable)
+                        ?.bitmap
+                val sameArtwork =
+                    nativeArtwork != null &&
+                        oldBitmap != null &&
+                        !oldBitmap.isRecycled &&
+                        (nativeArtwork === oldBitmap || nativeArtwork.sameAs(oldBitmap))
+                val background =
+                    if (sameArtwork) {
+                        currentModel?.background
+                    } else if (nativeArtwork != null) {
+                        Icon.Loaded(
+                            BitmapDrawable(applicationContext.resources, nativeArtwork),
+                            null,
+                        )
+                    } else if (
+                        currentModel != null &&
+                            updateModel?.isBackgroundUpdated == false &&
+                            instanceId !in nativeArtworkOwners
+                    ) {
+                        currentModel.background
+                    } else {
+                        artwork?.loadDrawable(applicationContext)?.let { drawable ->
+                            Icon.Loaded(drawable, contentDescription = null)
+                        }
+                    }
+                Triple(icon, background, nativeArtwork != null)
+            }
         }
     }
 
     private suspend fun getScheme(
         artwork: android.graphics.drawable.Icon?,
         packageName: String,
+        drawable: Drawable? = null,
     ): MediaColorScheme? {
-        val wallpaperColors = getWallpaperColor(applicationContext, backgroundDispatcher, artwork)
+        val wallpaperColors =
+            if (drawable == null)
+                getWallpaperColor(applicationContext, backgroundDispatcher, artwork)
+            else
+                try {
+                    WallpaperColors.fromDrawable(drawable)
+                } catch (_: RuntimeException) {
+                    null
+                }
         val colorScheme =
             wallpaperColors?.let { ColorScheme(it, false, ThemeStyle.CONTENT) }
                 ?: let {
@@ -545,6 +627,7 @@ internal constructor(
                             if (activeControllers[dataModel.instanceId] !== controller) {
                                 return@withLock
                             }
+                            updatePlaybackStateLocked(dataModel.instanceId, state)
                             if (state == null) {
                                 clearControllerState(dataModel.instanceId)
                             } else {
@@ -560,19 +643,37 @@ internal constructor(
                             if (activeControllers[dataModel.instanceId] !== controller) {
                                 return@withLock
                             }
-                            val duration =
-                                metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
                             currentMedia
                                 .find { it.instanceId == dataModel.instanceId }
                                 ?.let { latestModel ->
-                                    updateMediaModelInStateLocked(latestModel) { model ->
-                                        val canBeScrubbed =
-                                            controller.playbackState?.state !=
-                                                PlaybackState.STATE_NONE && duration > 0L
-                                        model.copy(
-                                            canBeScrubbed = canBeScrubbed,
-                                            durationMs = duration,
+                                    val data =
+                                        mutableUserEntries.value[dataModel.instanceId]
+                                            ?: return@withLock
+                                    val updateModel =
+                                        modelSources[data.instanceId]?.let {
+                                            getUpdateInfoModel(it, data)
+                                        }
+                                    val (icon, background, nativeArtwork) =
+                                        getIconAndBackground(
+                                            data,
+                                            latestModel,
+                                            updateModel,
+                                            controller,
                                         )
+                                    val cachedColors =
+                                        latestModel.colorScheme.takeIf {
+                                            latestModel.background === background
+                                        }
+                                    val refreshed =
+                                        data.toDataModel(controller, icon, background, cachedColors)
+                                    if (
+                                        activeControllers[data.instanceId] === controller &&
+                                            mutableUserEntries.value[data.instanceId] === data
+                                    ) {
+                                        if (nativeArtwork) nativeArtworkOwners.add(data.instanceId)
+                                        else nativeArtworkOwners.remove(data.instanceId)
+                                        updateMediaModelInStateLocked(latestModel) { refreshed }
+                                        publishLockscreenArtworkLocked()
                                     }
                                 }
                         }
@@ -652,21 +753,39 @@ internal constructor(
         applicationScope.launch {
             mediaMutex.withLock {
                 if (activeControllers[instanceId] !== controller) return@withLock
-                currentMedia
-                    .find { it.instanceId == instanceId }
-                    ?.let { latestModel ->
-                        val newPosition =
-                            playbackState?.computeActualPosition(latestModel.durationMs)
-                        updateMediaModelInStateLocked(latestModel) {
-                            if (newPosition != null && newPosition <= latestModel.durationMs) {
-                                it.copy(positionMs = newPosition)
-                            } else {
-                                it
-                            }
-                        }
-                    }
+                updatePlaybackStateLocked(instanceId, playbackState)
             }
         }
+    }
+
+    @GuardedBy("mediaMutex")
+    private fun updatePlaybackStateLocked(instanceId: InstanceId, playbackState: PlaybackState?) {
+        currentMedia
+            .find { it.instanceId == instanceId }
+            ?.let { latestModel ->
+                val newPosition = playbackState?.computeActualPosition(latestModel.durationMs)
+                updateMediaModelInStateLocked(latestModel) {
+                    it.copy(
+                        positionMs = newPosition?.coerceIn(0L, it.durationMs) ?: it.positionMs,
+                        state =
+                            when {
+                                playbackState != null &&
+                                    NotificationMediaManager.isPlayingState(playbackState.state) ->
+                                    MediaSessionState.Playing
+                                playbackState != null &&
+                                    NotificationMediaManager.isConnectingState(
+                                        playbackState.state
+                                    ) -> MediaSessionState.Buffering
+                                else -> MediaSessionState.Paused
+                            },
+                        canBeScrubbed =
+                            playbackState != null &&
+                                playbackState.state != PlaybackState.STATE_NONE &&
+                                it.durationMs > 0L &&
+                                (playbackState.actions and PlaybackState.ACTION_SEEK_TO) != 0L,
+                    )
+                }
+            }
     }
 
     private fun clearControllerState(instanceId: InstanceId) {

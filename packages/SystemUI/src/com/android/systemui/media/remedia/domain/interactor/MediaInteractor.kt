@@ -36,16 +36,19 @@ import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.common.shared.model.asIcon
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
+import com.android.systemui.media.controls.domain.pipeline.MediaDataManager
 import com.android.systemui.media.controls.domain.pipeline.MediaDataProcessor
 import com.android.systemui.media.controls.domain.pipeline.getNotificationActions
 import com.android.systemui.media.controls.shared.model.MediaAction
 import com.android.systemui.media.controls.shared.model.SuggestionData
 import com.android.systemui.media.dialog.MediaOutputDialogManager
 import com.android.systemui.media.remedia.data.model.MediaDataModel
+import com.android.systemui.media.remedia.data.repository.MediaPipelineRepository
 import com.android.systemui.media.remedia.data.repository.MediaRepository
 import com.android.systemui.media.remedia.domain.model.MediaActionModel
 import com.android.systemui.media.remedia.domain.model.MediaOutputDeviceModel
 import com.android.systemui.media.remedia.domain.model.MediaSessionModel
+import com.android.systemui.media.remedia.shared.flag.MediaControlsInComposeFlag
 import com.android.systemui.media.remedia.shared.model.MediaCardActionButtonLayout
 import com.android.systemui.media.remedia.shared.model.MediaColorScheme
 import com.android.systemui.media.remedia.shared.model.MediaSessionState
@@ -98,6 +101,8 @@ constructor(
     private val activityIntentHelper: ActivityIntentHelper,
     private val lockscreenUserManager: NotificationLockscreenUserManager,
     private val mediaOutputDialogManager: MediaOutputDialogManager,
+    private val mediaDataManager: dagger.Lazy<MediaDataManager>,
+    private val mediaPipelineRepository: MediaPipelineRepository,
 ) : MediaInteractor {
 
     override val sessions: List<MediaSessionModel>
@@ -114,7 +119,14 @@ constructor(
     }
 
     override fun hide(sessionKey: Any, delayMs: Long) {
-        mediaDataProcessor.dismissMediaData(sessionKey as InstanceId, delayMs, userInitiated = true)
+        val instanceId = sessionKey as InstanceId
+        if (MediaControlsInComposeFlag.isEnabled) {
+            mediaDataProcessor.dismissMediaData(instanceId, delayMs, userInitiated = true)
+        } else {
+            val data = mediaPipelineRepository.currentUserEntries.value[instanceId] ?: return
+            val key = if (data.resumption) data.packageName else data.notificationKey ?: return
+            mediaDataManager.get().dismissMediaData(key, delayMs, userInitiated = true)
+        }
     }
 
     override fun openMediaSettings() {

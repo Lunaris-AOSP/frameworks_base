@@ -26,6 +26,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -48,18 +49,21 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material.icons.Icons
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon as MaterialIcon
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -82,11 +86,14 @@ import com.android.systemui.common.ui.compose.Icon
 import com.android.systemui.media.remedia.domain.model.MediaActionModel
 import com.android.systemui.media.remedia.domain.model.MediaSessionModel
 import com.android.systemui.media.remedia.shared.model.MediaSessionState
+import com.android.systemui.media.remedia.ui.compose.LocalMediaAnimationsEnabled
 import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.res.R
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+
+internal val LocalMediaButtonSquish = staticCompositionLocalOf { false }
 
 @Composable
 internal fun MediaControls(
@@ -232,6 +239,7 @@ internal fun CoreMediaAction(
     @StringRes descriptionRes: Int,
     @DrawableRes animatedIconRes: Int? = null,
     animatedIconAtEnd: Boolean = false,
+    buffering: Boolean = false,
     viewModel: AxMediaViewModel,
     width: Dp,
     height: Dp = width,
@@ -256,6 +264,7 @@ internal fun CoreMediaAction(
                 imageVector = imageVector,
                 animatedIconRes = animatedIconRes,
                 animatedIconAtEnd = animatedIconAtEnd,
+                buffering = buffering,
                 contentDescription = stringResource(descriptionRes),
             )
         MediaActionModel.ReserveSpace -> Spacer(Modifier.size(width = width, height = height))
@@ -288,29 +297,32 @@ internal fun PlaceholderMediaAction(
     shape: Shape = CircleShape,
 ) {
     val description = stringResource(descriptionRes)
+    val animationsEnabled = LocalMediaAnimationsEnabled.current
     val buttonWidth by
         animateDpAsState(
             targetValue = width,
-            animationSpec = tween(durationMillis = 220),
+            animationSpec = tween(durationMillis = if (animationsEnabled) 220 else 0),
             label = "AxMediaPlaceholderWidth",
         )
     val buttonHeight by
         animateDpAsState(
             targetValue = height,
-            animationSpec = tween(durationMillis = 220),
+            animationSpec = tween(durationMillis = if (animationsEnabled) 220 else 0),
             label = "AxMediaPlaceholderHeight",
         )
     val buttonBackground by
-        animateColorAsState(targetValue = background, label = "AxMediaPlaceholderBackground")
+        animateColorAsState(
+            targetValue = background,
+            animationSpec = if (animationsEnabled) spring() else snap(),
+            label = "AxMediaPlaceholderBackground",
+        )
     Box(
         contentAlignment = Alignment.Center,
         modifier =
-            Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                .clip(CircleShape)
-                .semantics {
-                    contentDescription = description
-                    disabled()
-                },
+            Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).clip(CircleShape).semantics {
+                contentDescription = description
+                disabled()
+            },
     ) {
         Box(
             contentAlignment = Alignment.Center,
@@ -380,21 +392,27 @@ internal fun MediaAction(
     @DrawableRes animatedIconRes: Int? = null,
     animatedIconAtEnd: Boolean = false,
     contentDescription: String? = null,
+    buffering: Boolean = false,
 ) {
+    val animationsEnabled = LocalMediaAnimationsEnabled.current
     val buttonWidth by
         animateDpAsState(
             targetValue = width,
-            animationSpec = tween(durationMillis = 220),
+            animationSpec = tween(durationMillis = if (animationsEnabled) 220 else 0),
             label = "AxMediaActionWidth",
         )
     val buttonHeight by
         animateDpAsState(
             targetValue = height,
-            animationSpec = tween(durationMillis = 220),
+            animationSpec = tween(durationMillis = if (animationsEnabled) 220 else 0),
             label = "AxMediaActionHeight",
         )
     val buttonBackground by
-        animateColorAsState(targetValue = background, label = "AxMediaActionBackground")
+        animateColorAsState(
+            targetValue = background,
+            animationSpec = if (animationsEnabled) spring() else snap(),
+            label = "AxMediaActionBackground",
+        )
     when (action) {
         is MediaActionModel.Action -> {
             val interactionSource = remember { MutableInteractionSource() }
@@ -420,13 +438,28 @@ internal fun MediaAction(
                             .clip(shape)
                             .background(buttonBackground),
                 ) {
-                    if (animatedIconRes != null) {
-                        val painter =
-                            rememberAnimatedVectorPainter(
-                                animatedImageVector =
-                                    AnimatedImageVector.animatedVectorResource(animatedIconRes),
-                                atEnd = animatedIconAtEnd,
+                    if (buffering) {
+                        if (animationsEnabled) {
+                            CircularProgressIndicator(
+                                color = tint,
+                                modifier = Modifier.size(iconSize),
                             )
+                        } else {
+                            CircularProgressIndicator(
+                                progress = { 0.5f },
+                                color = tint,
+                                modifier = Modifier.size(iconSize),
+                            )
+                        }
+                    } else if (animatedIconRes != null) {
+                        val painter =
+                            key(if (animationsEnabled) null else animatedIconAtEnd) {
+                                rememberAnimatedVectorPainter(
+                                    animatedImageVector =
+                                        AnimatedImageVector.animatedVectorResource(animatedIconRes),
+                                    atEnd = animatedIconAtEnd,
+                                )
+                            }
                         MaterialIcon(
                             painter = painter,
                             contentDescription = contentDescription,
@@ -437,9 +470,14 @@ internal fun MediaAction(
                         AnimatedContent(
                             targetState = imageVector,
                             transitionSpec = {
-                                (fadeIn(tween(180)) +
-                                    scaleIn(tween(220), initialScale = 0.72f)) togetherWith
-                                    (fadeOut(tween(120)) + scaleOut(tween(160), targetScale = 1.18f))
+                                if (animationsEnabled) {
+                                    (fadeIn(tween(180)) +
+                                        scaleIn(tween(220), initialScale = 0.72f)) togetherWith
+                                        (fadeOut(tween(120)) +
+                                            scaleOut(tween(160), targetScale = 1.18f))
+                                } else {
+                                    fadeIn(tween(0)) togetherWith fadeOut(tween(0))
+                                }
                             },
                             contentAlignment = Alignment.Center,
                             label = "AxMediaActionIcon",
@@ -459,20 +497,25 @@ internal fun MediaAction(
         }
         MediaActionModel.None -> Unit
         MediaActionModel.ReserveSpace ->
-            Spacer(Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).size(width = buttonWidth, height = buttonHeight))
+            Spacer(
+                Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                    .size(width = buttonWidth, height = buttonHeight)
+            )
     }
 }
 
 @Composable
-private fun Modifier.mediaActionPressFeedback(
+internal fun Modifier.mediaActionPressFeedback(
     interactionSource: InteractionSource,
     enabled: Boolean,
 ): Modifier {
     val scale = remember { Animatable(1f) }
+    val squish = LocalMediaButtonSquish.current
     val view = LocalView.current
-    LaunchedEffect(interactionSource, enabled, view) {
+    val animate = enabled && LocalMediaAnimationsEnabled.current
+    LaunchedEffect(interactionSource, animate, view, squish) {
         scale.snapTo(1f)
-        if (!enabled) return@LaunchedEffect
+        if (!animate) return@LaunchedEffect
 
         val presses = mutableSetOf<PressInteraction.Press>()
         var animation: Job? = null
@@ -491,7 +534,9 @@ private fun Modifier.mediaActionPressFeedback(
                             scale.animateTo(
                                 1f,
                                 spring(
-                                    dampingRatio = Spring.DampingRatioLowBouncy,
+                                    dampingRatio =
+                                        if (squish) Spring.DampingRatioMediumBouncy
+                                        else Spring.DampingRatioLowBouncy,
                                     stiffness = Spring.StiffnessMedium,
                                 ),
                             )
@@ -515,16 +560,14 @@ private fun Modifier.mediaActionPressFeedback(
         }
     }
     return graphicsLayer {
-        val value = if (enabled) scale.value else 1f
-        scaleX = value
+        val value = if (animate) scale.value else 1f
+        scaleX = if (squish) 1f + (1f - value) * 0.15f else value
         scaleY = value
     }
 }
 
 internal fun playPauseIcon(session: MediaSessionModel?): ImageVector =
-    with(Icons.Filled) {
-        if (session?.state == MediaSessionState.Playing) Pause else PlayArrow
-    }
+    with(Icons.Filled) { if (session?.state == MediaSessionState.Playing) Pause else PlayArrow }
 
 @StringRes
 internal fun playPauseDescription(session: MediaSessionModel?): Int =

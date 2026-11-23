@@ -28,8 +28,8 @@ import com.android.systemui.keyguard.ui.composable.elements.LockscreenUpperRegio
 import com.android.systemui.keyguard.ui.composable.elements.LockscreenUpperRegionElementProvider.Companion.getLayoutType
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardMediaViewModel
 import com.android.systemui.lifecycle.rememberViewModel
+import com.android.systemui.media.remedia.ui.compose.LockscreenMedia
 import com.android.systemui.media.remedia.ui.compose.Media
-import com.android.systemui.media.remedia.ui.compose.MediaPresentationStyle
 import com.android.systemui.plugins.keyguard.ui.composable.elements.LockscreenElement
 import com.android.systemui.plugins.keyguard.ui.composable.elements.LockscreenElementKeys
 import com.android.systemui.plugins.keyguard.ui.composable.elements.LockscreenElementProvider
@@ -64,14 +64,14 @@ constructor(
             val viewModel =
                 rememberViewModel("MediaCarouselElement") { mediaViewModelFactory.create() }
 
-            AnimatedVisibility(viewModel.isMediaActive && !viewModel.isDozing) {
+            AnimatedVisibility(viewModel.isMediaActive) {
                 Element(
                     key = Media.Elements.mediaCarousel,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = horizontalPadding),
                 ) {
-                    Media(
+                    LockscreenMedia(
                         viewModelFactory = viewModel.mediaViewModelFactory,
-                        presentationStyle = MediaPresentationStyle.Lockscreen,
+                        lockscreenViewModel = viewModel.lockscreenMediaViewModel,
                         behavior = viewModel.mediaUiBehavior,
                         onDismissed = viewModel::onSwipeToDismiss,
                     )

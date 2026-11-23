@@ -59,6 +59,9 @@ class LegacyMediaDataFilterImplTest : SysuiTestCase() {
     @Mock private lateinit var listener: MediaDataManager.Listener
     @Mock private lateinit var userTracker: UserTracker
     @Mock private lateinit var mediaDataManager: MediaDataManager
+    @Mock
+    private lateinit var mediaPipelineRepository:
+        com.android.systemui.media.remedia.data.repository.MediaPipelineRepository
     @Mock private lateinit var lockscreenUserManager: NotificationLockscreenUserManager
     @Mock private lateinit var executor: Executor
 
@@ -71,7 +74,13 @@ class LegacyMediaDataFilterImplTest : SysuiTestCase() {
     fun setup() {
         MockitoAnnotations.initMocks(this)
         MediaPlayerData.clear()
-        mediaDataFilter = LegacyMediaDataFilterImpl(userTracker, lockscreenUserManager, executor)
+        mediaDataFilter =
+            LegacyMediaDataFilterImpl(
+                userTracker,
+                lockscreenUserManager,
+                executor,
+                mediaPipelineRepository,
+            )
         mediaDataFilter.mediaDataManager = mediaDataManager
         mediaDataFilter.addListener(listener)
 

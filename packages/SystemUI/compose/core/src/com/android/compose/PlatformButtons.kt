@@ -20,6 +20,7 @@ package com.android.compose
 import android.graphics.drawable.Drawable
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.heightIn
@@ -45,6 +46,7 @@ fun PlatformButton(
     colors: ButtonColors = filledButtonColors(),
     contentPadding: PaddingValues = ButtonPaddings,
     shape: Shape = ButtonDefaults.shape,
+    interactionSource: MutableInteractionSource? = null,
     content: @Composable RowScope.() -> Unit,
 ) {
     androidx.compose.material3.Button(
@@ -54,6 +56,7 @@ fun PlatformButton(
         shape = shape,
         onClick = onClick,
         enabled = enabled,
+        interactionSource = interactionSource,
     ) {
         content()
     }
@@ -106,6 +109,7 @@ fun PlatformIconButton(
     shape: Shape = IconButtonDefaults.standardShape,
     @DrawableRes iconResource: Int,
     contentDescription: String?,
+    interactionSource: MutableInteractionSource? = null,
 ) {
     IconButton(
         modifier = modifier,
@@ -113,6 +117,7 @@ fun PlatformIconButton(
         enabled = enabled,
         colors = colors,
         shape = shape,
+        interactionSource = interactionSource,
     ) {
         Icon(
             painter = painterResource(id = iconResource),
@@ -131,6 +136,7 @@ fun PlatformIconButton(
     shape: Shape = IconButtonDefaults.standardShape,
     iconDrawable: Drawable,
     contentDescription: String?,
+    interactionSource: MutableInteractionSource? = null,
 ) {
     IconButton(
         modifier = modifier,
@@ -138,6 +144,7 @@ fun PlatformIconButton(
         enabled = enabled,
         colors = colors,
         shape = shape,
+        interactionSource = interactionSource,
     ) {
         Icon(
             painter = rememberDrawablePainter(iconDrawable),

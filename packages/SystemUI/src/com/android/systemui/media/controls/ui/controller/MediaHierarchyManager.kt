@@ -703,7 +703,7 @@ constructor(
             secureSettings.getBoolForUser(
                 Settings.Secure.MEDIA_CONTROLS_LOCK_SCREEN,
                 true,
-                UserHandle.USER_CURRENT
+                UserHandle.USER_CURRENT,
             )
     }
 
@@ -1284,7 +1284,7 @@ constructor(
                 // Communal does not have its own StatusBarState so it should always have higher
                 // priority for the UMO over the lockscreen.
                 isCommunalShowing -> LOCATION_COMMUNAL_HUB
-                onLockscreen && allowMediaPlayerOnLockScreen -> LOCATION_LOCKSCREEN
+                onLockscreen -> LOCATION_QS
                 else -> LOCATION_QQS
             }
         // When we're on lock screen and the player is not active, we should keep it in QS.
@@ -1369,7 +1369,7 @@ constructor(
     }
 
     private fun isLockScreenVisibleToUser(): Boolean {
-        return isOnLockscreen && allowMediaPlayerOnLockScreen
+        return isOnLockscreen && qsExpansion > 0f && !statusBarStateController.isDozing
     }
 
     private fun isHomeScreenShadeVisibleToUser(): Boolean {

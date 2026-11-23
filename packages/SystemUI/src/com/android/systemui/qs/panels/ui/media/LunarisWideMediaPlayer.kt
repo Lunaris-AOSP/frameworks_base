@@ -35,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
@@ -56,8 +57,9 @@ internal fun LunarisWideMediaPlayer(
     hasMultipleSessions: Boolean,
     motionArt: File? = null,
     motionArtPlaying: Boolean = false,
+    foreground: Color = MaterialTheme.colorScheme.onSurface,
+    secondaryForeground: Color = MaterialTheme.colorScheme.onSurfaceVariant,
 ) {
-    val foreground = MaterialTheme.colorScheme.onSurface
     val colors =
         AxMediaColors(
             primary = foreground,
@@ -118,7 +120,7 @@ internal fun LunarisWideMediaPlayer(
                         session?.subtitle?.takeIf { showSubtitle && it.isNotBlank() }?.let {
                             Text(
                                 text = it,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = secondaryForeground,
                                 style =
                                     MaterialTheme.typography.bodySmall.copy(
                                         fontSize = 12.sp,
@@ -134,6 +136,7 @@ internal fun LunarisWideMediaPlayer(
                         viewModel = viewModel,
                         interactive = interactive,
                         background = foreground.copy(alpha = 0.08f),
+                        foreground = foreground,
                         modifier = Modifier.size(40.dp),
                     )
                 }

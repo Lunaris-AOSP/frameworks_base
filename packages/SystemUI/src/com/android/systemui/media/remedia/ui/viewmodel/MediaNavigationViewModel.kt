@@ -68,6 +68,11 @@ sealed interface MediaNavigationViewModel {
         val isPlaying: Boolean = isSquiggly,
     ) : MediaNavigationViewModel
 
+    data class ActionsOnly(
+        val left: MediaSecondaryActionViewModel,
+        val right: MediaSecondaryActionViewModel,
+    ) : MediaNavigationViewModel
+
     /** The seek bar should be hidden. */
     data object Hidden : MediaNavigationViewModel
 }

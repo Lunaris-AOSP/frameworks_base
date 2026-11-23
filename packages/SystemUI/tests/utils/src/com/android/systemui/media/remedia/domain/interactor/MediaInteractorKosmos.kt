@@ -20,8 +20,10 @@ import android.content.applicationContext
 import com.android.systemui.activityIntentHelper
 import com.android.systemui.kosmos.Kosmos
 import com.android.systemui.media.controls.domain.pipeline.mediaDataProcessor
+import com.android.systemui.media.controls.domain.pipeline.mediaDataManager
 import com.android.systemui.media.mediaOutputDialogManager
 import com.android.systemui.media.remedia.data.repository.mediaRepository
+import com.android.systemui.media.remedia.data.repository.mediaPipelineRepository
 import com.android.systemui.plugins.activityStarter
 import com.android.systemui.statusbar.notificationLockscreenUserManager
 import com.android.systemui.statusbar.policy.keyguardStateController
@@ -37,5 +39,7 @@ val Kosmos.mediaInteractor by
             lockscreenUserManager = notificationLockscreenUserManager,
             activityIntentHelper = activityIntentHelper,
             mediaOutputDialogManager = mediaOutputDialogManager,
+            mediaDataManager = dagger.Lazy { mediaDataManager },
+            mediaPipelineRepository = mediaPipelineRepository,
         )
     }

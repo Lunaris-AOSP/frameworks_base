@@ -17,7 +17,6 @@
 
 package com.android.systemui.qs.panels.ui.viewmodel
 
-import android.provider.Settings
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -33,7 +32,6 @@ import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInteractor
 import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.media.controls.domain.pipeline.interactor.MediaCarouselInteractor
-import com.android.systemui.media.controls.shared.MediaSeekBarStyle
 import com.android.systemui.media.remedia.domain.interactor.MediaInteractor
 import com.android.systemui.media.remedia.domain.model.MediaActionModel
 import com.android.systemui.media.remedia.domain.model.MediaOutputDeviceModel
@@ -45,14 +43,19 @@ import com.android.systemui.qs.panels.data.repository.AxMediaHistoryRepository
 import com.android.systemui.qs.panels.data.repository.AxQsSettingsRepository
 import com.android.systemui.qs.panels.shared.model.AxMediaSurface
 import com.android.systemui.shade.domain.interactor.ShadeInteractor
-import com.android.systemui.shared.settings.data.repository.SystemSettingsRepository
+import com.android.systemui.statusbar.policy.BluetoothController
+import com.android.systemui.utils.coroutines.flow.conflatedCallbackFlow
 import javax.inject.Inject
 import kotlin.math.abs
 import kotlin.math.roundToLong
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.stateIn
 
 class AxMediaViewModel
 @Inject
@@ -66,14 +69,20 @@ constructor(
     @Main private val mainDispatcher: CoroutineDispatcher,
     private val shadeInteractor: ShadeInteractor,
     private val keyguardTransitionInteractor: KeyguardTransitionInteractor,
-    systemSettingsRepository: SystemSettingsRepository,
+    mediaSettingsRepository:
+        com.android.systemui.media.remedia.data.repository.LockscreenMediaSettingsRepository,
     qsSettingsRepository: AxQsSettingsRepository,
+    bluetoothController: BluetoothController,
 ) {
     private var scrubbingSessionKey: Any? by mutableStateOf(null)
+    private var scrubbingTrack: Triple<Any, String, String>? by mutableStateOf(null)
     private var gutsSessionKey: Any? by mutableStateOf(null)
     private var scrubProgress by mutableFloatStateOf(0f)
     private var dismissedSessions by mutableStateOf(emptyMap<AxMediaSurface, Set<Any>>())
     private val sessions by derivedStateOf { interactor.sessions }
+
+    val sessionCount: Int
+        get() = sessions.size
 
     private val activeSessions by derivedStateOf { sessions.filter { it.isDisplayable() } }
 
@@ -83,11 +92,13 @@ constructor(
     }
 
     val showOnLockscreen = mediaCarouselInteractor.allowMediaOnLockscreen
+    val lockscreenStyle = mediaSettingsRepository.style
     val isShadeExpanded: StateFlow<Boolean> = shadeInteractor.isAnyExpanded
     val isShadeInteracting: StateFlow<Boolean> = shadeInteractor.isUserInteracting
     var allowGlowOnPanelShown by mutableStateOf(true)
     val currentKeyguardState: StateFlow<KeyguardState> =
         keyguardTransitionInteractor.currentKeyguardState
+    val lockscreenTransition = keyguardTransitionInteractor.startedKeyguardTransitionStep
     val lastMediaPackage = mediaHistoryRepository.lastMediaPackage
     val mediaStyle = qsSettingsRepository.mediaStyle
     val mediaWideStyle = qsSettingsRepository.mediaWideStyle
@@ -95,13 +106,30 @@ constructor(
     val mediaMotionArt = qsSettingsRepository.mediaMotionArt
     val notificationMediaStatusGlow = qsSettingsRepository.notificationMediaStatusGlow
     val mediaTileStatusGlow = qsSettingsRepository.mediaTileStatusGlow
-    val seekBarStyle =
-        systemSettingsRepository
-            .intSetting(
-                Settings.System.MEDIA_WAVEFORM_SEEKBAR,
-                defaultValue = MediaSeekBarStyle.DEFAULT.value,
+    val seekBarStyle = mediaSettingsRepository.seekBarStyle
+    val isBluetoothConnected: StateFlow<Boolean> =
+        conflatedCallbackFlow {
+                val callback =
+                    object : BluetoothController.Callback {
+                        override fun onBluetoothStateChange(enabled: Boolean) {
+                            trySend(bluetoothController.isBluetoothConnected)
+                        }
+
+                        override fun onBluetoothDevicesChanged() {
+                            trySend(bluetoothController.isBluetoothConnected)
+                        }
+                    }
+                bluetoothController.addCallback(callback)
+                trySend(bluetoothController.isBluetoothConnected)
+                awaitClose { bluetoothController.removeCallback(callback) }
+            }
+            .flowOn(mainDispatcher)
+            .distinctUntilChanged()
+            .stateIn(
+                applicationScope,
+                SharingStarted.WhileSubscribed(),
+                bluetoothController.isBluetoothConnected,
             )
-            .map(MediaSeekBarStyle::fromValue)
 
     init {
         mediaHistoryRepository.startListening()
@@ -109,11 +137,16 @@ constructor(
 
     fun synchronizeSession(sessionKey: Any?) {
         if (scrubbingSessionKey != null && scrubbingSessionKey != sessionKey) {
-            scrubbingSessionKey = null
+            cancelScrubbing()
         }
         if (gutsSessionKey != null && gutsSessionKey != sessionKey) {
             gutsSessionKey = null
         }
+    }
+
+    fun cancelScrubbing() {
+        scrubbingSessionKey = null
+        scrubbingTrack = null
     }
 
     fun visibleSessions(surface: AxMediaSurface): List<MediaSessionModel> {
@@ -178,26 +211,40 @@ constructor(
     }
 
     fun progress(session: MediaSessionModel): Float {
-        if (scrubbingSessionKey == session.key) return scrubProgress
+        if (scrubbingTrack == Triple(session.key, session.title, session.subtitle))
+            return scrubProgress
         if (session.durationMs <= 0L) return 0f
         return (session.positionMs.toFloat() / session.durationMs).coerceIn(0f, 1f)
     }
 
     fun onScrubChange(session: MediaSessionModel, progress: Float) {
+        val latestSession = sessionForKey(session.key)
+        if (
+            latestSession?.canBeScrubbed != true ||
+                latestSession.title != session.title ||
+                latestSession.subtitle != session.subtitle
+        ) {
+            cancelScrubbing()
+            return
+        }
         scrubbingSessionKey = session.key
+        scrubbingTrack = Triple(session.key, session.title, session.subtitle)
         scrubProgress = progress.coerceIn(0f, 1f)
     }
 
     fun onScrubFinished(session: MediaSessionModel, dragDelta: Offset) {
+        val latestSession = sessionForKey(session.key)
         if (
-            session.canBeScrubbed &&
-                scrubbingSessionKey == session.key &&
+            latestSession?.canBeScrubbed == true &&
+                scrubbingTrack ==
+                    Triple(latestSession.key, latestSession.title, latestSession.subtitle) &&
+                scrubbingTrack == Triple(session.key, session.title, session.subtitle) &&
                 dragDelta.isHorizontal() &&
                 !falsingSystem.isFalseTouch(Classifier.MEDIA_SEEKBAR)
         ) {
-            interactor.seek(session.key, (scrubProgress * session.durationMs).roundToLong())
+            interactor.seek(session.key, (scrubProgress * latestSession.durationMs).roundToLong())
         }
-        scrubbingSessionKey = null
+        cancelScrubbing()
     }
 
     fun openSession(session: MediaSessionModel, expandable: Expandable) {

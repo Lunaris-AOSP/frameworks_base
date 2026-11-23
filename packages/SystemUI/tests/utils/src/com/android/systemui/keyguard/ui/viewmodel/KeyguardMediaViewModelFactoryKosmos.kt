@@ -19,6 +19,8 @@ package com.android.systemui.keyguard.ui.viewmodel
 import com.android.systemui.keyguard.domain.interactor.keyguardInteractor
 import com.android.systemui.kosmos.Kosmos
 import com.android.systemui.media.controls.domain.pipeline.interactor.mediaCarouselInteractor
+import com.android.systemui.media.controls.domain.pipeline.mediaDataManager
+import com.android.systemui.media.remedia.ui.viewmodel.factory.lockscreenMediaViewModel
 import com.android.systemui.media.remedia.ui.viewmodel.factory.mediaViewModelFactory
 
 val Kosmos.keyguardMediaViewModelFactory by
@@ -29,6 +31,8 @@ val Kosmos.keyguardMediaViewModelFactory by
                     mediaViewModelFactory = mediaViewModelFactory,
                     mediaCarouselInteractor = mediaCarouselInteractor,
                     keyguardInteractor = keyguardInteractor,
+                    lockscreenMediaViewModel = lockscreenMediaViewModel,
+                    mediaDataManager = mediaDataManager,
                 )
             }
         }

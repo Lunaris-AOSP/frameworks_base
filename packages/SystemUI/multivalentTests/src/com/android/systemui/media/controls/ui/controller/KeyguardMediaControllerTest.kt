@@ -34,10 +34,9 @@ import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.kosmos.applicationCoroutineScope
 import com.android.systemui.kosmos.testScope
 import com.android.systemui.media.controls.domain.pipeline.interactor.mediaCarouselInteractor
-import com.android.systemui.media.controls.ui.view.MediaHost
-import com.android.systemui.media.controls.ui.view.MediaHostState
+import com.android.systemui.media.controls.domain.pipeline.mediaDataManager
 import com.android.systemui.media.remedia.data.repository.setHasMedia
-import com.android.systemui.media.remedia.shared.flag.MediaControlsInComposeFlag
+import com.android.systemui.media.remedia.ui.viewmodel.factory.lockscreenMediaViewModel
 import com.android.systemui.media.remedia.ui.viewmodel.factory.mediaViewModelFactory
 import com.android.systemui.media.remedia.ui.viewmodel.mediaFalsingSystem
 import com.android.systemui.plugins.statusbar.StatusBarStateController
@@ -48,7 +47,6 @@ import com.android.systemui.statusbar.phone.KeyguardBypassController
 import com.android.systemui.statusbar.policy.ConfigurationController
 import com.android.systemui.statusbar.policy.ResourcesSplitShadeStateController
 import com.android.systemui.testKosmos
-import com.android.systemui.util.animation.UniqueObjectHostView
 import com.android.systemui.util.mockito.mock
 import com.android.systemui.util.mockito.whenever
 import com.android.systemui.util.settings.fakeSettings
@@ -62,7 +60,6 @@ import org.junit.runner.RunWith
 import org.mockito.Mock
 import org.mockito.Mockito.any
 import org.mockito.Mockito.doAnswer
-import org.mockito.Mockito.verify
 import org.mockito.junit.MockitoJUnit
 
 @SmallTest
@@ -71,7 +68,6 @@ import org.mockito.junit.MockitoJUnit
 @DisableSceneContainer
 class KeyguardMediaControllerTest : SysuiTestCase() {
 
-    @Mock private lateinit var mediaHost: MediaHost
     @Mock private lateinit var bypassController: KeyguardBypassController
     @Mock private lateinit var statusBarStateController: SysuiStatusBarStateController
     @Mock private lateinit var configurationController: ConfigurationController
@@ -84,7 +80,6 @@ class KeyguardMediaControllerTest : SysuiTestCase() {
     private val mediaViewModelFactory = kosmos.mediaViewModelFactory
     private val transitionRepository = kosmos.fakeKeyguardTransitionRepository
     private val mediaContainerView: MediaContainerView = MediaContainerView(context, null)
-    private val hostView = UniqueObjectHostView(context)
     private lateinit var keyguardMediaController: KeyguardMediaController
     private lateinit var statusBarStateListener: StatusBarStateController.StateListener
 
@@ -97,10 +92,7 @@ class KeyguardMediaControllerTest : SysuiTestCase() {
             .whenever(statusBarStateController)
             .addCallback(any(StatusBarStateController.StateListener::class.java))
         // default state is positive, media should show up
-        whenever(mediaHost.visible).thenReturn(true)
         whenever(statusBarStateController.state).thenReturn(StatusBarState.KEYGUARD)
-        whenever(mediaHost.hostView).thenReturn(hostView)
-        hostView.layoutParams = FrameLayout.LayoutParams(100, 100)
         kosmos.fakeSettings.putBoolForUser(
             Settings.Secure.MEDIA_CONTROLS_LOCK_SCREEN,
             true,
@@ -108,7 +100,6 @@ class KeyguardMediaControllerTest : SysuiTestCase() {
         )
         keyguardMediaController =
             KeyguardMediaController(
-                mediaHost,
                 kosmos.applicationCoroutineScope,
                 bypassController,
                 statusBarStateController,
@@ -120,26 +111,18 @@ class KeyguardMediaControllerTest : SysuiTestCase() {
                 mediaViewModelFactory,
                 kosmos.mediaCarouselInteractor,
                 mediaFalsingSystem,
+                kosmos.lockscreenMediaViewModel,
+                kosmos.mediaDataManager,
             )
         keyguardMediaController.attachSinglePaneContainer(mediaContainerView)
         keyguardMediaController.useSplitShade = false
 
-        if (MediaControlsInComposeFlag.isEnabled) {
-            kosmos.setHasMedia(visible = true, active = true)
-        } else {
-            verify(mediaHost).expansion = MediaHostState.EXPANDED
-            verify(mediaHost)
-                .addVisibilityChangeListener(keyguardMediaController::onMediaHostVisibilityChanged)
-        }
+        kosmos.setHasMedia(visible = true, active = true)
     }
 
     @Test
     fun testHiddenWhenHostIsHidden() {
-        if (MediaControlsInComposeFlag.isEnabled) {
-            kosmos.setHasMedia(visible = false)
-        } else {
-            whenever(mediaHost.visible).thenReturn(false)
-        }
+        kosmos.setHasMedia(visible = false)
 
         keyguardMediaController.refreshMediaPosition(TEST_REASON)
 

@@ -23,6 +23,7 @@ import com.android.internal.annotations.KeepForWeakReference
 import com.android.internal.annotations.VisibleForTesting
 import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.media.controls.shared.model.MediaData
+import com.android.systemui.media.remedia.data.repository.MediaPipelineRepository
 import com.android.systemui.settings.UserTracker
 import com.android.systemui.statusbar.NotificationLockscreenUserManager
 import java.util.concurrent.Executor
@@ -45,6 +46,7 @@ constructor(
     private val userTracker: UserTracker,
     private val lockscreenUserManager: NotificationLockscreenUserManager,
     @Main private val executor: Executor,
+    private val mediaPipelineRepository: MediaPipelineRepository,
 ) : MediaDataManager.Listener {
     private val _listeners: MutableSet<MediaDataManager.Listener> = mutableSetOf()
     val listeners: Set<MediaDataManager.Listener>
@@ -88,13 +90,28 @@ constructor(
             !lockscreenUserManager.isCurrentProfile(data.userId) ||
                 !lockscreenUserManager.isProfileAvailable(data.userId)
         ) {
+            setOfNotNull(key, oldKey).forEach { removedKey ->
+                userEntries.remove(removedKey)?.let {
+                    mediaPipelineRepository.removeCurrentUserMediaEntry(it.instanceId)
+                    listeners.forEach { listener -> listener.onMediaDataRemoved(removedKey, false) }
+                }
+            }
             return
         }
 
         if (oldKey != null && oldKey != key) {
-            userEntries.remove(oldKey)
+            userEntries.remove(oldKey)?.let {
+                if (it.instanceId != data.instanceId) {
+                    mediaPipelineRepository.removeCurrentUserMediaEntry(it.instanceId)
+                }
+            }
         }
-        userEntries.put(key, data)
+        userEntries.put(key, data)?.let {
+            if (it.instanceId != data.instanceId) {
+                mediaPipelineRepository.removeCurrentUserMediaEntry(it.instanceId)
+            }
+        }
+        mediaPipelineRepository.addCurrentUserMediaEntry(data)
 
         // Notify listeners
         listeners.forEach { it.onMediaDataLoaded(key, oldKey, data) }
@@ -103,6 +120,7 @@ constructor(
     override fun onMediaDataRemoved(key: String, userInitiated: Boolean) {
         allEntries.remove(key)
         userEntries.remove(key)?.let {
+            mediaPipelineRepository.removeCurrentUserMediaEntry(it.instanceId)
             // Only notify listeners if something actually changed
             listeners.forEach { it.onMediaDataRemoved(key, userInitiated) }
         }
@@ -110,13 +128,21 @@ constructor(
 
     @VisibleForTesting
     internal fun handleProfileChanged() {
-        // TODO(b/317221348) re-add media removed when profile is available.
         allEntries.forEach { (key, data) ->
-            if (!lockscreenUserManager.isProfileAvailable(data.userId)) {
+            if (
+                !lockscreenUserManager.isCurrentProfile(data.userId) ||
+                    !lockscreenUserManager.isProfileAvailable(data.userId)
+            ) {
                 // Only remove media when the profile is unavailable.
                 if (DEBUG) Log.d(TAG, "Removing $key after profile change")
-                userEntries.remove(key, data)
-                listeners.forEach { listener -> listener.onMediaDataRemoved(key, false) }
+                userEntries.remove(key)?.let {
+                    mediaPipelineRepository.removeCurrentUserMediaEntry(it.instanceId)
+                    listeners.forEach { listener -> listener.onMediaDataRemoved(key, false) }
+                }
+            } else if (key !in userEntries) {
+                userEntries[key] = data
+                mediaPipelineRepository.addCurrentUserMediaEntry(data)
+                listeners.forEach { it.onMediaDataLoaded(key, null, data) }
             }
         }
     }
@@ -129,15 +155,20 @@ constructor(
         // Clear the list first, to make sure callbacks from listeners if we have any entries
         // are up to date
         userEntries.clear()
+        mediaPipelineRepository.clearCurrentUserMedia()
         keyCopy.forEach {
             if (DEBUG) Log.d(TAG, "Removing $it after user change")
             listenersCopy.forEach { listener -> listener.onMediaDataRemoved(it, false) }
         }
 
         allEntries.forEach { (key, data) ->
-            if (lockscreenUserManager.isCurrentProfile(data.userId)) {
+            if (
+                lockscreenUserManager.isCurrentProfile(data.userId) &&
+                    lockscreenUserManager.isProfileAvailable(data.userId)
+            ) {
                 if (DEBUG) Log.d(TAG, "Re-adding $key after user change")
                 userEntries.put(key, data)
+                mediaPipelineRepository.addCurrentUserMediaEntry(data)
                 listenersCopy.forEach { listener -> listener.onMediaDataLoaded(key, null, data) }
             }
         }

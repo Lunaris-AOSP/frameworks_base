@@ -18,10 +18,12 @@ package com.android.systemui.media.controls.ui.controller
 
 import android.content.Context
 import android.content.res.Configuration
-import android.graphics.Rect
 import android.view.View
 import android.view.ViewGroup
 import androidx.annotation.VisibleForTesting
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -33,18 +35,15 @@ import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dump.DumpManager
 import com.android.systemui.initOnBackPressedDispatcherOwner
 import com.android.systemui.lifecycle.repeatWhenAttached
+import com.android.systemui.media.controls.domain.pipeline.MediaDataManager
 import com.android.systemui.media.controls.domain.pipeline.interactor.MediaCarouselInteractor
-import com.android.systemui.media.controls.ui.view.MediaHost
-import com.android.systemui.media.controls.ui.view.MediaHostState
-import com.android.systemui.media.dagger.MediaModule.KEYGUARD
-import com.android.systemui.media.remedia.shared.flag.MediaControlsInComposeFlag
-import com.android.systemui.media.remedia.ui.compose.Media
-import com.android.systemui.media.remedia.ui.compose.MediaPresentationStyle
+import com.android.systemui.media.remedia.ui.compose.LockscreenMedia
 import com.android.systemui.media.remedia.ui.compose.MediaUiBehavior
 import com.android.systemui.media.remedia.ui.viewmodel.MediaCarouselVisibility
 import com.android.systemui.media.remedia.ui.viewmodel.MediaFalsingSystem
 import com.android.systemui.media.remedia.ui.viewmodel.MediaViewModel
 import com.android.systemui.plugins.statusbar.StatusBarStateController
+import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.scene.shared.flag.SceneContainerFlag
 import com.android.systemui.shade.ShadeDisplayAware
 import com.android.systemui.statusbar.StatusBarState
@@ -59,7 +58,6 @@ import com.android.systemui.util.println
 import com.android.systemui.util.withIncreasedIndent
 import java.io.PrintWriter
 import javax.inject.Inject
-import javax.inject.Named
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.combine
@@ -73,7 +71,6 @@ import kotlinx.coroutines.launch
 class KeyguardMediaController
 @Inject
 constructor(
-    @param:Named(KEYGUARD) private val mediaHost: MediaHost,
     @Application private val applicationScope: CoroutineScope,
     private val bypassController: KeyguardBypassController,
     private val statusBarStateController: SysuiStatusBarStateController,
@@ -85,6 +82,8 @@ constructor(
     private val mediaViewModelFactory: MediaViewModel.Factory,
     private val mediaCarouselInteractor: MediaCarouselInteractor,
     private val falsingSystem: MediaFalsingSystem,
+    private val lockscreenMediaViewModel: AxMediaViewModel,
+    private val mediaDataManager: MediaDataManager,
 ) : Dumpable {
     private var lastUsedStatusBarState = -1
 
@@ -106,38 +105,22 @@ constructor(
             onMediaHostVisibilityChanged(value)
         }
 
-    init {
-        dumpManager.registerDumpable(this)
-        setUpListenersAndCallbacks()
-    }
-
     private fun setUpListenersAndCallbacks() {
         if (SceneContainerFlag.isEnabled) return
 
-        if (!MediaControlsInComposeFlag.isEnabled) {
-            // First let's set the desired state that we want for this host
-            mediaHost.expansion = MediaHostState.EXPANDED
-            mediaHost.showsOnlyActiveMedia = true
-            mediaHost.falsingProtectionNeeded = true
-
-            // Let's now initialize this view, which also creates the host view for us.
-            mediaHost.init(MediaHierarchyManager.LOCATION_LOCKSCREEN)
-            listenForLockscreenMediaAllowedChanges(applicationScope)
-        } else {
-            applicationScope.launch {
-                combine(
-                        mediaCarouselInteractor.allowMediaOnLockscreen,
-                        mediaCarouselInteractor.hasActiveMedia,
-                        mediaCarouselInteractor.isOnLockscreen,
-                    ) { allowMediaOnLockscreen, activeMedia, isOnLockscreen ->
-                        if (allowMediaOnLockscreen && isOnLockscreen) {
-                            activeMedia
-                        } else {
-                            false
-                        }
+        applicationScope.launch {
+            combine(
+                    mediaCarouselInteractor.allowMediaOnLockscreen,
+                    mediaCarouselInteractor.hasActiveMedia,
+                    mediaCarouselInteractor.isOnLockscreen,
+                ) { allowMediaOnLockscreen, activeMedia, isOnLockscreen ->
+                    if (allowMediaOnLockscreen && isOnLockscreen) {
+                        activeMedia
+                    } else {
+                        false
                     }
-                    .collect { isMediaVisibleOnLockscreen = it }
-            }
+                }
+                .collect { isMediaVisibleOnLockscreen = it }
         }
         statusBarStateController.addCallback(
             object : StatusBarStateController.StateListener {
@@ -157,6 +140,13 @@ constructor(
                 }
             }
         )
+        bypassController.registerOnBypassStateChangedListener(
+            object : KeyguardBypassController.OnBypassStateChangedListener {
+                override fun onBypassStateChanged(isEnabled: Boolean) {
+                    refreshMediaPosition(reason = "bypass state changed")
+                }
+            }
+        )
         updateResources()
     }
 
@@ -171,9 +161,9 @@ constructor(
 
     private fun setComposeContent(composeView: ComposeView) {
         composeView.setContent {
-            Media(
+            LockscreenMedia(
                 viewModelFactory = mediaViewModelFactory,
-                presentationStyle = MediaPresentationStyle.Lockscreen,
+                lockscreenViewModel = lockscreenMediaViewModel,
                 behavior =
                     MediaUiBehavior(
                         carouselVisibility = MediaCarouselVisibility.WhenAnyCardIsActive,
@@ -181,7 +171,12 @@ constructor(
                             falsingSystem.isFalseTouch(Classifier.MEDIA_CAROUSEL_SWIPE)
                         },
                     ),
-                onDismissed = { mediaCarouselInteractor.onSwipeToDismiss() },
+                onDismissed = { mediaDataManager.onSwipeToDismiss() },
+                visible = visible,
+                onVisibilityChanged = { isVisible ->
+                    isComposeMediaVisible = isVisible
+                    if (!isVisible && !visible) hideMediaPlayer()
+                },
             )
         }
     }
@@ -202,7 +197,7 @@ constructor(
         }
 
     /** Is the media player visible? */
-    var visible = false
+    var visible by mutableStateOf(false)
         private set
 
     var visibilityChangedListener: ((Boolean) -> Unit)? = null
@@ -219,26 +214,21 @@ constructor(
         private set
 
     private var splitShadeContainer: ViewGroup? = null
+    private var isComposeMediaVisible = false
+
+    init {
+        dumpManager.registerDumpable(this)
+        setUpListenersAndCallbacks()
+    }
 
     /**
      * Attaches media container in single pane mode, situated at the top of the notifications list
      */
     fun attachSinglePaneContainer(mediaView: MediaContainerView?) {
         SceneContainerFlag.assertInLegacyMode()
-        if (MediaControlsInComposeFlag.isEnabled) {
-            singlePaneContainer = mediaView
-            reattachHostView()
-            onMediaHostVisibilityChanged(isMediaVisibleOnLockscreen)
-        } else {
-            val needsListener = singlePaneContainer == null
-            singlePaneContainer = mediaView
-            if (needsListener) {
-                // On reinflation we don't want to add another listener
-                mediaHost.addVisibilityChangeListener(this::onMediaHostVisibilityChanged)
-            }
-            reattachHostView()
-            onMediaHostVisibilityChanged(mediaHost.visible)
-        }
+        singlePaneContainer = mediaView
+        reattachHostView()
+        onMediaHostVisibilityChanged(isMediaVisibleOnLockscreen)
 
         singlePaneContainer?.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
     }
@@ -252,16 +242,9 @@ constructor(
             if (useSplitShade) {
                 return
             }
-            if (MediaControlsInComposeFlag.isEnabled) {
-                composeView.layoutParams.apply {
-                    height = ViewGroup.LayoutParams.WRAP_CONTENT
-                    width = ViewGroup.LayoutParams.MATCH_PARENT
-                }
-            } else {
-                mediaHost.hostView.layoutParams.apply {
-                    height = ViewGroup.LayoutParams.WRAP_CONTENT
-                    width = ViewGroup.LayoutParams.MATCH_PARENT
-                }
+            composeView.layoutParams?.apply {
+                height = ViewGroup.LayoutParams.WRAP_CONTENT
+                width = ViewGroup.LayoutParams.MATCH_PARENT
             }
         }
     }
@@ -288,32 +271,18 @@ constructor(
             inactiveContainer.removeAllViews()
         }
         if (activeContainer?.childCount == 0) {
-            if (MediaControlsInComposeFlag.isEnabled) {
-                composeView.parent?.let { (it as? ViewGroup)?.removeView(composeView) }
-                activeContainer.addView(composeView)
-                composeView.layoutParams.apply {
-                    height = ViewGroup.LayoutParams.WRAP_CONTENT
-                    width = ViewGroup.LayoutParams.MATCH_PARENT
-                }
-            } else {
-                // Detach the hostView from its parent view if exists
-                mediaHost.hostView.parent?.let {
-                    (it as? ViewGroup)?.removeView(mediaHost.hostView)
-                }
-                activeContainer.addView(mediaHost.hostView)
+            composeView.parent?.let { (it as? ViewGroup)?.removeView(composeView) }
+            activeContainer.addView(composeView)
+            composeView.layoutParams.apply {
+                height = ViewGroup.LayoutParams.WRAP_CONTENT
+                width = ViewGroup.LayoutParams.MATCH_PARENT
             }
         }
     }
 
     fun isWithinMediaViewBounds(x: Int, y: Int): Boolean {
         if (!visible) return false
-        if (MediaControlsInComposeFlag.isEnabled) {
-            return composeView.boundsOnScreen.contains(x, y)
-        }
-        val bounds = Rect()
-        mediaHost.hostView.getBoundsOnScreen(bounds)
-
-        return bounds.contains(x, y)
+        return composeView.boundsOnScreen.contains(x, y)
     }
 
     fun refreshMediaPosition(reason: String) {
@@ -321,14 +290,7 @@ constructor(
         val currentState = statusBarStateController.state
 
         val keyguardOrUserSwitcher = (currentState == StatusBarState.KEYGUARD)
-        // mediaHost.visible required for proper animations handling
-        val isMediaHostVisible =
-            if (MediaControlsInComposeFlag.isEnabled) {
-                isMediaVisibleOnLockscreen
-            } else {
-                val allowedOnLockscreen = mediaCarouselInteractor.allowMediaOnLockscreen.value
-                mediaHost.visible && allowedOnLockscreen
-            }
+        val isMediaHostVisible = isMediaVisibleOnLockscreen
         val isBypassNotEnabled = !bypassController.bypassEnabled
         val useSplitShade = useSplitShade
         val shouldBeVisibleForSplitShade = shouldBeVisibleForSplitShade()
@@ -353,7 +315,7 @@ constructor(
         logger.logActiveMediaContainer("before refreshMediaPosition", currActiveContainer)
         if (visible) {
             showMediaPlayer()
-        } else {
+        } else if (!isComposeMediaVisible || !composeView.isAttachedToWindow) {
             hideMediaPlayer()
         }
         logger.logActiveMediaContainer("after refreshMediaPosition", currActiveContainer)

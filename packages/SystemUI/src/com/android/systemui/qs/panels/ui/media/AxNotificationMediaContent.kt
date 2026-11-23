@@ -17,6 +17,7 @@
 package com.android.systemui.qs.panels.ui.media
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -35,8 +36,10 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -202,6 +205,7 @@ internal fun NotificationMediaOutput(
         session?.outputDevice?.name?.toString()?.takeUnless { it.isBlank() || it == "null" }
             ?: stringResource(com.android.settingslib.R.string.media_transfer_this_device_name)
     val outputDescription = stringResource(R.string.media_output_dialog_accessibility_title)
+    val interactionSource = remember { MutableInteractionSource() }
     Expandable(
         controller =
             rememberExpandableController(color = { Color.Transparent }, shape = CircleShape),
@@ -215,6 +219,14 @@ internal fun NotificationMediaOutput(
                     .heightIn(min = minHeight)
                     .clip(CircleShape)
                     .then(
+                        if (LocalMediaButtonSquish.current)
+                            Modifier.mediaActionPressFeedback(
+                                interactionSource,
+                                interactive && session != null,
+                            )
+                        else Modifier
+                    )
+                    .then(
                         if (showDeviceIcon) Modifier.semantics { contentDescription = outputName }
                         else Modifier
                     )
@@ -222,6 +234,8 @@ internal fun NotificationMediaOutput(
                         enabled = interactive && session != null,
                         role = Role.Button,
                         onClickLabel = outputDescription,
+                        interactionSource = interactionSource,
+                        indication = ripple(),
                     ) {
                         session?.let { viewModel.openOutput(it.outputDevice, expandable) }
                     },
