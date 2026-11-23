@@ -302,11 +302,34 @@ constructor(
         log { "\n" }
         log { "computeHeight --- reason: $reason" }
 
-        val stackHeightSequence = computeHeightPerNotificationLimit(stack, shelfHeight)
-
-        val (notifsHeight, notifsHeightSavingSpace, shelfHeightWithSpaceBefore) =
-            stackHeightSequence.elementAtOrElse(maxNotifs) {
-                stackHeightSequence.last() // Height with all notifications visible.
+        val children = stack.showableChildren().toMutableList()
+        stack.orderMotoCompactNotifications(children)
+        val notificationCount =
+            if (maxNotifs < 0) children.size else min(maxNotifs, children.size)
+        val onLockscreen = onLockscreen()
+        val motoCompact = stack.isMotoCompactDesignActive
+        var notifsHeight = 0f
+        var notifsHeightSavingSpace = 0f
+        var previous: ExpandableView? = null
+        for (i in 0 until notificationCount) {
+            val current = children[i]
+            val space = getSpaceNeeded(current, i, previous, stack, onLockscreen)
+            notifsHeight += space.whenEnoughSpace
+            notifsHeightSavingSpace += space.whenSavingSpace
+            previous = current
+        }
+        val shelfHeightWithSpaceBefore =
+            when {
+                notificationCount == 0 -> shelfHeight
+                notificationCount < children.size ->
+                    calculateGapAndDividerHeight(
+                        stack,
+                        previous,
+                        children[notificationCount],
+                        notificationCount,
+                    ) + shelfHeight
+                motoCompact -> dividerHeight + shelfHeight
+                else -> 0f
             }
 
         var height: Float
