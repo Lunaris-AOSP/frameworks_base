@@ -73,6 +73,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.trace
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.compose.animation.Expandable
 import com.android.compose.animation.bounceable
 import com.android.compose.animation.rememberExpandableController
@@ -85,6 +86,7 @@ import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.qs.composefragment.mist.LocalBlurEnabled
 import com.android.systemui.qs.flags.QsDetailedView
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
+import com.android.systemui.qs.panels.shared.model.LunarisQsDataUsage
 import com.android.systemui.qs.panels.shared.model.LunarisQsBluetoothTileStyle
 import com.android.systemui.qs.panels.ui.compose.AxTileDefaults.InactiveCornerRadius
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults.longPressLabelMoreDetails
@@ -110,6 +112,7 @@ import com.android.systemui.qs.ui.composable.QuickSettingsShade
 import com.android.systemui.qs.ui.compose.borderOnFocus
 import com.android.systemui.res.R
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 @Composable
@@ -132,15 +135,31 @@ fun ContentScope.AxTile(
     deviceArtwork: Drawable? = null,
     strokeStyle: Boolean = LocalLunarisQsTileStrokeStyle.current,
     inactiveBackgroundColor: Color? = null,
+    networkDataUsage: StateFlow<LunarisQsDataUsage>? = null,
 ) {
     trace(tile.spec.spec) {
-        val compact = span.columns == 1
+        val networkTile =
+            tile.spec.spec == "wifi" || tile.spec.spec == "cell" || tile.spec.spec == "internet"
+        val compact = span.columns == 1 && !(networkTile && span.rows == 2)
         val currentBounceableInfo by rememberUpdatedState(bounceableInfo)
         val res = axResources()
 
-        val uiState by
+        val baseUiState by
             produceState(tile.currentState.toUiState(res), tile, res) {
                 tile.state.collect { value = it.toUiState(res) }
+            }
+        val uiState =
+            if (supportsNetworkDataUsage(tile.spec.spec, span)) {
+                val usage =
+                    if (networkDataUsage != null) {
+                        val data by networkDataUsage.collectAsStateWithLifecycle()
+                        data
+                    } else {
+                        LunarisQsDataUsage()
+                    }
+                baseUiState.withNetworkDataUsage(tile.spec.spec, usage, res)
+            } else {
+                baseUiState
             }
         val isClickable = uiState.state != STATE_UNAVAILABLE
         val pressInteractionSource =
@@ -339,6 +358,8 @@ fun ContentScope.AxTile(
                             AxLargeTileContent(
                                 label = uiState.label,
                                 secondaryLabel = uiState.secondaryLabel,
+                                labelsAtBottom =
+                                    networkTile && span.rows == 2 && span.columns in 1..2,
                                 iconProvider = iconProvider,
                                 sideDrawable = uiState.sideDrawable,
                                 showDialogIndicator = uiState.showDialogIndicator,
@@ -367,6 +388,66 @@ fun ContentScope.AxTile(
             }
         }
     }
+}
+
+internal fun supportsNetworkDataUsage(spec: String, span: AxQsSpan): Boolean =
+    ((spec == "wifi" || spec == "cell" || spec == "internet") &&
+        span.rows == 2 && span.columns in 1..2) ||
+        (spec == "internet" && span == AxQsSpan.TileWideDefault)
+
+private fun TileUiState.withNetworkDataUsage(
+    spec: String,
+    data: LunarisQsDataUsage,
+    resources: Resources,
+): TileUiState {
+    if (state != STATE_ACTIVE) return this
+    val title: String
+    val summary: String
+    when (spec) {
+        "wifi" -> {
+            title = resources.getString(R.string.quick_settings_wifi_label)
+            val networkName =
+                data.wifiNetworkName
+                    ?: label.takeIf { it != title }
+                    ?: secondaryLabel
+            summary =
+                listOfNotNull(
+                        networkName.takeIf { it.isNotBlank() },
+                        data.wifiUsage.takeIf { data.enabled },
+                    )
+                    .joinToString(" · ")
+        }
+        "cell" -> {
+            title = label
+            summary =
+                if (data.enabled) {
+                    listOfNotNull(data.mobileNetworkName, data.mobileUsage).joinToString(" · ")
+                } else {
+                    ""
+                }
+        }
+        "internet" -> {
+            title = if (data.enabled) data.internetNetworkName ?: label else label
+            summary = if (data.enabled) data.internetUsage.orEmpty() else ""
+        }
+        else -> return this
+    }
+    return copy(
+        label = title,
+        secondaryLabel = summary,
+        accessibilityUiState =
+            accessibilityUiState.copy(
+                contentDescription = title,
+                stateDescription =
+                    listOfNotNull(
+                            accessibilityUiState.stateDescription.takeIf { it.isNotBlank() },
+                            summary.takeIf {
+                                it.isNotBlank() && !accessibilityUiState.stateDescription.contains(it)
+                            },
+                        )
+                        .joinToString(", "),
+            ),
+    )
 }
 
 @Composable

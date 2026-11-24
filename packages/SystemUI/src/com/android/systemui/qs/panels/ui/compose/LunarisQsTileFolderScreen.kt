@@ -66,6 +66,7 @@ import com.android.compose.animation.scene.ContentScope
 import com.android.systemui.qs.panels.shared.model.AxQsGridItem
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.AxQsTileStyle
+import com.android.systemui.qs.panels.shared.model.LunarisQsDataUsage
 import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolder
 import com.android.systemui.qs.panels.ui.compose.selection.TileState
 import com.android.systemui.qs.panels.ui.viewmodel.TileViewModel
@@ -73,6 +74,7 @@ import com.android.systemui.res.R
 import com.android.systemui.statusbar.phone.DialogDelegate
 import com.android.systemui.statusbar.phone.SystemUIDialog
 import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.StateFlow
 
 private const val FOLDER_DIALOG_WIDTH_FRACTION = 0.92f
 private const val FOLDER_DIALOG_HEIGHT_FRACTION = 0.84f
@@ -127,6 +129,7 @@ internal class LunarisFolderWindowDelegate : DialogDelegate<SystemUIDialog> {
 @Composable
 internal fun ContentScope.LunarisFolderScreen(
     folder: LunarisQsTileFolder,
+    networkDataUsage: StateFlow<LunarisQsDataUsage>,
     tiles: List<TileViewModel>,
     onShapeChange: (AxQsTileStyle?) -> Unit,
     onTileResize: (String, AxQsSpan) -> Unit,
@@ -242,6 +245,7 @@ internal fun ContentScope.LunarisFolderScreen(
                         } else {
                             this@LunarisFolderScreen.AxTile(
                                 tile = tile,
+                                networkDataUsage = networkDataUsage,
                                 iconOnly = item.span.columns == 1,
                                 span = item.span,
                                 fillHeight = true,

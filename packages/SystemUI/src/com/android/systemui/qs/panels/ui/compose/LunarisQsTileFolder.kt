@@ -140,6 +140,7 @@ internal fun ContentScope.LunarisQsTileFolder(
                             ) {
                                 this@LunarisQsTileFolder.LunarisFolderScreen(
                                     folder = currentFolder,
+                                    networkDataUsage = viewModel.dataUsage,
                                     tiles = currentTiles,
                                     onShapeChange = {
                                         viewModel.setFolderTileStyle(id, layout, it)

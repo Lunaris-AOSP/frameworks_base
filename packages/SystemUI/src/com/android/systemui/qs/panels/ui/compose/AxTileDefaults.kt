@@ -191,6 +191,7 @@ fun AxLargeTileContent(
     showDialogIndicator: Boolean = false,
     deviceArtwork: Drawable? = null,
     centeredDeviceArtwork: Boolean = false,
+    labelsAtBottom: Boolean = false,
 ) {
     val iconOnlyActiveColor = usesIconOnlyActiveColor(span)
     if (centeredDeviceArtwork && span.columns == 2 && span.rows == 2) {
@@ -319,7 +320,7 @@ fun AxLargeTileContent(
                 iconOnlyActiveColor = iconOnlyActiveColor,
                 modifier = Modifier.size(CommonTileDefaults.ToggleTargetSize),
             )
-            if (showDialogIndicator || sideDrawable != null) {
+            if (span.columns > 1 && (showDialogIndicator || sideDrawable != null)) {
                 val indicatorColor by
                     animateColorAsState(
                         if (iconOnlyActiveColor) colors.label else colors.icon,
@@ -350,6 +351,7 @@ fun AxLargeTileContent(
             label = label,
             secondaryLabel = secondaryLabel,
             colors = colors,
+            fillHeight = !labelsAtBottom,
             accessibilityUiState = accessibilityUiState,
             isVisible = isVisible,
             modifier =

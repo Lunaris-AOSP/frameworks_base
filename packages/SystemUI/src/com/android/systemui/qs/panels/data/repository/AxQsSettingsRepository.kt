@@ -216,6 +216,28 @@ constructor(
             .distinctUntilChanged()
             .stateIn(applicationScope, SharingStarted.Eagerly, 2)
     val showWeather: StateFlow<Boolean> = boolSetting(SHOW_WEATHER, true)
+    val showDataUsage: StateFlow<Boolean> =
+        userRepository.selectedUserInfo
+            .flatMapLatest { user ->
+                systemSettings.observerFlow(user.id, Settings.System.QS_SHOW_DATA_USAGE_TILE)
+                    .onStart { emit(Unit) }
+                    .map {
+                        systemSettings.getIntForUser(
+                            Settings.System.QS_SHOW_DATA_USAGE_TILE, 1, user.id
+                        ) == 1
+                    }
+            }
+            .flowOn(backgroundDispatcher)
+            .distinctUntilChanged()
+            .stateIn(
+                applicationScope,
+                SharingStarted.Eagerly,
+                systemSettings.getIntForUser(
+                    Settings.System.QS_SHOW_DATA_USAGE_TILE,
+                    1,
+                    userRepository.getSelectedUserInfo().id,
+                ) == 1,
+        )
     val autoHideTilePageIndicator: StateFlow<Boolean> =
         boolSetting(AUTO_HIDE_TILE_PAGE_INDICATOR, false)
     val notificationMediaStyle: StateFlow<LunarisQsNotificationMediaStyle> =
@@ -557,6 +579,15 @@ constructor(
     fun setSharedQqsRows(rows: Int) = putInt(SHARED_QQS_ROWS, rows.coerceIn(2, 4))
 
     fun setShowWeather(show: Boolean) = putInt(SHOW_WEATHER, show.toSetting())
+
+    fun setShowDataUsage(show: Boolean) {
+        val userId = userRepository.getSelectedUserInfo().id
+        applicationScope.launch(backgroundDispatcher) {
+            systemSettings.putIntForUser(
+                Settings.System.QS_SHOW_DATA_USAGE_TILE, show.toSetting(), userId
+            )
+        }
+    }
 
     fun setAutoHideTilePageIndicator(enabled: Boolean) =
         putInt(AUTO_HIDE_TILE_PAGE_INDICATOR, enabled.toSetting())

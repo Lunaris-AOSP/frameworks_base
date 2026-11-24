@@ -230,6 +230,14 @@ fun LunariQsPanelSettings(
                         onCheckedChange = viewModel::setShowWeather,
                     )
                 }
+                item("data_usage") {
+                    SettingsSwitch(
+                        title = stringResource(R.string.ax_qs_settings_data_usage),
+                        summary = stringResource(R.string.ax_qs_settings_data_usage_summary),
+                        checked = viewModel.showDataUsage,
+                        onCheckedChange = viewModel::setShowDataUsage,
+                    )
+                }
                 item("percentages") {
                     SettingsSwitch(
                         title = stringResource(R.string.ax_qs_settings_percentages),

@@ -718,6 +718,7 @@ private fun ContentScope.AxLiveTile(
 ) {
     val coroutineScope = rememberCoroutineScope()
     val large = item.span.columns > 1 && item.span.rows > 1
+    val networkLabels = supportsNetworkDataUsage(tile.spec.spec, item.span)
     if (large && tile.spec.spec == "dnd") {
         val modes by axQsViewModel.modes.collectAsStateWithLifecycle(emptyList())
         val state by tile.state.collectAsStateWithLifecycle(tile.currentState)
@@ -750,12 +751,13 @@ private fun ContentScope.AxLiveTile(
             fillHeight = true,
             compactIconSize = axQsTileIconSize(minOf(maxWidth, maxHeight)),
             deviceArtwork = deviceArtwork,
+            networkDataUsage = axQsViewModel.dataUsage.takeIf { listening() },
             squishiness = { 1f },
             coroutineScope = coroutineScope,
             bounceableInfo = null,
             interactionSource = null,
             modifier = Modifier.fillMaxSize(),
-            isVisible = if (separateQqs) ({ false }) else listening,
+            isVisible = if (separateQqs && !networkLabels) ({ false }) else listening,
             detailsViewModel = if (qqs) null else detailsViewModel,
         )
     }

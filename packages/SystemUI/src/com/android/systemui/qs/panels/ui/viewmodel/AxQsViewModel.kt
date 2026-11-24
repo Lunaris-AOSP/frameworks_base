@@ -41,6 +41,7 @@ import com.android.systemui.qs.QSHost
 import com.android.systemui.qs.panels.data.repository.AxQsSettingsRepository
 import com.android.systemui.qs.panels.data.repository.LunarisBluetoothArtworkRepository
 import com.android.systemui.qs.panels.data.repository.QSColumnsRepository
+import com.android.systemui.qs.panels.domain.interactor.LunarisQsDataUsageInteractor
 import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsGridLayout
 import com.android.systemui.qs.panels.shared.model.AxQsGridPosition
@@ -93,11 +94,13 @@ constructor(
     columnsRepository: QSColumnsRepository,
     carrierTextManagerBuilder: CarrierTextManager.Builder,
     bluetoothArtworkRepository: LunarisBluetoothArtworkRepository,
+    dataUsageInteractor: LunarisQsDataUsageInteractor,
     modesDialogViewModel: ModesDialogViewModel,
     private val falsingInteractor: FalsingInteractor,
     @ShadeDisplayAware private val context: Context,
 ) : ExclusiveActivatable() {
     val bluetoothArtwork = bluetoothArtworkRepository.artwork
+    val dataUsage = dataUsageInteractor.dataUsage
     val modes = modesDialogViewModel.tiles
 
     fun onModeClick(mode: ModeTileViewModel) {
@@ -489,6 +492,12 @@ constructor(
             initialValue = repository.showSliderPercentage.value,
             source = repository.showSliderPercentage,
         )
+    val showDataUsage by
+        hydrator.hydratedStateOf(
+            traceName = "showDataUsage",
+            initialValue = repository.showDataUsage.value,
+            source = repository.showDataUsage,
+        )
     val autoHideTilePageIndicator by
         hydrator.hydratedStateOf(
             traceName = "autoHideTilePageIndicator",
@@ -846,6 +855,8 @@ constructor(
     fun setMiuiSplitQsAnimation(enabled: Boolean) = repository.setMiuiSplitQsAnimation(enabled)
 
     fun setShowWeather(show: Boolean) = repository.setShowWeather(show)
+
+    fun setShowDataUsage(show: Boolean) = repository.setShowDataUsage(show)
 
     fun setAutoHideTilePageIndicator(enabled: Boolean) =
         repository.setAutoHideTilePageIndicator(enabled)

@@ -41,6 +41,8 @@
     <string name="ax_qs_settings_shape_dynamic">Dynamic (pill when active)</string>
     <string name="ax_qs_settings_shape_dynamic_inverted">Dynamic invert (pill when inactive)</string>
     <string name="ax_qs_settings_percentages">Show slider percentages</string>
+    <string name="ax_qs_settings_data_usage">Show data usage</string>
+    <string name="ax_qs_settings_data_usage_summary">Show today’s usage on 1×2 and 2×2 Wi-Fi, Data, and Internet tiles</string>
     <string name="ax_qs_settings_percentages_summary">Show values on brightness, volume, and flashlight sliders</string>
     <string name="ax_qs_settings_auto_hide_tile_page_indicator">Auto hide tile page indicator</string>
     <string name="ax_qs_settings_auto_hide_tile_page_indicator_summary">Keep the page dots hidden until you swipe between tile pages. Hide them again after 3 seconds of inactivity.</string>
