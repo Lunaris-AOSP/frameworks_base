@@ -1,5 +1,6 @@
 package com.android.systemui.axdynamicbar.ui
 
+import androidx.compose.ui.geometry.Rect
 import com.android.systemui.animation.Expandable
 import com.android.systemui.axdynamicbar.domain.AxDynamicBarInteractor
 import com.android.systemui.islandevents.model.IslandEvent
@@ -202,11 +203,11 @@ constructor(
         _keyguardCarrierText.value = text
     }
 
-    private val _chipCenterXFraction = MutableStateFlow(0.5f)
-    val chipCenterXFraction: StateFlow<Float> = _chipCenterXFraction.asStateFlow()
+    private val _chipBoundsOnScreen = MutableStateFlow<Rect?>(null)
+    val chipBoundsOnScreen: StateFlow<Rect?> = _chipBoundsOnScreen.asStateFlow()
 
-    fun updateChipCenterX(fraction: Float) {
-        if (fraction.isFinite()) _chipCenterXFraction.value = fraction.coerceIn(0f, 1f)
+    fun updateChipBounds(bounds: Rect) {
+        if (bounds.width > 0f && bounds.height > 0f) _chipBoundsOnScreen.value = bounds
     }
 
     val isExpanded: StateFlow<Boolean> = statusBarExpansion.isExpanded
