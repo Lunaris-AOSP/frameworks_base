@@ -23,4 +23,8 @@ interface IOptimizationEngine {
     void cancelOptimization();
     void registerCallback(IOptimizationCallback callback);
     void unregisterCallback(IOptimizationCallback callback);
+    void refreshDexoptApps();
+    long startPerAppDexopt(in String[] packages, String filter);
+    Bundle getPerAppDexoptSnapshot(int offset);
+    void cancelPerAppDexopt();
 }

@@ -111,4 +111,24 @@ public class OptimizationManager {
             throw e.rethrowFromSystemServer();
         }
     }
+
+    public void refreshDexoptApps() {
+        try { mService.refreshDexoptApps(); }
+        catch (RemoteException e) { throw e.rethrowFromSystemServer(); }
+    }
+
+    public long startPerAppDexopt(@NonNull String[] packages, @NonNull String filter) {
+        try { return mService.startPerAppDexopt(packages, filter); }
+        catch (RemoteException e) { throw e.rethrowFromSystemServer(); }
+    }
+
+    @NonNull public Bundle getPerAppDexoptSnapshot(int offset) {
+        try { return mService.getPerAppDexoptSnapshot(offset); }
+        catch (RemoteException e) { throw e.rethrowFromSystemServer(); }
+    }
+
+    public void cancelPerAppDexopt() {
+        try { mService.cancelPerAppDexopt(); }
+        catch (RemoteException e) { throw e.rethrowFromSystemServer(); }
+    }
 }

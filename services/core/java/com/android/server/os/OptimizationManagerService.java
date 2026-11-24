@@ -39,11 +39,13 @@ public final class OptimizationManagerService extends SystemService {
     private final Set<String> activeTools = new HashSet<>();
     private long nextToolId;
     private OptimizationTools tools;
+    private PerAppDexoptController perAppDexopt;
 
     public OptimizationManagerService(Context context) { super(context); }
     @Override public void onStart() {
         actions = new OptimizationActions(getContext());
         tools = new OptimizationTools(getContext());
+        perAppDexopt = new PerAppDexoptController(getContext(), lock);
         thread.start(); worker = new Handler(thread.getLooper());
         snapshot.putString("status", "idle");
         for (String kind : OptimizationTools.KINDS) {
@@ -61,6 +63,32 @@ public final class OptimizationManagerService extends SystemService {
         }
     }
     private final IOptimizationEngine.Stub binder = new IOptimizationEngine.Stub() {
+        @Override public void refreshDexoptApps() {
+            enforcePermission();
+            synchronized (lock) {
+                if (busy) throw new IllegalStateException("A maintenance run is already active");
+                perAppDexopt.beginScan();
+                worker.post(perAppDexopt::scan);
+            }
+        }
+        @Override public long startPerAppDexopt(String[] requested, String filter) {
+            enforcePermission();
+            List<String> packages = OptimizationTools.validatePackages(requested);
+            synchronized (lock) {
+                if (busy) throw new IllegalStateException("A maintenance run is already active");
+                long id = perAppDexopt.beginCompilation(packages, filter);
+                worker.post(() -> perAppDexopt.compile(packages, filter));
+                return id;
+            }
+        }
+        @Override public Bundle getPerAppDexoptSnapshot(int offset) {
+            enforcePermission();
+            return perAppDexopt.snapshot(offset);
+        }
+        @Override public void cancelPerAppDexopt() {
+            enforcePermission();
+            perAppDexopt.cancel();
+        }
         @Override public Bundle getSnapshot() {
             enforcePermission();
             synchronized (lock) { return snapshot.deepCopy(); }
@@ -134,7 +162,9 @@ public final class OptimizationManagerService extends SystemService {
             enforcePermission();
             OptimizationPlan plan = OptimizationPlan.parse(options);
             synchronized (lock) {
-                if (busy) throw new IllegalStateException("A maintenance run is already active");
+                if (busy || perAppDexopt.active()) {
+                    throw new IllegalStateException("A maintenance or per-app dexopt task is already active");
+                }
                 busy = true;
                 cancellation = new CancellationSignal();
                 snapshot = new Bundle();
