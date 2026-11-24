@@ -105,6 +105,7 @@ internal fun ContentScope.LunarisQsTileFolder(
     val tileStrokeStyle by rememberUpdatedState(LocalLunarisQsTileStrokeStyle.current)
     val tileStrokeWidth by rememberUpdatedState(LocalLunarisQsTileStrokeWidth.current)
     val cosTileBackground by rememberUpdatedState(LocalLunarisQsCosTileBackground.current)
+    val iconOnlyActiveColor by rememberUpdatedState(LocalLunarisQsIconOnlyActiveColor.current)
     val tileScale by rememberUpdatedState(LocalTileScale.current)
     val bySpec = remember(tiles) { tiles.associateBy { it.spec.spec } }
     val directCount = LunarisQsTileFolderController.directTileCount(span, folder.tileSpecs.size)
@@ -134,6 +135,7 @@ internal fun ContentScope.LunarisQsTileFolder(
                                 LocalLunarisQsTileStrokeStyle provides tileStrokeStyle,
                                 LocalLunarisQsTileStrokeWidth provides tileStrokeWidth,
                                 LocalLunarisQsCosTileBackground provides cosTileBackground,
+                                LocalLunarisQsIconOnlyActiveColor provides iconOnlyActiveColor,
                                 LocalTileScale provides tileScale,
                             ) {
                                 this@LunarisQsTileFolder.LunarisFolderScreen(

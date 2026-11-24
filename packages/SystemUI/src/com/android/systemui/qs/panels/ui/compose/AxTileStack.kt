@@ -17,6 +17,7 @@
 
 package com.android.systemui.qs.panels.ui.compose
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -35,6 +36,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -156,12 +159,18 @@ internal fun AxTileStack(
             key = { pageKeys[it] },
             modifier = Modifier.fillMaxSize(),
         ) { page ->
-            pageContent(page)
+            CompositionLocalProvider(LocalAxQsTileStack provides true) {
+                pageContent(page)
+            }
         }
         if (pageKeys.size > 1) {
             val firstDot =
                 (pagerState.currentPage - 3).coerceIn(0, (pageKeys.size - 7).coerceAtLeast(0))
-            val color = indicatorColor(pagerState.currentPage.coerceIn(pageKeys.indices))
+            val color by
+                animateColorAsState(
+                    indicatorColor(pagerState.currentPage.coerceIn(pageKeys.indices)),
+                    label = "AxTileStackIndicatorColor",
+                )
             Column(
                 modifier = Modifier.align(Alignment.CenterEnd).padding(end = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),

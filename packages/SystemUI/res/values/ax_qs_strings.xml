@@ -89,6 +89,8 @@
     <string name="ax_qs_settings_style_rounded_flat">Rounded square (flat fill)</string>
     <string name="ax_qs_settings_tile_labels">Show tile labels</string>
     <string name="ax_qs_settings_cos_tile_bg">Cos tile bg</string>
+    <string name="ax_qs_settings_icon_only_active_color">Icon-only active color</string>
+    <string name="ax_qs_settings_icon_only_active_color_summary">Apply the active color only to the icon background in 2×2 and stacked tiles</string>
     <string name="ax_qs_settings_cos_tile_bg_summary">Use alternate backgrounds with a fine gradient border on active and inactive tiles, shade notifications, and notification footer buttons</string>
     <string name="ax_qs_settings_gradient">Active color gradient</string>
     <string name="ax_qs_settings_gradient_enabled">Enable gradient</string>

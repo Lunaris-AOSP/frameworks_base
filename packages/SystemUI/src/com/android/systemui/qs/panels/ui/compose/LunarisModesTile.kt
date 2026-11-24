@@ -51,6 +51,7 @@ import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.android.compose.theme.LocalAndroidColorScheme
 import com.android.settingslib.notification.modes.ZenMode
 import com.android.systemui.common.ui.compose.Icon
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
@@ -77,6 +78,7 @@ internal fun LunarisModesTile(
     val interactionSource = remember { MutableInteractionSource() }
     val view = LocalView.current
     val hapticEnabled = rememberTileHaptic()
+    val iconOnlyActiveColor = usesIconOnlyActiveColor(span)
     Column(
         modifier =
             modifier.lunarisTilePressAnimation(interactionSource, enabled)
@@ -110,6 +112,7 @@ internal fun LunarisModesTile(
             enabled = enabled,
             onClick = { onModeClick(dnd) },
             onLongClick = { onModeLongClick(dnd) },
+            iconOnlyActiveColor = iconOnlyActiveColor,
             modifier = Modifier.fillMaxWidth().weight(1f),
         )
         if (shortcuts.isNotEmpty()) {
@@ -124,6 +127,7 @@ internal fun LunarisModesTile(
                         enabled = enabled,
                         onClick = { onModeClick(mode) },
                         onLongClick = { onModeLongClick(mode) },
+                        iconOnlyActiveColor = iconOnlyActiveColor,
                         modifier = Modifier.weight(1f).fillMaxSize(),
                     )
                 }
@@ -139,20 +143,24 @@ private fun LunarisModeButton(
     enabled: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    iconOnlyActiveColor: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val gradient = rememberLunarisQsGradient()
-    val brush = gradient.tileBrush().takeIf { mode.enabled }
-    val strokeStyle = LocalLunarisQsTileStrokeStyle.current
+    val activeBrush = gradient.tileBrush().takeIf { mode.enabled }
+    val brush = activeBrush.takeUnless { iconOnlyActiveColor }
+    val strokeStyle = LocalLunarisQsTileStrokeStyle.current && !iconOnlyActiveColor
     val background by
         animateColorAsState(
-            if (mode.enabled && !strokeStyle) MaterialTheme.colorScheme.primary
+            if (mode.enabled && !strokeStyle && !iconOnlyActiveColor)
+                MaterialTheme.colorScheme.primary
             else MaterialTheme.colorScheme.primaryContainer,
             label = "LunarisModeBackground",
         )
     val foreground by
         animateColorAsState(
-            if (brush != null) gradient.contentColor
+            if (iconOnlyActiveColor) MaterialTheme.colorScheme.onPrimaryContainer
+            else if (brush != null) gradient.contentColor
             else if (mode.enabled) MaterialTheme.colorScheme.onPrimary
             else MaterialTheme.colorScheme.onPrimaryContainer,
             label = "LunarisModeForeground",
@@ -214,7 +222,29 @@ private fun LunarisModeButton(
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             modifier = Modifier.clearAndSetSemantics {},
         ) {
-            Icon(icon = mode.icon, tint = foreground, modifier = Modifier.size(24.dp))
+            if (iconOnlyActiveColor) {
+                val iconForeground by
+                    animateColorAsState(
+                        if (activeBrush != null) gradient.contentColor
+                        else if (mode.enabled) MaterialTheme.colorScheme.onPrimary
+                        else MaterialTheme.colorScheme.onSurface,
+                        label = "LunarisModeIconForeground",
+                    )
+                Box(
+                    modifier =
+                        Modifier.size(40.dp).lunarisQsAnimatedIconBackground(
+                            color =
+                                if (mode.enabled) MaterialTheme.colorScheme.primary
+                                else LocalAndroidColorScheme.current.surfaceEffect2,
+                            brush = activeBrush,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(icon = mode.icon, tint = iconForeground, modifier = Modifier.size(24.dp))
+                }
+            } else {
+                Icon(icon = mode.icon, tint = foreground, modifier = Modifier.size(24.dp))
+            }
             if (showLabel) {
                 Text(
                     text = stringResource(R.string.ax_qs_dnd_short_label),

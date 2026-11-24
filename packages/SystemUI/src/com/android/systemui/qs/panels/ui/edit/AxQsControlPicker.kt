@@ -72,6 +72,7 @@ import com.android.axion.compose.preferences.LocalPreferencePosition
 import com.android.axion.compose.preferences.PreferenceGroup
 import com.android.axion.compose.preferences.preferenceShape
 import com.android.compose.gesture.gesturesDisabled
+import com.android.compose.theme.LocalAndroidColorScheme
 import com.android.settingslib.notification.modes.ZenMode
 import com.android.systemui.common.ui.compose.load
 import com.android.systemui.qs.panels.shared.model.AxQsControl
@@ -98,6 +99,7 @@ import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.SmallTileContent
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.TileColors
 import com.android.systemui.qs.panels.ui.compose.lunarisQsCosTileBorder
+import com.android.systemui.qs.panels.ui.compose.usesIconOnlyActiveColor
 import com.android.systemui.qs.panels.ui.compose.useAxQsCircleCells
 import com.android.systemui.qs.panels.ui.viewmodel.EditTileViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.LocalLunarisFlashlightSliderViewModel
@@ -803,7 +805,10 @@ fun AxQsEditTile(
     val colors =
         TileColors(
             background = tileBg,
-            iconBackground = Color.Transparent,
+            iconBackground =
+                if (usesIconOnlyActiveColor(span))
+                    LocalAndroidColorScheme.current.surfaceEffect2
+                else Color.Transparent,
             label = MaterialTheme.colorScheme.onSurface,
             secondaryLabel = MaterialTheme.colorScheme.onSurfaceVariant,
             icon = MaterialTheme.colorScheme.onSurface,

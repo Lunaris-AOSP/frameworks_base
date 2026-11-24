@@ -370,6 +370,15 @@ fun LunariQsPanelSettings(
                         onCheckedChange = viewModel::setFullColorDualTargetTiles,
                     )
                 }
+                item("icon_only_active_color") {
+                    SettingsSwitch(
+                        title = stringResource(R.string.ax_qs_settings_icon_only_active_color),
+                        summary =
+                            stringResource(R.string.ax_qs_settings_icon_only_active_color_summary),
+                        checked = viewModel.iconOnlyActiveColor,
+                        onCheckedChange = viewModel::setIconOnlyActiveColor,
+                    )
+                }
                 item("tile_stroke_style") {
                     SettingsSwitch(
                         title = stringResource(R.string.ax_qs_settings_tile_stroke_style),

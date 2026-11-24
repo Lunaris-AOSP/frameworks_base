@@ -78,6 +78,7 @@ import com.android.compose.animation.bounceable
 import com.android.compose.animation.rememberExpandableController
 import com.android.compose.animation.scene.ContentScope
 import com.android.compose.modifiers.thenIf
+import com.android.compose.theme.LocalAndroidColorScheme
 import com.android.mechanics.compose.modifier.verticalFadeContentReveal
 import com.android.mechanics.compose.modifier.verticalTactileSurfaceReveal
 import com.android.systemui.common.shared.model.Icon
@@ -157,12 +158,14 @@ fun ContentScope.AxTile(
                 !compact &&
                 span.rows == 1 &&
                 uiState.handlesSecondaryClick
+        val iconOnlyActiveColor = usesIconOnlyActiveColor(span) && !compact
         val colors =
             AxTileColorsDefaults.getColorForState(
                 uiState = uiState,
                 iconOnly = compact,
                 useDualTargetStyle = useDualTargetStyle,
                 inactiveBackgroundColor = inactiveBackgroundColor,
+                iconOnlyActiveColor = iconOnlyActiveColor,
             )
         val view = LocalView.current
         val hapticEnabled = rememberTileHaptic()
@@ -170,7 +173,8 @@ fun ContentScope.AxTile(
         val defaultTileShape = animateAxQsTileShape(span, uiState.state)
         val tileShape = tileShapeOverride ?: defaultTileShape
         val useStrokeStyle =
-            strokeStyle && !useDualTargetStyle && uiState.state != STATE_UNAVAILABLE
+            strokeStyle && !useDualTargetStyle && !iconOnlyActiveColor &&
+                uiState.state != STATE_UNAVAILABLE
         val animatedColor by animateColorAsState(
             if (useStrokeStyle) inactiveBackgroundColor ?: AxTileDefaults.backgroundColor()
             else colors.background,
@@ -565,7 +569,20 @@ object AxTileColorsDefaults {
         iconOnly: Boolean,
         useDualTargetStyle: Boolean = false,
         inactiveBackgroundColor: Color? = null,
+        iconOnlyActiveColor: Boolean = false,
     ): TileColors {
+        if (iconOnlyActiveColor && !iconOnly) {
+            val colors =
+                when (uiState.state) {
+                    STATE_ACTIVE -> activeDualTargetTileColors()
+                    STATE_INACTIVE ->
+                        inactiveTileColors().copy(
+                            iconBackground = LocalAndroidColorScheme.current.surfaceEffect2
+                        )
+                    else -> unavailableTileColors()
+                }
+            return colors.copy(background = inactiveBackgroundColor ?: backgroundTileColors())
+        }
         return when (uiState.state) {
             STATE_ACTIVE ->
                 if (useDualTargetStyle && uiState.handlesSecondaryClick && !iconOnly) {

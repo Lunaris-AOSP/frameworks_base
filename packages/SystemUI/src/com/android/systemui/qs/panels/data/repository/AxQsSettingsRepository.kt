@@ -253,6 +253,7 @@ constructor(
     val sliderStrokeWidth: StateFlow<Int> =
         strokeWidthSetting(SLIDER_STROKE_WIDTH, LunarisQsStrokeWidths.DEFAULT_SLIDER)
     val cosTileBackground: StateFlow<Boolean> = boolSetting(COS_TILE_BACKGROUND, false)
+    val iconOnlyActiveColor: StateFlow<Boolean> = boolSetting(ICON_ONLY_ACTIVE_COLOR, false)
 
     val fullColorDualTargetTiles: StateFlow<Boolean> =
         userRepository.selectedUserInfo
@@ -581,6 +582,9 @@ constructor(
         putInt(SLIDER_STROKE_WIDTH, width.coerceIn(LunarisQsStrokeWidths.RANGE))
 
     fun setCosTileBackground(enabled: Boolean) = putInt(COS_TILE_BACKGROUND, enabled.toSetting())
+
+    fun setIconOnlyActiveColor(enabled: Boolean) =
+        putInt(ICON_ONLY_ACTIVE_COLOR, enabled.toSetting())
 
     fun setFullColorDualTargetTiles(enabled: Boolean) {
         val userId = userRepository.getSelectedUserInfo().id
@@ -1055,6 +1059,7 @@ constructor(
         private const val SLIDER_STROKE_STYLE = "ax_qs_slider_stroke_style"
         private const val SLIDER_STROKE_WIDTH = "ax_qs_slider_stroke_width"
         private const val COS_TILE_BACKGROUND = QsCosTileBackground.SETTING
+        private const val ICON_ONLY_ACTIVE_COLOR = "ax_qs_icon_only_active_color"
         private const val GRADIENT_ENABLED = "ax_qs_gradient_enabled"
         private const val GRADIENT_SLIDER_ONLY = "ax_qs_gradient_slider_only"
         private const val GRADIENT_COLOR_MODE = "ax_qs_gradient_color_mode"

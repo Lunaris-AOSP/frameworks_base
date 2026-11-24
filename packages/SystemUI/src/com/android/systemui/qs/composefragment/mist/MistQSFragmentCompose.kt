@@ -204,6 +204,7 @@ import com.android.systemui.qs.panels.ui.compose.LocalAxQsTileStyle
 import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsBluetoothTileStyle
 import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsCosTileBackground
 import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsGradientSettings
+import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsIconOnlyActiveColor
 import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsSliderStrokeStyle
 import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsSliderStrokeWidth
 import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsTileStrokeStyle
@@ -442,6 +443,8 @@ constructor(
                         LocalLunarisQsSliderStrokeStyle provides axQsViewModel.sliderStrokeStyle,
                         LocalLunarisQsSliderStrokeWidth provides axQsViewModel.sliderStrokeWidth.dp,
                         LocalLunarisQsCosTileBackground provides axQsViewModel.cosTileBackground,
+                        LocalLunarisQsIconOnlyActiveColor provides
+                            axQsViewModel.iconOnlyActiveColor,
                         LocalShowQsSliderPercentage provides axQsViewModel.showSliderPercentage,
                         LocalRingerSliderViewModel provides ringerSliderViewModel,
                         LocalLunarisFlashlightSliderViewModel provides flashlightSliderViewModel,

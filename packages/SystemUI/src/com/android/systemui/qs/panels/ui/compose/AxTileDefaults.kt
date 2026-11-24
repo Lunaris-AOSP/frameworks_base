@@ -192,6 +192,7 @@ fun AxLargeTileContent(
     deviceArtwork: Drawable? = null,
     centeredDeviceArtwork: Boolean = false,
 ) {
+    val iconOnlyActiveColor = usesIconOnlyActiveColor(span)
     if (centeredDeviceArtwork && span.columns == 2 && span.rows == 2) {
         AxCenteredDeviceTileContent(
             label = label,
@@ -205,6 +206,7 @@ fun AxLargeTileContent(
             toggleClick = toggleClick,
             toggleInteractionSource = toggleInteractionSource,
             onLongClick = onLongClick,
+            iconOnlyActiveColor = iconOnlyActiveColor,
             modifier = modifier,
         )
         return
@@ -314,12 +316,18 @@ fun AxLargeTileContent(
                 toggleInteractionSource = toggleInteractionSource,
                 onLongClick = onLongClick,
                 deviceArtwork = deviceArtwork,
+                iconOnlyActiveColor = iconOnlyActiveColor,
                 modifier = Modifier.size(CommonTileDefaults.ToggleTargetSize),
             )
             if (showDialogIndicator || sideDrawable != null) {
+                val indicatorColor by
+                    animateColorAsState(
+                        if (iconOnlyActiveColor) colors.label else colors.icon,
+                        label = "AxLargeTileIndicatorColor",
+                    )
                 val indicatorModifier =
                     Modifier.size(32.dp * scale)
-                        .background(colors.icon.copy(alpha = ICON_CHIP_ALPHA), CircleShape)
+                        .background(indicatorColor.copy(alpha = ICON_CHIP_ALPHA), CircleShape)
                         .padding(8.dp * scale)
                 if (sideDrawable != null) {
                     Image(
@@ -331,7 +339,7 @@ fun AxLargeTileContent(
                     MaterialIcon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                         contentDescription = null,
-                        tint = colors.icon,
+                        tint = indicatorColor,
                         modifier = indicatorModifier,
                     )
                 }
@@ -365,6 +373,7 @@ private fun AxCenteredDeviceTileContent(
     toggleClick: (() -> Unit)?,
     toggleInteractionSource: MutableInteractionSource?,
     onLongClick: (() -> Unit)?,
+    iconOnlyActiveColor: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val scale = LocalTileScale.current
@@ -395,6 +404,13 @@ private fun AxCenteredDeviceTileContent(
                 },
             contentAlignment = Alignment.Center,
         ) {
+            Box(
+                Modifier.size(64.dp * scale)
+                    .lunarisQsAnimatedIconBackground(
+                        color = if (iconOnlyActiveColor) colors.iconBackground else Color.Transparent,
+                        brush = colors.iconBackgroundGradient.takeIf { iconOnlyActiveColor },
+                    )
+            )
             if (deviceArtwork != null) {
                 Image(
                     painter = rememberDrawablePainter(deviceArtwork),
@@ -451,34 +467,36 @@ private fun AxLargeTileIcon(
     toggleInteractionSource: MutableInteractionSource?,
     onLongClick: (() -> Unit)?,
     deviceArtwork: Drawable?,
+    iconOnlyActiveColor: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val longPressLabel = longPressLabelSettings().takeIf { onLongClick != null }
     val focusBorderColor = MaterialTheme.colorScheme.secondary
-    val chipColor by
-        animateColorAsState(
-            targetValue =
-                if (deviceArtwork != null) {
-                    Color.White
-                } else if (colors.iconBackground == Color.Transparent) {
-                    colors.icon.copy(alpha = ICON_CHIP_ALPHA)
-                } else {
-                    colors.iconBackground
-                },
-            label = "AxLargeTileIconBackground",
-        )
+    val chipColor =
+        if (deviceArtwork != null && !iconOnlyActiveColor) {
+            Color.White
+        } else if (colors.iconBackground == Color.Transparent) {
+            colors.icon.copy(alpha = ICON_CHIP_ALPHA)
+        } else {
+            colors.iconBackground
+        }
     Box(
         modifier =
-            modifier.background(chipColor, CircleShape).thenIf(toggleClick != null) {
-                Modifier.borderOnFocus(color = focusBorderColor, CircleShape.topEnd)
-                    .combinedClickable(
-                        interactionSource = toggleInteractionSource,
-                        onClick = toggleClick!!,
-                        onLongClick = onLongClick,
-                        onLongClickLabel = longPressLabel,
-                        hapticFeedbackEnabled = false,
-                    )
-            },
+            modifier
+                .lunarisQsAnimatedIconBackground(
+                    color = chipColor,
+                    brush = colors.iconBackgroundGradient.takeIf { iconOnlyActiveColor },
+                )
+                .thenIf(toggleClick != null) {
+                    Modifier.borderOnFocus(color = focusBorderColor, CircleShape.topEnd)
+                        .combinedClickable(
+                            interactionSource = toggleInteractionSource,
+                            onClick = toggleClick!!,
+                            onLongClick = onLongClick,
+                            onLongClickLabel = longPressLabel,
+                            hapticFeedbackEnabled = false,
+                        )
+                },
         contentAlignment = Alignment.Center,
     ) {
         if (deviceArtwork != null) {

@@ -551,6 +551,12 @@ constructor(
             initialValue = repository.cosTileBackground.value,
             source = repository.cosTileBackground,
         )
+    val iconOnlyActiveColor by
+        hydrator.hydratedStateOf(
+            traceName = "iconOnlyActiveColor",
+            initialValue = repository.iconOnlyActiveColor.value,
+            source = repository.iconOnlyActiveColor,
+        )
     val spacing by
         hydrator.hydratedStateOf(
             traceName = "spacing",
@@ -863,6 +869,9 @@ constructor(
     fun setSliderStrokeWidth(width: Int) = repository.setSliderStrokeWidth(width)
 
     fun setCosTileBackground(enabled: Boolean) = repository.setCosTileBackground(enabled)
+
+    fun setIconOnlyActiveColor(enabled: Boolean) =
+        repository.setIconOnlyActiveColor(enabled)
 
     fun setFullColorDualTargetTiles(enabled: Boolean) =
         repository.setFullColorDualTargetTiles(enabled)

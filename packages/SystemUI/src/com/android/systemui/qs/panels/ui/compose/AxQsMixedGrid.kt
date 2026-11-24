@@ -360,6 +360,8 @@ internal fun ContentScope.AxQsMixedGrid(
                         AxTileColorsDefaults.getColorForState(
                                 uiState = state.toUiState(LocalResources.current),
                                 iconOnly = false,
+                                iconOnlyActiveColor =
+                                    LocalLunarisQsIconOnlyActiveColor.current,
                             )
                             .label
                     },
