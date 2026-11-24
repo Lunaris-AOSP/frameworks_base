@@ -25,6 +25,9 @@ data class ClockElement(
     val x: Float = 0.5f,
     val y: Float = 0.2f,
     val size: Int = 84,
+    val stretchX: Int = 100,
+    val stretchY: Int = 100,
+    val stretchFromTop: Boolean = true,
     val font: String = "sans-serif",
     val weight: Int = 400,
     val italic: Boolean = false,
@@ -106,6 +109,7 @@ data class ClockElement(
     fun toJson() = JSONObject()
         .put("id", id).put("kind", kind.name).put("text", text).put("format", format)
         .put("x", x.toDouble()).put("y", y.toDouble()).put("size", size).put("font", font)
+        .put("stretchX", stretchX).put("stretchY", stretchY).put("stretchFromTop", stretchFromTop)
         .put("weight", weight).put("italic", italic).put("letterSpacing", letterSpacing)
         .put("rotation", rotation).put("color", color ?: JSONObject.NULL).put("opacity", opacity)
         .put("visible", visible)
@@ -129,6 +133,8 @@ data class ClockElement(
     companion object {
         const val MIN_TEXT_SIZE = 8
         const val MAX_TEXT_SIZE = 400
+        const val MIN_TEXT_STRETCH = 25
+        const val MAX_TEXT_STRETCH = 400
         const val MIN_POSITION = -4f
         const val MAX_POSITION = 4f
 
@@ -167,6 +173,9 @@ data class ClockElement(
                 x = number("x", d.x, MIN_POSITION, MAX_POSITION),
                 y = number("y", d.y, MIN_POSITION, MAX_POSITION),
                 size = j.optInt("size", d.size).coerceIn(MIN_TEXT_SIZE, MAX_TEXT_SIZE),
+                stretchX = j.optInt("stretchX", d.stretchX).coerceIn(MIN_TEXT_STRETCH, MAX_TEXT_STRETCH),
+                stretchY = j.optInt("stretchY", d.stretchY).coerceIn(MIN_TEXT_STRETCH, MAX_TEXT_STRETCH),
+                stretchFromTop = j.optBoolean("stretchFromTop", d.stretchFromTop),
                 font = j.optString("font", d.font).take(100),
                 weight = j.optInt("weight", 400).coerceIn(100, 900),
                 italic = j.optBoolean("italic"), letterSpacing = j.optInt("letterSpacing").coerceIn(-10, 50),

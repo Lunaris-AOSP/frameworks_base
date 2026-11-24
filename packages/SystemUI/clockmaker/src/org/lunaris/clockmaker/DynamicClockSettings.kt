@@ -13,6 +13,7 @@ import java.util.zip.GZIPOutputStream
 object DynamicClockSettings {
     const val ENABLED = "lock_screen_dynamic_clock_enabled"
     const val LAYOUTS = "lock_screen_dynamic_clock_layouts"
+    const val HOME_SMALL = "lock_screen_home_clock_use_small"
     const val SMALL = "small"
     const val LARGE = "large"
     const val ACTION = "org.lunaris.lockstyles.action.DYNAMIC_CLOCK"

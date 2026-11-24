@@ -60,6 +60,7 @@ import com.android.systemui.shared.system.TaskStackChangeListeners
 import com.android.systemui.statusbar.policy.KeyguardStateController
 import com.android.systemui.util.InteractionBoost
 import org.lunaris.clockmaker.ClockViewTransform
+import org.lunaris.clockmaker.DynamicClockSettings
 import java.lang.ref.WeakReference
 import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
@@ -95,7 +96,10 @@ class HomeClockProvider : ContentProvider() {
     override fun onCreate(): Boolean {
         val context = context ?: return false
         providerContext = context
-        for (key in arrayOf(ENABLED_SETTING, ClockStyle.CLOCK_STYLE_KEY)) {
+        for (key in arrayOf(ENABLED_SETTING, ClockStyle.CLOCK_STYLE_KEY, DynamicClockSettings.HOME_SMALL,
+            DynamicClockSettings.ENABLED, DynamicClockSettings.LAYOUTS, ClockStyle.HOME_CLOCK_SIZE_KEY,
+            ClockStyle.HOME_CLOCK_MARGIN_TOP_KEY, ClockStyle.HOME_CLOCK_MARGIN_START_KEY,
+            Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_FACE, Settings.Secure.LOCKSCREEN_USE_DOUBLE_LINE_CLOCK)) {
             context.contentResolver.registerContentObserver(
                 Settings.Secure.getUriFor(key), false, settingsObserver, UserHandle.USER_ALL,
             )
@@ -251,6 +255,8 @@ class HomeClockProvider : ContentProvider() {
     private class ClockSnapshot(
         val view: WeakReference<ClockStyle>,
         val bounds: RectF,
+        val layoutBounds: RectF?,
+        val morph: ClockStyle.HomeClockMorph?,
         val global: Matrix,
         val animationMatrix: Matrix?,
         val alpha: Float,
@@ -300,13 +306,17 @@ class HomeClockProvider : ContentProvider() {
                 alpha: Float = clock.alpha): ClockSnapshot? {
                 val bounds = clock.clockBounds() ?: return null
                 bounds.offset(screenX.toFloat(), screenY.toFloat())
+                val layoutBounds = clock.clockLayoutBounds()?.apply {
+                    offset(screenX.toFloat(), screenY.toFloat())
+                }
                 val global = Matrix()
                 if (!ClockViewTransform.toGlobal(clock, global)) return null
                 global.apply {
                     postTranslate(screenX.toFloat(), screenY.toFloat())
                 }
                 val animation = clock.animationMatrix?.let(::Matrix)
-                return ClockSnapshot(WeakReference(clock), bounds, global, animation, alpha,
+                return ClockSnapshot(WeakReference(clock), bounds, layoutBounds, clock.captureHomeClockMorph(),
+                    global, animation, alpha,
                     screenX, screenY)
             }
         }
@@ -321,14 +331,16 @@ class HomeClockProvider : ContentProvider() {
         private val transform = Matrix()
         private val appliedMatrix = Matrix()
 
-        fun apply(bounds: RectF, alpha: Float): Boolean {
+        fun apply(bounds: RectF, alpha: Float, useLayoutBounds: Boolean = false): Boolean {
             val view = snapshot.view.get()?.takeIf { it.isAttachedToWindow } ?: return false
             if (!view.matrix.invert(inverseLocal)) return false
             if (!ClockViewTransform.toGlobal(view, parent, view)) return false
             parent.postTranslate(snapshot.screenX.toFloat(), snapshot.screenY.toFloat())
             parent.preConcat(inverseLocal)
             if (!parent.invert(inverseParent)) return false
-            if (view.clockBounds(snapshot.global, contentBounds) == null) return false
+            val content = if (useLayoutBounds) view.clockLayoutBounds(snapshot.global, contentBounds)
+                else view.clockBounds(snapshot.global, contentBounds)
+            if (content == null) return false
             transform.setRectToRect(contentBounds, bounds, Matrix.ScaleToFit.FILL)
             transform.preConcat(snapshot.global)
             transform.preConcat(inverseLocal)
@@ -375,17 +387,24 @@ class HomeClockProvider : ContentProvider() {
     private class ClockTransition(val source: ClockSnapshot, val picture: HomeClockPicture) {
         val from = RectF(source.bounds)
         val bounds = RectF(from)
+        private val layoutFrom = RectF(source.layoutBounds ?: from)
+        val layoutBounds = RectF(layoutFrom)
+        var progress = 0f
+            private set
         var overlay: HomeClockTransitionOverlay? = null
         var home: Session? = null
         var pendingHome: Session? = null
         private var destination: RectF? = null
+        private var layoutDestination: RectF? = null
         val hasDestination: Boolean
             get() = destination != null
         private var destinationFromLauncher = false
         private val anchor = RectF(from)
+        private val layoutAnchor = RectF(layoutBounds)
         private var anchorProgress = 0f
         private var originCaptured = false
         private var overlayTarget: ClockTransform? = null
+        private var overlayMorphs = false
         private var bridgePicture = picture
         private var bridgeIsHome = false
         private val pictures = mutableListOf(picture)
@@ -418,38 +437,49 @@ class HomeClockProvider : ContentProvider() {
             if (!closed && !sourceHidden && request.started) sourceTransform.apply(bounds, 1f)
         }
 
-        fun setDestination(value: RectF, request: UnlockTransition, fromLauncher: Boolean) {
+        fun setDestination(snapshot: ClockSnapshot, request: UnlockTransition, fromLauncher: Boolean) {
             if (destinationFromLauncher && !fromLauncher) return
             destinationFromLauncher = fromLauncher
+            val value = snapshot.bounds
             val previous = destination
             if (previous != null && abs(previous.left - value.left) < 0.5f &&
                 abs(previous.top - value.top) < 0.5f &&
                 abs(previous.right - value.right) < 0.5f &&
-                abs(previous.bottom - value.bottom) < 0.5f) return
+                abs(previous.bottom - value.bottom) < 0.5f && layoutDestination == snapshot.layoutBounds) return
             if (previous != null && request.started) {
                 updateBounds(request.amount)
                 anchor.set(bounds)
+                layoutAnchor.set(layoutBounds)
                 anchorProgress = motion.getInterpolation(request.amount)
             }
             destination = RectF(value)
+            layoutDestination = snapshot.layoutBounds?.let(::RectF)
             updateBounds(request.amount)
         }
 
         fun updateBounds(amount: Float) {
             if (pendingHome != null) return
             val to = destination ?: return
-            val progress = motion.getInterpolation(amount)
-            if (progress < anchorProgress) {
-                anchor.set(from)
-                anchorProgress = 0f
-            }
-            val fraction = if (anchorProgress >= 1f) 1f else
+            progress = motion.getInterpolation(amount)
+            val returningToOrigin = progress < anchorProgress
+            val fraction = if (returningToOrigin) progress / anchorProgress
+                else if (anchorProgress >= 1f) 1f else
                 ((progress - anchorProgress) / (1f - anchorProgress)).coerceIn(0f, 1f)
-            bounds.set(
-                anchor.left + (to.left - anchor.left) * fraction,
-                anchor.top + (to.top - anchor.top) * fraction,
-                anchor.right + (to.right - anchor.right) * fraction,
-                anchor.bottom + (to.bottom - anchor.bottom) * fraction,
+            interpolateBounds(bounds, if (returningToOrigin) from else anchor,
+                if (returningToOrigin) anchor else to, fraction)
+            layoutDestination?.let { target ->
+                interpolateBounds(layoutBounds,
+                    if (returningToOrigin) layoutFrom else layoutAnchor,
+                    if (returningToOrigin) layoutAnchor else target, fraction)
+            }
+        }
+
+        private fun interpolateBounds(result: RectF, start: RectF, end: RectF, fraction: Float) {
+            result.set(
+                start.left + (end.left - start.left) * fraction,
+                start.top + (end.top - start.top) * fraction,
+                start.right + (end.right - start.right) * fraction,
+                start.bottom + (end.bottom - start.bottom) * fraction,
             )
         }
 
@@ -461,16 +491,20 @@ class HomeClockProvider : ContentProvider() {
             if (overlayTarget == null) {
                 ClockSnapshot.capture(layer.clock, alpha = 1f)?.let {
                     overlayTarget = ClockTransform(it)
-                    setDestination(it.bounds, request, false)
+                    setDestination(it, request, false)
+                    overlayMorphs = source.layoutBounds != null && it.layoutBounds != null &&
+                        source.morph?.let(layer.clock::prepareHomeClockTransition) == true
                 }
             }
-            val appearance = if (overlayTarget == null) 0f else if (bridgeIsHome) 1f else
+            if (overlayMorphs) layer.clock.setHomeClockTransition(progress)
+            val appearance = if (overlayTarget == null) 0f else if (overlayMorphs || bridgeIsHome) 1f else
                 (request.amount / APPEARANCE_HANDOFF).coerceIn(0f, 1f)
             val previousAlpha = layer.pictureAlpha
             val changedBounds = layer.bounds != bounds
             layer.bounds.set(bounds)
             val target = overlayTarget
-            if (target != null && target.apply(bounds, appearance)) {
+            val alpha = if (overlayMorphs) source.alpha + (1f - source.alpha) * progress else appearance
+            if (target != null && target.apply(if (overlayMorphs) layoutBounds else bounds, alpha, overlayMorphs)) {
                 layer.pictureAlpha = 1f - appearance
                 layer.clockPadding = layer.clock.transitionPadding * maxOf(
                     bounds.width() / target.contentBounds.width(),
@@ -502,8 +536,15 @@ class HomeClockProvider : ContentProvider() {
                         if (transition !== request || overlay !== view) false else {
                             if (!originCaptured) {
                                 originCaptured = true
-                                if (!request.started) from.set(start)
+                                if (!request.started) {
+                                    from.set(start)
+                                    source.view.get()?.clockLayoutBounds()?.let {
+                                        layoutFrom.set(it)
+                                        layoutBounds.set(it)
+                                    }
+                                }
                                 anchor.set(start)
+                                layoutAnchor.set(layoutBounds)
                                 anchorProgress = motion.getInterpolation(request.amount)
                                 bounds.set(start)
                             }
@@ -580,26 +621,48 @@ class HomeClockProvider : ContentProvider() {
         }
 
         fun closeOverlay() {
+            overlay?.clock?.resetHomeClockTransition()
             overlay?.close()
             overlay = null
             overlayTarget?.restore()
             overlayTarget = null
+            overlayMorphs = false
         }
 
-        fun close(animateSourceBlur: Boolean = false) {
+        fun close(animateSourceBlur: Boolean = false, restoreSourceOnDraw: Boolean = false) {
             if (closed) return
             closed = true
-            closeOverlay()
             sourceTree?.takeIf { it.isAlive }?.removeOnPreDrawListener(sourcePreDraw)
             sourceTree = null
             sourceTransform.restore()
-            if (sourceHidden) source.view.get()?.alpha = source.alpha
-            source.view.get()?.restoreGlassBlur(animateSourceBlur)
+            val view = source.view.get()
+            if (sourceHidden) view?.alpha = source.alpha
+            view?.restoreGlassBlur(animateSourceBlur)
             sourceHidden = false
-            pictures.forEach { it.bitmap.recycle() }
-            pictures.clear()
             pendingHome = null
             home = null
+            val layer = overlay
+            val target = overlayTarget
+            overlay = null
+            overlayTarget = null
+            overlayMorphs = false
+            var released = false
+            lateinit var release: Runnable
+            release = Runnable {
+                if (!released) {
+                    released = true
+                    main.removeCallbacks(release)
+                    layer?.close()
+                    target?.restore()
+                    pictures.forEach { it.bitmap.recycle() }
+                    pictures.clear()
+                }
+            }
+            if (restoreSourceOnDraw && layer?.ready == true && view?.isShown == true &&
+                layer.hideOnDraw(view, release)) {
+                main.postDelayed(release, 250L)
+                view.invalidate()
+            } else release.run()
         }
     }
 
@@ -619,6 +682,7 @@ class HomeClockProvider : ContentProvider() {
         private val clockAlpha = clock.alpha
         private var request: UnlockTransition? = null
         private var target: ClockTransform? = null
+        private var morphs = false
         private var attached = false
         private var closed = false
         private var interactive = true
@@ -700,11 +764,17 @@ class HomeClockProvider : ContentProvider() {
                 clock.alpha = 0f
                 ClockSnapshot.capture(clock, viewport.x, viewport.y, clockAlpha)?.let {
                     target = ClockTransform(it)
-                    movement.setDestination(it.bounds, current, true)
+                    movement.setDestination(it, current, true)
+                    morphs = movement.source.layoutBounds != null && it.layoutBounds != null &&
+                        movement.source.morph?.let(clock::prepareHomeClockTransition) == true
                 }
             }
+            if (morphs) clock.setHomeClockTransition(movement.progress)
             val visible = movement.home === this || movement.pendingHome === this
-            target?.apply(movement.bounds, if (visible) 1f else 0f)
+            val alpha = if (visible) {
+                if (morphs) movement.source.alpha + (1f - movement.source.alpha) * movement.progress else 1f
+            } else 0f
+            target?.apply(if (morphs) movement.layoutBounds else movement.bounds, alpha, morphs)
             if (attached && interactive && contentVisible && shadeAlpha > 0f &&
                 current.started && current.keyguardGone &&
                 current.timing?.unlocked != false &&
@@ -719,7 +789,8 @@ class HomeClockProvider : ContentProvider() {
             val layer = movement.overlay ?: return
             movement.pendingHome = this
             movement.updateOverlay(current)
-            if (target?.apply(movement.bounds, 1f) != true) {
+            val alpha = if (morphs) movement.source.alpha + (1f - movement.source.alpha) * movement.progress else 1f
+            if (target?.apply(if (morphs) movement.layoutBounds else movement.bounds, alpha, morphs) != true) {
                 movement.pendingHome = null
                 return
             }
@@ -743,6 +814,8 @@ class HomeClockProvider : ContentProvider() {
             ClockSnapshot.capture(clock, viewport.x, viewport.y, clockAlpha)?.capturePicture()
 
         fun resetTransition(animateBlur: Boolean = false) {
+            clock.resetHomeClockTransition()
+            morphs = false
             target?.restore()
             target = null
             request = null
@@ -839,11 +912,14 @@ class HomeClockProvider : ContentProvider() {
                 Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME),
                 PackageManager.MATCH_DEFAULT_ONLY,
             )?.activityInfo
+            val clockEnabled = Settings.Secure.getIntForUser(
+                userContext.contentResolver, ClockStyle.CLOCK_STYLE_KEY, 0, user,
+            ) > 0 || Settings.Secure.getIntForUser(
+                userContext.contentResolver, DynamicClockSettings.ENABLED, 0, user,
+            ) != 0
             home?.packageName == LAUNCHER_PACKAGE && Settings.Secure.getIntForUser(
                 userContext.contentResolver, ENABLED_SETTING, 0, user,
-            ) != 0 && Settings.Secure.getIntForUser(
-                userContext.contentResolver, ClockStyle.CLOCK_STYLE_KEY, 0, user,
-            ) > 0
+            ) != 0 && clockEnabled
         }.getOrDefault(false)
 
         private fun isHomeUnderneath(context: Context): Boolean = runCatching {
@@ -879,7 +955,9 @@ class HomeClockProvider : ContentProvider() {
             val restoreBlur = current?.let { it.keyguardGone && it.amount >= 1f } == true
             sessions.toList().forEach { it.resetTransition(restoreBlur) }
             val restoreSourceBlur = current?.let { it.started && !it.keyguardGone } == true
-            current?.clocks?.values?.forEach { it.close(restoreSourceBlur) }
+            current?.let { request ->
+                request.clocks.values.forEach { it.close(restoreSourceBlur, !request.keyguardGone) }
+            }
         }
 
         private fun syncUnlock(request: UnlockTransition) {
@@ -941,7 +1019,7 @@ class HomeClockProvider : ContentProvider() {
         private fun startPlayback(request: UnlockTransition) {
             val timing = request.timing ?: return
             if (transition !== request || animator != null ||
-                request.clocks.values.any { !it.hasDestination }) return
+                request.clocks.values.any { !it.hasDestination || it.overlay?.ready != true && it.home == null }) return
             val to = if (timing.unlocked) 1f else 0f
             if (request.started && request.amount == to) {
                 syncUnlock(request)

@@ -38,8 +38,11 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.abs
 import kotlin.math.ceil
+import kotlin.math.cos
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 object ClockFonts {
     val uri: Uri = Uri.parse("content://org.lunaris.lockstyles.clockfonts/fonts")
@@ -118,6 +121,8 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
     var appearance = ClockDesignAppearance()
         private set
     private var aodProgress = 0f
+    private var layoutTarget: ClockDesign? = null
+    private var layoutFraction = 0f
     var retainAnimationBounds = false
         set(value) {
             if (field == value) return
@@ -226,6 +231,8 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
     }
 
     fun setDesign(value: ClockDesign) {
+        layoutTarget = null
+        layoutFraction = 0f
         val rebuild = childCount != value.elements.size ||
             design.elements.map { it.id to it.kind } != value.elements.map { it.id to it.kind }
         design = value
@@ -248,6 +255,25 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
         updateQuickLook()
         refreshTime(forceAlignment = true)
         scheduleTick()
+    }
+
+    fun setLayoutTransition(target: ClockDesign?, fraction: Float) {
+        if (!fraction.isFinite()) return
+        val next = if (target === layoutTarget) target
+            else target?.takeIf { ClockDesignTransition.canMorphLayouts(design, it) }
+        val progress = ClockElementAnimation.progress(fraction)
+        if (layoutTarget == next && layoutFraction == progress) return
+        layoutTarget = next
+        layoutFraction = progress
+        applyElements(updateFonts = false)
+        updateQuickLook()
+    }
+
+    private fun elementFrame(element: ClockElement, index: Int): ClockElementFrame {
+        val target = layoutTarget?.elements?.getOrNull(index)
+        return if (target != null && renderProgress == 0f)
+            ClockElementAnimation.layoutFrame(element, target, layoutFraction, appearance.color)
+        else ClockElementAnimation.frame(element, renderProgress, appearance.color)
     }
 
     fun setAppearance(value: ClockDesignAppearance) {
@@ -319,7 +345,7 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
         glass.blurAmount = minOf(1f - progress, glassBlurAmount)
         design.elements.forEachIndexed { index, element ->
             val view = getChildAt(index)
-            val frame = ClockElementAnimation.frame(element, progress, appearance.color)
+            val frame = elementFrame(element, index)
             view.visibility = if (frame.visibility > 0f &&
                 (element.kind != ClockElementKind.WEATHER || appearance.weather)) View.VISIBLE else View.INVISIBLE
             view.alpha = frame.alpha
@@ -330,6 +356,8 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
                 return@forEachIndexed
             }
             view as TextView
+            view.scaleX = frame.stretchX
+            view.scaleY = frame.stretchY
             view.letterSpacing = frame.letterSpacing
             view.setTextColor(frame.color)
             (view as? ClockQuickLookView)?.setAodProgress(progress)
@@ -422,7 +450,7 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
         var bottom = 1f
         design.elements.forEachIndexed { index, element ->
             val child = getChildAt(index)
-            val frame = ClockElementAnimation.frame(element, renderProgress)
+            val frame = elementFrame(element, index)
             if (child is TextView) {
                 child.setTextSize(TypedValue.COMPLEX_UNIT_PX, frame.size * w / 360f)
                 child.measure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.AT_MOST),
@@ -432,7 +460,18 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
                     MeasureSpec.makeMeasureSpec((frame.imageHeight * w / 360f).roundToInt(), MeasureSpec.EXACTLY))
             }
             if (element.kind != ClockElementKind.WEATHER || appearance.weather) {
-                val extent = (frame.y * w + child.measuredHeight / 2f + w * 0.04f).coerceAtLeast(0f)
+                val aod = element.aodStyle
+                val target = layoutTarget?.elements?.getOrNull(index)
+                val stretched = child is TextView && (element.stretchX != 100 || element.stretchY != 100 ||
+                    aod.stretchX != 100 || aod.stretchY != 100 ||
+                    target != null && (target.stretchX != 100 || target.stretchY != 100))
+                val offset = if (stretched) frame.textOffsetY(child.measuredHeight) else 0f
+                val halfHeight = if (stretched) {
+                    val radians = Math.toRadians(frame.rotation.toDouble())
+                    (abs(sin(radians)) * child.measuredWidth * frame.stretchX +
+                        abs(cos(radians)) * child.measuredHeight * frame.stretchY).toFloat() / 2f
+                } else child.measuredHeight / 2f
+                val extent = (frame.y * w + offset + halfHeight + w * 0.04f).coerceAtLeast(0f)
                 val visibility = if (retainAnimationBounds && frame.visibility > 0f) 1f else frame.visibility
                 bottom = maxOf(bottom, extent * visibility)
             }
@@ -449,9 +488,11 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
         val progress = renderProgress
         design.elements.forEachIndexed { index, element ->
             val child = getChildAt(index)
-            val frame = ClockElementAnimation.frame(element, progress, appearance.color)
-            val targetX = frame.x * width - child.measuredWidth / 2f
-            val targetY = frame.y * width - child.measuredHeight / 2f
+            val frame = elementFrame(element, index)
+            val targetX = frame.x * width - child.measuredWidth / 2f +
+                (if (child is TextView) frame.textOffsetX(child.measuredHeight) else 0f)
+            val targetY = frame.y * width - child.measuredHeight / 2f +
+                (if (child is TextView) frame.textOffsetY(child.measuredHeight) else 0f)
             val x = targetX.roundToInt()
             val y = targetY.roundToInt()
             child.layout(x, y, x + child.measuredWidth, y + child.measuredHeight)
@@ -518,7 +559,7 @@ class ClockDesignView @JvmOverloads constructor(context: Context, attrs: Attribu
                 touchId = design.elements[hit].id
                 selectedId = touchId
                 onSelect?.invoke(touchId!!)
-                val frame = ClockElementAnimation.frame(design.elements[hit], renderProgress)
+                val frame = elementFrame(design.elements[hit], hit)
                 grabX = event.x - frame.x * width
                 grabY = event.y - frame.y * width
                 parent?.requestDisallowInterceptTouchEvent(true)

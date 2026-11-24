@@ -6,6 +6,18 @@
 package org.lunaris.clockmaker
 
 object ClockDesignTransition {
+    fun canMorphLayouts(source: ClockDesign, target: ClockDesign): Boolean =
+        source.elements.isNotEmpty() && source.elements.size == target.elements.size &&
+            source.elements.none { it.kind == ClockElementKind.IMAGE || it.kind == ClockElementKind.QUICKLOOK } &&
+            source.elements.zip(target.elements).all { (from, to) ->
+                from == to.copy(x = from.x, y = from.y, size = from.size,
+                    stretchX = from.stretchX, stretchY = from.stretchY, stretchFromTop = from.stretchFromTop,
+                    letterSpacing = from.letterSpacing, rotation = from.rotation,
+                    opacity = from.opacity, visible = from.visible,
+                    imageWidth = from.imageWidth, imageHeight = from.imageHeight,
+                    aod = from.aod, aodLayoutConfigured = from.aodLayoutConfigured)
+            }
+
     fun fromAod(source: ClockDesign, target: ClockDesign): ClockDesign =
         fromAod(source, target, mergeElements = true)
 
@@ -47,6 +59,8 @@ object ClockDesignTransition {
                 } else {
                     aodElements[match.id] = match.copy(
                         id = outgoingId(match), x = element.x, y = element.y, size = element.size,
+                        stretchX = element.stretchX, stretchY = element.stretchY,
+                        stretchFromTop = element.stretchFromTop,
                         letterSpacing = element.letterSpacing, rotation = element.rotation,
                         imageWidth = element.imageWidth, imageHeight = element.imageHeight,
                         visible = false,

@@ -12,6 +12,9 @@ data class ClockElementAodStyle(
     val x: Float = 0.5f,
     val y: Float = 0.2f,
     val size: Int = 84,
+    val stretchX: Int = 100,
+    val stretchY: Int = 100,
+    val stretchFromTop: Boolean = true,
     val letterSpacing: Int = 0,
     val rotation: Int = 0,
     val opacity: Int = 100,
@@ -33,6 +36,7 @@ data class ClockElementAodStyle(
 ) {
     fun applyTo(element: ClockElement): ClockElement = element.copy(
         x = x, y = y, size = size, letterSpacing = letterSpacing, rotation = rotation,
+        stretchX = stretchX, stretchY = stretchY, stretchFromTop = stretchFromTop,
         opacity = opacity, visible = visible, color = Color.WHITE,
         gradient = false, shadow = false, glass = false,
         lockscreenOutline = outline, lockscreenOutlineWidth = outlineWidth,
@@ -44,6 +48,7 @@ data class ClockElementAodStyle(
 
     fun toJson() = JSONObject()
         .put("x", x.toDouble()).put("y", y.toDouble()).put("size", size)
+        .put("stretchX", stretchX).put("stretchY", stretchY).put("stretchFromTop", stretchFromTop)
         .put("letterSpacing", letterSpacing).put("rotation", rotation)
         .put("opacity", opacity).put("visible", visible)
         .put("outline", outline).put("outlineWidth", outlineWidth).put("animateOutline", animateOutline)
@@ -56,6 +61,7 @@ data class ClockElementAodStyle(
     companion object {
         fun fromElement(element: ClockElement) = ClockElementAodStyle(
             x = element.x, y = element.y, size = element.size,
+            stretchX = element.stretchX, stretchY = element.stretchY, stretchFromTop = element.stretchFromTop,
             letterSpacing = element.letterSpacing, rotation = element.rotation,
             opacity = element.opacity, visible = element.visible,
             outline = element.lockscreenOutline, outlineWidth = element.lockscreenOutlineWidth,
@@ -79,6 +85,11 @@ data class ClockElementAodStyle(
                 x = number("x", fallback.x, ClockElement.MIN_POSITION, ClockElement.MAX_POSITION),
                 y = number("y", fallback.y, ClockElement.MIN_POSITION, ClockElement.MAX_POSITION),
                 size = j.optInt("size", fallback.size).coerceIn(ClockElement.MIN_TEXT_SIZE, ClockElement.MAX_TEXT_SIZE),
+                stretchX = j.optInt("stretchX", fallback.stretchX)
+                    .coerceIn(ClockElement.MIN_TEXT_STRETCH, ClockElement.MAX_TEXT_STRETCH),
+                stretchY = j.optInt("stretchY", fallback.stretchY)
+                    .coerceIn(ClockElement.MIN_TEXT_STRETCH, ClockElement.MAX_TEXT_STRETCH),
+                stretchFromTop = j.optBoolean("stretchFromTop", fallback.stretchFromTop),
                 letterSpacing = j.optInt("letterSpacing", fallback.letterSpacing).coerceIn(-10, 50),
                 rotation = j.optInt("rotation", fallback.rotation).coerceIn(-180, 180),
                 opacity = j.optInt("opacity", fallback.opacity).coerceIn(0, 100),

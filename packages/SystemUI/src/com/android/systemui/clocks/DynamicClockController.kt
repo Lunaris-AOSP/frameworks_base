@@ -39,6 +39,8 @@ internal class DynamicClockController(private val host: ClockStyle) {
     private var nativeClockHeight = 0
     private var managesNativeClock = false
     private var rendersAodTransition = false
+    private var canMorphLayouts = false
+    private var rendersLayoutTransition = false
     private val nativeClockAlphas = linkedMapOf<View, Float>()
     private var attached = false
     private var userId = -1
@@ -51,6 +53,7 @@ internal class DynamicClockController(private val host: ClockStyle) {
 
     val activeClock: ClockStyle?
         get() = if (!enabled || dozeAmount >= 1f) null
+            else if (rendersLayoutTransition) largeClock
             else if (faceFraction >= 0.5f) smallClock else largeClock
 
     private val faceFraction: Float
@@ -129,6 +132,9 @@ internal class DynamicClockController(private val host: ClockStyle) {
             selectionPending = true
             animateSelection = false
         }
+        canMorphLayouts = enabled && largeClock?.let { large ->
+            smallClock?.let(large::canMorphLayoutWith)
+        } == true
         applyFrame()
         host.updateClockVisibility()
         host.requestLayout()
@@ -223,6 +229,7 @@ internal class DynamicClockController(private val host: ClockStyle) {
         if (!enabled) return null
         val small = smallClock ?: return null
         val large = largeClock ?: return null
+        if (rendersLayoutTransition) return large.layoutClockHeight
         val dynamicHeight = lerp(large.layoutClockHeight.toFloat(), small.layoutClockHeight.toFloat(), layoutFraction)
         if (rendersAodTransition && dozeAmount < 1f) return dynamicHeight.roundToInt().coerceAtLeast(0)
         val aodHeight = if (host.baseClockStyle == 0) nativeClockHeight else baselineHeight
@@ -290,16 +297,21 @@ internal class DynamicClockController(private val host: ClockStyle) {
     private fun applyFrame() {
         if (!enabled) {
             rendersAodTransition = false
+            rendersLayoutTransition = false
             host.setBaselineClockAlpha(1f)
             host.configureClockParallax(null, null, 0f, false)
             return
         }
         val small = smallClock
         val large = largeClock
-        val fraction = faceFraction
-        val smallAodTransition = small?.setLayoutClockAodProgress(host,
+        rendersLayoutTransition = canMorphLayouts && dozeAmount == 0f &&
+            smallFraction > 0f && smallFraction < 1f && small != null &&
+            large?.setLayoutClockTransition(small, smallFraction) == true
+        if (!rendersLayoutTransition) large?.setLayoutClockTransition(null, 0f)
+        val fraction = if (rendersLayoutTransition) smallFraction else faceFraction
+        val smallAodTransition = !rendersLayoutTransition && small?.setLayoutClockAodProgress(host,
             if (fraction > 0f) dozeAmount else 0f) == true
-        val largeAodTransition = large?.setLayoutClockAodProgress(host,
+        val largeAodTransition = !rendersLayoutTransition && large?.setLayoutClockAodProgress(host,
             if (fraction < 1f) dozeAmount else 0f) == true
         rendersAodTransition = when (fraction) {
             0f -> largeAodTransition
@@ -310,24 +322,24 @@ internal class DynamicClockController(private val host: ClockStyle) {
         host.setBaselineClockAlpha(if (rendersAodTransition && dozeAmount < 1f) 0f else dozeAmount)
         val distance = (small?.layoutClockCenterY ?: 0f) - (large?.layoutClockCenterY ?: 0f)
         small?.apply {
-            alpha = fraction * dynamicAlpha
+            alpha = if (rendersLayoutTransition) 0f else fraction * dynamicAlpha
             visibility = if (alpha > 0f) View.VISIBLE else View.INVISIBLE
-            scaleX = lerp(0.92f, 1f, fraction)
+            scaleX = if (rendersLayoutTransition) 1f else lerp(0.92f, 1f, fraction)
             scaleY = scaleX
             pivotX = width / 2f
             pivotY = layoutClockCenterY
-            translationY = -distance * (1f - smallFraction) * 0.15f
+            translationY = if (rendersLayoutTransition) 0f else -distance * (1f - smallFraction) * 0.15f
             setLayoutClockInteractive(fraction >= 0.5f && dozeAmount == 0f && switchingAllowed &&
                 host.isClockSwitchingVisible && animator == null)
         }
         large?.apply {
-            alpha = (1f - fraction) * dynamicAlpha
+            alpha = if (rendersLayoutTransition) 1f else (1f - fraction) * dynamicAlpha
             visibility = if (alpha > 0f) View.VISIBLE else View.INVISIBLE
-            scaleX = lerp(1f, 0.92f, fraction)
+            scaleX = if (rendersLayoutTransition) 1f else lerp(1f, 0.92f, fraction)
             scaleY = scaleX
             pivotX = width / 2f
             pivotY = layoutClockCenterY
-            translationY = distance * smallFraction * 0.15f
+            translationY = if (rendersLayoutTransition) 0f else distance * smallFraction * 0.15f
             setLayoutClockInteractive(fraction < 0.5f && dozeAmount == 0f && switchingAllowed &&
                 host.isClockSwitchingVisible && animator == null)
         }
