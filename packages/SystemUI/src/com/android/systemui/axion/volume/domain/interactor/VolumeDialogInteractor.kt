@@ -117,20 +117,8 @@ class AxionVolumeDialogInteractorImpl @Inject constructor(
             }
         }
 
-    private fun volumeStreamFlow(streamType: Int): Flow<AxionVolumeStreamModel> = combine(
-        volumeRepository.volumeFlow(streamType),
-        volumeRepository.muteFlow(streamType),
-        volumeRepository.routedToBluetoothFlow(streamType),
-    ) { level, isMuted, routedToBluetooth ->
-        AxionVolumeStreamModel(
-            streamType = streamType,
-            level = level,
-            isMuted = isMuted,
-            maxLevel = volumeRepository.getMaxVolume(streamType),
-            minLevel = volumeRepository.getMinVolume(streamType),
-            isRoutedToBluetooth = routedToBluetooth,
-        )
-    }
+    private fun volumeStreamFlow(streamType: Int): Flow<AxionVolumeStreamModel> =
+        volumeRepository.volumeStreamFlow(streamType)
 
     override fun setVolume(streamType: Int, level: Float) {
         volumeRepository.setVolume(streamType, level)

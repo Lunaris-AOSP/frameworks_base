@@ -325,6 +325,7 @@
     <protected-broadcast android:name="android.media.RINGER_MODE_CHANGED" />
     <protected-broadcast android:name="android.media.VIBRATE_SETTING_CHANGED" />
     <protected-broadcast android:name="android.media.VOLUME_CHANGED_ACTION" />
+    <protected-broadcast android:name="android.media.MAX_CHANGED_ACTION" />
     <protected-broadcast android:name="android.media.MASTER_VOLUME_CHANGED_ACTION" />
     <protected-broadcast android:name="android.media.MASTER_MUTE_CHANGED_ACTION" />
     <protected-broadcast android:name="android.media.MASTER_MONO_CHANGED_ACTION" />

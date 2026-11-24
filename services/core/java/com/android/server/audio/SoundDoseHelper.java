@@ -330,8 +330,7 @@ public class SoundDoseHelper {
         // The default safe volume index read here will be replaced by the actual value when
         // the mcc is read by onConfigureSafeMedia()
         // For now we use the same index for RS2 initial warning with CSD
-        mSafeMediaVolumeIndex = mContext.getResources().getInteger(
-                R.integer.config_safe_media_volume_index) * 10;
+        mSafeMediaVolumeIndex = getConfiguredSafeMediaVolumeIndex();
 
         mSoundDose.set(AudioSystem.getSoundDoseInterface(mSoundDoseCallback));
         // Csd will be initially disabled until the mcc is read in onConfigureSafeMedia()
@@ -765,6 +764,30 @@ public class SoundDoseHelper {
                 time);
     }
 
+    private int getConfiguredSafeMediaVolumeIndex() {
+        final int index = mContext.getResources().getInteger(
+                R.integer.config_safe_media_volume_index) * 10;
+        final int min = MIN_STREAM_VOLUME[AudioSystem.STREAM_MUSIC] * 10;
+        final int max = MAX_STREAM_VOLUME[AudioSystem.STREAM_MUSIC] * 10;
+        final int defaultMax = mAudioService.getDefaultMaxMusicVolume() * 10;
+        return defaultMax > min
+                ? Math.max(min, Math.min(max,
+                        min + Math.round((index - min) * (float) (max - min) / (defaultMax - min))))
+                : index;
+    }
+
+    void onMusicVolumeRangeChanged() {
+        synchronized (mSafeMediaVolumeStateLock) {
+            mSafeMediaVolumeIndex = getConfiguredSafeMediaVolumeIndex();
+            for (int i = 0; i < mSafeMediaVolumeDevices.size(); i++) {
+                mSafeMediaVolumeDevices.setValueAt(i, SAFE_MEDIA_VOLUME_UNINITIALIZED);
+            }
+            initSafeMediaVolumeIndex();
+            mPendingVolumeCommand = null;
+        }
+        enforceSafeMediaVolumeIfActive(TAG);
+    }
+
     /*package*/ void initSafeMediaVolumeIndex() {
         for (int i = 0; i < mSafeMediaVolumeDevices.size(); ++i)  {
             int deviceType = mSafeMediaVolumeDevices.keyAt(i);
@@ -998,8 +1021,7 @@ public class SoundDoseHelper {
         synchronized (mSafeMediaVolumeStateLock) {
             int mcc = mContext.getResources().getConfiguration().mcc;
             if ((mMcc != mcc) || ((mMcc == 0) && force)) {
-                mSafeMediaVolumeIndex = mContext.getResources().getInteger(
-                        com.android.internal.R.integer.config_safe_media_volume_index) * 10;
+                mSafeMediaVolumeIndex = getConfiguredSafeMediaVolumeIndex();
                 initSafeMediaVolumeIndex();
 
                 updateSafeMediaVolume_l(caller);

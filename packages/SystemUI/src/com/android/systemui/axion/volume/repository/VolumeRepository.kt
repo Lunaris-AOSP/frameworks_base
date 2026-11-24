@@ -33,6 +33,7 @@ import android.os.UserHandle
 import android.telephony.TelephonyManager
 import lineageos.providers.LineageSettings
 import com.android.systemui.axion.volume.domain.model.AxionAppVolumeModel
+import com.android.systemui.axion.volume.domain.model.AxionVolumeStreamModel
 import com.android.systemui.axion.volume.dagger.AxionVolumeScope
 import com.android.systemui.broadcast.BroadcastDispatcher
 import com.android.systemui.dagger.qualifiers.Application
@@ -40,12 +41,14 @@ import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.plugins.VolumeDialogController
 import com.android.systemui.volume.VolumeDialogControllerImpl
 import javax.inject.Inject
+import kotlin.math.roundToInt
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.*
 import com.android.systemui.statusbar.policy.bluetooth.data.repository.BluetoothRepository
 
 interface AxionVolumeRepository {
+    fun volumeStreamFlow(streamType: Int): Flow<AxionVolumeStreamModel>
     fun volumeFlow(streamType: Int): Flow<Float>
     fun muteFlow(streamType: Int): Flow<Boolean>
     fun routedToBluetoothFlow(streamType: Int): Flow<Boolean>
@@ -135,25 +138,30 @@ class AxionVolumeRepositoryImpl @Inject constructor(
         initialValue = null
     )
 
-    override fun volumeFlow(streamType: Int): Flow<Float> = controllerState
+    override fun volumeStreamFlow(streamType: Int): Flow<AxionVolumeStreamModel> = controllerState
         .filterNotNull()
-        .map { state ->
-            val ss = state.states.get(streamType)
-            if (ss != null) {
-                val max = ss.levelMax
-                val min = ss.levelMin
-                val current = ss.level
-                if (max > min) {
-                    (current - min).toFloat() / (max - min)
+        .mapNotNull { state -> state.states.get(streamType) }
+        .map { stream ->
+            AxionVolumeStreamModel(
+                streamType = streamType,
+                level = if (stream.levelMax > stream.levelMin) {
+                    ((stream.level - stream.levelMin).toFloat() /
+                        (stream.levelMax - stream.levelMin)).coerceIn(0f, 1f)
                 } else {
                     0f
-                }
-            } else {
-                0f
-            }
+                },
+                isMuted = stream.muted,
+                maxLevel = stream.levelMax,
+                minLevel = stream.levelMin,
+                isRoutedToBluetooth = stream.routedToBluetooth,
+            )
         }
         .distinctUntilChanged()
         .flowOn(backgroundDispatcher)
+
+    override fun volumeFlow(streamType: Int): Flow<Float> = volumeStreamFlow(streamType)
+        .map { it.level }
+        .distinctUntilChanged()
 
     override fun muteFlow(streamType: Int): Flow<Boolean> = controllerState
         .filterNotNull()
@@ -363,7 +371,7 @@ class AxionVolumeRepositoryImpl @Inject constructor(
     override fun setVolume(streamType: Int, level: Float, flags: Int) {
         val max = getMaxVolume(streamType)
         val min = getMinVolume(streamType)
-        val volume = (min + (level * (max - min))).toInt().coerceIn(min, max)
+        val volume = (min + (level * (max - min))).roundToInt().coerceIn(min, max)
         
         if (streamType >= VolumeDialogControllerImpl.DYNAMIC_STREAM_REMOTE_START_INDEX ||
             streamType == VolumeDialogControllerImpl.DYNAMIC_STREAM_BROADCAST) {
