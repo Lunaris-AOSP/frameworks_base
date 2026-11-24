@@ -7431,6 +7431,12 @@ public final class Settings {
         public static final String LOCKSCREEN_BATTERY_INFO = "lockscreen_battery_info";
 
         /**
+         * Always use dark status bar icons on the lock screen. Default is 0 (disabled).
+         * @hide
+         */
+        public static final String LOCKSCREEN_DARK_STATUS_BAR = "lockscreen_dark_status_bar";
+
+        /**
          * Whether to enable the ripple animation on fingerprint unlock
          * @hide
          */

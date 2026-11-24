@@ -128,6 +128,8 @@ public class KeyguardStatusBarViewController extends ViewController<KeyguardStat
             "system:" + Settings.System.STATUSBAR_EXTRA_PADDING_TOP;
     private static final String STATUSBAR_EXTRA_PADDING_END =
             "system:" + Settings.System.STATUSBAR_EXTRA_PADDING_END;
+    private static final String LOCKSCREEN_DARK_STATUS_BAR =
+            "system:" + Settings.System.LOCKSCREEN_DARK_STATUS_BAR;
 
     private static final String TAG = "KeyguardStatusBarViewController";
     private static final AnimationProperties KEYGUARD_HUN_PROPERTIES =
@@ -544,6 +546,7 @@ public class KeyguardStatusBarViewController extends ViewController<KeyguardStat
         mTunerService.addTunable(this, STATUSBAR_EXTRA_PADDING_START);
         mTunerService.addTunable(this, STATUSBAR_EXTRA_PADDING_TOP);
         mTunerService.addTunable(this, STATUSBAR_EXTRA_PADDING_END);
+        mTunerService.addTunable(this, LOCKSCREEN_DARK_STATUS_BAR);
         updateUserSwitcher();
         onThemeChanged();
         if (!Flags.glanceableHubV2()) {
@@ -632,6 +635,9 @@ public class KeyguardStatusBarViewController extends ViewController<KeyguardStat
     @Override
     public void onTuningChanged(String key, String newValue) {
         switch (key) {
+            case LOCKSCREEN_DARK_STATUS_BAR:
+                onThemeChanged();
+                break;
             case STATUSBAR_EXTRA_PADDING_START:
             case STATUSBAR_EXTRA_PADDING_TOP:
             case STATUSBAR_EXTRA_PADDING_END:

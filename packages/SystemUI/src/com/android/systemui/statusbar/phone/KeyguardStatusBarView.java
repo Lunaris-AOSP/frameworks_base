@@ -504,8 +504,11 @@ public class KeyguardStatusBarView extends RelativeLayout {
     }
 
     private void updateIconsAndTextColors(TintedIconManager iconManager) {
-        @ColorInt int textColor = Utils.getColorAttrDefaultColor(mContext,
-                R.attr.wallpaperTextColor);
+        boolean useDarkStatusBar = Settings.System.getIntForUser(
+                mContext.getContentResolver(), Settings.System.LOCKSCREEN_DARK_STATUS_BAR,
+                0, UserHandle.USER_CURRENT) == 1;
+        @ColorInt int textColor = useDarkStatusBar ? Color.BLACK
+                : Utils.getColorAttrDefaultColor(mContext, R.attr.wallpaperTextColor);
         float luminance = Color.luminance(textColor);
         
         // Check if accent color tinting is enabled
@@ -538,9 +541,9 @@ public class KeyguardStatusBarView extends RelativeLayout {
 
         TextView userSwitcherName = mUserSwitcherContainer.findViewById(R.id.current_user_name);
         if (userSwitcherName != null) {
-            userSwitcherName.setTextColor(Utils.getColorStateListDefaultColor(
-                    mContext,
-                    com.android.settingslib.R.color.light_mode_icon_color_single_tone));
+            userSwitcherName.setTextColor(useDarkStatusBar ? iconColor
+                    : Utils.getColorStateListDefaultColor(mContext,
+                            com.android.settingslib.R.color.light_mode_icon_color_single_tone));
         }
 
         if (iconManager != null) {
