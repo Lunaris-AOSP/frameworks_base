@@ -24,6 +24,7 @@ import com.android.systemui.keyguard.shared.model.KeyguardState.AOD
 import com.android.systemui.keyguard.shared.model.KeyguardState.GONE
 import com.android.systemui.keyguard.ui.KeyguardTransitionAnimationFlow
 import com.android.systemui.keyguard.ui.transitions.DeviceEntryIconTransition
+import com.android.systemui.power.domain.interactor.PowerInteractor
 import com.android.systemui.scene.shared.flag.SceneContainerFlag
 import com.android.systemui.scene.shared.model.Scenes
 import javax.inject.Inject
@@ -34,7 +35,10 @@ import kotlinx.coroutines.flow.Flow
 @SysUISingleton
 class AodToGoneTransitionViewModel
 @Inject
-constructor(animationFlow: KeyguardTransitionAnimationFlow) : DeviceEntryIconTransition {
+constructor(
+    animationFlow: KeyguardTransitionAnimationFlow,
+    private val powerInteractor: PowerInteractor,
+) : DeviceEntryIconTransition {
 
     private val transitionAnimation =
         animationFlow
@@ -52,7 +56,9 @@ constructor(animationFlow: KeyguardTransitionAnimationFlow) : DeviceEntryIconTra
         var startAlpha = 1f
         return transitionAnimation.sharedFlow(
             duration = 200.milliseconds,
-            onStart = { startAlpha = viewState.alpha() },
+            onStart = {
+                startAlpha = if (powerInteractor.isScreenOffBeforeWake) 0f else viewState.alpha()
+            },
             onStep = { MathUtils.lerp(startAlpha, 0f, it) },
             onFinish = { 0f },
         )
@@ -71,7 +77,10 @@ constructor(animationFlow: KeyguardTransitionAnimationFlow) : DeviceEntryIconTra
             var startAlpha = 1f
             return transitionAnimation.sharedFlow(
                 duration = 200.milliseconds,
-                onStart = { startAlpha = viewState.alpha() },
+                onStart = {
+                    startAlpha =
+                        if (powerInteractor.isScreenOffBeforeWake) 0f else viewState.alpha()
+                },
                 onStep = { startAlpha },
                 onFinish = { 1f },
             )

@@ -19,9 +19,11 @@ package com.android.systemui.keyguard.ui.viewmodel
 import com.android.systemui.keyguard.ui.keyguardTransitionAnimationFlow
 import com.android.systemui.kosmos.Kosmos
 import com.android.systemui.kosmos.Kosmos.Fixture
+import com.android.systemui.power.domain.interactor.powerInteractor
 
 val Kosmos.aodToGoneTransitionViewModel by Fixture {
     AodToGoneTransitionViewModel(
         animationFlow = keyguardTransitionAnimationFlow,
+        powerInteractor = powerInteractor,
     )
 }
