@@ -71,8 +71,10 @@ internal class DynamicClockController(private val host: ClockStyle) {
         get() = enabled && dozeAmount > 0f && dozeAmount < 1f ||
             animator != null || selectionPending && animateSelection && enabled && switchingAllowed &&
             dozeAmount == 0f && smallFraction != if (hasNotifications) 1f else 0f
+    val layoutClocks: List<ClockStyle>
+        get() = listOfNotNull(smallClock, largeClock)
     val visibleClocks: List<ClockStyle>
-        get() = if (enabled) listOfNotNull(smallClock, largeClock).filter { it.alpha > 0f }
+        get() = if (enabled) layoutClocks.filter { it.alpha > 0f }
             else emptyList()
     val isBaselineVisible: Boolean
         get() = !enabled || dozeAmount == 1f || !rendersAodTransition && dozeAmount > 0f

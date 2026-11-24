@@ -515,6 +515,7 @@ class ClockStyle @JvmOverloads constructor(
         clock.clipToPadding = false
         clock.textGlass.wallpaperFlags = WallpaperManager.FLAG_LOCK
         clock.configureLayout(profile)
+        clock.setGlassTransitionAmount(glassTransitionAmount)
         addView(clock, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         return clock
     }
@@ -1399,7 +1400,7 @@ class ClockStyle @JvmOverloads constructor(
             glassTransitionAmount = amount
             updateGlassAmount()
         }
-        dynamicClockController?.visibleClocks?.forEach { it.setGlassTransitionAmount(value) }
+        dynamicClockController?.layoutClocks?.forEach { it.setGlassTransitionAmount(amount) }
     }
 
     internal fun restoreGlassBlur(animate: Boolean) {
@@ -1419,7 +1420,7 @@ class ClockStyle @JvmOverloads constructor(
             if (glassAnimator === animation) {
                 glassTransitionAmount = it.animatedValue as Float
                 updateGlassAmount()
-                dynamicClockController?.visibleClocks?.forEach { clock ->
+                dynamicClockController?.layoutClocks?.forEach { clock ->
                     clock.setGlassTransitionAmount(glassTransitionAmount)
                 }
             }

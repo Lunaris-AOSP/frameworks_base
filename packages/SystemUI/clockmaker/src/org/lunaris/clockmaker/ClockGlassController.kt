@@ -275,7 +275,11 @@ class ClockGlassController(private val host: View) :
             blurAmount = value
             shader?.setFloatUniform("blurAmount", value)
             outlineShader?.setFloatUniform("blurAmount", value)
-            if (visible && applied && view.visibility == View.VISIBLE && view.alpha > 0f) view.invalidate()
+            if (visible && applied && view.visibility == View.VISIBLE && view.alpha > 0f) {
+                view.invalidate()
+            } else {
+                dirty = true
+            }
         }
 
         companion object {

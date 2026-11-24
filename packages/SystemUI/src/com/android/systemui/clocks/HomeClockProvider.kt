@@ -433,8 +433,9 @@ class HomeClockProvider : ContentProvider() {
         }
 
         fun updateSource(request: UnlockTransition) {
+            if (closed || transition !== request) return
             source.view.get()?.setGlassTransitionAmount(unlockBlurAmount(request))
-            if (!closed && !sourceHidden && request.started) sourceTransform.apply(bounds, 1f)
+            if (!sourceHidden && request.started) sourceTransform.apply(bounds, 1f)
         }
 
         fun setDestination(snapshot: ClockSnapshot, request: UnlockTransition, fromLauncher: Boolean) {
@@ -977,8 +978,13 @@ class HomeClockProvider : ContentProvider() {
         }
 
         private fun unlockBlurAmount(request: UnlockTransition): Float {
-            val progress = (request.amount / APPEARANCE_HANDOFF).coerceIn(0f, 1f)
-            return 1f - progress * progress * (3f - 2f * progress)
+            val amount = request.amount.coerceIn(0f, 1f)
+            val progress = if (amount <= APPEARANCE_HANDOFF) {
+                1f - amount / APPEARANCE_HANDOFF
+            } else {
+                (amount - APPEARANCE_HANDOFF) / (1f - APPEARANCE_HANDOFF)
+            }
+            return progress * progress * (3f - 2f * progress)
         }
 
         private fun getShadeAlpha(displayId: Int): Float =
