@@ -1374,7 +1374,7 @@ constructor(
             AxCompactQuickSettingsHeader(
                 viewModel = headerViewModel,
                 isTransitioning = isTransitioning,
-                expansionProgress = viewModel.expansionState.progress,
+                expansionProgress = { viewModel.expansionState.progress },
                 sidePadding = axQsViewModel.spacing.sidePadding.dp,
                 modifier = modifier.padding(top = quickSettingsHeaderTopPadding()),
             )

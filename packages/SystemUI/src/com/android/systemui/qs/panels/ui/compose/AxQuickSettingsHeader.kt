@@ -70,6 +70,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
@@ -77,6 +78,7 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.PlatformTextStyle
@@ -85,6 +87,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -130,20 +133,20 @@ private val AxQuickSettingsHeaderContent = SceneKey("AxQuickSettingsHeader")
 fun AxCompactQuickSettingsHeader(
     viewModel: ShadeHeaderViewModel,
     isTransitioning: Boolean,
-    expansionProgress: Float,
+    expansionProgress: () -> Float,
     sidePadding: Dp,
     modifier: Modifier = Modifier,
 ) {
-    val progress = expansionProgress.coerceIn(0f, 1f)
     val textColor = ShadeHeader.Colors.textColor
-    val dateAlpha =
-        if (progress < 0.5f) (1f - progress / 0.3f).coerceIn(0f, 1f)
-        else ((progress - 0.7f) / 0.3f).coerceIn(0f, 1f)
+    val collapsedHeight = AxCompactHeaderDimensions.height(0f)
+    val expandedHeight = AxCompactHeaderDimensions.height(1f)
+    val collapsedClockScale = with(LocalDensity.current) { 14.sp.toPx() / 24.sp.toPx() }
+    val clockTransformOrigin =
+        TransformOrigin(if (LocalLayoutDirection.current == LayoutDirection.Ltr) 0f else 1f, 0f)
     Layout(
         modifier =
             modifier
                 .fillMaxWidth()
-                .height(AxCompactHeaderDimensions.height(progress))
                 .windowInsetsPadding(axCompactQsHorizontalInsets())
                 .padding(horizontal = sidePadding)
                 .sysuiResTag(ShadeHeader.TestTags.Root),
@@ -153,15 +156,29 @@ fun AxCompactQuickSettingsHeader(
                     AxHeaderClock(
                         onClick = viewModel::onClockClicked,
                         textColor = textColor,
-                        textSize = 14f + 10f * progress,
-                        modifier = Modifier.miuiQsHeaderMotion(),
+                        textSize = 24f,
+                        modifier =
+                            Modifier.miuiQsHeaderMotion().graphicsLayer {
+                                val progress = expansionProgress().coerceIn(0f, 1f)
+                                val scale =
+                                    collapsedClockScale + (1f - collapsedClockScale) * progress
+                                scaleX = scale
+                                scaleY = scale
+                                transformOrigin = clockTransformOrigin
+                            },
                     )
                 },
                 {
                     AxQuickSettingsDate(
                         viewModel = viewModel,
                         textSize = 14f,
-                        modifier = Modifier.graphicsLayer { alpha = dateAlpha },
+                        modifier =
+                            Modifier.graphicsLayer {
+                                val progress = expansionProgress().coerceIn(0f, 1f)
+                                alpha =
+                                    if (progress < 0.5f) (1f - progress / 0.3f).coerceIn(0f, 1f)
+                                    else ((progress - 0.7f) / 0.3f).coerceIn(0f, 1f)
+                            },
                     )
                 },
                 {
@@ -197,25 +214,39 @@ fun AxCompactQuickSettingsHeader(
                 },
             ),
     ) { measurables, constraints ->
+        val progress = expansionProgress().coerceIn(0f, 1f)
+        val clockScale = collapsedClockScale + (1f - collapsedClockScale) * progress
         val width = constraints.maxWidth
-        val height = constraints.maxHeight
+        val headerHeight =
+            (collapsedHeight + (expandedHeight - collapsedHeight) * progress)
+                .toPx()
+                .coerceIn(constraints.minHeight.toFloat(), constraints.maxHeight.toFloat())
+        val height = constraints.constrainHeight(headerHeight.roundToInt())
         val gap = 8.dp.roundToPx()
-        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val loose =
+            constraints.copy(
+                minWidth = 0,
+                minHeight = 0,
+                maxHeight = minOf(expandedHeight.roundToPx(), constraints.maxHeight),
+            )
         val icons = measurables[2].single().measure(loose.copy(maxWidth = width / 2))
         val startWidth = (width - icons.width - gap).coerceAtLeast(0)
         val clock = measurables[0].single().measure(loose.copy(maxWidth = startWidth))
-        val dateX = if (progress < 0.5f) clock.width + gap else 0
+        val dateX = if (progress < 0.5f) (clock.width * clockScale).roundToInt() + gap else 0
         val date =
-            measurables[1].single().measure(
-                loose.copy(maxWidth = (startWidth - dateX).coerceAtLeast(0))
-            )
+            measurables[1]
+                .single()
+                .measure(loose.copy(maxWidth = (startWidth - dateX).coerceAtLeast(0)))
         val bottomRowHeight = maxOf(date.height, icons.height)
         val bottomRowY = height - bottomRowHeight
         fun rowY(childHeight: Int): Int =
             (((height - childHeight) / 2f) * (1f - progress) +
-                (bottomRowY + (bottomRowHeight - childHeight) / 2f) * progress).roundToInt()
+                    (bottomRowY + (bottomRowHeight - childHeight) / 2f) * progress)
+                .roundToInt()
         layout(width, height) {
-            clock.placeRelative(0, (((height - clock.height) / 2f) * (1f - progress)).roundToInt())
+            clock.placeRelativeWithLayer(0, 0) {
+                translationY = ((headerHeight - clock.height * clockScale) / 2f) * (1f - progress)
+            }
             date.placeRelative(
                 dateX,
                 if (progress < 0.5f) (height - date.height) / 2
