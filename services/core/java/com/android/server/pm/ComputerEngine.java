@@ -1762,6 +1762,15 @@ public class ComputerEngine implements Computer {
         return Optional.of(fakeSignature);
     }
 
+    private boolean isPlatformSignedPackage(AndroidPackage p) {
+        if ("android".equals(p.getPackageName())) {
+            return true;
+        }
+        final PackageStateInternal platformPs = mSettings.getPackage("android");
+        return platformPs != null && compareSignatures(platformPs.getSigningDetails(),
+                p.getSigningDetails()) == PackageManager.SIGNATURE_MATCH;
+    }
+
     public final PackageInfo generatePackageInfo(PackageStateInternal ps,
             @PackageManager.PackageInfoFlagsBits long flags, int userId) {
         if (!mUserManager.exists(userId)) return null;
@@ -1842,7 +1851,7 @@ public class ComputerEngine implements Computer {
                 }
             });
 
-            if ("android".equals(p.getPackageName())) {
+            if (ps.isSystem()) {
                 try {
                     PlayIntegritySpoofService pifService = PlayIntegritySpoofService.getInstance();
                     if (pifService.isSpoofSignatureEnabled()) {
@@ -1856,7 +1865,7 @@ public class ComputerEngine implements Computer {
                                 }
                             }
                         }
-                        if (isGms) {
+                        if (isGms && isPlatformSignedPackage(p)) {
                             Signature pifSignature = new Signature(pifService.getRomSignatureBytes());
                             packageInfo.signatures = new Signature[]{pifSignature};
                             packageInfo.signingInfo = new SigningInfo(
@@ -1867,7 +1876,8 @@ public class ComputerEngine implements Computer {
                                             null
                                     )
                             );
-                            Slog.d(TAG, "PIF: Spoofed ROM signature for 'android' package to GMS");
+                            Slog.d(TAG, "PIF: Spoofed ROM signature for '"
+                                    + p.getPackageName() + "' package to GMS");
                         }
                     }
                 } catch (Exception e) {
