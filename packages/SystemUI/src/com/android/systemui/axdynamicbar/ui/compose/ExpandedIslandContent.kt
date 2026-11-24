@@ -53,6 +53,7 @@ import com.android.systemui.axdynamicbar.shared.IslandActions
 import com.android.systemui.haptics.slider.compose.ui.SliderHapticsViewModel
 import kotlinx.coroutines.delay
 import com.android.systemui.islandevents.model.IslandEvent
+import com.android.systemui.islandevents.shared.CallNotificationInfo
 import com.android.systemui.axdynamicbar.shared.*
 import com.android.systemui.res.R
 
@@ -243,6 +244,7 @@ internal fun BiometricUnlockExpanded(event: IslandEvent.BiometricUnlock) {
 @Composable
 internal fun CallExpanded(event: IslandEvent.Call, interactor: IslandActions) {
     val context = LocalContext.current
+    val callInfo = CallNotificationInfo.from(event.sbn)
     val isIncoming = event.callType.contains("incoming", ignoreCase = true)
     val tone = if (isIncoming) IslandTone.POSITIVE else IslandTone.ACCENT
     val accent = tone.tint
@@ -315,12 +317,18 @@ internal fun CallExpanded(event: IslandEvent.Call, interactor: IslandActions) {
                 horizontalArrangement = Arrangement.spacedBy(SpaceLg),
             ) {
                 event.actions.forEach { action ->
-                    val isDestructive = action.label.toString().lowercase().let {
-                        it.contains("decline") || it.contains("reject") || it.contains("hang up")
-                    }
-                    val isAnswer = action.label.toString().lowercase().let {
-                        it.contains("answer") || it.contains("accept")
-                    }
+                    val intent = action.action.actionIntent
+                    val isDestructive =
+                        (intent != null &&
+                            (intent == callInfo?.declineIntent || intent == callInfo?.hangUpIntent)) ||
+                            action.label.toString().lowercase().let {
+                                it.contains("decline") || it.contains("reject") || it.contains("hang up")
+                            }
+                    val isAnswer =
+                        (intent != null && intent == callInfo?.answerIntent) ||
+                            action.label.toString().lowercase().let {
+                                it.contains("answer") || it.contains("accept")
+                            }
                     val tint = when {
                         isDestructive -> declineTint
                         isAnswer -> answerTint

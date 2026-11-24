@@ -1,6 +1,7 @@
 package com.android.systemui.islandevents.data.source
 
 import android.app.Notification
+import android.app.Person
 import android.content.Context
 import com.android.systemui.res.R
 import android.graphics.Bitmap
@@ -18,6 +19,7 @@ import android.widget.Chronometer
 import android.widget.FrameLayout
 import com.android.systemui.islandevents.model.IslandEvent
 import com.android.systemui.islandevents.model.RecordingState
+import com.android.systemui.islandevents.shared.CallNotificationInfo
 import com.android.systemui.islandevents.shared.isSportsNotification
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.util.ScrimUtils
@@ -246,18 +248,12 @@ constructor(
                     return
                 }
 
-                if (sbn.notification?.category == Notification.CATEGORY_CALL) {
-                    val isCallStyle =
-                        extras.containsKey(Notification.EXTRA_ANSWER_INTENT) ||
-                            extras.containsKey(Notification.EXTRA_DECLINE_INTENT) ||
-                            extras.containsKey(Notification.EXTRA_HANG_UP_INTENT)
-                    if (isCallStyle) {
-                        if ("call" !in disabledTypes) {
-                            handleCallNotification(sbn, extras)
-                            return
-                        }
-                    }
+                val callInfo = CallNotificationInfo.from(sbn)
+                if (callInfo != null && "call" !in disabledTypes) {
+                    handleCallNotification(sbn, extras, callInfo)
+                    return
                 }
+                clearCall(sbn.key)
 
                 val allActions = sbn.notification?.actions ?: emptyArray()
                 val isMedia = sbn.notification?.category == Notification.CATEGORY_TRANSPORT ||
@@ -819,12 +815,22 @@ constructor(
             ""
         }
 
-    private fun handleCallNotification(sbn: StatusBarNotification, extras: Bundle) {
-        val callerName = extras.getString("android.title")
-        val number = extras.getString("android.text")
+    private fun handleCallNotification(
+        sbn: StatusBarNotification,
+        extras: Bundle,
+        callInfo: CallNotificationInfo,
+    ) {
+        val person = extras.getParcelable(Notification.EXTRA_CALL_PERSON, Person::class.java)
+        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
+        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
+        val callerName =
+            if (callInfo.isLegacyTelegram) text?.takeIf { it.isNotBlank() } ?: title
+            else title ?: person?.name?.toString()
+        val number = if (callInfo.isLegacyTelegram) null else text
         val callerPhoto =
             try {
                 sbn.notification?.getLargeIcon()?.loadDrawable(context)
+                    ?: person?.icon?.loadDrawable(context)
             } catch (_: Exception) {
                 null
             }
@@ -838,14 +844,7 @@ constructor(
                     a.title?.let { IslandEvent.NotificationAction(label = it, action = a) }
                 }
 
-        val androidCallType = extras.getInt(
-            Notification.EXTRA_CALL_TYPE,
-            Notification.CallStyle.CALL_TYPE_UNKNOWN,
-        )
-        val callType =
-            if (androidCallType == Notification.CallStyle.CALL_TYPE_INCOMING)
-                "Phone:incoming"
-            else "Phone:active"
+        val callType = if (callInfo.isIncoming) "Phone:incoming" else "Phone:active"
 
         val icon =
             try {

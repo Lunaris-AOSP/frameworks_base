@@ -18,6 +18,7 @@ import com.android.systemui.common.shared.model.ContentDescription
 import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.islandevents.model.IslandEvent
+import com.android.systemui.islandevents.shared.CallNotificationInfo
 import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.NotificationLockscreenUserManager
@@ -398,22 +399,10 @@ constructor(
                                 else -> R.string.dynamic_island_event_call
                             }
                         )
-                    val extras = event.sbn.notification.extras
-                    val answerIntent =
-                        extras.getParcelable(
-                            Notification.EXTRA_ANSWER_INTENT,
-                            PendingIntent::class.java,
-                        )
-                    val declineIntent =
-                        extras.getParcelable(
-                            Notification.EXTRA_DECLINE_INTENT,
-                            PendingIntent::class.java,
-                        )
-                    val hangUpIntent =
-                        extras.getParcelable(
-                            Notification.EXTRA_HANG_UP_INTENT,
-                            PendingIntent::class.java,
-                        )
+                    val callInfo = CallNotificationInfo.from(event.sbn)
+                    val answerIntent = callInfo?.answerIntent
+                    val declineIntent = callInfo?.declineIntent
+                    val hangUpIntent = callInfo?.hangUpIntent
                     event.actions.forEach { item ->
                         val intent = item.action.actionIntent
                         send(intent, item.action.isAuthenticationRequired)?.let { onClick ->
@@ -479,10 +468,7 @@ constructor(
                     (event.callerName
                         ?: event.number
                         ?: context.getString(R.string.dynamic_island_event_call)) to
-                        (event.sbn.notification.extras
-                            .getCharSequence(android.app.Notification.EXTRA_TEXT)
-                            ?.toString()
-                            .orEmpty())
+                        event.number.orEmpty()
                 }
                 is IslandEvent.Notification -> {
                     appName = event.appName

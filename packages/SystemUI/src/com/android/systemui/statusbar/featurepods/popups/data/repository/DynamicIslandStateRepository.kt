@@ -16,11 +16,11 @@
 
 package com.android.systemui.statusbar.featurepods.popups.data.repository
 
-import android.app.Notification
 import android.os.UserHandle
 import android.service.notification.StatusBarNotification
 import android.view.Display
 import com.android.systemui.dagger.SysUISingleton
+import com.android.systemui.islandevents.shared.CallNotificationInfo
 import com.android.systemui.statusbar.NotificationLockscreenUserManager
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -56,11 +56,6 @@ constructor(private val lockscreenUserManager: NotificationLockscreenUserManager
             return false
         }
 
-        val notification = sbn.notification
-        val extras = notification.extras
-        return notification.category == Notification.CATEGORY_CALL &&
-            (extras.containsKey(Notification.EXTRA_ANSWER_INTENT) ||
-                extras.containsKey(Notification.EXTRA_DECLINE_INTENT) ||
-                extras.containsKey(Notification.EXTRA_HANG_UP_INTENT))
+        return CallNotificationInfo.from(sbn) != null
     }
 }
