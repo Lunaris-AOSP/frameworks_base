@@ -48,9 +48,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
@@ -70,7 +67,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
@@ -86,7 +82,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -544,7 +539,11 @@ internal fun AxQsHeaderActions(
             containerColor = AxTileDefaults.backgroundColor(),
             modifier = Modifier.miuiQsHeaderMotion().sysuiResTag("settings_button_container"),
         )
-        AxFooterOverflowMenu(viewModel)
+        FooterIconButton(
+            model = viewModel.powerButtonViewModel,
+            containerColor = AxTileDefaults.backgroundColor(),
+            modifier = Modifier.miuiQsHeaderMotion().sysuiResTag("pm_lite"),
+        )
     }
 }
 
@@ -649,66 +648,6 @@ private fun AxEditButton(viewModel: ToolbarViewModel) {
             modifier = Modifier.size(16.dp),
         )
     }
-}
-
-@Composable
-private fun AxFooterOverflowMenu(viewModel: ToolbarViewModel) {
-    var expanded by remember { mutableStateOf(false) }
-    var expandable by remember { mutableStateOf<SystemUiExpandable?>(null) }
-    val menuColor =
-        AxTileDefaults.backgroundColor().compositeOver(MaterialTheme.colorScheme.surface)
-    Box {
-        AxHeaderButton(
-            onClick = {
-                expandable = it
-                expanded = true
-            },
-            modifier = Modifier.miuiQsHeaderMotion(),
-        ) {
-            Icon(
-                imageVector = Icons.Default.MoreVert,
-                contentDescription = stringResource(R.string.qs_edit_menu_content_description),
-                tint = ShadeHeader.Colors.textColor,
-                modifier = Modifier.size(AxHeaderActionDimensions.IconSize),
-            )
-        }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            offset = DpOffset(0.dp, (-12).dp),
-            shape = RoundedCornerShape(24.dp),
-            containerColor = menuColor,
-            tonalElevation = 0.dp,
-            shadowElevation = 0.dp,
-        ) {
-            AxPowerMenuItem(viewModel.powerButtonViewModel) {
-                val source = expandable ?: return@AxPowerMenuItem
-                expanded = false
-                viewModel.powerButtonViewModel.onClick(source)
-            }
-        }
-    }
-}
-
-@Composable
-private fun AxPowerMenuItem(model: FooterActionsButtonViewModel, onClick: () -> Unit) {
-    DropdownMenuItem(
-        text = {
-            Text(
-                text = stringResource(R.string.accessibility_quick_settings_power_menu),
-                style = MaterialTheme.typography.labelLarge,
-            )
-        },
-        leadingIcon = {
-            SystemUiIcon(
-                icon = model.icon,
-                tint = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.size(20.dp),
-            )
-        },
-        onClick = onClick,
-        modifier = Modifier.heightIn(min = 52.dp),
-    )
 }
 
 @Composable
