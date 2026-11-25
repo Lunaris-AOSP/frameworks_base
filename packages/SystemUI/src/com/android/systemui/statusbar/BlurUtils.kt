@@ -19,6 +19,7 @@ package com.android.systemui.statusbar
 import android.annotation.SuppressLint
 import android.app.ActivityManager
 import android.content.res.Resources
+import android.database.ContentObserver
 import android.gui.EarlyWakeupInfo
 import android.os.Binder
 import android.os.Build
@@ -38,35 +39,65 @@ import androidx.annotation.VisibleForTesting
 import com.android.systemui.Dumpable
 import com.android.systemui.Flags
 import com.android.systemui.dagger.SysUISingleton
+import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.dump.DumpManager
-import com.android.systemui.keyguard.ui.transitions.BlurConfig
 import com.android.systemui.res.R
-import com.android.systemui.util.settings.SettingsProxyExt.observerFlow
+import com.android.systemui.user.data.repository.UserRepository
 import com.android.systemui.util.settings.SecureSettings
 import java.io.PrintWriter
 import javax.inject.Inject
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 
 @SysUISingleton
 open class BlurUtils
 @Inject
 constructor(
     @Main resources: Resources,
-    blurConfig: BlurConfig,
     private val crossWindowBlurListeners: CrossWindowBlurListeners,
     dumpManager: DumpManager,
-    private val secureSettings: SecureSettings,
+    secureSettings: SecureSettings,
+    userRepository: UserRepository,
+    @Background backgroundScope: CoroutineScope,
 ) : Dumpable {
     val minBlurRadius = resources.getDimensionPixelSize(R.dimen.min_window_blur_radius).toFloat()
-    val maxBlurRadius: Float 
-        get() = secureSettings.getFloatForUser("system_blur_radius", 34f, UserHandle.USER_CURRENT)
+    val maxBlurRadiusFlow =
+        userRepository.selectedUserInfo
+            .map { it.id }
+            .distinctUntilChanged()
+            .flatMapLatest { userId ->
+                callbackFlow<Unit> {
+                    val observer = object : ContentObserver(null) {
+                        override fun onChange(selfChange: Boolean) {
+                            trySend(Unit)
+                        }
+                    }
+                    try {
+                        secureSettings.registerContentObserverForUser(
+                            BLUR_RADIUS_SETTING, observer, userId
+                        )
+                        trySend(Unit)
+                        awaitClose()
+                    } finally {
+                        secureSettings.unregisterContentObserverAsync(observer)
+                    }
+                }.map { secureSettings.getFloatForUser(BLUR_RADIUS_SETTING, 34f, userId) }
+            }
+            .stateIn(
+                backgroundScope,
+                SharingStarted.Eagerly,
+                secureSettings.getFloatForUser(BLUR_RADIUS_SETTING, 34f, UserHandle.USER_CURRENT),
+            )
 
-    val maxBlurRadiusFlow: Flow<Float> = secureSettings
-        .observerFlow("system_blur_radius")
-        .onStart { emit(Unit) }
-        .map { maxBlurRadius }
-        .distinctUntilChanged()
+    val maxBlurRadius: Float
+        get() = maxBlurRadiusFlow.value
 
     private var lastAppliedBlur = 0
     private var lastTargetViewRootImpl: ViewRootImpl? = null
@@ -314,6 +345,7 @@ constructor(
 
     companion object {
         const val TRACK_NAME = "BlurUtils"
+        private const val BLUR_RADIUS_SETTING = "system_blur_radius"
         private const val TAG = "BlurUtils"
         private val PREPARE_BLUR_TRACE_NAME = BlurUtils::class.java.name + "::prepareBlur"
         private val APPLY_BLUR_TRACE_NAME = BlurUtils::class.java.name + "::applyBlur"

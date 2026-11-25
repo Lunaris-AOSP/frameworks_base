@@ -42,6 +42,7 @@ final class MiuiNotificationShadeAnimator {
 
     void setExpansion(float expansion, boolean enabled, boolean fromLeft) {
         mExpansion = MiuiQsMotion.clamp(expansion);
+        if (!enabled && !mEnabled) return;
         mEnabled = enabled;
         updateAppearance(fromLeft);
     }
