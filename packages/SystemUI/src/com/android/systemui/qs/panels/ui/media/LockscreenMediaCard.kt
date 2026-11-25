@@ -40,7 +40,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,6 +60,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.axion.blur.AxBlurBackgroundRenderer
 import com.android.axion.blur.AxBlurLifecycle
+import com.android.axion.blur.LocalAxBlurEnabled
 import com.android.axion.blur.model.AxBackdropBlurSettingsSpec
 import com.android.compose.animation.Expandable
 import com.android.compose.animation.rememberExpandableController
@@ -92,13 +95,16 @@ private class LockscreenMediaBlurHost(context: Context) : View(context) {
     private var cornerRadiusPx = 0f
     private var overlayColor = 0
     private var fallbackColor = 0
+    private var surfaceColor = 0
     private var blurEnabled = false
     private var blurFraction = 1f
+    var onSolidSurfaceChanged: (Boolean) -> Unit = {}
 
     fun updateAppearance(
         cornerRadiusPx: Float,
         overlayColor: Int,
         fallbackColor: Int,
+        surfaceColor: Int,
         enabled: Boolean,
         blurFraction: Float,
     ) {
@@ -108,6 +114,7 @@ private class LockscreenMediaBlurHost(context: Context) : View(context) {
         this.cornerRadiusPx = cornerRadiusPx
         this.overlayColor = overlayColor
         this.fallbackColor = fallbackColor
+        this.surfaceColor = surfaceColor
         this.blurEnabled = enabled
         this.blurFraction = clamped
         if (radiusChanged) {
@@ -164,18 +171,20 @@ private class LockscreenMediaBlurHost(context: Context) : View(context) {
         val alphaInt = (blurFraction * 255f).roundToInt()
         val blurActive = blurEnabled && blur.isCrossWindowBlurActive()
         if (!blurActive) {
-            fallbackPaint.color = fallbackColor
+            onSolidSurfaceChanged(true)
+            fallbackPaint.color = surfaceColor
             canvas.drawPath(clipPath, fallbackPaint)
             return
         }
         val drewBlur =
-            if (alphaInt > 1) {
+            alphaInt > 1 &&
                 blur.draw(canvas, bounds, clipPath, cornerRadiusPx, overlayColor, alphaInt)
-            } else {
-                blur.clear()
-                false
-            }
-        if (blurFraction < 1f) {
+        val useSolidSurface = !drewBlur && alphaInt > 1
+        onSolidSurfaceChanged(useSolidSurface)
+        if (useSolidSurface) {
+            fallbackPaint.color = surfaceColor
+            canvas.drawPath(clipPath, fallbackPaint)
+        } else if (blurFraction < 1f) {
             val weight = if (drewBlur) (1f - blurFraction) * 0.72f else 0.72f
             val fallbackAlpha = (AndroidColor.alpha(fallbackColor) * weight).roundToInt()
             if (fallbackAlpha > 0) {
@@ -188,9 +197,6 @@ private class LockscreenMediaBlurHost(context: Context) : View(context) {
                     )
                 canvas.drawPath(clipPath, fallbackPaint)
             }
-        } else if (!drewBlur) {
-            fallbackPaint.color = fallbackColor
-            canvas.drawPath(clipPath, fallbackPaint)
         }
     }
 }
@@ -200,18 +206,22 @@ private fun LockscreenMediaBlurBackground(
     cornerRadius: Dp,
     overlayColor: Int,
     fallbackColor: Int,
+    surfaceColor: Int,
     enabled: Boolean,
     blurFraction: Float,
+    onSolidSurfaceChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val cornerRadiusPx = with(LocalDensity.current) { cornerRadius.toPx() }
     AndroidView(
         factory = { LockscreenMediaBlurHost(it) },
         update = { view ->
+            view.onSolidSurfaceChanged = onSolidSurfaceChanged
             view.updateAppearance(
                 cornerRadiusPx = cornerRadiusPx,
                 overlayColor = overlayColor,
                 fallbackColor = fallbackColor,
+                surfaceColor = surfaceColor,
                 enabled = enabled,
                 blurFraction = blurFraction,
             )
@@ -294,6 +304,9 @@ internal fun LockscreenMediaCard(
                         maxOf(seekBarHeight, timestampHeight) - 20.dp
             }
         AxBlurLifecycle(enabled = blurVisible) {
+            val themeColors = MaterialTheme.colorScheme
+            val blurEnabled = blurVisible && LocalAxBlurEnabled.current
+            var solidSurface by remember(style, blurEnabled) { mutableStateOf(true) }
             val colorOsBlurFraction by
                 AxDynamicBarColorOsController.mediaBlurFractionFlow.collectAsStateWithLifecycle()
             Expandable(
@@ -322,8 +335,10 @@ internal fun LockscreenMediaCard(
                             cornerRadius = cornerRadius,
                             overlayColor = Color.Black.copy(alpha = 0.32f).toArgb(),
                             fallbackColor = background.toArgb(),
-                            enabled = blurVisible,
+                            surfaceColor = themeColors.surface.toArgb(),
+                            enabled = blurEnabled,
                             blurFraction = colorOsBlurFraction,
+                            onSolidSurfaceChanged = { solidSurface = it },
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -358,6 +373,12 @@ internal fun LockscreenMediaCard(
                             },
                             label = "LockscreenMediaStyle",
                         ) { currentStyle ->
+                            val useSurfaceColors =
+                                solidSurface &&
+                                    (currentStyle == LockscreenMediaStyle.ALBUM_ART ||
+                                        currentStyle == LockscreenMediaStyle.COS)
+                            val contentColor =
+                                if (useSurfaceColors) themeColors.onSurface else Color.White
                             when (currentStyle) {
                                 LockscreenMediaStyle.ALBUM_ART ->
                                     LunarisWideMediaPlayer(
@@ -367,8 +388,10 @@ internal fun LockscreenMediaCard(
                                         hasMultipleSessions = hasMultipleSessions,
                                         motionArt = motionArt,
                                         motionArtPlaying = motionArtPlaying,
-                                        foreground = Color.White,
-                                        secondaryForeground = Color.White,
+                                        foreground = contentColor,
+                                        secondaryForeground =
+                                            if (useSurfaceColors) themeColors.onSurfaceVariant
+                                            else contentColor,
                                     )
                                 LockscreenMediaStyle.ONE_UI ->
                                     NotificationMediaContent(
@@ -382,7 +405,19 @@ internal fun LockscreenMediaCard(
                                     CosLockscreenMediaPlayer(
                                         session = session,
                                         viewModel = viewModel,
-                                        colors = colors.copy(primary = Color(0xFF80DEEA)),
+                                        colors =
+                                            if (useSurfaceColors) {
+                                                colors.copy(
+                                                    primary = themeColors.primary,
+                                                    background = themeColors.surface,
+                                                    foreground = contentColor,
+                                                )
+                                            } else {
+                                                colors.copy(primary = Color(0xFF80DEEA))
+                                            },
+                                        subtitleColor =
+                                            if (useSurfaceColors) themeColors.onSurfaceVariant
+                                            else contentColor.copy(alpha = 0.55f),
                                         interactive = interactive,
                                         onOpenApp = { viewModel.openSession(session, expandable) },
                                     )
@@ -400,6 +435,7 @@ private fun CosLockscreenMediaPlayer(
     session: MediaSessionModel,
     viewModel: AxMediaViewModel,
     colors: AxMediaColors,
+    subtitleColor: Color,
     interactive: Boolean,
     onOpenApp: () -> Unit,
 ) {
@@ -446,7 +482,7 @@ private fun CosLockscreenMediaPlayer(
                     )
                     AnimatedMediaText(
                         text = session.subtitle,
-                        color = colors.foreground.copy(alpha = 0.55f),
+                        color = subtitleColor,
                         style =
                             MaterialTheme.typography.bodyMedium.copy(
                                 fontSize = 14.sp,
