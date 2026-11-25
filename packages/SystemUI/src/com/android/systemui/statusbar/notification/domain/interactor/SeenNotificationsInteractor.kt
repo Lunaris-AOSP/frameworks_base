@@ -19,6 +19,7 @@ package com.android.systemui.statusbar.notification.domain.interactor
 import android.os.UserHandle
 import android.provider.Settings
 import android.util.IndentingPrintWriter
+import com.android.systemui.axdynamicbar.domain.AxDynamicBarSettings
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.statusbar.notification.collection.NotificationEntry
@@ -140,16 +141,33 @@ constructor(
                 .observerFlow(
                     UserHandle.USER_ALL,
                     Settings.Secure.LOCK_SCREEN_NOTIFICATION_MINIMALISM,
+                    AxDynamicBarSettings.KEY_KEYGUARD_ENABLED,
+                    AxDynamicBarSettings.KEY_KEYGUARD_COLOROS_STYLE,
                 )
                 // perform a query immediately
                 .onStart { emit(Unit) }
                 // for each change, lookup the new value
                 .map {
-                    secureSettings.getIntForUser(
-                        name = Settings.Secure.LOCK_SCREEN_NOTIFICATION_MINIMALISM,
-                        default = 1,
-                        userHandle = UserHandle.USER_CURRENT,
-                    ) == 1
+                    val forceFullSize =
+                        secureSettings.getIntForUser(
+                            name = AxDynamicBarSettings.KEY_KEYGUARD_ENABLED,
+                            default = 0,
+                            userHandle = UserHandle.USER_CURRENT,
+                        ) == 1 &&
+                            secureSettings.getIntForUser(
+                                name = AxDynamicBarSettings.KEY_KEYGUARD_COLOROS_STYLE,
+                                default = 0,
+                                userHandle = UserHandle.USER_CURRENT,
+                            ) == 1
+                    if (forceFullSize) {
+                        false
+                    } else {
+                        secureSettings.getIntForUser(
+                            name = Settings.Secure.LOCK_SCREEN_NOTIFICATION_MINIMALISM,
+                            default = 1,
+                            userHandle = UserHandle.USER_CURRENT,
+                        ) == 1
+                    }
                 }
                 // don't emit anything if nothing has changed
                 .distinctUntilChanged()

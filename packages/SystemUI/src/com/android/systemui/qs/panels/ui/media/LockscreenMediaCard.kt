@@ -5,6 +5,15 @@
 
 package com.android.systemui.qs.panels.ui.media
 
+import android.content.Context
+import android.graphics.Canvas
+import android.graphics.Color as AndroidColor
+import android.graphics.Paint
+import android.graphics.Path as AndroidPath
+import android.graphics.RectF
+import android.graphics.drawable.Drawable
+import android.view.View
+import android.view.ViewGroup
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -37,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
@@ -44,12 +54,14 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.android.axion.blur.AxBlurBackgroundRenderer
 import com.android.axion.blur.AxBlurLifecycle
-import com.android.axion.blur.axBlurBackground
 import com.android.axion.blur.model.AxBackdropBlurSettingsSpec
 import com.android.compose.animation.Expandable
 import com.android.compose.animation.rememberExpandableController
+import com.android.systemui.axdynamicbar.ui.AxDynamicBarColorOsController
 import com.android.systemui.common.ui.compose.Icon
 import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.media.remedia.domain.model.MediaSessionModel
@@ -62,6 +74,7 @@ import com.android.systemui.qs.panels.ui.compose.AxNotificationMediaCornerRadius
 import com.android.systemui.qs.panels.ui.compose.AxTileDefaults
 import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.res.R
+import kotlin.math.roundToInt
 
 internal fun lockscreenMediaCornerRadius(style: LockscreenMediaStyle): Dp =
     when (style) {
@@ -69,6 +82,143 @@ internal fun lockscreenMediaCornerRadius(style: LockscreenMediaStyle): Dp =
         LockscreenMediaStyle.ONE_UI -> AxNotificationMediaCornerRadius
         else -> 32.dp
     }
+
+private class LockscreenMediaBlurHost(context: Context) : View(context) {
+    private val blur =
+        AxBlurBackgroundRenderer(this, AxBackdropBlurSettingsSpec.system(), false)
+    private val bounds = RectF()
+    private val clipPath = AndroidPath()
+    private val fallbackPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private var cornerRadiusPx = 0f
+    private var overlayColor = 0
+    private var fallbackColor = 0
+    private var blurEnabled = false
+    private var blurFraction = 1f
+
+    fun updateAppearance(
+        cornerRadiusPx: Float,
+        overlayColor: Int,
+        fallbackColor: Int,
+        enabled: Boolean,
+        blurFraction: Float,
+    ) {
+        val clamped = blurFraction.coerceIn(0f, 1f)
+        val alphaInt = (clamped * 255f).roundToInt()
+        val radiusChanged = this.cornerRadiusPx != cornerRadiusPx
+        this.cornerRadiusPx = cornerRadiusPx
+        this.overlayColor = overlayColor
+        this.fallbackColor = fallbackColor
+        this.blurEnabled = enabled
+        this.blurFraction = clamped
+        if (radiusChanged) {
+            rebuildPath()
+        }
+        blur.setSurfaceAlpha(alphaInt)
+        blur.setEnabled(enabled)
+        if (!enabled || alphaInt <= 1) {
+            blur.clear()
+        }
+        invalidate()
+    }
+
+    private fun rebuildPath() {
+        clipPath.reset()
+        if (!bounds.isEmpty) {
+            clipPath.addRoundRect(
+                bounds,
+                cornerRadiusPx,
+                cornerRadiusPx,
+                AndroidPath.Direction.CW,
+            )
+        }
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        bounds.set(0f, 0f, w.toFloat(), h.toFloat())
+        rebuildPath()
+        if (w <= 0 || h <= 0) blur.clear()
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        blur.onAttachedToWindow()
+        (parent as? ViewGroup)?.layoutTransition = null
+    }
+
+    override fun onDetachedFromWindow() {
+        blur.onDetachedFromWindow()
+        super.onDetachedFromWindow()
+    }
+
+    override fun onVisibilityAggregated(isVisible: Boolean) {
+        super.onVisibilityAggregated(isVisible)
+        blur.onVisibilityAggregated(isVisible)
+    }
+
+    override fun verifyDrawable(who: Drawable): Boolean =
+        blur.verifyDrawable(who) || super.verifyDrawable(who)
+
+    override fun draw(canvas: Canvas) {
+        if (width <= 0 || height <= 0) return
+        val alphaInt = (blurFraction * 255f).roundToInt()
+        val blurActive = blurEnabled && blur.isCrossWindowBlurActive()
+        if (!blurActive) {
+            fallbackPaint.color = fallbackColor
+            canvas.drawPath(clipPath, fallbackPaint)
+            return
+        }
+        val drewBlur =
+            if (alphaInt > 1) {
+                blur.draw(canvas, bounds, clipPath, cornerRadiusPx, overlayColor, alphaInt)
+            } else {
+                blur.clear()
+                false
+            }
+        if (blurFraction < 1f) {
+            val weight = if (drewBlur) (1f - blurFraction) * 0.72f else 0.72f
+            val fallbackAlpha = (AndroidColor.alpha(fallbackColor) * weight).roundToInt()
+            if (fallbackAlpha > 0) {
+                fallbackPaint.color =
+                    AndroidColor.argb(
+                        fallbackAlpha,
+                        AndroidColor.red(fallbackColor),
+                        AndroidColor.green(fallbackColor),
+                        AndroidColor.blue(fallbackColor),
+                    )
+                canvas.drawPath(clipPath, fallbackPaint)
+            }
+        } else if (!drewBlur) {
+            fallbackPaint.color = fallbackColor
+            canvas.drawPath(clipPath, fallbackPaint)
+        }
+    }
+}
+
+@Composable
+private fun LockscreenMediaBlurBackground(
+    cornerRadius: Dp,
+    overlayColor: Int,
+    fallbackColor: Int,
+    enabled: Boolean,
+    blurFraction: Float,
+    modifier: Modifier = Modifier,
+) {
+    val cornerRadiusPx = with(LocalDensity.current) { cornerRadius.toPx() }
+    AndroidView(
+        factory = { LockscreenMediaBlurHost(it) },
+        update = { view ->
+            view.updateAppearance(
+                cornerRadiusPx = cornerRadiusPx,
+                overlayColor = overlayColor,
+                fallbackColor = fallbackColor,
+                enabled = enabled,
+                blurFraction = blurFraction,
+            )
+        },
+        modifier = modifier,
+    )
+}
 
 @Composable
 internal fun LockscreenMediaCard(
@@ -144,6 +294,8 @@ internal fun LockscreenMediaCard(
                         maxOf(seekBarHeight, timestampHeight) - 20.dp
             }
         AxBlurLifecycle(enabled = blurVisible) {
+            val colorOsBlurFraction by
+                AxDynamicBarColorOsController.mediaBlurFractionFlow.collectAsStateWithLifecycle()
             Expandable(
                 controller =
                     rememberExpandableController(color = { Color.Transparent }, shape = shape),
@@ -161,19 +313,20 @@ internal fun LockscreenMediaCard(
             ) { expandable ->
                 val glass =
                     style == LockscreenMediaStyle.ALBUM_ART || style == LockscreenMediaStyle.COS
-                val surface =
+                Box(
+                    Modifier.fillMaxSize()
+                        .then(if (glass) Modifier else Modifier.background(background))
+                ) {
                     if (glass) {
-                        Modifier.axBlurBackground(
+                        LockscreenMediaBlurBackground(
+                            cornerRadius = cornerRadius,
+                            overlayColor = Color.Black.copy(alpha = 0.32f).toArgb(),
+                            fallbackColor = background.toArgb(),
                             enabled = blurVisible,
-                            fallbackColor = background,
-                            tintColor = Color.Black.copy(alpha = 0.32f),
-                            settingsSpec = AxBackdropBlurSettingsSpec.system(),
-                            shape = shape,
+                            blurFraction = colorOsBlurFraction,
+                            modifier = Modifier.fillMaxSize(),
                         )
-                    } else {
-                        Modifier.background(background)
                     }
-                Box(Modifier.fillMaxSize().then(surface)) {
                     if (style == LockscreenMediaStyle.ONE_UI) {
                         MediaArtwork(
                             artwork =

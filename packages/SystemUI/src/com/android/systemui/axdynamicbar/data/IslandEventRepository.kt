@@ -191,7 +191,12 @@ constructor(
             }
         val transientGroup = combine(midGroup, lowGroup) { mid, low -> mid + low }
 
-        val indicationGroup = _indicationEvents.map { it.values.toList() }
+        val indicationGroup = combine(
+            _indicationEvents.map { it.values.toList() },
+            notification.notificationEvents,
+        ) { indications, notifications ->
+            indications + notifications
+        }
 
         val allEvents = combine(
             highGroup,

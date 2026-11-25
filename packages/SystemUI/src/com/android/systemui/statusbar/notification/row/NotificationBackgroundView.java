@@ -89,6 +89,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
     private final int concaveR = 22;
     private boolean mAxBlurEnabled;
     private int mAxBlurOverlayColor;
+    private float mTransientBlurFraction = 1f;
 
     // True only if the dismiss button is visible.
     private boolean mDrawDismissButtonCutout = false;
@@ -302,6 +303,15 @@ public class NotificationBackgroundView extends View implements Dumpable,
             if (shouldDrawFallbackBackground(drewAxBlur)) {
                 drawable.setBounds(left, top, right, bottom);
                 drawable.draw(canvas);
+            } else if (mTransientBlurFraction < 1f && mAxBlurEnabled) {
+                int savedAlpha = drawable.getAlpha();
+                int fallbackAlpha = Math.round(savedAlpha * (1f - mTransientBlurFraction) * 0.72f);
+                if (fallbackAlpha > 0) {
+                    drawable.setBounds(left, top, right, bottom);
+                    drawable.setAlpha(fallbackAlpha);
+                    drawable.draw(canvas);
+                    drawable.setAlpha(savedAlpha);
+                }
             }
             drawCosTileBorder(canvas, mBackgroundBounds);
         }
@@ -337,6 +347,17 @@ public class NotificationBackgroundView extends View implements Dumpable,
             return false;
         }
 
+        final int baseAlpha = mBackground.getAlpha();
+        final int effectiveAlpha = mTransientBlurFraction < 1f
+                ? Math.round(baseAlpha * mTransientBlurFraction)
+                : baseAlpha;
+        if (mTransientBlurFraction < 1f) {
+            mAxBlurRenderer.setSurfaceAlpha(effectiveAlpha);
+            if (effectiveAlpha <= 1) {
+                mAxBlurRenderer.clear();
+                return false;
+            }
+        }
         mBackground.setBounds(bounds);
         return mAxBlurRenderer.draw(
                 canvas,
@@ -347,7 +368,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
                 bounds.bottom,
                 cornerRadii,
                 mAxBlurOverlayColor,
-                mBackground.getAlpha());
+                effectiveAlpha);
     }
 
     private boolean shouldDrawFallbackBackground(boolean drewAxBlur) {
@@ -419,7 +440,35 @@ public class NotificationBackgroundView extends View implements Dumpable,
         }
         mAxBlurEnabled = enabled;
         mAxBlurRenderer.setEnabled(enabled);
+        if (enabled) {
+            final int baseAlpha = mBackground != null ? mBackground.getAlpha() : mDrawableAlpha;
+            final int effectiveAlpha = mTransientBlurFraction < 1f
+                    ? Math.round(baseAlpha * mTransientBlurFraction)
+                    : 255;
+            mAxBlurRenderer.setSurfaceAlpha(effectiveAlpha);
+            if (mTransientBlurFraction < 1f && effectiveAlpha <= 1) {
+                mAxBlurRenderer.clear();
+            }
+        }
         invalidate();
+    }
+
+    public void setTransientBlurFraction(float fraction) {
+        final float clamped = Math.max(0f, Math.min(1f, fraction));
+        if (Math.abs(mTransientBlurFraction - clamped) < 0.005f
+                && !((clamped == 0f || clamped == 1f) && mTransientBlurFraction != clamped)) {
+            return;
+        }
+        mTransientBlurFraction = clamped;
+        final int baseAlpha = mBackground != null ? mBackground.getAlpha() : mDrawableAlpha;
+        final int effectiveAlpha = clamped < 1f ? Math.round(baseAlpha * clamped) : 255;
+        mAxBlurRenderer.setSurfaceAlpha(effectiveAlpha);
+        if (clamped < 1f && effectiveAlpha <= 1) {
+            mAxBlurRenderer.clear();
+        }
+        if (mAxBlurEnabled) {
+            invalidate();
+        }
     }
 
     private void updateAxBlurOverlayColor() {

@@ -5,6 +5,7 @@ package com.android.systemui.axdynamicbar.ui.compose
 import com.android.systemui.statusbar.chips.ui.model.OngoingActivityChipModel
 import android.graphics.Canvas
 import android.graphics.drawable.GradientDrawable
+import android.view.HapticFeedbackConstants
 import android.view.View
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.viewinterop.AndroidView
@@ -28,6 +29,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
@@ -54,12 +56,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
@@ -78,11 +84,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -99,7 +105,10 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -131,6 +140,10 @@ private val MusicActionSize = MusicChipHeight - 16.dp
 private val MusicActionIconSize = MusicChipHeight - 26.dp
 private val MusicPlayPauseSize = MusicChipHeight - 24.dp
 private val MusicPlayPauseIconSize = MusicChipHeight - 34.dp
+private val NotifAppIconShape = RoundedCornerShape(10.dp)
+private val NotifAvatarBadgeSize = 16.dp
+private val NotifAvatarBadgeShape = RoundedCornerShape(5.dp)
+private val NotifCountBadgeSize = 17.dp
 private val ActionSize = SpacePanel
 private val ActionIconSize = SizeBadge
 private val BatteryIconSize = ChipHeight - SpaceXxl
@@ -194,6 +207,9 @@ fun AxDynamicBarKeyguardChip(
     val keyguardBatteryChipMode by viewModel.keyguardBatteryChipMode.collectAsStateWithLifecycle()
     val batteryInfo by viewModel.keyguardBatteryInfo.collectAsStateWithLifecycle()
     val isKeyguardExpanded by viewModel.isKeyguardExpanded.collectAsStateWithLifecycle()
+    val isKeyguardColorOsActive by viewModel.isKeyguardColorOsActive.collectAsStateWithLifecycle()
+    val isKeyguardColorOsRevealed by viewModel.isKeyguardColorOsRevealed.collectAsStateWithLifecycle()
+    val activeNotificationCount by viewModel.totalNotificationCount.collectAsStateWithLifecycle()
     val touchSlop = LocalViewConfiguration.current.touchSlop
     val batteryString by viewModel.batteryString.collectAsStateWithLifecycle()
     val isKeyguardDynamicBarEnabled = isKeyguardEnabled
@@ -229,16 +245,100 @@ fun AxDynamicBarKeyguardChip(
             }
         }
 
+        val impactScaleX = remember { Animatable(1f) }
+        val impactScaleY = remember { Animatable(1f) }
+        val impactOffsetYDp = remember { Animatable(0f) }
+        var wasColorOsRevealed by remember { mutableStateOf(false) }
+
+        LaunchedEffect(isKeyguardColorOsRevealed, isKeyguardColorOsActive, isKeyguardChipVisible) {
+            val justCollapsed = wasColorOsRevealed && !isKeyguardColorOsRevealed
+            wasColorOsRevealed = isKeyguardColorOsRevealed
+            if (justCollapsed && isKeyguardColorOsActive && isKeyguardChipVisible) {
+                delay(155L)
+                coroutineScope {
+                    launch {
+                        impactScaleX.animateTo(
+                            targetValue = 1.09f,
+                            animationSpec = tween(durationMillis = 75, easing = FastOutSlowInEasing),
+                        )
+                        impactScaleX.animateTo(
+                            targetValue = 1f,
+                            animationSpec = spring(dampingRatio = 0.44f, stiffness = 420f),
+                        )
+                    }
+                    launch {
+                        impactScaleY.animateTo(
+                            targetValue = 0.87f,
+                            animationSpec = tween(durationMillis = 75, easing = FastOutSlowInEasing),
+                        )
+                        impactScaleY.animateTo(
+                            targetValue = 1f,
+                            animationSpec = spring(dampingRatio = 0.44f, stiffness = 420f),
+                        )
+                    }
+                    launch {
+                        impactOffsetYDp.animateTo(
+                            targetValue = 3f,
+                            animationSpec = tween(durationMillis = 75, easing = FastOutSlowInEasing),
+                        )
+                        impactOffsetYDp.animateTo(
+                            targetValue = 0f,
+                            animationSpec = spring(dampingRatio = 0.46f, stiffness = 400f),
+                        )
+                    }
+                }
+            } else if (isKeyguardColorOsRevealed || !isKeyguardColorOsActive || !isKeyguardChipVisible) {
+                impactScaleX.snapTo(1f)
+                impactScaleY.snapTo(1f)
+                impactOffsetYDp.snapTo(0f)
+            }
+        }
+
+        val chipEnterDelay = if (isKeyguardColorOsActive) 130 else 300
         AnimatedVisibility(
-            visible = isKeyguardChipVisible && !isKeyguardExpanded,
-            enter = fadeIn(tween(durationMillis = 200, delayMillis = 300)) +
-                scaleIn(
-                    initialScale = 0.9f,
-                    animationSpec = tween(durationMillis = 200, delayMillis = 300),
+            visible = isKeyguardChipVisible && !isKeyguardExpanded && !isKeyguardColorOsRevealed,
+            enter = fadeIn(
+                tween(
+                    durationMillis = if (isKeyguardColorOsActive) 140 else 200,
+                    delayMillis = chipEnterDelay,
                 ),
-            exit = fadeOut(motionScheme.fastEffectsSpec()) + scaleOut(targetScale = 0.9f, animationSpec = motionScheme.fastSpatialSpec()),
+            ) +
+                scaleIn(
+                    initialScale = if (isKeyguardColorOsActive) 0.92f else 0.9f,
+                    animationSpec = if (isKeyguardColorOsActive) {
+                        tween(durationMillis = 130, delayMillis = chipEnterDelay)
+                    } else {
+                        tween(durationMillis = 200, delayMillis = chipEnterDelay)
+                    },
+                ),
+            exit = if (isKeyguardColorOsActive) {
+                fadeOut(tween(durationMillis = 90)) +
+                    scaleOut(targetScale = 0.94f, animationSpec = tween(durationMillis = 110))
+            } else {
+                fadeOut(motionScheme.fastEffectsSpec()) +
+                    scaleOut(targetScale = 0.9f, animationSpec = motionScheme.fastSpatialSpec())
+            },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
+                .padding(horizontal = 12.dp, vertical = 2.dp)
+                .onGloballyPositioned { coords ->
+                    if (!isKeyguardColorOsRevealed) {
+                        val bounds = coords.boundsInWindow()
+                        if (bounds.width > 0f && bounds.height > 0f) {
+                            viewModel.colorOsController.updatePillAnchorRect(
+                                bounds.left,
+                                bounds.top,
+                                bounds.right,
+                                bounds.bottom,
+                            )
+                        }
+                    }
+                }
+                .graphicsLayer {
+                    scaleX = impactScaleX.value
+                    scaleY = impactScaleY.value
+                    translationY = impactOffsetYDp.value.dp.toPx()
+                }
                 .pointerInput(viewModel, state?.event?.id) {
                     awaitEachGesture {
                         val down = awaitFirstDown(pass = PointerEventPass.Initial)
@@ -343,8 +443,13 @@ fun AxDynamicBarKeyguardChip(
                         defaultMinSize = false,
                     ) { expandable ->
                         val keyguardEventCount = remember(chipState.allEvents, isKeyguardMusicPillEnabled) {
-                            if (isKeyguardMusicPillEnabled) chipState.eventCount
-                            else chipState.allEvents.count { it !is IslandEvent.Media }
+                            chipState.allEvents.count { isKeyguardMusicPillEnabled || it !is IslandEvent.Media }
+                        }
+                        val totalNotificationCount = remember(activeNotificationCount, chipState.allEvents) {
+                            maxOf(
+                                activeNotificationCount,
+                                chipState.allEvents.count { it is IslandEvent.Notification },
+                            )
                         }
                         KeyguardChipBody(
                             event = event,
@@ -352,6 +457,7 @@ fun AxDynamicBarKeyguardChip(
                             contentColor = contentColor,
                             progress = progress,
                             eventCount = keyguardEventCount,
+                            totalNotificationCount = totalNotificationCount,
                             viewModel = viewModel,
                             batteryString = batteryString,
                             aospChipExpandable = expandable,
@@ -377,22 +483,26 @@ private fun KeyguardChipBody(
     contentColor: Color,
     progress: Float?,
     eventCount: Int,
+    totalNotificationCount: Int,
     viewModel: AxDynamicBarChipViewModel,
     batteryString: String = "",
     aospChipExpandable: SystemUiExpandable,
 ) {
     val context = LocalContext.current
+    val view = LocalView.current
     val motionScheme = MaterialTheme.motionScheme
     var toggleCount by remember { mutableIntStateOf(0) }
     val isMedia = event is IslandEvent.Media
+    val isNotification = event is IslandEvent.Notification
+    val isLargePill = isMedia || isNotification
     val parts = rememberChargingParts(batteryString)
     val isMultiLineCharging = event is IslandEvent.Charging && parts.size >= 2
     val dynamicHeight = when {
-        isMedia -> MusicChipHeight
+        isLargePill -> MusicChipHeight
         isMultiLineCharging -> 48.dp
         else -> ChipHeight
     }
-    val dynamicMinWidth = if (isMedia) MusicChipMinWidth else 48.dp
+    val dynamicMinWidth = if (isLargePill) MusicChipMinWidth else 48.dp
 
     Box(contentAlignment = Alignment.Center) {
         Box(
@@ -429,24 +539,36 @@ private fun KeyguardChipBody(
                     } else Modifier
                 )
                 .clickable {
-                    when (event) {
-                        is IslandEvent.Notification ->
-                            viewModel.launchNotificationFromKeyguard(event)
+                    if (viewModel.colorOsController.shouldUseColorOsRevealFor(event)) {
+                        view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                        viewModel.colorOsController.toggleReveal()
+                    } else {
+                        when (event) {
+                            is IslandEvent.Notification -> {
+                                view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                                viewModel.launchNotificationFromKeyguard(event)
+                            }
 
-                        is IslandEvent.AospChip -> {
-                            viewModel.handleAospChipTap(event, aospChipExpandable)
-                        }
+                            is IslandEvent.AospChip -> {
+                                view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                                viewModel.handleAospChipTap(event, aospChipExpandable)
+                            }
 
-                        is IslandEvent.KeyguardIndication,
-                        is IslandEvent.AppSwitch -> { }
-                        else -> {
-                            val wasExpanded = viewModel.keyguardExpansion.isExpanded.value
-                            viewModel.keyguardExpansion.toggle()
-                            if (!wasExpanded) toggleCount++
+                            is IslandEvent.KeyguardIndication,
+                            is IslandEvent.AppSwitch -> { }
+                            else -> {
+                                view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                                val wasExpanded = viewModel.keyguardExpansion.isExpanded.value
+                                viewModel.keyguardExpansion.toggle()
+                                if (!wasExpanded) toggleCount++
+                            }
                         }
                     }
                 }
-                .padding(start = if (isMedia) SpaceMd else SpaceSm, end = SpaceMd),
+                .padding(
+                    start = if (isLargePill) SpaceMd else SpaceSm,
+                    end = if (isNotification) SpaceLg else SpaceMd,
+                ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (event is IslandEvent.Media) {
@@ -518,7 +640,10 @@ private fun KeyguardChipBody(
                 }
                 Spacer(Modifier.width(SpaceXs))
                 Surface(
-                    onClick = { viewModel.togglePlayPause() },
+                    onClick = {
+                        view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                        viewModel.togglePlayPause()
+                    },
                     modifier = Modifier.size(MusicPlayPauseSize),
                     shape = CircleShape,
                     color = lerp(accent, contentColor, AlphaSubtle).copy(alpha = 0.4f),
@@ -533,6 +658,112 @@ private fun KeyguardChipBody(
                             tint = contentColor,
                             modifier = Modifier.size(MusicPlayPauseIconSize),
                         )
+                    }
+                }
+            } else if (event is IslandEvent.Notification) {
+                Box(modifier = Modifier.size(MusicActionSize)) {
+                    AnimatedContent(
+                        targetState = event,
+                        transitionSpec = {
+                            (fadeIn(motionScheme.defaultEffectsSpec()) +
+                                scaleIn(initialScale = 0.85f, animationSpec = motionScheme.defaultSpatialSpec())) togetherWith
+                                (fadeOut(motionScheme.fastEffectsSpec()) +
+                                    scaleOut(targetScale = 0.85f, animationSpec = motionScheme.fastSpatialSpec())) using
+                                SizeTransform(clip = false)
+                        },
+                        contentKey = {
+                            "${it.sbn.key}|${it.isRedacted}|${it.senderIcon?.hashCode() ?: 0}|${it.appIcon?.hashCode() ?: 0}"
+                        },
+                        label = "kg_notif_icon",
+                    ) { ev ->
+                        KeyguardNotificationPillIcon(
+                            event = ev,
+                            accent = accent,
+                            contentColor = contentColor,
+                        )
+                    }
+                    if (totalNotificationCount > 0) {
+                        val badgeBorderColor = if (isSystemInDarkTheme()) {
+                            Color.Black.copy(alpha = 0.55f)
+                        } else {
+                            Color.White.copy(alpha = 0.85f)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .offset(x = (-1).dp, y = (-1).dp)
+                                .height(NotifCountBadgeSize)
+                                .widthIn(min = NotifCountBadgeSize)
+                                .clip(CircleShape)
+                                .background(RedAccent)
+                                .border(1.dp, badgeBorderColor, CircleShape)
+                                .padding(horizontal = SpaceXs),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = if (totalNotificationCount > 99) "99+" else "$totalNotificationCount",
+                                color = chipContentColorOn(RedAccent),
+                                style = TsBadge.copy(fontSize = 10.sp),
+                                lineHeight = 10.sp,
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.width(SpaceMd))
+                AnimatedContent(
+                    targetState = event,
+                    transitionSpec = {
+                        (fadeIn(motionScheme.defaultEffectsSpec()) +
+                            scaleIn(initialScale = 0.85f, animationSpec = motionScheme.defaultSpatialSpec())) togetherWith
+                            (fadeOut(motionScheme.fastEffectsSpec()) +
+                                scaleOut(targetScale = 0.85f, animationSpec = motionScheme.fastSpatialSpec())) using
+                            SizeTransform(clip = false, sizeAnimationSpec = { _, _ -> motionScheme.defaultSpatialSpec() })
+                    },
+                    contentKey = { "${it.sbn.key}|${it.isRedacted}|${it.senderName}|${it.title}|${it.text}" },
+                    label = "kg_notif_text",
+                    modifier = Modifier.weight(1f, fill = false),
+                ) { ev ->
+                    val primaryText = if (ev.isRedacted) {
+                        ev.appName.ifEmpty { stringResource(R.string.ax_dynamic_bar_notification) }
+                    } else if (ev.isConversation && !ev.senderName.isNullOrBlank()) {
+                        ev.senderName
+                    } else {
+                        ev.title?.takeIf { it.isNotBlank() }
+                            ?: ev.appName.ifEmpty { stringResource(R.string.ax_dynamic_bar_notification) }
+                    }
+                    val summaryText = if (ev.isRedacted) {
+                        stringResource(R.string.ax_dynamic_bar_sensitive_content)
+                    } else {
+                        ev.text?.takeIf { it.isNotBlank() }?.takeIfDistinctFrom(primaryText)
+                            ?: ev.title?.takeIf { ev.isConversation && it.isNotBlank() }
+                                ?.takeIfDistinctFrom(primaryText)
+                    }
+                    Column(
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.Start,
+                        modifier = Modifier.widthIn(max = 114.dp).fillMaxWidth(),
+                    ) {
+                        Text(
+                            primaryText,
+                            style = PillPrimary.copy(fontSize = 13.sp),
+                            color = contentColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Start,
+                            modifier = Modifier.fillMaxWidth().basicMarquee(iterations = 1),
+                        )
+                        if (!summaryText.isNullOrBlank()) {
+                            Text(
+                                summaryText,
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
+                                color = contentColor.copy(alpha = AlphaSecondary),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Start,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
                     }
                 }
             } else if (event is IslandEvent.Sports && event.team2Name.isNotEmpty()) {
@@ -560,7 +791,11 @@ private fun KeyguardChipBody(
                     contentKey = { iconKeyFor(it) },
                     label = "kg_chip_icon",
                 ) { ev ->
-                    PillEventIcon(ev, tint = contentColor, animated = false)
+                    if (ev is IslandEvent.Call && ev.callType == "Phone:incoming") {
+                        IncomingCallShakeIcon(ev)
+                    } else {
+                        PillEventIcon(ev, tint = contentColor, animated = false)
+                    }
                 }
                 Spacer(Modifier.width(SpaceXs))
                 AnimatedContent(
@@ -609,7 +844,10 @@ private fun KeyguardChipBody(
                             icon = action.icon,
                             color = contentColor,
                             bgColor = accent.copy(alpha = 0.5f),
-                            onClick = { action.perform(viewModel, event, context) },
+                            onClick = {
+                                view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                                action.perform(viewModel, event, context)
+                            },
                             size = ActionSize,
                             iconSize = ActionIconSize,
                         )
@@ -617,7 +855,7 @@ private fun KeyguardChipBody(
                 }
             }
 
-            if (eventCount > 1 && event !is IslandEvent.Media) {
+            if (eventCount > 1 && !isLargePill) {
                 Spacer(Modifier.width(SpaceXs))
                 Box(
                     contentAlignment = Alignment.Center,
@@ -636,6 +874,139 @@ private fun KeyguardChipBody(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun KeyguardNotificationPillIcon(
+    event: IslandEvent.Notification,
+    accent: Color,
+    contentColor: Color,
+) {
+    val showAvatar = !event.isRedacted && event.isConversation && event.senderIcon != null
+    val mainIcon = if (showAvatar) event.senderIcon else event.appIcon
+    val badgeIcon = if (showAvatar) event.appIcon else null
+    val badgeBorderColor = if (isSystemInDarkTheme()) Color.Black.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.85f)
+
+    when {
+        showAvatar && mainIcon != null -> {
+            Box(modifier = Modifier.size(MusicActionSize)) {
+                Image(
+                    bitmap = mainIcon.toSquareScaledBitmap(MusicActionSize),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(MusicActionSize)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop,
+                )
+                badgeIcon?.let { appDrawable ->
+                    Image(
+                        bitmap = appDrawable.toScaledBitmap(NotifAvatarBadgeSize),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(NotifAvatarBadgeSize)
+                            .align(Alignment.BottomEnd)
+                            .clip(NotifAvatarBadgeShape)
+                            .border(1.dp, badgeBorderColor, NotifAvatarBadgeShape),
+                        contentScale = ContentScale.Crop,
+                    )
+                }
+            }
+        }
+        mainIcon != null -> {
+            Image(
+                bitmap = mainIcon.toScaledBitmap(MusicActionSize),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(MusicActionSize)
+                    .clip(NotifAppIconShape),
+                contentScale = ContentScale.Crop,
+            )
+        }
+        else -> {
+            Box(
+                modifier = Modifier
+                    .size(MusicActionSize)
+                    .clip(NotifAppIconShape)
+                    .background(lerp(accent, contentColor, AlphaSubtle).copy(alpha = 0.35f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Filled.Notifications,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(SizeIconSm),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun IncomingCallShakeIcon(event: IslandEvent.Call) {
+    val transition = rememberInfiniteTransition(label = "kg_incoming_call_shake")
+    val shakeRotation by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = keyframes {
+                durationMillis = 900
+                0f at 0
+                -14f at 70
+                14f at 140
+                -14f at 210
+                14f at 280
+                -10f at 350
+                10f at 420
+                0f at 490
+                0f at 900
+            },
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "kg_incoming_call_rot",
+    )
+    val shakeOffsetX by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = keyframes {
+                durationMillis = 900
+                0f at 0
+                -1.2f at 70
+                1.2f at 140
+                -1.2f at 210
+                1.2f at 280
+                -0.8f at 350
+                0.8f at 420
+                0f at 490
+                0f at 900
+            },
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "kg_incoming_call_dx",
+    )
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(SizeIconSm)
+            .graphicsLayer {
+                rotationZ = shakeRotation
+                translationX = shakeOffsetX.dp.toPx()
+            },
+    ) {
+        event.appIcon?.let { icon ->
+            Image(
+                bitmap = icon.toScaledBitmap(16.dp),
+                contentDescription = null,
+                modifier = Modifier.size(16.dp).clip(ShapeXs),
+                contentScale = ContentScale.Crop,
+            )
+        } ?: Icon(
+            Icons.Filled.Call,
+            contentDescription = null,
+            tint = GreenAccent,
+            modifier = Modifier.size(SizeBadge),
+        )
     }
 }
 

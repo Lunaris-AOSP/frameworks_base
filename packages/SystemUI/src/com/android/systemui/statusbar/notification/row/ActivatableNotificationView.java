@@ -396,6 +396,12 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
         }
     }
 
+    public void setTransientBlurFraction(float fraction) {
+        if (mBackgroundNormal != null) {
+            mBackgroundNormal.setTransientBlurFraction(fraction);
+        }
+    }
+
     protected boolean shouldUseAxBlurBackground() {
         boolean keyguardAllowed = mRowTransparencyLockscreenEnabled && isAxBlurKeyguardVisible();
         boolean headsUpAllowed = mRowTransparencyEnabled && isHeadsUpState() && !mShadeExpanded;

@@ -10,6 +10,7 @@ import com.android.systemui.biometrics.domain.interactor.UdfpsOverlayInteractor
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.statusbar.KeyguardIndicationController
+import com.android.systemui.statusbar.notification.domain.interactor.ActiveNotificationsInteractor
 import com.android.systemui.statusbar.pipeline.battery.domain.interactor.BatteryInteractor
 import com.android.systemui.statusbar.policy.BatteryController
 import javax.inject.Inject
@@ -60,6 +61,8 @@ constructor(
     keyguardIndicationController: KeyguardIndicationController,
     val keyguardExpansion: AxDynamicBarKeyguardExpansion,
     val statusBarExpansion: AxDynamicBarStatusBarExpansion,
+    val colorOsController: AxDynamicBarColorOsController,
+    activeNotificationsInteractor: ActiveNotificationsInteractor,
 ) {
     val isLowUdfps: StateFlow<Boolean> =
         udfpsOverlayInteractor.udfpsOverlayParams
@@ -94,6 +97,12 @@ constructor(
     val isKeyguardEnabled: StateFlow<Boolean> = interactor.settings.isKeyguardEnabled
     val keyguardBatteryChipMode: StateFlow<Int> = interactor.settings.keyguardBatteryChipMode
     val isKeyguardMusicPillEnabled: StateFlow<Boolean> = interactor.settings.isKeyguardMusicPillEnabled
+    val isKeyguardColorOsActive: StateFlow<Boolean> = colorOsController.isModeActive
+    val isKeyguardColorOsRevealed: StateFlow<Boolean> = colorOsController.isRevealed
+    val totalNotificationCount: StateFlow<Int> =
+        activeNotificationsInteractor.allNotificationsCount
+            .distinctUntilChanged()
+            .stateIn(applicationScope, SharingStarted.Eagerly, 0)
     val isMediaEventTypeEnabled: StateFlow<Boolean> =
         interactor.settings.disabledEventTypes
             .map { "media" !in it }
@@ -140,10 +149,14 @@ constructor(
                 keyguardExpansion.canShow,
                 interactor.isPanelExpanded,
                 interactor.qsExpansion.map { it > 0f }.distinctUntilChanged(),
-                interactor.legacyShadeExpansion.map { it > 0f }.distinctUntilChanged(),
-            ) { (incomingCallId, onKeyguard), keyguardCanShow, panelExpanded, qsOpen, shadeOpen ->
+                combine(
+                    interactor.legacyShadeExpansion.map { it > 0f }.distinctUntilChanged(),
+                    colorOsController.isModeActive,
+                ) { shadeOpen, colorOsActive -> shadeOpen to colorOsActive },
+            ) { (incomingCallId, onKeyguard), keyguardCanShow, panelExpanded, qsOpen, (shadeOpen, colorOsActive) ->
                 val canExpand =
-                    if (onKeyguard) keyguardCanShow else !panelExpanded && !qsOpen && !shadeOpen
+                    if (onKeyguard) keyguardCanShow && !colorOsActive
+                    else !panelExpanded && !qsOpen && !shadeOpen
                 Triple(incomingCallId, onKeyguard, canExpand)
             }
                 .distinctUntilChanged()

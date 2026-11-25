@@ -570,6 +570,16 @@ public class NotificationChildrenContainer extends ViewGroup
         mBundleHeaderViewModel.setUseBlurBackground(mBundleHeaderBlurView.isBackgroundActive());
     }
 
+    public void setTransientBlurFraction(float fraction) {
+        if (mBundleHeaderBlurView != null) {
+            mBundleHeaderBlurView.setTransientBlurFraction(fraction);
+        }
+        final int count = mAttachedChildren.size();
+        for (int i = 0; i < count; i++) {
+            mAttachedChildren.get(i).setTransientBlurFraction(fraction);
+        }
+    }
+
     private void initBundleDimens() {
         Resources res = getResources();
         NotificationBundleUi.unsafeAssertInNewMode();

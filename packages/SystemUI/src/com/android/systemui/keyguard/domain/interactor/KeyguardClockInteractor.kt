@@ -19,6 +19,7 @@ package com.android.systemui.keyguard.domain.interactor
 
 import android.util.Log
 import com.android.keyguard.ClockEventController
+import com.android.systemui.axdynamicbar.ui.AxDynamicBarColorOsController
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.keyguard.data.repository.KeyguardClockRepository
@@ -104,11 +105,17 @@ constructor(
             combine(
                 activeNotificationsInteractor.areAnyNotificationsPresent,
                 isAodPromotedNotificationPresent,
-            ) { areAnyNotificationsPresent, isAodPromotedNotificationPresent ->
-                areAnyNotificationsPresent || isAodPromotedNotificationPresent
+                AxDynamicBarColorOsController.hidingClockNotificationsFlow,
+            ) { areAnyNotificationsPresent, isAodPromotedNotificationPresent, hidingForPill ->
+                (areAnyNotificationsPresent || isAodPromotedNotificationPresent) && !hidingForPill
             }
         } else {
-            activeNotificationsInteractor.areAnyNotificationsPresent
+            combine(
+                activeNotificationsInteractor.areAnyNotificationsPresent,
+                AxDynamicBarColorOsController.hidingClockNotificationsFlow,
+            ) { areAnyNotificationsPresent, hidingForPill ->
+                areAnyNotificationsPresent && !hidingForPill
+            }
         }
 
     private val dynamicClockSize: Flow<ClockSize> =
@@ -117,7 +124,10 @@ constructor(
                 keyguardClockRepository.forcedClockSize,
                 shadeModeInteractor.isFullWidthShade,
                 areAnyNotificationsPresent,
-                mediaCarouselInteractor.hasActiveMedia,
+                combine(
+                    mediaCarouselInteractor.hasActiveMedia,
+                    AxDynamicBarColorOsController.hidingClockNotificationsFlow,
+                ) { hasMedia, hidingForPill -> hasMedia && !hidingForPill },
                 keyguardInteractor.isDozing,
             ) { forcedClockSize, isFullWidthShade, hasNotifs, hasMedia, isDozing ->
                 when {

@@ -510,6 +510,14 @@ public class NotificationStackScrollLayout
             new MotoCompactNotificationAnimator(this);
     private final MiuiNotificationShadeAnimator mMiuiShadeAnimator =
             new MiuiNotificationShadeAnimator(this);
+    private final ColorOsLockscreenRevealAnimator mColorOsRevealAnimator =
+            new ColorOsLockscreenRevealAnimator(this);
+    private final com.android.systemui.axdynamicbar.ui.AxDynamicBarColorOsController.Listener
+            mColorOsRevealListener = (active, revealed) ->
+            mColorOsRevealAnimator.updateState(active, revealed);
+    private boolean mColorOsOutsideTapPending;
+    private float mColorOsOutsideDownX;
+    private float mColorOsOutsideDownY;
     private final float[] mMiuiTouchPosition = new float[2];
     private float mMiuiTouchOffsetX;
     private float mMiuiTouchOffsetY;
@@ -2225,7 +2233,7 @@ public class NotificationStackScrollLayout
 
     public void updateClipping() {
         boolean clipped = mRequestedClipBounds != null && !mInHeadsUpPinnedMode
-                && !mHeadsUpAnimatingAway;
+                && !mHeadsUpAnimatingAway && !mColorOsRevealAnimator.isUnclipped();
         if (mIsClipped != clipped) {
             mIsClipped = clipped;
         }
@@ -3361,6 +3369,7 @@ public class NotificationStackScrollLayout
     public void onViewRemoved(View child) {
         super.onViewRemoved(child);
         mMiuiShadeAnimator.remove(child);
+        mColorOsRevealAnimator.remove(child);
         // we only call our internal methods if this is actually a removal and not just a
         // notification which becomes a child notification
         ExpandableView expandableView = (ExpandableView) child;
@@ -4283,6 +4292,17 @@ public class NotificationStackScrollLayout
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (mColorOsRevealAnimator.shouldBlockTouch()) {
+            return false;
+        }
+        if (mColorOsOutsideTapPending && mColorOsRevealAnimator.isRevealedAndActive()) {
+            return true;
+        }
+        if (ev.getActionMasked() == ACTION_DOWN
+                && mColorOsRevealAnimator.isRevealedAndActive()
+                && !mColorOsOutsideTapPending) {
+            mColorOsRevealAnimator.finishForInteraction();
+        }
         closeMotoCompactPreviewIfOutsideTouch(ev);
         final boolean collapseStack = handleLockscreenStackCollapseTouch(ev);
         if (!collapseStack) finishMiuiMotionForTouch(ev);
@@ -6524,13 +6544,127 @@ public class NotificationStackScrollLayout
     }
 
     @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        com.android.systemui.axdynamicbar.ui.AxDynamicBarColorOsController.registerListener(
+                mColorOsRevealListener);
+    }
+
+    @Override
     protected void onDetachedFromWindow() {
+        com.android.systemui.axdynamicbar.ui.AxDynamicBarColorOsController.unregisterListener(
+                mColorOsRevealListener);
+        mColorOsRevealAnimator.cancel();
+        mColorOsOutsideTapPending = false;
         finishMotoCompactSelection();
         mMiuiShadeAnimator.cancel();
         mAmbientState.setMiuiShadeAnimationEnabled(false);
         mMiuiTouchOffsetX = 0f;
         mMiuiTouchOffsetY = 0f;
         super.onDetachedFromWindow();
+    }
+
+    public boolean handleColorOsOutsideTouch(MotionEvent event) {
+        if (!mColorOsRevealAnimator.isRevealedAndActive()) {
+            mColorOsOutsideTapPending = false;
+            return false;
+        }
+        switch (event.getActionMasked()) {
+            case ACTION_DOWN:
+                mColorOsOutsideDownX = event.getRawX();
+                mColorOsOutsideDownY = event.getRawY();
+                mColorOsOutsideTapPending = !isRawPointInsideRevealedLockscreenContent(
+                        mColorOsOutsideDownX, mColorOsOutsideDownY);
+                return false;
+            case MotionEvent.ACTION_POINTER_DOWN:
+            case ACTION_CANCEL:
+                mColorOsOutsideTapPending = false;
+                return false;
+            case MotionEvent.ACTION_MOVE:
+                if (mColorOsOutsideTapPending) {
+                    float dx = event.getRawX() - mColorOsOutsideDownX;
+                    float dy = event.getRawY() - mColorOsOutsideDownY;
+                    if (dx * dx + dy * dy > mTouchSlop * mTouchSlop) {
+                        mColorOsOutsideTapPending = false;
+                    }
+                }
+                return false;
+            case ACTION_UP:
+                if (mColorOsOutsideTapPending) {
+                    mColorOsOutsideTapPending = false;
+                    com.android.systemui.axdynamicbar.ui.AxDynamicBarColorOsController controller =
+                            com.android.systemui.axdynamicbar.ui.AxDynamicBarColorOsController
+                                    .getOrNull();
+                    if (controller != null) {
+                        controller.collapse();
+                    }
+                    return true;
+                }
+                return false;
+            default:
+                return false;
+        }
+    }
+
+    private boolean isRawPointInsideRevealedLockscreenContent(float rawX, float rawY) {
+        for (int i = 0; i < getChildCount(); i++) {
+            ExpandableView child = getChildAtIndex(i);
+            if (!isInteractiveRevealedChild(child)) {
+                continue;
+            }
+            ExpandableViewState state = child.getViewState();
+            if (child.getVisibility() != VISIBLE
+                    || child.getAlpha() <= 0f
+                    || child.getWidth() <= 0
+                    || child.getActualHeight() <= 0
+                    || (state != null
+                            && (state.hidden || state.gone || state.inShelf
+                                    || state.getAlpha() <= 0f))) {
+                continue;
+            }
+            child.getLocationOnScreen(mTempInt2);
+            final float x = rawX - mTempInt2[0];
+            final float y = rawY - mTempInt2[1];
+            final float top = Math.max(child.getClipTopAmount(), child.getTopOverlap());
+            final float bottom = child.getActualHeight()
+                    - Math.max(child.getClipBottomAmount(), child.getBottomOverlap());
+            if (bottom > top && x >= 0f && x < child.getWidth() && y >= top && y < bottom) {
+                return true;
+            }
+        }
+        View root = getRootView();
+        if (root != null) {
+            if (isRawPointInsideView(root.findViewById(R.id.start_button), rawX, rawY)
+                    || isRawPointInsideView(root.findViewById(R.id.end_button), rawX, rawY)
+                    || isRawPointInsideView(
+                            root.findViewById(R.id.device_entry_icon_view), rawX, rawY)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isInteractiveRevealedChild(ExpandableView child) {
+        if (child instanceof ExpandableNotificationRow row) {
+            return !row.isRemoved() && !row.willBeGone();
+        }
+        if (child instanceof MediaContainerView media) {
+            return media.getChildCount() > 0;
+        }
+        if (child == mShelf && mShelf != null) {
+            return mShelf.hasItemsInStableShelf();
+        }
+        return false;
+    }
+
+    private boolean isRawPointInsideView(View view, float rawX, float rawY) {
+        if (view == null || view.getVisibility() != VISIBLE || view.getAlpha() <= 0f
+                || view.getWidth() <= 0 || view.getHeight() <= 0) {
+            return false;
+        }
+        view.getLocationOnScreen(mTempInt2);
+        return rawX >= mTempInt2[0] && rawX < mTempInt2[0] + view.getWidth()
+                && rawY >= mTempInt2[1] && rawY < mTempInt2[1] + view.getHeight();
     }
 
     private void updateMotoCompactPreview() {
@@ -7488,6 +7622,14 @@ public class NotificationStackScrollLayout
 
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
+        final boolean onLockscreen = SceneContainerFlag.isEnabled()
+                ? mIsOnLockscreen : onKeyguard();
+        mColorOsRevealAnimator.prepareFrame(
+                onLockscreen,
+                mAmbientState.isDozing(),
+                mAmbientState.isPulsing() || mAmbientState.isPulseExpanding(),
+                mAmbientState.getDozeAmount(),
+                mAmbientState.getFractionToShade());
         mMiuiShadeAnimator.prepareFrame(
                 mShouldUseRoundedRectClipping ? mRoundedRectClippingLeft : 0f,
                 mShouldUseRoundedRectClipping
@@ -7536,7 +7678,9 @@ public class NotificationStackScrollLayout
                 // TODO(b/388469101) draw these children in z-order
                 ExpandableView child = getChildAtIndex(i);
                 if (shouldSkipBlurForChild(child)) {
-                    if (!mMiuiShadeAnimator.shouldDraw(child)) continue;
+                    if (!mColorOsRevealAnimator.shouldDraw(child)
+                            || !mMiuiShadeAnimator.shouldDraw(child)) continue;
+                    int saveCountForColorOs = mColorOsRevealAnimator.prepareCanvas(canvas, child);
                     int saveCountForMiui = mMiuiShadeAnimator.prepareCanvas(canvas, child);
                     int saveCountForSwipe = preparePanelSwipeCanvas(canvas, child);
                     try {
@@ -7544,6 +7688,7 @@ public class NotificationStackScrollLayout
                     } finally {
                         if (saveCountForSwipe >= 0) canvas.restoreToCount(saveCountForSwipe);
                         if (saveCountForMiui >= 0) canvas.restoreToCount(saveCountForMiui);
+                        if (saveCountForColorOs >= 0) canvas.restoreToCount(saveCountForColorOs);
                     }
                 }
             }
@@ -7558,6 +7703,9 @@ public class NotificationStackScrollLayout
     }
 
     private void applyClipToCanvas(Canvas canvas) {
+        if (mColorOsRevealAnimator.isUnclipped()) {
+            return;
+        }
         if (mMiuiShadeAnimator.isRunning() && mShouldUseRoundedRectClipping) {
             float overflow = Math.max(getRootView().getHeight(), getWidth()) * 0.5f;
             canvas.clipRect(mRoundedRectClippingLeft - overflow,
@@ -7588,7 +7736,10 @@ public class NotificationStackScrollLayout
 
     @Override
     protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
-        if (!mMiuiShadeAnimator.shouldDraw(child)) return false;
+        if (!mColorOsRevealAnimator.shouldDraw(child) || !mMiuiShadeAnimator.shouldDraw(child)) {
+            return false;
+        }
+        final int colorOsSaveCount = mColorOsRevealAnimator.prepareCanvas(canvas, child);
         final int miuiSaveCount = mMiuiShadeAnimator.prepareCanvas(canvas, child);
         final int swipeSaveCount = preparePanelSwipeCanvas(canvas, child);
         final int saveCount = mMotoCompactAnimator.prepareCanvas(canvas, child);
@@ -7598,6 +7749,7 @@ public class NotificationStackScrollLayout
             if (saveCount >= 0) canvas.restoreToCount(saveCount);
             if (swipeSaveCount >= 0) canvas.restoreToCount(swipeSaveCount);
             if (miuiSaveCount >= 0) canvas.restoreToCount(miuiSaveCount);
+            if (colorOsSaveCount >= 0) canvas.restoreToCount(colorOsSaveCount);
         }
     }
 

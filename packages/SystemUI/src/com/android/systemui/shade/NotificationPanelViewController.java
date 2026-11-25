@@ -1281,7 +1281,9 @@ public final class NotificationPanelViewController implements
     private ClockSize computeDesiredClockSizeForSplitShade() {
         // Media is not visible to the user on AOD.
         boolean isMediaVisibleToUser =
-                mMediaDataManager.hasActiveMedia() && !isOnAod();
+                mMediaDataManager.hasActiveMedia() && !isOnAod()
+                        && !com.android.systemui.axdynamicbar.ui.AxDynamicBarColorOsController
+                                .isHidingClockNotificationsStatic();
         if (isMediaVisibleToUser) {
             // When media is visible, it overlaps with the large clock. Use small clock instead.
             return ClockSize.SMALL;
@@ -1331,6 +1333,10 @@ public final class NotificationPanelViewController implements
     }
 
     private boolean hasVisibleNotifications() {
+        if (com.android.systemui.axdynamicbar.ui.AxDynamicBarColorOsController
+                .isHidingClockNotificationsStatic()) {
+            return false;
+        }
         return mActiveNotificationsInteractor.getAreAnyNotificationsPresentValue()
                 || mMediaDataManager.hasActiveMedia();
     }
@@ -3886,10 +3892,19 @@ public final class NotificationPanelViewController implements
         positionClockAndNotifications(true /* forceUpdate */);
     }
 
+    private final com.android.systemui.axdynamicbar.ui.AxDynamicBarColorOsController.ClockListener
+            mColorOsClockListener = hiding -> {
+                if (isKeyguardShowing()) {
+                    positionClockAndNotifications(true);
+                }
+            };
+
     private final class ShadeAttachStateChangeListener implements View.OnAttachStateChangeListener,
             TunerService.Tunable, StatusBarHeaderMachine.IStatusBarHeaderMachineObserver {
         @Override
         public void onViewAttachedToWindow(View v) {
+            com.android.systemui.axdynamicbar.ui.AxDynamicBarColorOsController
+                    .registerClockListener(mColorOsClockListener);
             mFragmentService.getFragmentHostManager(mView)
                     .addTagListener(QS.TAG, mQsController.getQsFragmentListener());
             if (!SceneContainerFlag.isEnabled()) {
@@ -3921,6 +3936,8 @@ public final class NotificationPanelViewController implements
 
         @Override
         public void onViewDetachedFromWindow(View v) {
+            com.android.systemui.axdynamicbar.ui.AxDynamicBarColorOsController
+                    .unregisterClockListener(mColorOsClockListener);
             abortAnimations();
             setOverExpansionInternal(0);
             mQsController.cancelShadeOverscroll();

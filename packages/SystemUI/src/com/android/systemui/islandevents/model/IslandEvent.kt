@@ -325,6 +325,7 @@ sealed class IslandEvent(open val priority: Int, val id: String) : Comparable<Is
         val notificationImage: Drawable? = null,
         val callStartTimeMs: Long = 0L,
         val createdAt: Long = System.currentTimeMillis(),
+        val isRedacted: Boolean = false,
     ) : IslandEvent(priority = NOTIFICATION_STALE_PRIORITY, id = "notification_${sbn.key}") {
         override val behavior = EventBehavior(autoDismissMs = null)
         override val priority: Int
@@ -332,6 +333,12 @@ sealed class IslandEvent(open val priority: Int, val id: String) : Comparable<Is
                 if (System.currentTimeMillis() - createdAt < NOTIFICATION_DECAY_MS)
                     NOTIFICATION_FRESH_PRIORITY
                 else NOTIFICATION_STALE_PRIORITY
+
+        override fun withoutDrawables() = copy(
+            appIcon = null,
+            senderIcon = null,
+            notificationImage = null,
+        )
     }
 
     companion object {

@@ -94,8 +94,14 @@ constructor(
                 isSoundEffectsEnabled = false
                 setOnClickListener { viewModel.keyguardExpansion.collapse() }
             }
+        constraintLayout.clipChildren = false
         constraintLayout.addView(dismissView, 0)
-        val composeView = AxComposeView(context).apply { id = chipViewId }
+        val composeView =
+            AxComposeView(context).apply {
+                id = chipViewId
+                clipChildren = false
+                clipToPadding = false
+            }
         constraintLayout.addView(composeView)
     }
 

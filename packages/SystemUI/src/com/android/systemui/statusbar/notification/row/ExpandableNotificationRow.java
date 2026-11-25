@@ -1906,6 +1906,14 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     }
 
     @Override
+    public void setTransientBlurFraction(float fraction) {
+        super.setTransientBlurFraction(fraction);
+        if (mChildrenContainer != null) {
+            mChildrenContainer.setTransientBlurFraction(fraction);
+        }
+    }
+
+    @Override
     protected boolean isAxBlurKeyguardVisible() {
         return super.isAxBlurKeyguardVisible()
                 || (mBackgroundNormal != null

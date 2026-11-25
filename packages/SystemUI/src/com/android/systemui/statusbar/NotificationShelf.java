@@ -236,6 +236,16 @@ public class NotificationShelf extends ActivatableNotificationView {
         mContext.getContentResolver().registerContentObserver(
                 Settings.Secure.getUriFor(Settings.Secure.LOCK_SCREEN_NOTIFICATION_MINIMALISM),
                 false, mNotificationDesignObserver, UserHandle.USER_ALL);
+        mContext.getContentResolver().registerContentObserver(
+                Settings.Secure.getUriFor(
+                        com.android.systemui.axdynamicbar.domain.AxDynamicBarSettings
+                                .KEY_KEYGUARD_ENABLED),
+                false, mNotificationDesignObserver, UserHandle.USER_ALL);
+        mContext.getContentResolver().registerContentObserver(
+                Settings.Secure.getUriFor(
+                        com.android.systemui.axdynamicbar.domain.AxDynamicBarSettings
+                                .KEY_KEYGUARD_COLOROS_STYLE),
+                false, mNotificationDesignObserver, UserHandle.USER_ALL);
     }
 
     public void destroy() {
@@ -249,7 +259,16 @@ public class NotificationShelf extends ActivatableNotificationView {
         mAlignToCenter = isCenterAlignmentEnabled();
         applyAlignToCenterToChildren();
         final boolean wasEnabled = mMotoCompactNotificationsEnabled;
+        final boolean forceFullSize = Settings.Secure.getIntForUser(mContext.getContentResolver(),
+                        com.android.systemui.axdynamicbar.domain.AxDynamicBarSettings
+                                .KEY_KEYGUARD_ENABLED,
+                        0, UserHandle.USER_CURRENT) == 1
+                && Settings.Secure.getIntForUser(mContext.getContentResolver(),
+                        com.android.systemui.axdynamicbar.domain.AxDynamicBarSettings
+                                .KEY_KEYGUARD_COLOROS_STYLE,
+                        0, UserHandle.USER_CURRENT) == 1;
         mMotoCompactNotificationsEnabled = NotificationMinimalism.isEnabled()
+                && !forceFullSize
                 && Settings.Secure.getIntForUser(mContext.getContentResolver(),
                         Settings.Secure.LOCK_SCREEN_NOTIFICATION_MINIMALISM, 1,
                         UserHandle.USER_CURRENT) == 1
@@ -1374,6 +1393,10 @@ public class NotificationShelf extends ActivatableNotificationView {
             mHasItemsInStableShelf = hasItemsInStableShelf;
             updateInteractiveness();
         }
+    }
+
+    public boolean hasItemsInStableShelf() {
+        return mHasItemsInStableShelf;
     }
 
     private void updateInteractiveness() {

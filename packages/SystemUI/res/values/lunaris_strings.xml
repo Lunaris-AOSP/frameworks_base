@@ -333,6 +333,8 @@
     <string name="ax_dynamic_bar_sports_final">Final</string>
     <string name="ax_dynamic_bar_sports_halftime">Halftime</string>
     <string name="ax_dynamic_bar_sports_upcoming">Upcoming</string>
+    <string name="ax_dynamic_bar_notification">Notification</string>
+    <string name="ax_dynamic_bar_sensitive_content">Sensitive content</string>
 
     <!-- Screenshot -->
     <string name="quick_settings_screenshot_label">Screenshot</string>

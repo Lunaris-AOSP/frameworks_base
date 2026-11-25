@@ -3,6 +3,7 @@ package com.android.systemui.axdynamicbar.domain
 import android.app.Notification
 import android.media.AudioManager
 import android.net.Uri
+import android.os.UserHandle
 import com.android.systemui.axdynamicbar.data.IslandEventRepository
 import com.android.systemui.islandevents.model.IslandEvent
 import com.android.systemui.axdynamicbar.model.IslandState
@@ -18,7 +19,11 @@ import com.android.systemui.plugins.statusbar.StatusBarStateController
 import com.android.systemui.shade.data.repository.ShadeRepository
 import com.android.systemui.shade.domain.interactor.ShadeInteractor
 import com.android.systemui.statusbar.KeyguardIndicationController
+import com.android.systemui.statusbar.NotificationLockscreenUserManager
 import com.android.systemui.statusbar.StatusBarState
+import com.android.systemui.statusbar.notification.collection.notifcollection.CommonNotifCollection
+import com.android.systemui.statusbar.notification.collection.notifcollection.NotifCollectionListener
+import com.android.systemui.statusbar.notification.interruption.KeyguardNotificationVisibilityProvider
 import com.android.systemui.statusbar.policy.KeyguardStateController
 import com.android.systemui.statusbar.policy.ZenModeController
 import com.android.systemui.util.settings.GlobalSettings
@@ -33,6 +38,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 @SysUISingleton
@@ -52,9 +58,14 @@ constructor(
     private val zenModeController: ZenModeController,
     private val globalSettings: GlobalSettings,
     private val audioManager: AudioManager,
+    private val lockscreenUserManager: NotificationLockscreenUserManager,
+    private val notifCollection: CommonNotifCollection,
+    private val keyguardNotificationVisibilityProvider: KeyguardNotificationVisibilityProvider,
 ) : IslandActions {
     private val _uiState = MutableStateFlow(IslandUiState())
     val uiState: StateFlow<IslandUiState> = _uiState.asStateFlow()
+
+    private val _lockscreenPrivacyTick = MutableStateFlow(0)
 
     private val autoDismissJobs = ConcurrentHashMap<String, Job>()
     @Volatile private var notifAlertJob: Job? = null
@@ -171,6 +182,28 @@ constructor(
                 override fun onPrimaryBouncerShowingChanged() {
                     _isBouncerShowing.value = keyguardStateController.isPrimaryBouncerShowing
                 }
+
+                override fun onUnlockedChanged() {
+                    _lockscreenPrivacyTick.update { it + 1 }
+                }
+            }
+        )
+
+        lockscreenUserManager.addNotificationStateChangedListener {
+            _lockscreenPrivacyTick.update { it + 1 }
+        }
+
+        keyguardNotificationVisibilityProvider.addOnStateChangedListener {
+            _lockscreenPrivacyTick.update { it + 1 }
+        }
+
+        notifCollection.addCollectionListener(
+            object : NotifCollectionListener {
+                override fun onRankingApplied() {
+                    if (_isOnKeyguard.value) {
+                        _lockscreenPrivacyTick.update { it + 1 }
+                    }
+                }
             }
         )
 
@@ -258,9 +291,11 @@ constructor(
                 combine(settings.isEnabled, settings.isKeyguardEnabled) { enabled, kgEnabled ->
                     enabled to kgEnabled
                 },
-                settings.isKeyguardMusicPillEnabled,
+                combine(settings.isKeyguardMusicPillEnabled, _lockscreenPrivacyTick) { pill, tick ->
+                    pill to tick
+                },
                 _isOnKeyguard,
-            ) { raw, _, (enabled, kgEnabled), pillEnabled, kg ->
+            ) { raw, _, (enabled, kgEnabled), (pillEnabled, _), kg ->
                 raw.filter { e ->
                     if (kg && e is IslandEvent.Media) {
                         // The lock screen music pill has its own switch and event source.
@@ -271,16 +306,17 @@ constructor(
                 } to kg
             }.collect { (rawEvents, onKeyguard) ->
                 dismissedEventIds.removeAll { id -> rawEvents.none { it.id == id } }
-                val events = rawEvents.filter { e ->
-                    e.id !in dismissedEventIds &&
-                        
-                        !(onKeyguard && e is IslandEvent.Notification) &&
-                        
-                        !(onKeyguard && e is IslandEvent.Charging) &&
-                        
-                        !(onKeyguard && e is IslandEvent.AppSwitch) &&
-                        
-                        !(!onKeyguard && e is IslandEvent.KeyguardIndication)
+                val events = rawEvents.mapNotNull { e ->
+                    if (e.id in dismissedEventIds) return@mapNotNull null
+                    if (!onKeyguard && e is IslandEvent.Notification) return@mapNotNull null
+                    if (onKeyguard && e is IslandEvent.Charging) return@mapNotNull null
+                    if (onKeyguard && e is IslandEvent.AppSwitch) return@mapNotNull null
+                    if (!onKeyguard && e is IslandEvent.KeyguardIndication) return@mapNotNull null
+                    if (onKeyguard && e is IslandEvent.Notification) {
+                        applyKeyguardNotificationPrivacy(e)
+                    } else {
+                        e
+                    }
                 }
 
                 val current = _uiState.value
@@ -301,6 +337,9 @@ constructor(
                             when {
                                 e is IslandEvent.Media && old is IslandEvent.Media ->
                                     e.track != old.track || e.artist != old.artist
+                                e is IslandEvent.Notification && old is IslandEvent.Notification ->
+                                    e.title != old.title || e.text != old.text ||
+                                        e.senderName != old.senderName
                                 else -> false
                             }
                         }
@@ -330,6 +369,9 @@ constructor(
                                     when {
                                         e is IslandEvent.Media && old is IslandEvent.Media ->
                                             e.track != old.track || e.artist != old.artist
+                                        e is IslandEvent.Notification && old is IslandEvent.Notification ->
+                                            e.title != old.title || e.text != old.text ||
+                                                e.senderName != old.senderName
                                         else -> false
                                     }
                                 }
@@ -595,6 +637,31 @@ constructor(
                 val current = _uiState.value.events.find { it.id == eventId } ?: event
                 dismissEvent(current)
             }
+    }
+
+    private fun applyKeyguardNotificationPrivacy(
+        event: IslandEvent.Notification,
+    ): IslandEvent.Notification? {
+        if (!lockscreenUserManager.shouldShowLockscreenNotifications()) return null
+        val entry = notifCollection.getEntry(event.sbn.key)
+        if (entry != null && keyguardNotificationVisibilityProvider.shouldHideNotification(entry)) {
+            return null
+        }
+        val notif = event.sbn.notification ?: return event
+        if (notif.visibility == Notification.VISIBILITY_SECRET) return null
+        val userId = event.sbn.user.identifier.let {
+            if (it == UserHandle.USER_ALL) lockscreenUserManager.currentUserId else it
+        }
+        val isLocked =
+            keyguardStateController.isMethodSecure && !keyguardStateController.canDismissLockScreen()
+        if (isLocked && !lockscreenUserManager.userAllowsNotificationsInPublic(userId)) {
+            return null
+        }
+        val shouldRedact =
+            isLocked &&
+                notif.visibility == Notification.VISIBILITY_PRIVATE &&
+                !lockscreenUserManager.userAllowsPrivateNotificationsInPublic(userId)
+        return if (shouldRedact) event.copy(isRedacted = true) else event
     }
 
     private fun resolveByIdOrFallback(

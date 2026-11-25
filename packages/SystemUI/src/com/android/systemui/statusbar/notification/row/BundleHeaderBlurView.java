@@ -33,6 +33,7 @@ public class BundleHeaderBlurView extends View {
     private int mOverlayColor;
     private boolean mLastBlurActive;
     private Runnable mOnBlurStateChanged;
+    private float mTransientBlurFraction = 1f;
 
     public BundleHeaderBlurView(Context context) {
         super(context);
@@ -101,8 +102,33 @@ public class BundleHeaderBlurView extends View {
         mBlurRenderer.setEnabled(enabled);
         if (!enabled) {
             mBlurRenderer.clear();
+        } else {
+            final int effectiveAlpha = mTransientBlurFraction < 1f
+                    ? Math.round(255f * mTransientBlurFraction)
+                    : 255;
+            mBlurRenderer.setSurfaceAlpha(effectiveAlpha);
+            if (mTransientBlurFraction < 1f && effectiveAlpha <= 1) {
+                mBlurRenderer.clear();
+            }
         }
         invalidate();
+    }
+
+    public void setTransientBlurFraction(float fraction) {
+        final float clamped = Math.max(0f, Math.min(1f, fraction));
+        if (Math.abs(mTransientBlurFraction - clamped) < 0.005f
+                && !((clamped == 0f || clamped == 1f) && mTransientBlurFraction != clamped)) {
+            return;
+        }
+        mTransientBlurFraction = clamped;
+        final int effectiveAlpha = clamped < 1f ? Math.round(255f * clamped) : 255;
+        mBlurRenderer.setSurfaceAlpha(effectiveAlpha);
+        if (clamped < 1f && effectiveAlpha <= 1) {
+            mBlurRenderer.clear();
+        }
+        if (mBlurEnabled) {
+            invalidate();
+        }
     }
 
     private void updateColors() {
@@ -114,6 +140,16 @@ public class BundleHeaderBlurView extends View {
         if (!isBackgroundActive() || getWidth() <= 0 || getHeight() <= 0) {
             return;
         }
+        final int effectiveAlpha = mTransientBlurFraction < 1f
+                ? Math.round(255f * mTransientBlurFraction)
+                : 255;
+        if (mTransientBlurFraction < 1f) {
+            mBlurRenderer.setSurfaceAlpha(effectiveAlpha);
+            if (effectiveAlpha <= 1) {
+                mBlurRenderer.clear();
+                return;
+            }
+        }
         float cornerRadius = Math.min(getWidth(), getHeight()) * 0.5f;
         mBlurRenderer.draw(
                 canvas,
@@ -124,6 +160,6 @@ public class BundleHeaderBlurView extends View {
                 getHeight(),
                 cornerRadius,
                 mOverlayColor,
-                255);
+                effectiveAlpha);
     }
 }

@@ -15,6 +15,7 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import com.android.systemui.axdynamicbar.ui.AxDynamicBarColorOsController
 import com.android.systemui.clocks.ClockStyle
 import com.android.systemui.keyguard.domain.interactor.KeyguardBlueprintInteractor
 import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInteractor
@@ -48,6 +49,7 @@ constructor(
     private val keyguardTransitionInteractor: KeyguardTransitionInteractor,
     private val tunerService: TunerService,
     private val blueprintInteractor: Lazy<KeyguardBlueprintInteractor>,
+    private val colorOsController: AxDynamicBarColorOsController,
 ) : KeyguardSection() {
     private var clockStyleView: ClockStyle? = null
     private var disposableHandle: DisposableHandle? = null
@@ -91,10 +93,15 @@ constructor(
                     activeNotificationsInteractor.allNotificationsCount,
                     mediaCarouselInteractor.hasActiveMedia,
                     mediaCarouselInteractor.allowMediaOnLockscreen,
-                    keyguardTransitionInteractor.currentKeyguardState,
-                    keyguardTransitionInteractor.isInTransition,
-                ) { notificationCount, hasActiveMedia, allowMediaOnLockscreen, state, transitioning ->
-                    val present = notificationCount > 0 || (hasActiveMedia && allowMediaOnLockscreen)
+                    combine(
+                        keyguardTransitionInteractor.currentKeyguardState,
+                        keyguardTransitionInteractor.isInTransition,
+                    ) { state, transitioning -> state to transitioning },
+                    colorOsController.isHidingClockNotifications,
+                ) { notificationCount, hasActiveMedia, allowMediaOnLockscreen, (state, transitioning), hidingForPill ->
+                    val rawPresent =
+                        notificationCount > 0 || (hasActiveMedia && allowMediaOnLockscreen)
+                    val present = rawPresent && !hidingForPill
                     present to (state == KeyguardState.LOCKSCREEN && !transitioning)
                 }.distinctUntilChanged().collect { (present, allowed) ->
                     val clock = clockStyleView ?: return@collect

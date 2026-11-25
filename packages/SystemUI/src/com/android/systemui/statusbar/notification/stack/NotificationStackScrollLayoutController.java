@@ -221,12 +221,20 @@ public class NotificationStackScrollLayoutController implements Dumpable {
     private View mLongPressedView;
     private boolean mStackedNotificationsEnabled;
     private boolean mCompactNotificationsEnabled = true;
+    private boolean mKeyguardDynamicBarEnabled;
+    private boolean mKeyguardColorOsStyleEnabled;
 
     private final TunerService.Tunable mLockscreenStackTunable = (key, value) -> {
         if (Settings.Secure.LOCK_SCREEN_STACKED_NOTIFICATIONS.equals(key)) {
             mStackedNotificationsEnabled = TunerService.parseIntegerSwitch(value, false);
         } else if (Settings.Secure.LOCK_SCREEN_NOTIFICATION_MINIMALISM.equals(key)) {
             mCompactNotificationsEnabled = TunerService.parseIntegerSwitch(value, true);
+        } else if (com.android.systemui.axdynamicbar.domain.AxDynamicBarSettings
+                .KEY_KEYGUARD_ENABLED.equals(key)) {
+            mKeyguardDynamicBarEnabled = TunerService.parseIntegerSwitch(value, false);
+        } else if (com.android.systemui.axdynamicbar.domain.AxDynamicBarSettings
+                .KEY_KEYGUARD_COLOROS_STYLE.equals(key)) {
+            mKeyguardColorOsStyleEnabled = TunerService.parseIntegerSwitch(value, false);
         } else if (Settings.Secure.LOCK_SCREEN_NOTIFICATIONS_BOTTOM_ANCHORED.equals(key)) {
             mView.setLockscreenNotificationsBottomAnchored(
                     TunerService.parseIntegerSwitch(value, false));
@@ -234,8 +242,10 @@ public class NotificationStackScrollLayoutController implements Dumpable {
             mView.setLockscreenNotificationAnchorPosition(TunerService.parseInteger(value,
                     LockscreenNotificationStack.DEFAULT_ANCHOR_POSITION));
         }
+        final boolean effectiveCompact = mCompactNotificationsEnabled
+                && !(mKeyguardDynamicBarEnabled && mKeyguardColorOsStyleEnabled);
         mView.setLockscreenNotificationStackEnabled(mStackedNotificationsEnabled
-                && !(NotificationMinimalism.isEnabled() && mCompactNotificationsEnabled));
+                && !(NotificationMinimalism.isEnabled() && effectiveCompact));
     };
 
     private final NotificationListContainerImpl mNotificationListContainer =
@@ -254,7 +264,11 @@ public class NotificationStackScrollLayoutController implements Dumpable {
                             Settings.Secure.LOCK_SCREEN_NOTIFICATION_MINIMALISM,
                             Settings.Secure.LOCK_SCREEN_STACKED_NOTIFICATIONS,
                             Settings.Secure.LOCK_SCREEN_NOTIFICATIONS_BOTTOM_ANCHORED,
-                            LOCKSCREEN_NOTIFICATION_ANCHOR_POSITION);
+                            LOCKSCREEN_NOTIFICATION_ANCHOR_POSITION,
+                            com.android.systemui.axdynamicbar.domain.AxDynamicBarSettings
+                                    .KEY_KEYGUARD_ENABLED,
+                            com.android.systemui.axdynamicbar.domain.AxDynamicBarSettings
+                                    .KEY_KEYGUARD_COLOROS_STYLE);
                     final int newBarState = mStatusBarStateController.getState();
                     if (newBarState != mBarState) {
                         mStateListener.onStateChanged(newBarState);

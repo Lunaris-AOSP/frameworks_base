@@ -39,6 +39,7 @@ class AxDynamicBarSettings @Inject constructor(
         const val KEY_KEYGUARD_EVENTS = "ax_dynamic_bar_lockscreen_events"
         private const val KEY_LEGACY_KEYGUARD_ENABLED = "ax_dynamic_bar_keyguard_enabled"
         const val KEY_KEYGUARD_MUSIC_PILL_ENABLED = "ax_dynamic_bar_keyguard_music_pill"
+        const val KEY_KEYGUARD_COLOROS_STYLE = "ax_dynamic_bar_keyguard_coloros_style"
         const val KEY_KEYGUARD_BATTERY_CHIP_MODE = "ax_dynamic_bar_keyguard_battery_chip_mode"
         const val KEY_CHIP_STYLE = "ax_dynamic_bar_chip_style"
         const val KEY_COMPACT_NOTIFICATIONS = "ax_dynamic_bar_compact_notifications"
@@ -54,6 +55,10 @@ class AxDynamicBarSettings @Inject constructor(
 
     private val _isKeyguardMusicPillEnabled = MutableStateFlow(false)
     val isKeyguardMusicPillEnabled: StateFlow<Boolean> = _isKeyguardMusicPillEnabled.asStateFlow()
+
+    private val _isKeyguardColorOsStyleEnabled = MutableStateFlow(false)
+    val isKeyguardColorOsStyleEnabled: StateFlow<Boolean> =
+        _isKeyguardColorOsStyleEnabled.asStateFlow()
 
     private val _keyguardBatteryChipMode = MutableStateFlow(1)
     val keyguardBatteryChipMode: StateFlow<Int> = _keyguardBatteryChipMode.asStateFlow()
@@ -131,6 +136,12 @@ class AxDynamicBarSettings @Inject constructor(
             UserHandle.USER_ALL,
         )
         secureSettings.registerContentObserverForUserSync(
+            KEY_KEYGUARD_COLOROS_STYLE,
+            false,
+            settingsObserver,
+            UserHandle.USER_ALL,
+        )
+        secureSettings.registerContentObserverForUserSync(
             KEY_KEYGUARD_BATTERY_CHIP_MODE,
             false,
             settingsObserver,
@@ -196,6 +207,8 @@ class AxDynamicBarSettings @Inject constructor(
             secureSettings.getIntForUser(KEY_KEYGUARD_BATTERY_CHIP_MODE, 1, UserHandle.USER_CURRENT)
         _isKeyguardMusicPillEnabled.value =
             secureSettings.getIntForUser(KEY_KEYGUARD_MUSIC_PILL_ENABLED, 0, UserHandle.USER_CURRENT) == 1
+        _isKeyguardColorOsStyleEnabled.value =
+            secureSettings.getIntForUser(KEY_KEYGUARD_COLOROS_STYLE, 0, UserHandle.USER_CURRENT) == 1
         _chipStyle.value =
             secureSettings.getIntForUser(KEY_CHIP_STYLE, 0, UserHandle.USER_CURRENT)
         _seekBarStyle.value = MediaSeekBarStyle.read(context, userTracker.userId)
@@ -240,6 +253,13 @@ class AxDynamicBarSettings @Inject constructor(
     fun isNotificationEventsActive(): Boolean =
         _isEnabled.value && statusBarStateController.state == StatusBarState.SHADE &&
             "notification" !in _disabledEventTypes.value
+
+    fun isKeyguardNotificationEventsActive(): Boolean =
+        _isKeyguardEnabled.value && statusBarStateController.state == StatusBarState.KEYGUARD &&
+            "notification" !in _keyguardDisabledEventTypes.value
+
+    val isKeyguardColorOsActive: Boolean
+        get() = _isKeyguardEnabled.value && _isKeyguardColorOsStyleEnabled.value
 
     fun shouldSuppressHeadsUp(notification: StatusBarNotification): Boolean {
         if (CallNotificationInfo.from(notification) != null) {

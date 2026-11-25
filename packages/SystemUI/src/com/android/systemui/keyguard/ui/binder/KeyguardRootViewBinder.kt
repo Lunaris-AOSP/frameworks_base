@@ -118,6 +118,12 @@ object KeyguardRootViewBinder {
 
         disposables +=
             view.onTouchListener { _, event ->
+                if (
+                    com.android.systemui.axdynamicbar.ui.AxDynamicBarColorOsController.getOrNull()
+                        ?.isStackRevealed() == true
+                ) {
+                    return@onTouchListener false
+                }
                 var consumed = false
                 if (falsingManager?.isFalseTap(FalsingManager.LOW_PENALTY) == false) {
                     // signifies a primary button click down has reached keyguardrootview
