@@ -76,8 +76,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.ui.compose.AxTileDefaults
-import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsSliderStrokeStyle
-import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsSliderStrokeWidth
 import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsTileStrokeStyle
 import com.android.systemui.qs.panels.ui.compose.LocalLunarisQsTileStrokeWidth
 import com.android.systemui.qs.panels.ui.compose.LocalTileScale
@@ -319,12 +317,6 @@ fun RingerSliderTileContent(
             label = "RingerPosition",
         )
     val activeBrush = gradient.sliderBrush()
-    val strokeWidth =
-        if (LocalLunarisQsSliderStrokeStyle.current) {
-            LocalLunarisQsSliderStrokeWidth.current * LocalTileScale.current
-        } else {
-            0.dp
-        }
     val activeBg = MaterialTheme.colorScheme.primary
     val activeIcon =
         if (activeBrush != null) gradient.contentColor else MaterialTheme.colorScheme.onPrimary
@@ -347,7 +339,7 @@ fun RingerSliderTileContent(
                 .then(interactionModifier),
         contentAlignment = trackAlignment,
     ) {
-        val outerPadding = RINGER_OUTER_PADDING
+        val outerPadding = 4.dp
         val availableHeight = (maxHeight - outerPadding * 2).coerceAtLeast(0.dp)
         val availableWidth = (maxWidth - outerPadding * 2).coerceAtLeast(0.dp)
         val slotSize = minOf(availableHeight, availableWidth)
@@ -396,7 +388,7 @@ fun RingerSliderTileContent(
                     .lunarisQsInsetBackground(
                         brush = activeBrush ?: SolidColor(activeBg),
                         shape = CircleShape,
-                        insetWidth = strokeWidth,
+                        insetWidth = 5.dp,
                     ),
             contentAlignment = Alignment.Center,
         ) {
@@ -434,5 +426,4 @@ private fun animateRingerTileShape(ringerMode: Int, isDndEnabled: Boolean): Roun
     return animateAxQsTileShape(AxQsSpan.TileDefault, tileState)
 }
 
-private val RINGER_OUTER_PADDING = 3.dp
 private val RINGER_DOT_SIZE = 6.dp
