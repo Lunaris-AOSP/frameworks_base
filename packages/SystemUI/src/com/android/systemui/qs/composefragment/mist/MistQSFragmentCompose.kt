@@ -217,6 +217,7 @@ import com.android.systemui.qs.panels.ui.compose.MiuiQsAnimationBoost
 import com.android.systemui.qs.panels.ui.compose.miuiQsMotionBounds
 import com.android.systemui.qs.panels.ui.compose.rememberMiuiQsPanelMotion
 import com.android.systemui.qs.panels.ui.compose.LocalShowQsSliderPercentage
+import com.android.systemui.qs.panels.ui.compose.LocalSmoothVolumeSlider
 import com.android.systemui.qs.panels.domain.interactor.EditTilesResetInteractor
 import com.android.systemui.qs.panels.ui.edit.AxQsEditUi
 import com.android.systemui.qs.panels.ui.edit.LunariQsPanelSettings
@@ -446,6 +447,7 @@ constructor(
                         LocalLunarisQsIconOnlyActiveColor provides
                             axQsViewModel.iconOnlyActiveColor,
                         LocalShowQsSliderPercentage provides axQsViewModel.showSliderPercentage,
+                        LocalSmoothVolumeSlider provides axQsViewModel.smoothVolumeSlider,
                         LocalRingerSliderViewModel provides ringerSliderViewModel,
                         LocalLunarisFlashlightSliderViewModel provides flashlightSliderViewModel,
                         LocalQsTilePagerGestureStart provides

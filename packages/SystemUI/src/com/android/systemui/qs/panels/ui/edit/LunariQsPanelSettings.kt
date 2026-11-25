@@ -246,6 +246,14 @@ fun LunariQsPanelSettings(
                         onCheckedChange = viewModel::setShowSliderPercentage,
                     )
                 }
+                item("step_based_volume") {
+                    SettingsSwitch(
+                        title = stringResource(R.string.ax_qs_settings_step_based_volume),
+                        summary = stringResource(R.string.ax_qs_settings_step_based_volume_summary),
+                        checked = !viewModel.smoothVolumeSlider,
+                        onCheckedChange = { stepped -> viewModel.setSmoothVolumeSlider(!stepped) },
+                    )
+                }
                 item("auto_hide_tile_page_indicator") {
                     SettingsSwitch(
                         title =

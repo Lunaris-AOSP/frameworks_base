@@ -492,6 +492,12 @@ constructor(
             initialValue = repository.showSliderPercentage.value,
             source = repository.showSliderPercentage,
         )
+    val smoothVolumeSlider by
+        hydrator.hydratedStateOf(
+            traceName = "smoothVolumeSlider",
+            initialValue = repository.smoothVolumeSlider.value,
+            source = repository.smoothVolumeSlider,
+        )
     val showDataUsage by
         hydrator.hydratedStateOf(
             traceName = "showDataUsage",
@@ -870,6 +876,7 @@ constructor(
     fun setMediaTileStatusGlow(enabled: Boolean) = repository.setMediaTileStatusGlow(enabled)
 
     fun setShowSliderPercentage(show: Boolean) = repository.setShowSliderPercentage(show)
+    fun setSmoothVolumeSlider(show: Boolean) = repository.setSmoothVolumeSlider(show)
 
     fun setTileStrokeStyle(enabled: Boolean) = repository.setTileStrokeStyle(enabled)
 

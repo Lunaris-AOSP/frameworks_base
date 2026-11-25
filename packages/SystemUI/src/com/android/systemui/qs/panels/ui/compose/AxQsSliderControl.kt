@@ -149,6 +149,7 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 internal val LocalShowQsSliderPercentage = staticCompositionLocalOf { false }
+internal val LocalSmoothVolumeSlider = staticCompositionLocalOf { false }
 
 internal fun Modifier.axQsEntrance(progress: () -> Float): Modifier {
     return graphicsLayer {
@@ -1029,9 +1030,17 @@ private fun AxVolumeSliderContent(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isDragging by interactionSource.collectIsDraggedAsState()
+    val smooth = LocalSmoothVolumeSlider.current
+    var dragValue by remember(viewModel, smooth, state.valueRange, state.isEnabled) {
+        mutableFloatStateOf(Float.NaN)
+    }
+    LaunchedEffect(isDragging) {
+        if (!isDragging) dragValue = Float.NaN
+    }
+    val displayValue = if (smooth && isDragging && !dragValue.isNaN()) dragValue else state.value
     val value = key(state is SliderState.Empty, state.isEnabled, state.valueRange) {
         animateAxQsSliderValue(
-            value = state.value,
+            value = displayValue,
             valueRange = state.valueRange,
             isDragging = isDragging,
             label = "AxVolumeSliderValue",
@@ -1071,25 +1080,40 @@ private fun AxVolumeSliderContent(
                 else -> R.string.ax_dynamic_bar_ring
             }
         )
+    val hapticsFactory =
+        if (interactive && hapticsEnabled) viewModel.getSliderHapticsViewModelFactory() else null
     val hapticsViewModel =
-        axVolumeHapticsViewModel(
-            value = state.value,
-            state = state,
-            interactionSource = interactionSource,
-            factory =
-                if (interactive && hapticsEnabled) viewModel.getSliderHapticsViewModelFactory()
-                else null,
-        )
+        if (smooth) {
+            hapticsFactory?.let { factory ->
+                rememberViewModel(traceName = "AxSmoothVolumeSliderHaptics", key = state.valueRange) {
+                    factory.create(
+                        interactionSource,
+                        state.valueRange,
+                        Orientation.Horizontal,
+                        SliderHapticFeedbackConfig(maxVelocityToScale = 1f),
+                        SeekableSliderTrackerConfig(),
+                    )
+                }
+            }
+        } else {
+            axVolumeHapticsViewModel(state.value, state, interactionSource, hapticsFactory)
+        }
 
     AxQsSlider(
         value = value,
         valueRange = state.valueRange,
-        percentage = axQsSliderPercentage(state.value, state.valueRange),
+        percentage = axQsSliderPercentage(displayValue, state.valueRange),
         onValueChange = { newValue ->
-            hapticsViewModel?.addVelocityDataPoint(newValue)
+            if (smooth && interactive) {
+                dragValue = newValue
+                hapticsViewModel?.onValueChange(newValue)
+            } else {
+                hapticsViewModel?.addVelocityDataPoint(newValue)
+            }
             if (interactive) viewModel.onValueChanged(state, newValue)
         },
         onValueChangeFinished = {
+            dragValue = Float.NaN
             hapticsViewModel?.onValueChangeEnded()
             if (interactive) viewModel.onValueChangeFinished()
         },
