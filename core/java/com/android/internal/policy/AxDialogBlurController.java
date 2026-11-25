@@ -36,6 +36,7 @@ import android.view.WindowManager;
 import com.android.internal.R;
 import com.android.internal.app.AlertActivity;
 import com.android.internal.graphics.drawable.AxBlurCustomization;
+import com.android.internal.graphics.drawable.AxBlurRimPainter;
 import com.android.internal.graphics.drawable.BackgroundBlurDrawable;
 import com.android.internal.util.ArrayUtils;
 
@@ -237,7 +238,9 @@ public final class AxDialogBlurController {
     private void updateBackgrounds() {
         final boolean hadBackgrounds = hasBlurBackgrounds();
         mGeneration++;
-        if (mRadius > 0 || (mBlurEnabled && mCustomizationState.tintEnabled)) {
+        if (mRadius > 0
+                || (mBlurEnabled && (mCustomizationState.tintEnabled
+                        || mCustomizationState.rim.enabled))) {
             addBackgrounds(mRootView);
         }
         for (int i = mBackgrounds.size() - 1; i >= 0; i--) {
@@ -325,6 +328,7 @@ public final class AxDialogBlurController {
         private final Drawable mBackground;
         private BackgroundBlurDrawable mBlur;
         private ViewRootImpl mBlurRoot;
+        private AxBlurRimPainter mRimPainter;
         private int mGeneration;
 
         private BackgroundRenderer(View view, Drawable background) {
@@ -338,7 +342,10 @@ public final class AxDialogBlurController {
 
         public void draw(Canvas canvas, Drawable background) {
             final ViewRootImpl root = mView.getViewRootImpl();
-            if ((mRadius <= 0 && !(mBlurEnabled && mCustomizationState.tintEnabled))
+            final boolean drawBlur = mRadius > 0
+                    || (mBlurEnabled && mCustomizationState.tintEnabled);
+            final boolean drawRim = mBlurEnabled && mCustomizationState.rim.enabled;
+            if ((!drawBlur && !drawRim)
                     || !canvas.isHardwareAccelerated() || root == null
                     || background.getAlpha() == 0
                     || Boolean.TRUE.equals(mView.getTag(R.id.ax_dialog_blur_owned))) {
@@ -352,58 +359,94 @@ public final class AxDialogBlurController {
                 background.draw(canvas);
                 return;
             }
-            if (mBlurRoot != root) {
-                clear();
-            }
-            if (mBlur == null) {
-                mBlurRoot = root;
-                mBlur = root.createBackgroundBlurDrawable();
-                mBlur.setApplyRenderNodeAlpha(true);
-                mBlur.setColor(Color.TRANSPARENT);
-                mActiveRenderers.add(this);
-            }
-            mBlur.setBounds(surface.getBounds());
-            mBlur.setBlurRadius(mRadius);
-            final int tint = mCustomizationState.resolveTint(mContext, Color.TRANSPARENT);
-            mBlur.setColor((tint & 0x00ffffff)
-                    | (Math.round(Color.alpha(tint) * background.getAlpha() / 255f) << 24));
-            final float windowAlpha =
-                    mWindow != null ? mWindow.getAttributes().alpha : mToastParams.alpha;
-            mBlur.setAlpha(Float.isFinite(windowAlpha)
-                    ? Math.round(background.getAlpha() * Math.max(0f, Math.min(1f, windowAlpha))) : 0);
+            final Rect surfaceBounds = surface.getBounds();
+            float cornerRadius = 0f;
+            float[] cornerRadii = null;
             if (surface instanceof GradientDrawable) {
                 final GradientDrawable gradient = (GradientDrawable) surface;
                 final float[] radii = gradient.getCornerRadii();
                 if (radii != null && radii.length >= 8) {
-                    mBlur.setCornerRadius((radii[0] + radii[1]) * 0.5f,
-                            (radii[2] + radii[3]) * 0.5f,
-                            (radii[6] + radii[7]) * 0.5f,
-                            (radii[4] + radii[5]) * 0.5f);
+                    cornerRadii = radii;
                 } else {
-                    mBlur.setCornerRadius(gradient.getCornerRadius());
+                    cornerRadius = gradient.getCornerRadius();
+                }
+            }
+            if (drawBlur) {
+                if (mBlurRoot != root) {
+                    clearBlur();
+                }
+                if (mBlur == null) {
+                    mBlurRoot = root;
+                    mBlur = root.createBackgroundBlurDrawable();
+                    mBlur.setApplyRenderNodeAlpha(true);
+                    mBlur.setColor(Color.TRANSPARENT);
+                    mActiveRenderers.add(this);
+                }
+                mBlur.setBounds(surfaceBounds);
+                mBlur.setBlurRadius(mRadius);
+                final int tint = mCustomizationState.resolveTint(mContext, Color.TRANSPARENT);
+                mBlur.setColor((tint & 0x00ffffff)
+                        | (Math.round(Color.alpha(tint) * background.getAlpha() / 255f) << 24));
+                final float windowAlpha =
+                        mWindow != null ? mWindow.getAttributes().alpha : mToastParams.alpha;
+                mBlur.setAlpha(Float.isFinite(windowAlpha)
+                        ? Math.round(background.getAlpha()
+                                * Math.max(0f, Math.min(1f, windowAlpha))) : 0);
+                if (cornerRadii != null) {
+                    mBlur.setCornerRadius((cornerRadii[0] + cornerRadii[1]) * 0.5f,
+                            (cornerRadii[2] + cornerRadii[3]) * 0.5f,
+                            (cornerRadii[6] + cornerRadii[7]) * 0.5f,
+                            (cornerRadii[4] + cornerRadii[5]) * 0.5f);
+                } else {
+                    mBlur.setCornerRadius(cornerRadius);
+                }
+                mBlur.draw(canvas);
+                if (!mCustomizationState.tintEnabled) {
+                    final Rect bounds = background.getBounds();
+                    final int save = canvas.saveLayerAlpha(bounds.left, bounds.top,
+                            bounds.right, bounds.bottom, SURFACE_ALPHA);
+                    try {
+                        background.draw(canvas);
+                    } finally {
+                        canvas.restoreToCount(save);
+                    }
                 }
             } else {
-                mBlur.setCornerRadius(0f);
-            }
-            mBlur.draw(canvas);
-            if (mCustomizationState.tintEnabled) return;
-            final Rect bounds = background.getBounds();
-            final int save = canvas.saveLayerAlpha(bounds.left, bounds.top,
-                    bounds.right, bounds.bottom, SURFACE_ALPHA);
-            try {
+                clearBlur();
                 background.draw(canvas);
-            } finally {
-                canvas.restoreToCount(save);
+            }
+            if (drawRim) {
+                if (mRimPainter == null) {
+                    mRimPainter = new AxBlurRimPainter();
+                }
+                mRimPainter.draw(
+                        canvas,
+                        mCustomizationState.rim,
+                        mView.getResources().getDisplayMetrics().density,
+                        surfaceBounds.left,
+                        surfaceBounds.top,
+                        surfaceBounds.right,
+                        surfaceBounds.bottom,
+                        cornerRadius,
+                        cornerRadii,
+                        background.getAlpha());
+            } else {
+                mRimPainter = null;
             }
         }
 
-        public void clear() {
+        private void clearBlur() {
             if (mBlur != null) {
                 mBlur.setBlurRadius(0);
                 mBlur = null;
             }
             mBlurRoot = null;
             mActiveRenderers.remove(this);
+        }
+
+        public void clear() {
+            clearBlur();
+            mRimPainter = null;
         }
     }
 }
