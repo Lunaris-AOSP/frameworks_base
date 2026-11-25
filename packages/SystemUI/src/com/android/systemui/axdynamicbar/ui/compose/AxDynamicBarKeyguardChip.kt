@@ -189,7 +189,6 @@ fun AxDynamicBarKeyguardChip(
 ) {
     val state by viewModel.chipState.collectAsStateWithLifecycle()
     val isKeyguardChipVisible by viewModel.isKeyguardChipVisible.collectAsStateWithLifecycle()
-    val isEnabled by viewModel.isEnabled.collectAsStateWithLifecycle()
     val isKeyguardEnabled by viewModel.isKeyguardEnabled.collectAsStateWithLifecycle()
     val isKeyguardMusicPillEnabled by viewModel.isKeyguardMusicPillEnabled.collectAsStateWithLifecycle()
     val keyguardBatteryChipMode by viewModel.keyguardBatteryChipMode.collectAsStateWithLifecycle()
@@ -197,7 +196,7 @@ fun AxDynamicBarKeyguardChip(
     val isKeyguardExpanded by viewModel.isKeyguardExpanded.collectAsStateWithLifecycle()
     val touchSlop = LocalViewConfiguration.current.touchSlop
     val batteryString by viewModel.batteryString.collectAsStateWithLifecycle()
-    val isKeyguardDynamicBarEnabled = isEnabled && isKeyguardEnabled
+    val isKeyguardDynamicBarEnabled = isKeyguardEnabled
 
     val motionScheme = MaterialTheme.motionScheme
     val expandableController = rememberExpandableController(color = Color.Transparent, shape = ChipShape)

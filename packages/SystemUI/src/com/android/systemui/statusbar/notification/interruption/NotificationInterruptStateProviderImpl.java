@@ -435,7 +435,7 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
             return false;
         }
 
-        if (mAxDynamicBarSettings.isNotificationEventsActive()) {
+        if (mAxDynamicBarSettings.shouldSuppressHeadsUp(sbn)) {
             if (log) mLogger.logNoHeadsUpFeatureDisabled();
             return false;
         }

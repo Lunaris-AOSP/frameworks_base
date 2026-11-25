@@ -167,7 +167,7 @@ constructor(
         check(!started)
 
         addCondition(PeekDisabledSuppressor(globalSettings, headsUpManager, logger, mainHandler))
-        addCondition(PeekAxDynamicBarSuppressor(axDynamicBarSettings))
+        addFilter(PeekAxDynamicBarSuppressor(axDynamicBarSettings))
         addCondition(PulseDisabledSuppressor(ambientDisplayConfiguration, userTracker))
         addCondition(PulseBatterySaverSuppressor(batteryController))
         addFilter(PeekPackageSnoozedSuppressor(headsUpManager))

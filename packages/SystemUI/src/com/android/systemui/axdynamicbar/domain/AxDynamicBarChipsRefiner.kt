@@ -37,7 +37,13 @@ class AxDynamicBarChipsRefiner @Inject constructor(
         if (!settings.isEnabled.value) return input
 
         return input.copy(
-            active = input.active.map { chip -> chip.copy(isHidden = true) },
+            active = input.active.map { chip ->
+                if (chip.key.startsWith("callChip-") && "call" in settings.disabledEventTypes.value) {
+                    chip
+                } else {
+                    chip.copy(isHidden = true)
+                }
+            },
         )
     }
 }

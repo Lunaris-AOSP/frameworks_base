@@ -59,10 +59,16 @@ constructor(
 
     val events: Flow<List<IslandEvent>> = buildEventsFlow()
 
-    private val disabled get() = settings.disabledEventTypes.value
+    private val disabled: Set<String>
+        get() = when {
+            settings.isEnabled.value && settings.isKeyguardEnabled.value ->
+                settings.disabledEventTypes.value intersect settings.keyguardDisabledEventTypes.value
+            settings.isKeyguardEnabled.value -> settings.keyguardDisabledEventTypes.value
+            else -> settings.disabledEventTypes.value
+        }
 
     private fun isTypeEnabled(typeId: String): Boolean =
-        settings.isEnabled.value && typeId !in disabled
+        settings.isEventSourceNeeded(typeId)
 
     private fun isMediaSourceNeeded(): Boolean =
         isTypeEnabled("media") || settings.isKeyguardMusicPillEnabled.value
@@ -96,7 +102,7 @@ constructor(
         if (isMediaSourceNeeded()) media.startListening()
         else media.stopListening()
 
-        if (settings.isEnabled.value) notification.startListening()
+        if (settings.isAnyBarEnabled()) notification.startListening()
         else notification.stopListening()
 
         if (isTypeEnabled("bluetooth")) connectivity.startBluetooth()
@@ -134,8 +140,7 @@ constructor(
             smartspace.sportsEvents,
             notification.sportsEvents,
         ) { qlSports, notifSports ->
-            if (!isTypeEnabled("sports")) emptyList()
-            else qlSports + notifSports.filter { ns ->
+            qlSports + notifSports.filter { ns ->
                 qlSports.none { qs ->
                     qs.team1Name.equals(ns.team1Name, ignoreCase = true) &&
                         qs.team2Name.equals(ns.team2Name, ignoreCase = true)
@@ -146,19 +151,15 @@ constructor(
             notification.promotedOngoingEvents,
             sportsGroup,
         ) { promoted, sports ->
-            (if (isTypeEnabled("promoted_ongoing")) promoted else emptyList()) + sports
+            promoted + sports
         }
         val highGroup = combine(
             notification.callEvents,
             torch.torchEvent,
             biometric.biometricEvent
         ) { call, t, bio ->
-                (if (isTypeEnabled("call")) call else emptyList()) +
-                listOfNotNull(
-                    t?.takeIf { isTypeEnabled("torch") },
-                    bio?.takeIf { isTypeEnabled("biometric_unlock") },
-                )
-            }
+            call + listOfNotNull(t, bio)
+        }
         val midGroup =
             combine(
                 media.mediaEvent,
@@ -167,13 +168,7 @@ constructor(
                 system.chargingEvent,
                 notification.alarmEvent,
             ) { m, bt, hotspot, charging, alarm ->
-                listOfNotNull(
-                    m?.takeIf { isMediaSourceNeeded() },
-                    bt?.takeIf { isTypeEnabled("bluetooth") },
-                    hotspot?.takeIf { isTypeEnabled("hotspot") },
-                    charging?.takeIf { isTypeEnabled("charging") },
-                    alarm?.takeIf { isTypeEnabled("alarm") },
-                )
+                listOfNotNull(m, bt, hotspot, charging, alarm)
             }
         val lowGroupA =
             combine(
@@ -183,13 +178,7 @@ constructor(
                 connectivity.vpnEvent,
                 system.clipboardEvent,
             ) { timer, stopwatch, ringer, vpn, clipboard ->
-                listOfNotNull(
-                    timer?.takeIf { isTypeEnabled("timer") },
-                    stopwatch?.takeIf { isTypeEnabled("stopwatch") },
-                    ringer?.takeIf { isTypeEnabled("ringer") },
-                    vpn?.takeIf { isTypeEnabled("vpn") },
-                    clipboard?.takeIf { isTypeEnabled("clipboard") },
-                )
+                listOfNotNull(timer, stopwatch, ringer, vpn, clipboard)
             }
         val lowGroup =
             combine(
@@ -198,11 +187,7 @@ constructor(
                 notification.audioRecordingEvent,
                 smartspace.nowPlayingEvent,
             ) { a, appSwitch, audioRec, nowPlaying ->
-                a + listOfNotNull(
-                    appSwitch?.takeIf { isTypeEnabled("app_switch") },
-                    audioRec?.takeIf { isTypeEnabled("audio_recording") },
-                    nowPlaying?.takeIf { isTypeEnabled("media") },
-                )
+                a + listOfNotNull(appSwitch, audioRec, nowPlaying)
             }
         val transientGroup = combine(midGroup, lowGroup) { mid, low -> mid + low }
 

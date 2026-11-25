@@ -118,11 +118,12 @@ class PeekDisabledSuppressor(
 
 class PeekAxDynamicBarSuppressor(
     private val settings: AxDynamicBarSettings,
-) : VisualInterruptionCondition(
+) : VisualInterruptionFilter(
     types = setOf(PEEK),
     reason = "suppressed by AxDynamicBar"
 ) {
-    override fun shouldSuppress(): Boolean = settings.isNotificationEventsActive()
+    override fun shouldSuppress(entry: NotificationEntry): Boolean =
+        settings.shouldSuppressHeadsUp(entry.sbn)
 }
 
 class PulseDisabledSuppressor(

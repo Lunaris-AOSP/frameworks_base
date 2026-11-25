@@ -182,6 +182,7 @@ constructor(
 
                 override fun onStateChanged(newState: Int) {
                     _isOnKeyguard.value = newState == StatusBarState.KEYGUARD
+                    if (newState != StatusBarState.SHADE) dismissNotificationAlert()
                     updateChipVisibility()
                 }
 
@@ -222,13 +223,15 @@ constructor(
         applicationScope.launch {
             combine(
                 settings.isEnabled,
+                settings.isKeyguardEnabled,
                 settings.isKeyguardMusicPillEnabled,
                 settings.disabledEventTypes,
-            ) { enabled, pillEnabled, _ ->
-                enabled to pillEnabled
-            }.collect { (enabled, pillEnabled) ->
-                if (!enabled) dismissNotificationAlert()
-                if (enabled || pillEnabled) repository.startListening()
+                settings.keyguardDisabledEventTypes,
+            ) { enabled, keyguardEnabled, pillEnabled, _, _ ->
+                Triple(enabled, keyguardEnabled, pillEnabled)
+            }.collect { (enabled, keyguardEnabled, pillEnabled) ->
+                if (!settings.isNotificationEventsActive()) dismissNotificationAlert()
+                if (enabled || keyguardEnabled || pillEnabled) repository.startListening()
                 else {
                     repository.stopListening()
                     autoDismissJobs.values.forEach { it.cancel() }
@@ -249,7 +252,9 @@ constructor(
         applicationScope.launch {
             combine(
                 repository.events,
-                settings.disabledEventTypes,
+                combine(settings.disabledEventTypes, settings.keyguardDisabledEventTypes) { a, b ->
+                    a to b
+                },
                 combine(settings.isEnabled, settings.isKeyguardEnabled) { enabled, kgEnabled ->
                     enabled to kgEnabled
                 },
@@ -261,7 +266,7 @@ constructor(
                         // The lock screen music pill has its own switch and event source.
                         pillEnabled
                     } else {
-                        enabled && (!kg || kgEnabled) && settings.isEventEnabled(e)
+                        (if (kg) kgEnabled else enabled) && settings.isEventEnabled(e, kg)
                     }
                 } to kg
             }.collect { (rawEvents, onKeyguard) ->
@@ -477,7 +482,7 @@ constructor(
     private fun showNotificationAlert(
         notification: IslandEvent.Notification,
     ) {
-        if (!settings.isEnabled.value) return
+        if (!settings.isNotificationEventsActive()) return
         if (panelBlocking || statusBlocking || _isOnKeyguard.value) return
         if (shouldSuppressForDndOrRinger(notification)) return
         val current = _uiState.value
@@ -580,7 +585,7 @@ constructor(
     }
 
     private fun scheduleAutoDismiss(event: IslandEvent, delayOverride: Long? = null) {
-        if (!settings.isEnabled.value) return
+        if (!settings.isAnyBarEnabled()) return
         val ms = delayOverride ?: event.behavior.autoDismissMs ?: return
         val eventId = event.id
         autoDismissJobs[eventId]?.cancel()

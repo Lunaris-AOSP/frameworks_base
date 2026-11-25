@@ -124,17 +124,33 @@ constructor(
 
     init {
         applicationScope.launch {
-            interactor.uiState
-                .map { state ->
-                    state.events
-                        .firstOrNull { it is IslandEvent.Call && it.callType == "Phone:incoming" }
-                        ?.id
+            val incomingCall =
+                combine(interactor.uiState, interactor.isOnKeyguard) { state, onKeyguard ->
+                    val enabled = if (onKeyguard) isKeyguardEnabled.value else isEnabled.value
+                    val incomingCallId = state.events
+                        .firstOrNull {
+                            state.shouldShow && enabled && it is IslandEvent.Call &&
+                                it.callType == "Phone:incoming" &&
+                                interactor.settings.isEventEnabled(it, onKeyguard)
+                        }?.id
+                    incomingCallId to onKeyguard
                 }
+            combine(
+                incomingCall,
+                keyguardExpansion.canShow,
+                interactor.isPanelExpanded,
+                interactor.qsExpansion.map { it > 0f }.distinctUntilChanged(),
+                interactor.legacyShadeExpansion.map { it > 0f }.distinctUntilChanged(),
+            ) { (incomingCallId, onKeyguard), keyguardCanShow, panelExpanded, qsOpen, shadeOpen ->
+                val canExpand =
+                    if (onKeyguard) keyguardCanShow else !panelExpanded && !qsOpen && !shadeOpen
+                Triple(incomingCallId, onKeyguard, canExpand)
+            }
                 .distinctUntilChanged()
-                .collect { incomingCallId ->
-                    if (incomingCallId != null) {
+                .collect { (incomingCallId, onKeyguard, canExpand) ->
+                    if (incomingCallId != null && canExpand) {
                         interactor.dismissNotificationAlert()
-                        if (interactor.isOnKeyguard.value) {
+                        if (onKeyguard) {
                             keyguardExpansion.expand()
                         } else {
                             statusBarExpansion.expand()
@@ -173,21 +189,20 @@ constructor(
     val isOnKeyguard: StateFlow<Boolean> = interactor.isOnKeyguard
 
     val shouldSuppressKeyguardIndication: StateFlow<Boolean> =
-        combine(isOnKeyguard, isEnabled, isKeyguardEnabled) { onKeyguard, enabled, keyguardEnabled ->
-            onKeyguard && enabled && keyguardEnabled
+        combine(isOnKeyguard, isKeyguardEnabled) { onKeyguard, keyguardEnabled ->
+            onKeyguard && keyguardEnabled
         }.distinctUntilChanged()
             .stateIn(applicationScope, SharingStarted.Eagerly, false)
 
     val isKeyguardChipVisible: StateFlow<Boolean> =
         combine(
             isOnKeyguard,
-            isEnabled,
             isKeyguardEnabled,
             isKeyguardMusicPillEnabled,
             chipState,
-        ) { onKeyguard, enabled, keyguardEnabled, pillEnabled, state ->
+        ) { onKeyguard, keyguardEnabled, pillEnabled, state ->
             onKeyguard && (
-                (enabled && keyguardEnabled) ||
+                keyguardEnabled ||
                     (pillEnabled && state?.allEvents?.any { it is IslandEvent.Media } == true)
             )
         }.distinctUntilChanged()
