@@ -52,6 +52,11 @@ class AxionVolumeDialog @Inject constructor(
     var isLeftSide: Boolean = false
     private var volumeStyle = VolumeStyle.MOTO
     private var motoExpanded = false
+    private var compactSession by mutableIntStateOf(0)
+
+    fun startVolumeSession(compact: Boolean) {
+        compactSession = if (compact) compactSession + 1 else 0
+    }
 
     init {
         with(window!!) {
@@ -170,7 +175,16 @@ class AxionVolumeDialog @Inject constructor(
                             .padding(12.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        VolumeStyleDispatcher(viewModel, style, ::onMotoExpandedLayoutChanged)
+                        val panel = @Composable {
+                            VolumeStyleDispatcher(viewModel, style, ::onMotoExpandedLayoutChanged)
+                        }
+                        if (compactSession == 0) {
+                            panel()
+                        } else {
+                            key(compactSession) {
+                                CompactVolumePill(viewModel, style, panel)
+                            }
+                        }
                     }
                 }
             }
@@ -183,7 +197,7 @@ class AxionVolumeDialog @Inject constructor(
 
         override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
             if (ev.action == MotionEvent.ACTION_DOWN) {
-                if (isTouchOutsidePanelBounds(ev.x, ev.y)) {
+                if (isTouchOutsidePanelBounds(ev.x)) {
                     viewModel.visibilityState = VisibilityState.DISMISSED
                     return true
                 }
@@ -191,7 +205,7 @@ class AxionVolumeDialog @Inject constructor(
             return super.dispatchTouchEvent(ev)
         }
 
-        private fun isTouchOutsidePanelBounds(x: Float, y: Float): Boolean {
+        private fun isTouchOutsidePanelBounds(x: Float): Boolean {
             if (isExpanded) return false
             val density = resources.displayMetrics.density
             val widthPx = if (volumeStyle == VolumeStyle.MOTO) {
@@ -200,8 +214,8 @@ class AxionVolumeDialog @Inject constructor(
                 66 * density
             }
             val w = width.toFloat()
-            val ls = isLeftSide
-            return if (ls) x > widthPx else x < (w - widthPx)
+            val onLeftEdge = isLeftSide == (layoutDirection == View.LAYOUT_DIRECTION_LTR)
+            return if (onLeftEdge) x > widthPx else x < (w - widthPx)
         }
     }
 }

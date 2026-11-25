@@ -20,6 +20,7 @@ import android.content.Context
 import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
+import android.os.UserHandle
 import android.provider.Settings
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
@@ -55,7 +56,8 @@ fun rememberVolumeStyle(): State<VolumeStyle> {
         context.contentResolver.registerContentObserver(
             Settings.System.getUriFor(VolumeStyle.SETTINGS_KEY),
             /* notifyForDescendants = */ false,
-            observer
+            observer,
+            UserHandle.USER_CURRENT,
         )
         onDispose {
             context.contentResolver.unregisterContentObserver(observer)
@@ -67,10 +69,11 @@ fun rememberVolumeStyle(): State<VolumeStyle> {
 
 private fun readStyle(context: Context): VolumeStyle =
     VolumeStyle.from(
-        Settings.System.getInt(
+        Settings.System.getIntForUser(
             context.contentResolver,
             VolumeStyle.SETTINGS_KEY,
-            VolumeStyle.MOTO.value
+            VolumeStyle.MOTO.value,
+            UserHandle.USER_CURRENT,
         )
     )
 

@@ -19,6 +19,7 @@ package com.android.systemui.axion.volume
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.os.UserHandle
 import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
 import com.android.systemui.accessibility.data.repository.AccessibilityRepository
@@ -30,6 +31,7 @@ import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.plugins.VolumeDialog
 import com.android.systemui.plugins.VolumeDialogController
 import com.android.systemui.shared.settings.data.repository.SecureSettingsRepository
+import com.android.systemui.volume.Events
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.*
 import javax.inject.Inject
@@ -62,6 +64,12 @@ class AxionVolumeDialogPlugin @Inject constructor(
             val wasShowing = viewModel.visibilityState == VisibilityState.SHOWING
             
             if (!wasShowing) {
+                val volumeChanged = reason == Events.SHOW_REASON_VOLUME_CHANGED ||
+                    reason == Events.SHOW_REASON_REMOTE_VOLUME_CHANGED
+                val compact = volumeChanged && Settings.System.getIntForUser(
+                    context.contentResolver, "compose_volume_compact_pill", 0, UserHandle.USER_CURRENT
+                ) != 0
+                dialog.startVolumeSession(compact)
                 viewModel.expansionState = ExpansionState.COLLAPSED
             }
             viewModel.visibilityState = VisibilityState.SHOWING
