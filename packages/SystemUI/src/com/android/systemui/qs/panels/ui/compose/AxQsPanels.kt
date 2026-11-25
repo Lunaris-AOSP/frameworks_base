@@ -639,6 +639,7 @@ private fun AxEditButton(viewModel: ToolbarViewModel) {
     if (!editModeButtonViewModel.isEditButtonVisible) return
     AxHeaderButton(
         onClick = { editModeButtonViewModel.onButtonClick() },
+        onLongClick = { editModeButtonViewModel.onButtonLongClick() },
         modifier = Modifier.miuiQsHeaderMotion().sysuiResTag("qs_edit_mode_button"),
     ) {
         Icon(
@@ -676,6 +677,7 @@ private fun AxHeaderButton(
     onClick: (SystemUiExpandable) -> Unit,
     modifier: Modifier = Modifier,
     containerColor: Color = AxTileDefaults.backgroundColor(),
+    onLongClick: ((SystemUiExpandable) -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     CompositionLocalProvider(
@@ -685,6 +687,7 @@ private fun AxHeaderButton(
             color = containerColor,
             shape = CircleShape,
             onClick = onClick,
+            onLongClick = onLongClick,
             modifier = modifier.semantics { role = Role.Button },
             useModifierBasedImplementation = true,
             defaultMinSize = false,

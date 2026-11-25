@@ -73,6 +73,9 @@ constructor(
 
     /** Returns `true` if the tap gesture should be rejected */
     fun isFalseTap(@Penalty penalty: Int): Boolean = manager.isFalseTap(penalty)
+
+    /** Returns `true` if the long tap gesture should be rejected. */
+    fun isFalseLongTap(@Penalty penalty: Int): Boolean = manager.isFalseLongTap(penalty)
 }
 
 inline fun FalsingInteractor.runIfNotFalseTap(

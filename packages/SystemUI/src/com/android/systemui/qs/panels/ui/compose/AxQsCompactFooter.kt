@@ -121,6 +121,7 @@ internal fun AxQsCompactFooter(
         if (editViewModel.isEditButtonVisible) {
             CompactFooterButton(
                 onClick = { editViewModel.onButtonClick() },
+                onLongClick = { editViewModel.onButtonLongClick() },
                 modifier = Modifier.sysuiResTag("qs_edit_mode_button"),
             ) {
                 Icon(

@@ -85,6 +85,14 @@ constructor(
         }
     }
 
+    fun onButtonLongClick() {
+        if (!falsingInteractor.isFalseLongTap(FalsingManager.LOW_PENALTY)) {
+            activityStarter.postQSRunnableDismissingKeyguard {
+                editModeViewModel.startEditing(openPanelSettings = true)
+            }
+        }
+    }
+
     fun onTooltipDisposed() {
         qsPreferencesInteractor.setEditTooltipShown(true)
     }

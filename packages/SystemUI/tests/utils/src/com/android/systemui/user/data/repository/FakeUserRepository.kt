@@ -69,6 +69,8 @@ class FakeUserRepository @Inject constructor() : UserRepository {
         )
     override val selectedUserInfo: Flow<UserInfo> = selectedUser.map { it.userInfo }
 
+    override val isCurrentUserHeadlessSystemUser = MutableStateFlow(false)
+
     private val _isPolicyManagerLogoutEnabled = MutableStateFlow<Boolean>(false)
     override val isPolicyManagerLogoutEnabled: StateFlow<Boolean> =
         _isPolicyManagerLogoutEnabled.asStateFlow()

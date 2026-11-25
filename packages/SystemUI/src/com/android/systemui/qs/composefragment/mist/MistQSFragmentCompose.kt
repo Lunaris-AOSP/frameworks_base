@@ -1288,15 +1288,18 @@ constructor(
     private fun EditModeElement(modifier: Modifier = Modifier) {
         val editModeViewModel = viewModel.containerViewModel.editModeViewModel
         val allTiles by editModeViewModel.tiles.collectAsStateWithLifecycle(initialValue = null)
-        var showPanelSettings by rememberSaveable { mutableStateOf(false) }
-        var panelSettingsLayout by rememberSaveable { mutableStateOf(AxQsLayout.QS) }
+        val showPanelSettings by editModeViewModel.isPanelSettingsOpen.collectAsStateWithLifecycle()
+        var panelSettingsLayout by rememberSaveable {
+            mutableStateOf(if (viewModel.isInSplitShade) AxQsLayout.SPLIT_SHADE else AxQsLayout.QS)
+        }
         val pageState = rememberSaveableStateHolder()
         val spatialSpec = MaterialTheme.motionScheme.fastSpatialSpec<IntOffset>()
         val effectsSpec = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
         val direction = if (LocalLayoutDirection.current == LayoutDirection.Ltr) 1 else -1
 
         BackHandler(enabled = viewModel.isEditing) {
-            if (showPanelSettings) showPanelSettings = false else editModeViewModel.stopEditing()
+            if (showPanelSettings) editModeViewModel.setPanelSettingsOpen(false)
+            else editModeViewModel.stopEditing()
         }
 
         AnimatedContent(
@@ -1316,7 +1319,7 @@ constructor(
                     LunariQsPanelSettings(
                         viewModel = axQsViewModel,
                         initialLayout = panelSettingsLayout,
-                        onBack = { showPanelSettings = false },
+                        onBack = { editModeViewModel.setPanelSettingsOpen(false) },
                         onDone = editModeViewModel::stopEditing,
                         isSplitShade = viewModel.isInSplitShade,
                     )
@@ -1339,7 +1342,7 @@ constructor(
                         },
                         onOpenPanelSettings = {
                             panelSettingsLayout = it
-                            showPanelSettings = true
+                            editModeViewModel.setPanelSettingsOpen(true)
                         },
                         animateItemBounds = true,
                         splitShade = viewModel.isInSplitShade,

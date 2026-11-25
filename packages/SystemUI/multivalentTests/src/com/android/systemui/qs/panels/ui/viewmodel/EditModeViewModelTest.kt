@@ -548,6 +548,54 @@ class EditModeViewModelTest(flags: FlagsParameterization) : SysuiTestCase() {
             }
         }
 
+    @Test
+    fun stopEditing_keepsPanelSettingsVisibleDuringExit() =
+        kosmos.runTest {
+            underTest.startEditing(openPanelSettings = true)
+
+            underTest.stopEditing()
+
+            assertThat(underTest.isEditing.value).isFalse()
+            assertThat(underTest.isPanelSettingsOpen.value).isTrue()
+
+            underTest.startEditing()
+
+            assertThat(underTest.isPanelSettingsOpen.value).isFalse()
+        }
+
+    @Test
+    fun startEditing_whenAlreadyEditing_keepsCurrentPage() =
+        kosmos.runTest {
+            underTest.startEditing(openPanelSettings = true)
+
+            underTest.startEditing()
+
+            assertThat(underTest.isPanelSettingsOpen.value).isTrue()
+            assertThat(uiEventLoggerFake.numLogs()).isEqualTo(1)
+        }
+
+    @Test
+    fun panelSettingsNavigation_doesNotRestartEditing() =
+        kosmos.runTest {
+            underTest.startEditing(openPanelSettings = true)
+
+            underTest.setPanelSettingsOpen(false)
+
+            assertThat(underTest.isPanelSettingsOpen.value).isFalse()
+            assertThat(underTest.isEditing.value).isTrue()
+
+            underTest.setPanelSettingsOpen(true)
+
+            assertThat(underTest.isPanelSettingsOpen.value).isTrue()
+            assertThat(uiEventLoggerFake.numLogs()).isEqualTo(1)
+
+            underTest.stopEditing()
+            underTest.setPanelSettingsOpen(false)
+
+            assertThat(underTest.isPanelSettingsOpen.value).isTrue()
+            assertThat(uiEventLoggerFake.numLogs()).isEqualTo(2)
+        }
+
     // UI EVENT TESTS
 
     @Test

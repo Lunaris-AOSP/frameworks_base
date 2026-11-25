@@ -80,6 +80,11 @@ constructor(
      */
     val isEditing = _isEditing.asStateFlow()
 
+    private val _isPanelSettingsOpen = MutableStateFlow(false)
+
+    /** Retained during the editor's exit animation and reset when a new session starts. */
+    val isPanelSettingsOpen = _isPanelSettingsOpen.asStateFlow()
+
     val gridLayout: StateFlow<GridLayout> =
         gridLayoutTypeInteractor.layout
             .map { gridLayoutMap[it] ?: defaultGridLayout }
@@ -166,10 +171,21 @@ constructor(
 
     /** @see isEditing */
     fun startEditing() {
+        startEditing(openPanelSettings = false)
+    }
+
+    fun startEditing(openPanelSettings: Boolean) {
         if (!isEditing.value) {
+            _isPanelSettingsOpen.value = openPanelSettings
             uiEventLogger.log(QSEditEvent.QS_EDIT_OPEN)
         }
         _isEditing.value = true
+    }
+
+    fun setPanelSettingsOpen(open: Boolean) {
+        if (isEditing.value) {
+            _isPanelSettingsOpen.value = open
+        }
     }
 
     /** @see isEditing */

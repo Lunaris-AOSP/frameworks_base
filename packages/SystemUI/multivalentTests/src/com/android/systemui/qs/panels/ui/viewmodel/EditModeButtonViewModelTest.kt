@@ -34,14 +34,15 @@ import com.android.systemui.qs.panels.data.repository.qsPreferencesRepository
 import com.android.systemui.qs.panels.ui.viewmodel.toolbar.EditModeButtonViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.toolbar.editModeButtonViewModelFactory
 import com.android.systemui.testKosmos
-import com.android.systemui.user.domain.interactor.fakeHeadlessSystemUserMode
-import com.android.systemui.user.domain.interactor.headlessSystemUserMode
+import com.android.systemui.user.data.repository.fakeUserRepository
 import com.google.common.truth.Truth.assertThat
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doAnswer
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 
 @RunWith(AndroidJUnit4::class)
@@ -50,7 +51,7 @@ class EditModeButtonViewModelTest : SysuiTestCase() {
     val kosmos = testKosmos().useUnconfinedTestDispatcher()
 
     // NOTE: cannot instantiate EditModeButtonViewModel here because it would hydrate
-    // showEditButton before the value on fakeHeadlessSystemUserMode is set
+    // showEditButton before the headless system user state is set.
 
     @Before
     fun setUp() {
@@ -85,6 +86,65 @@ class EditModeButtonViewModelTest : SysuiTestCase() {
             underTest.onButtonClick()
 
             assertThat(isEditing).isTrue()
+        }
+
+    @Test
+    fun falseLongTap_doesNotOpenPanelSettings() =
+        kosmos.runTest {
+            val underTest = createEditModeButtonViewModel()
+            fakeFalsingManager.setFalseLongTap(true)
+
+            underTest.onButtonLongClick()
+
+            assertThat(editModeViewModel.isEditing.value).isFalse()
+            assertThat(editModeViewModel.isPanelSettingsOpen.value).isFalse()
+            verify(activityStarter, never()).postQSRunnableDismissingKeyguard(any())
+        }
+
+    @Test
+    fun validLongTap_opensPanelSettingsUsingLongTapFalsing() =
+        kosmos.runTest {
+            val underTest = createEditModeButtonViewModel()
+            fakeFalsingManager.setFalseTap(true)
+            fakeFalsingManager.setFalseLongTap(false)
+
+            underTest.onButtonLongClick()
+
+            assertThat(editModeViewModel.isEditing.value).isTrue()
+            assertThat(editModeViewModel.isPanelSettingsOpen.value).isTrue()
+        }
+
+    @Test
+    fun longTap_waitsForKeyguardDismissal() =
+        kosmos.runTest {
+            val underTest = createEditModeButtonViewModel()
+            var pendingAction: Runnable? = null
+            whenever(activityStarter.postQSRunnableDismissingKeyguard(any())).doAnswer {
+                pendingAction = it.getArgument(0)
+            }
+
+            underTest.onButtonLongClick()
+
+            assertThat(editModeViewModel.isEditing.value).isFalse()
+            assertThat(editModeViewModel.isPanelSettingsOpen.value).isFalse()
+
+            checkNotNull(pendingAction).run()
+
+            assertThat(editModeViewModel.isEditing.value).isTrue()
+            assertThat(editModeViewModel.isPanelSettingsOpen.value).isTrue()
+        }
+
+    @Test
+    fun tapAfterClosingPanelSettings_opensTileEditor() =
+        kosmos.runTest {
+            val underTest = createEditModeButtonViewModel()
+            underTest.onButtonLongClick()
+            editModeViewModel.stopEditing()
+
+            underTest.onButtonClick()
+
+            assertThat(editModeViewModel.isEditing.value).isTrue()
+            assertThat(editModeViewModel.isPanelSettingsOpen.value).isFalse()
         }
 
     @Test
@@ -170,8 +230,7 @@ class EditModeButtonViewModelTest : SysuiTestCase() {
     private fun Kosmos.createEditModeButtonViewModel(
         isHeadlessSystemUser: Boolean = false
     ): EditModeButtonViewModel {
-        headlessSystemUserMode = fakeHeadlessSystemUserMode
-        fakeHeadlessSystemUserMode.setIsHeadlessSystemUser(isHeadlessSystemUser)
+        fakeUserRepository.isCurrentUserHeadlessSystemUser.value = isHeadlessSystemUser
         return editModeButtonViewModelFactory.create(ignoreTestHarness = true).apply {
             activateIn(testScope)
         }
