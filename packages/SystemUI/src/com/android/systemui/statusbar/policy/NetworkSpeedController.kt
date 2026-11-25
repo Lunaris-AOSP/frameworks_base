@@ -52,6 +52,7 @@ class NetworkSpeedController private constructor(
     private var autoHide = false
     private var position = POSITION_RIGHT
     private var singleLine = false
+    private var refreshIntervalMs = DEFAULT_REFRESH_INTERVAL_SECONDS * 1000L
     private var lastTime = 0L
     private var lastTotalBytes = 0L
     private var speed = 0L
@@ -70,7 +71,7 @@ class NetworkSpeedController private constructor(
             lastTime = currentTime
             lastTotalBytes = totalBytes
             publishState()
-            handler.postDelayed(this, REFRESH_INTERVAL_MS)
+            handler.postDelayed(this, refreshIntervalMs)
         }
     }
 
@@ -91,10 +92,16 @@ class NetworkSpeedController private constructor(
     private val networkSpeedObserver = object : ContentObserver(handler) {
         override fun onChange(selfChange: Boolean) {
             val wasEnabled = isSwitchOn
+            val previousIntervalMs = refreshIntervalMs
             updateSettings()
             if (wasEnabled != isSwitchOn) {
                 restartSpeedUpdates()
             } else {
+                if (previousIntervalMs != refreshIntervalMs && isConnected && isSwitchOn) {
+                    handler.removeCallbacks(speedUpdate)
+                    val elapsed = SystemClock.elapsedRealtime() - lastTime
+                    handler.postDelayed(speedUpdate, (refreshIntervalMs - elapsed).coerceAtLeast(0L))
+                }
                 publishState()
             }
         }
@@ -115,6 +122,7 @@ class NetworkSpeedController private constructor(
             Settings.System.NETWORK_SPEED_AUTO_HIDE,
             Settings.System.NETWORK_SPEED_POSITION,
             Settings.System.NETWORK_SPEED_LAYOUT,
+            Settings.System.NETWORK_SPEED_REFRESH_INTERVAL,
         ).forEach { key ->
             contentResolver.registerContentObserver(
                 Settings.System.getUriFor(key), false, networkSpeedObserver, UserHandle.USER_ALL)
@@ -142,6 +150,9 @@ class NetworkSpeedController private constructor(
         position = if (readSetting(Settings.System.NETWORK_SPEED_POSITION, POSITION_RIGHT) ==
                 POSITION_LEFT) POSITION_LEFT else POSITION_RIGHT
         singleLine = readSetting(Settings.System.NETWORK_SPEED_LAYOUT, 1) == 0
+        refreshIntervalMs = readSetting(
+            Settings.System.NETWORK_SPEED_REFRESH_INTERVAL, DEFAULT_REFRESH_INTERVAL_SECONDS
+        ).coerceIn(1, 6) * 1000L
     }
 
     private fun readSetting(key: String, defaultValue: Int): Int =
@@ -154,7 +165,7 @@ class NetworkSpeedController private constructor(
         speed = 0L
         publishState()
         if (isConnected && isSwitchOn) {
-            handler.postDelayed(speedUpdate, REFRESH_INTERVAL_MS)
+            handler.postDelayed(speedUpdate, refreshIntervalMs)
         }
     }
 
@@ -226,6 +237,6 @@ class NetworkSpeedController private constructor(
         private const val ICON_HIDE_LIST = "icon_blacklist"
         private const val POSITION_LEFT = 0
         private const val POSITION_RIGHT = 1
-        private const val REFRESH_INTERVAL_MS = 4000L
+        private const val DEFAULT_REFRESH_INTERVAL_SECONDS = 4
     }
 }

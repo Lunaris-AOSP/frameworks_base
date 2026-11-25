@@ -7244,6 +7244,9 @@ public final class Settings {
          */
         public static final String NETWORK_SPEED_LAYOUT = "network_speed_layout";
 
+        /** @hide */
+        public static final String NETWORK_SPEED_REFRESH_INTERVAL = "network_speed_refresh_interval";
+
         /**
          * Statusbar logo
          * @hide
