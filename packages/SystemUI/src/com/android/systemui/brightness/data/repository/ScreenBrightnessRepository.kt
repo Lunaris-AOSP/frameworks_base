@@ -20,13 +20,14 @@ import android.annotation.SuppressLint
 import android.database.ContentObserver
 import android.hardware.display.BrightnessInfo
 import android.hardware.display.DisplayManager
+import android.os.PowerManager
+import android.os.UserHandle
 import android.provider.Settings
 import com.android.app.tracing.coroutines.launchTraced as launch
 import com.android.systemui.brightness.shared.model.BrightnessLog
 import com.android.systemui.brightness.shared.model.LinearBrightness
 import com.android.systemui.brightness.shared.model.formatBrightness
 import com.android.systemui.brightness.shared.model.logDiffForTable
-import com.android.systemui.util.settings.SystemSettings
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Background
@@ -34,6 +35,8 @@ import com.android.systemui.dagger.qualifiers.DisplayId
 import com.android.systemui.log.LogBuffer
 import com.android.systemui.log.core.LogLevel
 import com.android.systemui.log.table.TableLogBuffer
+import com.android.systemui.user.data.repository.UserRepository
+import com.android.systemui.util.settings.SystemSettings
 import com.android.systemui.utils.coroutines.flow.conflatedCallbackFlow
 import javax.inject.Inject
 import kotlin.coroutines.CoroutineContext
@@ -46,9 +49,10 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.withContext
 
@@ -79,6 +83,10 @@ interface ScreenBrightnessRepository {
      */
     fun setTemporaryBrightness(value: LinearBrightness)
 
+    fun clearTemporaryBrightness() {
+        setTemporaryBrightness(LinearBrightness(PowerManager.BRIGHTNESS_INVALID_FLOAT))
+    }
+
     /** Sets the brightness definitively. */
     fun setBrightness(value: LinearBrightness)
 
@@ -99,6 +107,7 @@ constructor(
     @Application private val applicationScope: CoroutineScope,
     @Background private val backgroundContext: CoroutineContext,
     private val systemSettings: SystemSettings,
+    userRepository: UserRepository? = null,
 ) : ScreenBrightnessRepository {
 
     private val apiQueue = Channel<SetBrightnessMethod>(capacity = UNLIMITED)
@@ -142,10 +151,9 @@ constructor(
                     null,
                     DisplayManager.EVENT_TYPE_DISPLAY_BRIGHTNESS,
                 )
-
+                trySend(Unit)
                 awaitClose { displayManager.unregisterDisplayListener(listener) }
             }
-            .onStart { emit(Unit) }
             .map { brightnessInfoValue() }
             .flowOn(backgroundContext)
             .stateIn(
@@ -202,36 +210,52 @@ constructor(
         apiQueue.trySend(SetBrightnessMethod.Permanent(value))
     }
 
-    override val isAutoBrightnessEnabledFlow: StateFlow<Boolean> =
-        conflatedCallbackFlow {
-            val uri = Settings.System.getUriFor(Settings.System.SCREEN_BRIGHTNESS_MODE)
-            val observer = object : ContentObserver(null) {
-                override fun onChange(selfChange: Boolean) {
-                    trySend(isAutoBrightnessEnabled())
-                }
-            }
-            systemSettings.registerContentObserverAsync(uri, false, observer)
-            trySend(isAutoBrightnessEnabled())
-            awaitClose {
-                systemSettings.unregisterContentObserverAsync(observer)
-            }
-        }
-        .flowOn(backgroundContext)
-        .stateIn(applicationScope, SharingStarted.WhileSubscribed(), isAutoBrightnessEnabled())
+    private val selectedUserIds =
+        userRepository?.selectedUserInfo?.map { it.id } ?: flowOf(UserHandle.USER_CURRENT)
 
-    fun isAutoBrightnessEnabled(): Boolean {
-        return systemSettings.getInt(
+    override val isAutoBrightnessEnabledFlow: StateFlow<Boolean> =
+        selectedUserIds
+            .flatMapLatest { userId ->
+                conflatedCallbackFlow<Unit> {
+                    val observer = object : ContentObserver(null) {
+                        override fun onChange(selfChange: Boolean) {
+                            trySend(Unit)
+                        }
+                    }
+                    try {
+                        systemSettings.registerContentObserverForUser(
+                            Settings.System.SCREEN_BRIGHTNESS_MODE, observer, userId
+                        )
+                        trySend(Unit)
+                        awaitClose()
+                    } finally {
+                        systemSettings.unregisterContentObserverAsync(observer)
+                    }
+                }.map { isAutoBrightnessEnabled(userId) }
+            }
+            .flowOn(backgroundContext)
+            .stateIn(
+                applicationScope,
+                SharingStarted.WhileSubscribed(),
+                isAutoBrightnessEnabled(UserHandle.USER_CURRENT),
+            )
+
+    private fun isAutoBrightnessEnabled(userId: Int): Boolean {
+        return systemSettings.getIntForUser(
             Settings.System.SCREEN_BRIGHTNESS_MODE,
-            Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC
+            Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC,
+            userId,
         ) != Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL
     }
 
     override fun toggleBrightnessMode() {
-        val enabled = isAutoBrightnessEnabled()
-        systemSettings.putInt(
+        val userId = systemSettings.getRealUserHandle(UserHandle.USER_CURRENT)
+        val enabled = isAutoBrightnessEnabled(userId)
+        systemSettings.putIntForUser(
             Settings.System.SCREEN_BRIGHTNESS_MODE,
             if (enabled) Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL
-            else Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC
+            else Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC,
+            userId,
         )
     }
 

@@ -22,6 +22,7 @@ import android.service.quicksettings.Tile.STATE_ACTIVE
 import android.service.quicksettings.Tile.STATE_INACTIVE
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -128,6 +129,13 @@ object AxTileDefaults {
 
     @Composable
     @ReadOnlyComposable
+    fun sliderTileInnerBackgroundColor(): Color {
+        val background = backgroundColor()
+        return background.copy(alpha = (background.alpha + 0.02f).coerceAtMost(1f))
+    }
+
+    @Composable
+    @ReadOnlyComposable
     fun folderPreviewTileBackgroundColor(): Color {
         return if (!LocalBlurEnabled.current) {
             MaterialTheme.colorScheme.surfaceBright
@@ -149,6 +157,13 @@ internal fun axQsTileShape(
 ): RoundedCornerShape =
     if (usesPillShape(span, style, state)) CircleShape
     else RoundedCornerShape(AxQsControlCornerRadius)
+
+@Composable
+internal fun animateAxQsInsetTileShape(active: Boolean): RoundedCornerShape {
+    val pill = LocalAxQsTileStyle.current.usesPillShape(active)
+    val corner by animateIntAsState(if (pill) 50 else 25, label = "AxQsInsetTileShape")
+    return RoundedCornerShape(percent = corner)
+}
 
 @Composable
 internal fun animateAxQsTileShape(span: AxQsSpan, state: Int): RoundedCornerShape {

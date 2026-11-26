@@ -33,11 +33,11 @@ internal fun Modifier.lunarisSliderLongPress(
     sliderStyle: LunarisQsSliderStyle,
     onLongPress: (() -> Unit)?,
 ): Modifier {
+    if (onLongPress == null) return this
     val currentOnLongPress by rememberUpdatedState(onLongPress)
     return pointerInput(vertical, sliderStyle) {
         awaitEachGesture {
             val down = awaitFirstDown(pass = PointerEventPass.Initial)
-            if (currentOnLongPress == null) return@awaitEachGesture
             val cancelled =
                 withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
                     while (true) {
@@ -61,8 +61,7 @@ internal fun Modifier.lunarisSliderLongPress(
                     }
                 }
             if (cancelled != null) return@awaitEachGesture
-            val action = currentOnLongPress ?: return@awaitEachGesture
-            action()
+            currentOnLongPress()
             do {
                 val event = awaitPointerEvent(PointerEventPass.Initial)
                 event.changes.forEach { it.consume() }

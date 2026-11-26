@@ -29,6 +29,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -67,7 +68,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -146,10 +146,34 @@ import com.android.systemui.volume.panel.component.volume.slider.ui.viewmodel.Sl
 import java.text.NumberFormat
 import kotlin.math.round
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 internal val LocalShowQsSliderPercentage = staticCompositionLocalOf { false }
 internal val LocalSmoothVolumeSlider = staticCompositionLocalOf { false }
+
+internal class AxQsSliderDrag<T : Any> {
+    var value: T? by mutableStateOf(null)
+        private set
+    private var owner: MutableInteractionSource? = null
+
+    fun update(source: MutableInteractionSource, value: T) {
+        owner = source
+        this.value = value
+    }
+
+    fun finish(source: MutableInteractionSource): T? {
+        if (owner !== source) return null
+        val finalValue = value
+        owner = null
+        value = null
+        return finalValue
+    }
+}
+
+internal val LocalBrightnessDrag = staticCompositionLocalOf<AxQsSliderDrag<Int>?> { null }
+internal val LocalVolumeDrag = staticCompositionLocalOf<AxQsSliderDrag<Float>?> { null }
 
 internal fun Modifier.axQsEntrance(progress: () -> Float): Modifier {
     return graphicsLayer {
@@ -293,7 +317,7 @@ internal fun animateAxQsSliderValue(
         targetValue = targetFraction,
         animationSpec =
             if (isDragging) {
-                spring(Spring.DampingRatioNoBouncy, Spring.StiffnessHigh)
+                snap()
             } else {
                 spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow)
             },
@@ -751,15 +775,7 @@ internal fun AxQsSliderPreview(
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
-                AxQsControl.AUTO_BRIGHTNESS,
-                AxQsControl.FLASHLIGHT,
-                AxQsControl.VOLUME_MUTE,
-                AxQsControl.RINGER,
-                AxQsControl.APP_WIDGET,
-                AxQsControl.APP_WIDGET_2,
-                AxQsControl.APP_WIDGET_3,
-                AxQsControl.PHOTO,
-                AxQsControl.MEDIA -> Unit
+                else -> Unit
             }
         }
     }
@@ -772,17 +788,24 @@ internal fun AxQsBrightnessControl(
     viewModel: BrightnessSliderViewModel,
     entranceProgress: () -> Float,
     modifier: Modifier = Modifier,
+    interactive: Boolean = true,
+    longPressEnabled: Boolean = true,
+    inactiveTrackColor: Color = AxTileDefaults.backgroundColor(),
 ) {
     var dragging by remember(vertical) { mutableStateOf(false) }
     val mirrorInOverlay = dragging && viewModel.showMirror
     AxQsSliderControl(
         vertical = vertical,
+        interceptParentScroll = interactive,
         mirrorInOverlay = mirrorInOverlay,
         entranceProgress = entranceProgress,
         modifier = modifier,
     ) { sliderHeight, verticalSlider ->
         AxBrightnessSlider(
             viewModel = viewModel,
+            interactive = interactive,
+            longPressEnabled = longPressEnabled,
+            inactiveTrackColor = inactiveTrackColor,
             onDraggingChanged = { dragging = it },
             sliderHeight = sliderHeight,
             vertical = verticalSlider,
@@ -800,6 +823,8 @@ private fun AxBrightnessSlider(
     vertical: Boolean,
     sliderStyle: LunarisQsSliderStyle,
     interactive: Boolean = true,
+    longPressEnabled: Boolean = true,
+    inactiveTrackColor: Color = AxTileDefaults.backgroundColor(),
     mirrorInOverlay: Boolean = false,
     onDraggingChanged: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -807,18 +832,19 @@ private fun AxBrightnessSlider(
     val gamma = viewModel.currentBrightness.value
     if (gamma == BrightnessSliderViewModel.initialValue.value) return
 
-    var value by remember(gamma) { mutableIntStateOf(gamma) }
+    val drag = LocalBrightnessDrag.current ?: remember { AxQsSliderDrag<Int>() }
+    val displayValue = drag.value ?: gamma
     val valueRange =
         viewModel.minBrightness.value.toFloat()..viewModel.maxBrightness.value.toFloat()
     val interactionSource = remember { MutableInteractionSource() }
     val isDragging by interactionSource.collectIsDraggedAsState()
     val animatedValue = animateAxQsSliderValue(
-        value = value.toFloat(),
+        value = displayValue.toFloat(),
         valueRange = valueRange,
-        isDragging = isDragging,
+        isDragging = isDragging || drag.value != null,
         label = "AxBrightnessSliderValue",
     )
-    val percentage = axQsSliderPercentage(value.toFloat(), valueRange)
+    val percentage = axQsSliderPercentage(displayValue.toFloat(), valueRange)
     val iconRes =
         if (viewModel.autoMode) {
             R.drawable.ic_qs_brightness_auto_on
@@ -853,7 +879,7 @@ private fun AxBrightnessSlider(
     val restricted = restriction as? PolicyRestriction.Restricted
     val enabled = restricted == null
     val overriddenByApp by viewModel.brightnessOverriddenByWindow.collectAsStateWithLifecycle()
-    val canToggleMode = interactive && enabled && !overriddenByApp
+    val canToggleMode = interactive && longPressEnabled && enabled && !overriddenByApp
     val view = LocalView.current
     val toggleMode: () -> Unit = {
         viewModel.onIconClick()
@@ -869,9 +895,8 @@ private fun AxBrightnessSlider(
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     val contentDescription = stringResource(R.string.accessibility_brightness)
-    val mirrorBackgroundColor = AxTileDefaults.backgroundColor()
-    var dragging by remember { mutableStateOf(false) }
-    val currentDragging by rememberUpdatedState(dragging)
+    var dragging by remember(viewModel, drag) { mutableStateOf(false) }
+    var temporaryWrite by remember(viewModel, drag) { mutableStateOf<Job?>(null) }
     val currentOnDraggingChanged by rememberUpdatedState(onDraggingChanged)
     val inputModifier =
         if (interactive) {
@@ -886,7 +911,7 @@ private fun AxBrightnessSlider(
                     }
                 }
                 .sliderPercentage {
-                    (value - valueRange.start) / (valueRange.endInclusive - valueRange.start)
+                    (displayValue - valueRange.start) / (valueRange.endInclusive - valueRange.start)
                 }
                 .pointerInteropFilter {
                     if (
@@ -908,19 +933,37 @@ private fun AxBrightnessSlider(
             Modifier
         }
 
-    DisposableEffect(viewModel) {
-        onDispose {
-            if (currentDragging) {
-                viewModel.setIsDragging(false)
-                currentOnDraggingChanged(false)
+    fun finishDrag(commit: Boolean) {
+        if (!dragging) return
+        dragging = false
+        temporaryWrite?.cancel()
+        temporaryWrite = null
+        val brightness = drag.finish(interactionSource)
+        if (brightness != null) {
+            if (commit) {
+                coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                    viewModel.onDrag(Drag.Stopped(GammaBrightness(brightness)))
+                }
+            } else {
+                viewModel.cancelDrag()
             }
         }
+        hapticsViewModel?.onValueChangeEnded()
+        if (drag.value == null) viewModel.setIsDragging(false)
+        currentOnDraggingChanged(false)
     }
 
-    LaunchedEffect(interactionSource, overriddenByApp) {
+    DisposableEffect(viewModel, drag, interactionSource) {
+        onDispose { finishDrag(false) }
+    }
+
+    LaunchedEffect(interactionSource, drag, viewModel, enabled, overriddenByApp) {
+        if (!enabled || overriddenByApp) finishDrag(false)
         interactionSource.interactions.collect { interaction ->
-            if (interaction is DragInteraction.Start && overriddenByApp) {
-                viewModel.showToast(context, R.string.quick_settings_brightness_unable_adjust_msg)
+            when {
+                interaction is DragInteraction.Cancel -> finishDrag(false)
+                interaction is DragInteraction.Start && overriddenByApp ->
+                    viewModel.showToast(context, R.string.quick_settings_brightness_unable_adjust_msg)
             }
         }
     }
@@ -931,33 +974,28 @@ private fun AxBrightnessSlider(
         onValueChange = { newValue ->
             if (interactive && enabled && !overriddenByApp) {
                 hapticsViewModel?.onValueChange(newValue)
-                value = newValue.toInt()
+                val brightness = newValue.toInt()
+                drag.update(interactionSource, brightness)
                 if (!dragging) {
                     dragging = true
                     viewModel.setIsDragging(true)
                     onDraggingChanged(true)
                 }
-                coroutineScope.launch { viewModel.onDrag(Drag.Dragging(GammaBrightness(value))) }
+                temporaryWrite?.cancel()
+                temporaryWrite = coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                    viewModel.onDrag(Drag.Dragging(GammaBrightness(brightness)))
+                }
             }
         },
-        onValueChangeFinished = {
-            if (interactive && enabled && !overriddenByApp) {
-                hapticsViewModel?.onValueChangeEnded()
-                coroutineScope.launch { viewModel.onDrag(Drag.Stopped(GammaBrightness(value))) }
-            }
-            if (dragging) {
-                dragging = false
-                viewModel.setIsDragging(false)
-                onDraggingChanged(false)
-            }
-        },
+        onValueChangeFinished = { finishDrag(interactive && enabled && !overriddenByApp) },
         valueRange = valueRange,
         enabled = enabled,
         interactionSource = interactionSource,
         sliderHeight = sliderHeight,
         vertical = vertical,
         sliderStyle = sliderStyle,
-        trackBackgroundColor = if (mirrorInOverlay) mirrorBackgroundColor else Color.Transparent,
+        trackBackgroundColor = if (mirrorInOverlay) inactiveTrackColor else Color.Transparent,
+        inactiveTrackColor = inactiveTrackColor,
         onLongPress = toggleMode.takeIf { canToggleMode },
         icon = { iconModifier ->
             Icon(
@@ -980,15 +1018,22 @@ internal fun AxQsVolumeControl(
     sliderStyle: LunarisQsSliderStyle,
     viewModel: AudioStreamSliderViewModel,
     modifier: Modifier = Modifier,
+    interactive: Boolean = true,
+    longPressEnabled: Boolean = true,
+    inactiveTrackColor: Color = AxTileDefaults.backgroundColor(),
 ) {
     val state by viewModel.slider.collectAsStateWithLifecycle()
     AxQsSliderControl(
         vertical = vertical,
+        interceptParentScroll = interactive,
         modifier = modifier,
     ) { sliderHeight, rotated ->
         AxVolumeSliderContent(
             state = state,
             viewModel = viewModel,
+            interactive = interactive,
+            longPressEnabled = longPressEnabled,
+            inactiveTrackColor = inactiveTrackColor,
             sliderHeight = sliderHeight,
             vertical = rotated,
             sliderStyle = sliderStyle,
@@ -1026,23 +1071,23 @@ private fun AxVolumeSliderContent(
     vertical: Boolean,
     sliderStyle: LunarisQsSliderStyle,
     interactive: Boolean = true,
+    longPressEnabled: Boolean = true,
+    inactiveTrackColor: Color = AxTileDefaults.backgroundColor(),
     modifier: Modifier = Modifier,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isDragging by interactionSource.collectIsDraggedAsState()
     val smooth = LocalSmoothVolumeSlider.current
-    var dragValue by remember(viewModel, smooth, state.valueRange, state.isEnabled) {
-        mutableFloatStateOf(Float.NaN)
+    val drag = LocalVolumeDrag.current ?: remember { AxQsSliderDrag<Float>() }
+    DisposableEffect(drag, interactionSource, smooth, state.valueRange, state.isEnabled) {
+        onDispose { drag.finish(interactionSource) }
     }
-    LaunchedEffect(isDragging) {
-        if (!isDragging) dragValue = Float.NaN
-    }
-    val displayValue = if (smooth && isDragging && !dragValue.isNaN()) dragValue else state.value
+    val displayValue = if (smooth) drag.value ?: state.value else state.value
     val value = key(state is SliderState.Empty, state.isEnabled, state.valueRange) {
         animateAxQsSliderValue(
             value = displayValue,
             valueRange = state.valueRange,
-            isDragging = isDragging,
+            isDragging = isDragging || (smooth && drag.value != null),
             label = "AxVolumeSliderValue",
         )
     }
@@ -1061,7 +1106,7 @@ private fun AxVolumeSliderContent(
             initialValue = ringerViewModel.currentMode
         )
     val isZenMuted by ringerViewModel.isZenMuted.collectAsStateWithLifecycle()
-    val canToggleMode = interactive && state.isEnabled && !isZenMuted
+    val canToggleMode = interactive && longPressEnabled && state.isEnabled && !isZenMuted
     val view = LocalView.current
     val toggleMode: () -> Unit = {
         val modes = ringerViewModel.availableModes
@@ -1099,13 +1144,23 @@ private fun AxVolumeSliderContent(
             axVolumeHapticsViewModel(state.value, state, interactionSource, hapticsFactory)
         }
 
+    if (smooth && interactive) {
+        LaunchedEffect(drag, interactionSource, hapticsViewModel) {
+            interactionSource.interactions.collect { interaction ->
+                if (interaction is DragInteraction.Cancel && drag.finish(interactionSource) != null) {
+                    hapticsViewModel?.onValueChangeEnded()
+                }
+            }
+        }
+    }
+
     AxQsSlider(
         value = value,
         valueRange = state.valueRange,
         percentage = axQsSliderPercentage(displayValue, state.valueRange),
         onValueChange = { newValue ->
             if (smooth && interactive) {
-                dragValue = newValue
+                drag.update(interactionSource, newValue)
                 hapticsViewModel?.onValueChange(newValue)
             } else {
                 hapticsViewModel?.addVelocityDataPoint(newValue)
@@ -1113,7 +1168,7 @@ private fun AxVolumeSliderContent(
             if (interactive) viewModel.onValueChanged(state, newValue)
         },
         onValueChangeFinished = {
-            dragValue = Float.NaN
+            drag.finish(interactionSource)
             hapticsViewModel?.onValueChangeEnded()
             if (interactive) viewModel.onValueChangeFinished()
         },
@@ -1122,6 +1177,7 @@ private fun AxVolumeSliderContent(
         sliderHeight = sliderHeight,
         vertical = vertical,
         sliderStyle = sliderStyle,
+        inactiveTrackColor = inactiveTrackColor,
         onLongPress = toggleMode.takeIf { canToggleMode },
         icon = { iconModifier ->
             val icon = state.icon
@@ -1153,7 +1209,7 @@ private fun AxVolumeSliderContent(
                     contentDescription = state.a11yContentDescription
                     stateDescription =
                         listOfNotNull(state.a11yStateDescription, ringerDescription).joinToString(", ")
-                    progressBarRangeInfo = ProgressBarRangeInfo(state.value, state.valueRange)
+                    progressBarRangeInfo = ProgressBarRangeInfo(displayValue, state.valueRange)
                     if (interactive) {
                         if (canToggleMode) {
                             onLongClick(label = longPressLabel) {

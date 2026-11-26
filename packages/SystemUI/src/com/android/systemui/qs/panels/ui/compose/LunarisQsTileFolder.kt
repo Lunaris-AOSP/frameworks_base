@@ -18,7 +18,6 @@ package com.android.systemui.qs.panels.ui.compose
 
 import android.service.quicksettings.Tile.STATE_ACTIVE
 import android.service.quicksettings.Tile.STATE_UNAVAILABLE
-import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -370,16 +369,10 @@ internal fun LunarisFolderPreview(
 @Composable
 private fun ContentScope.LunarisFolderLiveTile(tile: TileViewModel, preview: Boolean = false) {
     val scope = rememberCoroutineScope()
-    val style = LocalAxQsTileStyle.current
     val shape =
         if (preview) {
             val state by tile.state.collectAsStateWithLifecycle(tile.currentState)
-            val corner by
-                animateIntAsState(
-                    if (style.usesPillShape(isActive = state.state == STATE_ACTIVE)) 50 else 25,
-                    label = "LunarisFolderTileShape",
-                )
-            RoundedCornerShape(percent = corner)
+            animateAxQsInsetTileShape(state.state == STATE_ACTIVE)
         } else {
             null
         }

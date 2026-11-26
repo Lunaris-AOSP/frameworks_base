@@ -47,6 +47,7 @@ data class AxQsSpan(val columns: Int, val rows: Int) {
 
         val TileDefault = AxQsSpan(1, 1)
         val TileWideDefault = AxQsSpan(2, 1)
+        val SliderTile = AxQsSpan(2, 2)
         val ControlTileMin = TileDefault
         val MediaDefault = AxQsSpan(2, 2)
         val MediaWide = AxQsSpan(4, 2)
@@ -89,6 +90,18 @@ enum class AxQsControl(
         defaultSpan = AxQsSpan(1, 2),
         minSpan = AxQsSpan.TileDefault,
         maxSpan = AxQsSpan(AxQsSpan.MAX_COLUMNS, AxQsSpan.MAX_ROWS),
+    ),
+    BRIGHTNESS_TILE(
+        id = "control:brightness_tile",
+        defaultSpan = AxQsSpan.SliderTile,
+        minSpan = AxQsSpan.SliderTile,
+        maxSpan = AxQsSpan.SliderTile,
+    ),
+    VOLUME_TILE(
+        id = "control:volume_tile",
+        defaultSpan = AxQsSpan.SliderTile,
+        minSpan = AxQsSpan.SliderTile,
+        maxSpan = AxQsSpan.SliderTile,
     ),
     FLASHLIGHT(
         id = "control:flashlight",
@@ -198,6 +211,7 @@ enum class AxQsControl(
     }
 
     fun resizeSpan(startSpan: AxQsSpan, columnDelta: Int, rowDelta: Int, columns: Int): AxQsSpan {
+        if (minSpan == maxSpan) return minSpan
         if (isResizableContent) {
             return AxQsSpan(
                 (startSpan.columns + columnDelta).coerceIn(1, spans(columns).max.columns),
@@ -243,6 +257,13 @@ enum class AxQsControl(
 
     val isSlider: Boolean
         get() = this == BRIGHTNESS || this == VOLUME || this == FLASHLIGHT
+
+    val sliderStyleControl: AxQsControl
+        get() = when (this) {
+            BRIGHTNESS_TILE -> BRIGHTNESS
+            VOLUME_TILE -> VOLUME
+            else -> this
+        }
 
     val supportsOrientation: Boolean
         get() = isSlider || this == RINGER || isResizableContent

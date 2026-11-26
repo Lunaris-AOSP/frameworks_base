@@ -45,16 +45,13 @@ import dagger.assisted.AssistedInject
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.withContext
 
@@ -74,7 +71,7 @@ constructor(
     private val hapticsViewModelFactory: SliderHapticsViewModel.Factory,
 ) : SliderViewModel {
 
-    private val volumeChanges = MutableStateFlow<Int?>(null)
+    private val volumeChanges = Channel<Int>(Channel.CONFLATED)
     private val audioStream = audioStreamWrapper.audioStream
     private val labelsByStream =
         mapOf(
@@ -120,19 +117,16 @@ constructor(
             .stateIn(coroutineScope, SharingStarted.Eagerly, SliderState.Empty)
 
     init {
-        volumeChanges
-            .filterNotNull()
-            .onEach {
-                volumePanelLogger.onSetVolumeRequested(audioStream, it)
-                audioVolumeInteractor.setVolume(audioStream, it)
+        coroutineScope.launch {
+            for (volume in volumeChanges) {
+                volumePanelLogger.onSetVolumeRequested(audioStream, volume)
+                audioVolumeInteractor.setVolume(audioStream, volume)
             }
-            .launchIn(coroutineScope)
+        }
     }
 
     override fun onValueChanged(state: SliderState, newValue: Float) {
-        val audioViewModel = state as? State
-        audioViewModel ?: return
-        volumeChanges.tryEmit(newValue.roundToInt())
+        if (state is State) volumeChanges.trySend(newValue.roundToInt())
     }
 
     override fun onValueChangeFinished() {

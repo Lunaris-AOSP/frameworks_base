@@ -85,6 +85,8 @@ constructor(
         )
     }
 
+    fun clearTemporaryBrightness() = screenBrightnessRepository.clearTemporaryBrightness()
+
     /** Sets the brightness definitely. */
     suspend fun setBrightness(gammaBrightness: GammaBrightness) {
         screenBrightnessRepository.setBrightness(gammaBrightness.clamp().toLinearBrightness())

@@ -65,6 +65,11 @@ import com.android.systemui.qs.panels.shared.model.LunarisQsTileFolderController
 import com.android.systemui.qs.panels.ui.edit.LunarisQsPhotoActivity
 import com.android.systemui.qs.panels.ui.edit.LunarisQsWidgetActivity
 import com.android.systemui.qs.panels.widgets.LunarisQsWidgetService
+import com.android.systemui.qs.tiles.base.domain.model.QSTileInput
+import com.android.systemui.qs.tiles.base.shared.model.QSTileUserAction
+import com.android.systemui.qs.tiles.impl.uimodenight.domain.interactor.UiModeNightTileDataInteractor
+import com.android.systemui.qs.tiles.impl.uimodenight.domain.interactor.UiModeNightTileUserActionInteractor
+import com.android.systemui.qs.tiles.impl.uimodenight.domain.interactor.model.UiModeNightTileModel
 import com.android.systemui.res.R
 import com.android.systemui.shade.ShadeDisplayAware
 import com.android.systemui.shade.data.repository.ShadeRepository
@@ -78,6 +83,8 @@ import com.android.systemui.utils.coroutines.flow.conflatedCallbackFlow
 import javax.inject.Inject
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 
 class AxQsViewModel
@@ -96,12 +103,27 @@ constructor(
     bluetoothArtworkRepository: LunarisBluetoothArtworkRepository,
     dataUsageInteractor: LunarisQsDataUsageInteractor,
     modesDialogViewModel: ModesDialogViewModel,
+    darkThemeData: UiModeNightTileDataInteractor,
+    private val darkThemeActions: UiModeNightTileUserActionInteractor,
     private val falsingInteractor: FalsingInteractor,
     @ShadeDisplayAware private val context: Context,
 ) : ExclusiveActivatable() {
     val bluetoothArtwork = bluetoothArtworkRepository.artwork
     val dataUsage = dataUsageInteractor.dataUsage
     val modes = modesDialogViewModel.tiles
+    val darkTheme = userRepository.selectedUserInfo.flatMapLatest { user ->
+        darkThemeData.tileData(user.userHandle, emptyFlow())
+    }
+
+    suspend fun toggleDarkTheme(state: UiModeNightTileModel) {
+        darkThemeActions.handleInput(
+            QSTileInput(
+                userRepository.getSelectedUserInfo().userHandle,
+                QSTileUserAction.Click(null),
+                state,
+            )
+        )
+    }
 
     fun onModeClick(mode: ModeTileViewModel) {
         falsingInteractor.runIfNotFalseTap { mode.onClick() }
@@ -941,14 +963,14 @@ constructor(
         layout: AxQsLayout,
         control: AxQsControl,
     ): LunarisQsSliderStyle =
-        sliderStyles[LunarisQsSliderKey(layout, control)]
+        sliderStyles[LunarisQsSliderKey(layout, control.sliderStyleControl)]
             ?: LunarisQsSliderStyle.M3_EXPRESSIVE
 
     fun setSliderStyle(
         layout: AxQsLayout,
         control: AxQsControl,
         style: LunarisQsSliderStyle,
-    ) = repository.setSliderStyle(layout, control, style)
+    ) = repository.setSliderStyle(layout, control.sliderStyleControl, style)
 
     fun setColumns(layout: AxQsGridLayout, columns: Int) {
         repository.setColumns(layout, columns.coerceIn(columnRange(layout)))

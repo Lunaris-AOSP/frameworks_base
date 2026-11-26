@@ -17,15 +17,19 @@
 
 package com.android.systemui.qs.panels.ui.compose
 
+import android.service.quicksettings.Tile.STATE_ACTIVE
+import android.service.quicksettings.Tile.STATE_INACTIVE
+import android.service.quicksettings.Tile.STATE_UNAVAILABLE
+import android.view.HapticFeedbackConstants
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon as MaterialIcon
 import androidx.compose.material3.MaterialTheme
@@ -35,10 +39,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -46,15 +50,19 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.android.compose.modifiers.thenIf
 import com.android.systemui.brightness.ui.viewmodel.BrightnessSliderViewModel
 import com.android.systemui.common.ui.compose.Icon
 import com.android.systemui.qs.panels.shared.model.AxQsControl
 import com.android.systemui.qs.panels.shared.model.AxQsSpan
 import com.android.systemui.qs.panels.shared.model.LunarisQsSliderStyle
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberQSTileAnimationStyle
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberTileHaptic
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.tileToggleAnimation
 import com.android.systemui.qs.panels.ui.media.AxMediaPanel
 import com.android.systemui.qs.panels.ui.viewmodel.AxMediaViewModel
+import com.android.systemui.qs.panels.ui.viewmodel.AxQsViewModel
 import com.android.systemui.qs.tiles.ringer.RingerSliderTileContent
+import com.android.systemui.qs.ui.compose.borderOnFocus
 import com.android.systemui.res.R
 import com.android.systemui.volume.panel.component.volume.slider.ui.viewmodel.AudioStreamSliderViewModel
 
@@ -117,67 +125,103 @@ internal fun AxQsVolumeMuteButton(
 }
 
 @Composable
-private fun AxQsButtonControl(
+internal fun AxQsButtonControl(
     description: String,
     active: Boolean,
     interactive: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    inSliderTile: Boolean = false,
+    available: Boolean = true,
     icon: @Composable (Color) -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
+    val shape = if (inSliderTile) animateAxQsInsetTileShape(active) else CircleShape
+    val view = LocalView.current
+    val hapticEnabled = inSliderTile && interactive && rememberTileHaptic()
+    val animationStyle = if (inSliderTile && interactive) rememberQSTileAnimationStyle() else 0
+    val state =
+        when {
+            !available -> STATE_UNAVAILABLE
+            active -> STATE_ACTIVE
+            else -> STATE_INACTIVE
+        }
+    val backgroundColor =
+        if (inSliderTile) AxTileDefaults.sliderTileInnerBackgroundColor()
+        else AxTileDefaults.backgroundColor()
     val gradient = rememberLunarisQsGradient()
-    val activeBackgroundBrush = gradient.tileBrush().takeIf { active }
+    val brush = gradient.tileBrush()
+    val iconOnly = inSliderTile && usesIconOnlyActiveColor(AxQsSpan.SliderTile)
     val strokeStyle = LocalLunarisQsTileStrokeStyle.current
-    val background by
-        animateColorAsState(
-            targetValue =
-                if (active && !strokeStyle) MaterialTheme.colorScheme.primary
-                else AxTileDefaults.backgroundColor(),
-            label = "AxQsButtonBackground",
-        )
     val foreground by
         animateColorAsState(
             targetValue =
-                if (activeBackgroundBrush != null) gradient.contentColor
+                if (!available) AxTileColorsDefaults.unavailableTileColors().icon
+                else if (active && brush != null) gradient.contentColor
                 else if (active) MaterialTheme.colorScheme.onPrimary
                 else MaterialTheme.colorScheme.onSurface,
             label = "AxQsButtonForeground",
         )
-    val fillModifier =
-        if (strokeStyle) {
-            val fillAlpha = animateFloatAsState(if (active) 1f else 0f, label = "AxQsButtonStrokeFill")
-            Modifier.lunarisQsInsetBackground(
-                brush = gradient.tileBrush() ?: SolidColor(MaterialTheme.colorScheme.primary),
-                shape = CircleShape,
-                insetWidth = LocalLunarisQsTileStrokeWidth.current * LocalTileScale.current,
-                alpha = { fillAlpha.value },
-            )
-        } else {
-            Modifier.thenIf(activeBackgroundBrush != null) {
-                Modifier.drawBehind { drawRect(brush = activeBackgroundBrush!!) }
-            }
-        }
+    val fillAlpha =
+        animateFloatAsState(
+            if (active && available && !iconOnly) 1f else 0f,
+            label = "AxQsButtonFill",
+        )
     Box(
         contentAlignment = Alignment.Center,
         modifier =
             modifier
                 .fillMaxSize()
-                .lunarisTilePressAnimation(interactionSource, interactive)
-                .clip(CircleShape)
-                .background(background)
-                .then(fillModifier)
-                .lunarisQsCosTileBorder(CircleShape)
-                .clickable(
+                .lunarisTilePressAnimation(interactionSource, interactive && available)
+                .clip(shape)
+                .background(backgroundColor)
+                .lunarisQsInsetBackground(
+                    brush = brush ?: SolidColor(MaterialTheme.colorScheme.primary),
+                    shape = shape,
+                    insetWidth =
+                        if (strokeStyle)
+                            LocalLunarisQsTileStrokeWidth.current * LocalTileScale.current
+                        else 0.dp,
+                    alpha = { fillAlpha.value },
+                )
+                .lunarisQsCosTileBorder(
+                    shape,
+                    enabled =
+                        LocalLunarisQsCosTileBackground.current &&
+                            available &&
+                            (!inSliderTile || strokeStyle),
+                )
+                .borderOnFocus(MaterialTheme.colorScheme.secondary, shape.topEnd)
+                .toggleable(
+                    value = active,
                     interactionSource = interactionSource,
                     indication = LocalIndication.current,
-                    enabled = interactive,
+                    enabled = interactive && available,
                     role = Role.Switch,
-                    onClick = onClick,
+                    onValueChange = {
+                        if (hapticEnabled) {
+                            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                        }
+                        onClick()
+                    },
                 )
                 .semantics { contentDescription = description },
     ) {
-        icon(foreground)
+        val iconBackground =
+            if (iconOnly) {
+                Modifier.fillMaxSize(0.70f).lunarisQsAnimatedIconBackground(
+                    color =
+                        if (active && available) MaterialTheme.colorScheme.primary
+                        else Color.Transparent,
+                    brush = brush.takeIf { active && available },
+                )
+            } else Modifier
+        Box(
+            iconBackground.tileToggleAnimation(animationStyle, state),
+            contentAlignment = Alignment.Center,
+        ) {
+            icon(foreground)
+        }
     }
 }
 
@@ -192,6 +236,7 @@ fun AxQsControlPreview(
     brightnessViewModel: BrightnessSliderViewModel,
     volumeViewModel: AudioStreamSliderViewModel? = null,
     mediaViewModel: AxMediaViewModel,
+    axQsViewModel: AxQsViewModel,
     modifier: Modifier = Modifier,
 ) {
     when (control) {
@@ -200,6 +245,16 @@ fun AxQsControlPreview(
         AxQsControl.APP_WIDGET_3 ->
             LunarisQsWidgetCard(control = control, modifier = modifier.fillMaxSize())
         AxQsControl.PHOTO -> LunarisQsPhotoCard(modifier = modifier.fillMaxSize())
+        AxQsControl.BRIGHTNESS_TILE ->
+            LunarisBrightnessTile(
+                brightnessViewModel = brightnessViewModel,
+                axQsViewModel = axQsViewModel,
+                sliderStyle = sliderStyle,
+                interactive = false,
+                modifier = modifier,
+            )
+        AxQsControl.VOLUME_TILE ->
+            LunarisVolumeTile(volumeViewModel, sliderStyle, interactive = false, modifier = modifier)
         AxQsControl.FLASHLIGHT ->
             LunarisFlashlightSlider(
                 vertical = span.columns == 1,

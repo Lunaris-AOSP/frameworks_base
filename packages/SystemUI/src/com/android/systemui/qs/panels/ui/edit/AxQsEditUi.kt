@@ -1411,8 +1411,8 @@ private fun AxEditableGridSection(
                 ) {
                     if (listState.draggedId == item.id) {
                         Box(Modifier.fillMaxSize()) {
-                            if (orientationControl != null) {
-                                controlPreview(orientationControl, item.span, columns, controlStyle)
+                            if (contentControl != null) {
+                                controlPreview(contentControl, item.span, columns, controlStyle)
                             } else if (value is AxEditGridValue.Folder) {
                                 LunarisEditTileFolder(value.folder, value.tiles, item.span)
                             } else if (value is AxEditGridValue.Stack) {

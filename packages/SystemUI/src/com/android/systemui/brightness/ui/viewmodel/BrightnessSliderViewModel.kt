@@ -129,6 +129,8 @@ constructor(
         }
     }
 
+    fun cancelDrag() = screenBrightnessInteractor.clearTemporaryBrightness()
+
     fun onIconClick() {
         screenBrightnessInteractor.toggleBrightnessMode()
     }

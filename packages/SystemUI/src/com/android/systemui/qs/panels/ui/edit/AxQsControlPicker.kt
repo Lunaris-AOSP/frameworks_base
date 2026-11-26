@@ -197,6 +197,8 @@ internal fun AxAvailableControls(
                 AxQsControl.RINGER to stringResource(R.string.volume_ringer_mode),
                 AxQsControl.BRIGHTNESS to stringResource(R.string.lunaris_qs_brightness_slider),
                 AxQsControl.VOLUME to stringResource(R.string.lunaris_qs_volume_slider),
+                AxQsControl.BRIGHTNESS_TILE to stringResource(R.string.lunaris_qs_brightness_tile),
+                AxQsControl.VOLUME_TILE to stringResource(R.string.lunaris_qs_volume_tile),
                 AxQsControl.FLASHLIGHT to stringResource(R.string.lunaris_qs_flashlight_slider),
                 AxQsControl.MEDIA to axString("ax_qs_media", "Media player"),
                 AxQsControl.PHOTO to stringResource(R.string.lunaris_qs_photo_title),

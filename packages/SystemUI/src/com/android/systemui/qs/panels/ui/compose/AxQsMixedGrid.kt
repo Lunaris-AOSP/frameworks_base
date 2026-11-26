@@ -817,6 +817,14 @@ private fun AxLiveControl(
                     entranceProgress = entranceProgress,
                     modifier = Modifier.fillMaxSize(),
                 )
+            AxQsControl.BRIGHTNESS_TILE ->
+                LunarisBrightnessTile(
+                    brightnessViewModel = brightnessSliderViewModel,
+                    axQsViewModel = axQsViewModel,
+                    sliderStyle = sliderStyle,
+                    entranceProgress = entranceProgress,
+                )
+            AxQsControl.VOLUME_TILE -> LunarisVolumeTile(volumeSliderViewModel, sliderStyle)
             AxQsControl.VOLUME ->
                 if (volumeSliderViewModel != null) {
                     AxQsVolumeControl(

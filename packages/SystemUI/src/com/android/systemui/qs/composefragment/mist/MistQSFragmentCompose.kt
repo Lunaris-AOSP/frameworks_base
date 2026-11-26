@@ -217,7 +217,10 @@ import com.android.systemui.qs.panels.ui.compose.MiuiQsAnimationBoost
 import com.android.systemui.qs.panels.ui.compose.miuiQsMotionBounds
 import com.android.systemui.qs.panels.ui.compose.rememberMiuiQsPanelMotion
 import com.android.systemui.qs.panels.ui.compose.LocalShowQsSliderPercentage
+import com.android.systemui.qs.panels.ui.compose.AxQsSliderDrag
+import com.android.systemui.qs.panels.ui.compose.LocalBrightnessDrag
 import com.android.systemui.qs.panels.ui.compose.LocalSmoothVolumeSlider
+import com.android.systemui.qs.panels.ui.compose.LocalVolumeDrag
 import com.android.systemui.qs.panels.domain.interactor.EditTilesResetInteractor
 import com.android.systemui.qs.panels.ui.edit.AxQsEditUi
 import com.android.systemui.qs.panels.ui.edit.LunariQsPanelSettings
@@ -448,6 +451,8 @@ constructor(
                             axQsViewModel.iconOnlyActiveColor,
                         LocalShowQsSliderPercentage provides axQsViewModel.showSliderPercentage,
                         LocalSmoothVolumeSlider provides axQsViewModel.smoothVolumeSlider,
+                        LocalBrightnessDrag provides remember { AxQsSliderDrag<Int>() },
+                        LocalVolumeDrag provides remember { AxQsSliderDrag<Float>() },
                         LocalRingerSliderViewModel provides ringerSliderViewModel,
                         LocalLunarisFlashlightSliderViewModel provides flashlightSliderViewModel,
                         LocalQsTilePagerGestureStart provides
@@ -1339,6 +1344,7 @@ constructor(
                                 brightnessViewModel = viewModel.containerViewModel.brightnessSliderViewModel,
                                 volumeViewModel = volumeSliderViewModel,
                                 mediaViewModel = axMediaViewModel,
+                                axQsViewModel = axQsViewModel,
                                 modifier = Modifier.fillMaxSize(),
                             )
                         },
