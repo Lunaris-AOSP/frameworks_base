@@ -602,6 +602,16 @@ fun LunariQsPanelSettings(
                         },
                     )
                 }
+                if (separate && !isSplitShade) {
+                    item("two_row_header") {
+                        SettingsSwitch(
+                            title = stringResource(R.string.lunaris_qs_two_row_header),
+                            summary = stringResource(R.string.lunaris_qs_two_row_header_summary),
+                            checked = viewModel.twoRowHeader,
+                            onCheckedChange = viewModel::setTwoRowHeader,
+                        )
+                    }
+                }
                 item("panel_swipe") {
                     SettingsSwitch(
                         title = stringResource(R.string.lunaris_qs_panel_swipe),

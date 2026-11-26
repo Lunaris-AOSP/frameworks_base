@@ -34,6 +34,7 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.annotation.ColorInt
 import androidx.annotation.LayoutRes
+import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -41,21 +42,27 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -69,6 +76,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -80,8 +88,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.dimensionResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
@@ -105,6 +115,7 @@ import com.android.systemui.kairos.util.nameTag
 import com.android.systemui.privacy.OngoingPrivacyChip
 import com.android.systemui.privacy.PrivacyItem
 import com.android.systemui.qs.panels.shared.model.AxQsLayoutPadding
+import com.android.systemui.qs.panels.ui.viewmodel.toolbar.ToolbarViewModel
 import com.android.systemui.res.R
 import com.android.systemui.shade.ui.composable.LocalStatusIconContext
 import com.android.systemui.shade.ui.composable.ShadeHeader
@@ -269,6 +280,104 @@ object AxCompactHeaderDimensions {
 @Composable
 internal fun axCompactQsHorizontalInsets(): WindowInsets =
     WindowInsets.displayCutout.union(WindowInsets.navigationBars).only(WindowInsetsSides.Horizontal)
+
+@Composable
+internal fun AxSeparatePanelHeader(
+    viewModel: ShadeHeaderViewModel,
+    quickSettings: Boolean,
+    isTransitioning: Boolean,
+    carrierText: String,
+    sidePadding: Dp,
+    toolbarViewModel: ToolbarViewModel,
+    swipeProgress: () -> Float,
+    openSettings: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val tint = ShadeHeader.Colors.textColor
+    val buttonColor = if (tint.luminance() > 0.5f) Color.Black.copy(alpha = 0.38f)
+        else Color.White.copy(alpha = 0.55f)
+    Column(
+        modifier.windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
+            .padding(horizontal = sidePadding, vertical = 6.dp),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 62.dp).graphicsLayer {
+                val progress = swipeProgress()
+                alpha = if (progress < 0f) 1f else kotlin.math.abs(2f * progress - 1f)
+            },
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top,
+        ) {
+            if (quickSettings) {
+                Box(Modifier.weight(1f)) {
+                    AxEditButton(toolbarViewModel, containerColor = buttonColor)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    FooterIconButton(
+                        model = toolbarViewModel.userSwitcherViewModel,
+                        containerColor = Color.Transparent,
+                        iconColor = Color.Unspecified,
+                        iconModifier = Modifier.fillMaxSize().clip(CircleShape),
+                        modifier = Modifier.miuiQsHeaderMotion(),
+                    )
+                    FooterIconButton(
+                        model = toolbarViewModel.settingsButtonViewModel,
+                        containerColor = buttonColor,
+                        modifier = Modifier.miuiQsHeaderMotion(),
+                    )
+                }
+            } else {
+                Column(Modifier.weight(1f)) {
+                    AxQuickSettingsDate(viewModel, textSize = 14f)
+                    AxHeaderClock(viewModel::onClockClicked, tint, Modifier.miuiQsHeaderMotion(), textSize = 40f, bold = true)
+                }
+                NotificationSettingsButton(tint, buttonColor) {
+                    openSettings(Settings.ACTION_NOTIFICATION_SETTINGS)
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                carrierText,
+                modifier = Modifier.weight(1f).miuiQsHeaderMotion().clickable(onClick = viewModel::onShadeCarrierGroupClicked),
+                color = tint,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.size(4.dp))
+            AxStatusIcons(viewModel, isTransitioning, tint.toArgb(), Color.Transparent.toArgb(),
+                showMobileIcons = true)
+            Spacer(Modifier.size(4.dp))
+            AxBatteryInfo(viewModel, showIcon = true, useExpandedFormat = false, textColor = tint,
+                iconTint = tint, iconBackgroundColor = Color.Transparent, onClick = viewModel::onBatteryClicked)
+            if (viewModel.isPrivacyChipVisible) {
+                AxPrivacyChip(viewModel.privacyItems, viewModel::onPrivacyChipClicked)
+            }
+        }
+    }
+}
+
+@Composable
+private fun NotificationSettingsButton(tint: Color, background: Color, onClick: () -> Unit) {
+    IconButton(onClick = onClick, modifier = Modifier.miuiQsHeaderMotion()) {
+        Box(Modifier.size(36.dp).background(background, CircleShape), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(20.dp)) {
+                Icon(
+                    painterResource(R.drawable.ic_notification_bell),
+                    stringResource(R.string.notification_settings_button_description),
+                    Modifier.size(18.dp).align(Alignment.BottomStart),
+                    tint = tint,
+                )
+                Icon(
+                    painterResource(R.drawable.ic_settings), null,
+                    Modifier.size(10.dp).align(Alignment.TopEnd), tint = tint,
+                )
+            }
+        }
+    }
+}
 
 @Composable
 fun AxQuickSettingsHeader(
@@ -657,6 +766,7 @@ private fun AxHeaderClock(
     textColor: Color,
     modifier: Modifier = Modifier,
     textSize: Float = AX_CLOCK_TEXT_SIZE,
+    bold: Boolean = false,
 ) {
     val configuration = LocalConfiguration.current
     key(configuration.densityDpi, configuration.fontScale) {
@@ -672,7 +782,7 @@ private fun AxHeaderClock(
                     )
                     .apply {
                         isSingleLine = true
-                        setIncludeFontPadding(true)
+                        setIncludeFontPadding(!bold)
                         setUseBoundsForWidth(true)
                         setShiftDrawingOffsetForStartOverhang(true)
                         textDirection = View.TEXT_DIRECTION_LOCALE
@@ -688,7 +798,8 @@ private fun AxHeaderClock(
                         R.dimen.status_bar_clock_end_padding
                     )
                 view.setTextColor(textColor.toArgb())
-                view.setTypeface(view.typeface, Typeface.NORMAL)
+                view.includeFontPadding = !bold
+                view.setTypeface(view.typeface, if (bold) Typeface.BOLD else Typeface.NORMAL)
                 view.setTextSize(TypedValue.COMPLEX_UNIT_SP, textSize)
                 view.setPaddingRelative(0, 0, clockEndPadding, 0)
             },

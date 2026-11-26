@@ -633,11 +633,12 @@ internal fun AxQsPagerIndicator(
 }
 
 @Composable
-private fun AxEditButton(viewModel: ToolbarViewModel) {
+internal fun AxEditButton(viewModel: ToolbarViewModel, containerColor: Color = AxTileDefaults.backgroundColor()) {
     val editModeButtonViewModel =
         rememberViewModel("AxQsActions") { viewModel.editModeButtonViewModelFactory.create() }
     if (!editModeButtonViewModel.isEditButtonVisible) return
     AxHeaderButton(
+        containerColor = containerColor,
         onClick = { editModeButtonViewModel.onButtonClick() },
         onLongClick = { editModeButtonViewModel.onButtonLongClick() },
         modifier = Modifier.miuiQsHeaderMotion().sysuiResTag("qs_edit_mode_button"),
@@ -652,11 +653,12 @@ private fun AxEditButton(viewModel: ToolbarViewModel) {
 }
 
 @Composable
-private fun FooterIconButton(
+internal fun FooterIconButton(
     model: FooterActionsButtonViewModel?,
     containerColor: Color,
     modifier: Modifier = Modifier,
     iconColor: Color = ShadeHeader.Colors.textColor,
+    iconModifier: Modifier = Modifier.size(AxHeaderActionDimensions.IconSize),
 ) {
     if (model == null) return
     AxHeaderButton(
@@ -667,7 +669,7 @@ private fun FooterIconButton(
         SystemUiIcon(
             icon = model.icon,
             tint = iconColor,
-            modifier = Modifier.size(AxHeaderActionDimensions.IconSize),
+            modifier = iconModifier,
         )
     }
 }

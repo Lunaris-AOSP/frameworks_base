@@ -186,6 +186,10 @@ constructor(
                 ) != 0,
             )
 
+    val twoRowHeader = boolSetting(TWO_ROW_HEADER, false)
+
+    fun setTwoRowHeader(enabled: Boolean) = putInt(TWO_ROW_HEADER, enabled.toSetting())
+
     val quickPanelOnLeft: StateFlow<Boolean> = boolSetting(QUICK_PANEL_ON_LEFT, false)
     val panelSwipeEnabled: StateFlow<Boolean> = boolSetting(PANEL_SWIPE_ENABLED, false)
     val miuiQsAnimation: StateFlow<Boolean> =
@@ -1065,6 +1069,7 @@ constructor(
         const val QUICK_PANEL_ON_LEFT = "ax_qs_quick_panel_on_left"
         const val PANEL_SWIPE_ENABLED = "lunaris_qs_panel_swipe_enabled"
         const val MIUI_QS_ANIMATION = "lunaris_qs_miui_animation"
+        const val TWO_ROW_HEADER = "lunaris_qs_two_row_header"
         const val MIUI_SPLIT_QS_ANIMATION = "lunaris_qs_miui_split_animation"
         const val SHARED_QS_LAYOUT = "lunaris_qs_shared_layout"
         const val COMPACT_STYLE = "ax_qs_compact_style"

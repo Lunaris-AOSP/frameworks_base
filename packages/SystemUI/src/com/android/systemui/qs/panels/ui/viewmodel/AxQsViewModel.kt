@@ -491,6 +491,15 @@ constructor(
             initialValue = repository.miuiQsAnimation.value,
             source = repository.miuiQsAnimation,
         )
+    val twoRowHeader by
+        hydrator.hydratedStateOf(
+            traceName = "twoRowHeader",
+            initialValue = repository.twoRowHeader.value,
+            source = repository.twoRowHeader,
+        )
+
+    fun setTwoRowHeader(enabled: Boolean) = repository.setTwoRowHeader(enabled)
+
     val miuiSplitQsAnimation by
         hydrator.hydratedStateOf(
             traceName = "miuiSplitQsAnimation",

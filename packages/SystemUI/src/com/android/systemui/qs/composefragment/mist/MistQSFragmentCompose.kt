@@ -18,6 +18,8 @@
 
 package com.android.systemui.qs.composefragment.mist
 
+import android.content.Intent
+import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.qs.composefragment.SceneKeys
 
 import android.annotation.SuppressLint
@@ -158,6 +160,7 @@ import com.android.systemui.qs.panels.ui.compose.AxQuickSettingsHeader
 import com.android.systemui.qs.panels.ui.compose.AxCompactHeaderDimensions
 import com.android.systemui.qs.panels.ui.compose.AxCompactQuickSettingsHeader
 import com.android.systemui.qs.panels.ui.compose.AxQsCompactFooter
+import com.android.systemui.qs.panels.ui.compose.AxSeparatePanelHeader
 import com.android.systemui.qs.panels.ui.compose.EditMode
 import com.android.systemui.qs.panels.ui.compose.LocalQsTilePagerGestureStart
 import com.android.systemui.qs.panels.ui.compose.QuickQuickSettings
@@ -255,6 +258,7 @@ constructor(
     private val ringerSliderViewModel: RingerSliderViewModel,
     private val flashlightSliderViewModel: LunarisFlashlightSliderViewModel,
     private val audioStreamSliderViewModelFactory: AudioStreamSliderViewModel.Factory,
+    private val activityStarter: ActivityStarter,
     private val shadeHeaderController: ShadeHeaderController,
     private val tintedIconManagerFactory: TintedIconManager.Factory,
     private val dialogTransitionAnimator: DialogTransitionAnimator,
@@ -1101,6 +1105,7 @@ constructor(
                         ) {
                             Element(Elements.QuickQuickSettingsAndMedia, Modifier.fillMaxWidth()) {
                                 AxQsMixedGrid(
+                                    headerInOverlay = useTwoRowHeader,
                                     viewModel = viewModel,
                                     toolbarViewModel = toolbarViewModel,
                                     axQsViewModel = axQsViewModel,
@@ -1232,6 +1237,7 @@ constructor(
                                 .sysuiResTag(ResIdTags.qsScroll)
                     ) {
                         AxQsMixedGrid(
+                            headerInOverlay = useTwoRowHeader,
                             viewModel = viewModel,
                             toolbarViewModel = toolbarViewModel,
                             axQsViewModel = axQsViewModel,
@@ -1391,20 +1397,31 @@ constructor(
             )
             return
         }
+        val measuredModifier = modifier.fillMaxWidth()
+            .padding(top = quickSettingsHeaderTopPadding())
+            .onSizeChanged { if (it.height > 0) overlayHeaderContentHeightPx = it.height }
+        if (useTwoRowHeader) {
+            AxSeparatePanelHeader(
+                viewModel = headerViewModel,
+                quickSettings = sceneExpansionState.progress >= 0.5f,
+                isTransitioning = isTransitioning,
+                carrierText = axQsViewModel.carrierText,
+                sidePadding = axQsViewModel.spacing.sidePadding.dp,
+                toolbarViewModel = toolbarViewModel,
+                swipeProgress = { currentPanelSwipeProgress },
+                openSettings = { action ->
+                    activityStarter.postStartActivityDismissingKeyguard(Intent(action), 0)
+                },
+                modifier = measuredModifier,
+            )
+            return
+        }
         AxQuickSettingsHeader(
             viewModel = headerViewModel,
             carrierText = axQsViewModel.carrierText,
             sidePadding = axQsViewModel.spacing.sidePadding.dp,
             isTransitioning = isTransitioning,
-            modifier =
-                modifier
-                    .fillMaxWidth()
-                    .padding(top = quickSettingsHeaderTopPadding())
-                    .onSizeChanged { size ->
-                        if (size.height > 0) {
-                            overlayHeaderContentHeightPx = size.height
-                        }
-                    },
+            modifier = measuredModifier,
         )
     }
 
@@ -1438,6 +1455,9 @@ constructor(
     }
 
     private fun useOverlayShadeHeader() = true
+
+    private val useTwoRowHeader: Boolean
+        get() = isSeparateShade && axQsViewModel.twoRowHeader && !useCompactQsStyle()
 
     private fun useCompactQsStyle() = axQsViewModel.useCompactStyle && !viewModel.isInSplitShade
 

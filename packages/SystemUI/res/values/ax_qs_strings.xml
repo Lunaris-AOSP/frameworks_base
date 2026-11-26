@@ -146,4 +146,6 @@
     <string name="lunaris_qs_photo_dim">Dim</string>
     <string name="ax_qs_settings_step_based_volume">Step-based volume adjustment</string>
     <string name="ax_qs_settings_step_based_volume_summary">Turn off to slide smoothly between volume levels</string>
+    <string name="lunaris_qs_two_row_header">Two-row header</string>
+    <string name="lunaris_qs_two_row_header_summary">Show shortcuts above carrier info in Quick Settings and a large clock above it in notifications.</string>
 </resources>
