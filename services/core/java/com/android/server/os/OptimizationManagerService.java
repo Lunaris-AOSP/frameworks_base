@@ -183,7 +183,7 @@ public final class OptimizationManagerService extends SystemService {
             if (mode != 0 && mode != 1) throw new IllegalArgumentException("Unknown mode");
             Bundle options = new Bundle();
             options.putBoolean("trim", true); options.putBoolean("dexopt", true);
-            options.putString("filter", mode == 1 ? "speed" : "speed-profile");
+            options.putString("filter", mode == 1 ? "adaptive" : "speed-profile");
             startConfigured(options);
             if (callback != null) callbacks.register(callback);
         }
