@@ -124,7 +124,6 @@ import com.android.systemui.islandevents.model.IslandEvent
 import com.android.systemui.islandevents.model.RecordingState
 import com.android.systemui.axdynamicbar.shared.*
 import com.android.systemui.axdynamicbar.ui.AxDynamicBarChipViewModel
-import com.android.systemui.axdynamicbar.ui.KeyguardBatteryInfo
 import com.android.systemui.res.R
 import kotlinx.coroutines.delay
 import android.content.Context
@@ -207,6 +206,7 @@ fun AxDynamicBarKeyguardChip(
     val keyguardBatteryChipMode by viewModel.keyguardBatteryChipMode.collectAsStateWithLifecycle()
     val batteryInfo by viewModel.keyguardBatteryInfo.collectAsStateWithLifecycle()
     val isKeyguardExpanded by viewModel.isKeyguardExpanded.collectAsStateWithLifecycle()
+    val panelEvent by viewModel.keyguardExpansion.panelEvent.collectAsStateWithLifecycle()
     val isKeyguardColorOsActive by viewModel.isKeyguardColorOsActive.collectAsStateWithLifecycle()
     val isKeyguardColorOsRevealed by viewModel.isKeyguardColorOsRevealed.collectAsStateWithLifecycle()
     val activeNotificationCount by viewModel.totalNotificationCount.collectAsStateWithLifecycle()
@@ -220,7 +220,7 @@ fun AxDynamicBarKeyguardChip(
     Box(modifier = modifier) {
 
         val expandedVisibleState = remember { MutableTransitionState(false) }
-        expandedVisibleState.targetState = isKeyguardChipVisible && isKeyguardExpanded && state != null
+        expandedVisibleState.targetState = isKeyguardChipVisible && isKeyguardExpanded && panelEvent != null
         LaunchedEffect(expandedVisibleState.isIdle, expandedVisibleState.currentState) {
             if (expandedVisibleState.isIdle && !expandedVisibleState.currentState) {
                 viewModel.keyguardExpansion.notifyCollapseSettled()
@@ -234,10 +234,9 @@ fun AxDynamicBarKeyguardChip(
                 .fillMaxWidth()
                 .align(Alignment.Center),
         ) {
-            state?.let {
+            panelEvent?.let { event ->
                 KeyguardExpandedContent(
-                    event = it.event,
-                    allEvents = it.allEvents,
+                    event = event,
                     interactor = viewModel.interactor,
                     onCollapse = { viewModel.keyguardExpansion.collapse() },
                     hapticsViewModelFactory = viewModel.interactor.sliderHapticsViewModelFactory,
@@ -393,6 +392,7 @@ fun AxDynamicBarKeyguardChip(
                             batteryInfo,
                             keyguardBatteryChipMode,
                             batteryString,
+                            viewModel.keyguardExpansion::expandCharging,
                             modifier,
                         )
                     }
@@ -469,6 +469,7 @@ fun AxDynamicBarKeyguardChip(
                     batteryInfo,
                     keyguardBatteryChipMode,
                     batteryString,
+                    viewModel.keyguardExpansion::expandCharging,
                     modifier,
                 )
             }
@@ -1012,9 +1013,10 @@ private fun IncomingCallShakeIcon(event: IslandEvent.Call) {
 
 @Composable
 private fun KeyguardBatteryChip(
-    info: KeyguardBatteryInfo,
+    info: IslandEvent.Charging,
     keyguardBatteryChipMode: Int,
     batteryString: String,
+    onChargingClick: () -> Unit,
     modifier: Modifier,
 ) {
     if (keyguardBatteryChipMode <= 0) return
@@ -1050,6 +1052,7 @@ private fun KeyguardBatteryChip(
                 .border(BorderStroke(0.3.dp, chipStrokeColor()), ChipShape)
                 .clip(ChipShape)
                 .background(Color.Transparent)
+                .then(if (info.isCharging) Modifier.clickable(onClick = onChargingClick) else Modifier)
                 .padding(horizontal = SpaceMd)
                 .animateContentSize(MaterialTheme.motionScheme.defaultSpatialSpec()),
             verticalAlignment = Alignment.CenterVertically,

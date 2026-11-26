@@ -145,11 +145,10 @@ constructor(
                         }
                     }
                     scope.launch {
-                        combine(viewModel.isKeyguardExpanded, viewModel.chipState) {
-                                expanded,
-                                chipState ->
-                                expanded && chipState?.event is IslandEvent.Media
-                            }
+                        combine(
+                            viewModel.isKeyguardExpanded,
+                            viewModel.keyguardExpansion.panelEvent,
+                        ) { expanded, event -> expanded && event is IslandEvent.Media }
                             .distinctUntilChanged()
                             .collect { expandedMusicOpen ->
                                 com.android.systemui.media.MediaViewController.getOrNull()

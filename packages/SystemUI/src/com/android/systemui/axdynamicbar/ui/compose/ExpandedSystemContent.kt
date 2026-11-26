@@ -42,6 +42,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.selected
@@ -49,6 +50,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.systemui.axdynamicbar.shared.IslandActions
 import com.android.systemui.islandevents.model.IslandEvent
 import com.android.systemui.axdynamicbar.shared.*
@@ -60,7 +62,7 @@ private fun batteryLevelColor(level: Int): Color =
     if (level > 20) IslandTone.POSITIVE.tint else IslandTone.ALERT.tint
 
 @Composable
-internal fun ChargingExpanded(event: IslandEvent.Charging) {
+internal fun ChargingExpanded(event: IslandEvent.Charging, interactor: IslandActions) {
     val tint = IslandTone.POSITIVE.tint
     ExpandedCardLayout(
         accentColor = tint,
@@ -94,7 +96,51 @@ internal fun ChargingExpanded(event: IslandEvent.Charging) {
                 }
             }
         },
+        actions = { ChargingStats(interactor, tint) },
     )
+}
+
+@Composable
+private fun ChargingStats(interactor: IslandActions, tint: Color) {
+    val readings by interactor.chargerReadings.collectAsStateWithLifecycle()
+    val sample = readings ?: return
+    val locale = LocalConfiguration.current.locales[0]
+    val stats = listOfNotNull(
+        sample.currentMa?.let {
+            R.string.dynamic_island_charging_current to
+                if (it >= 1000f) String.format(locale, "%.2f A", it / 1000f)
+                else String.format(locale, "%.0f mA", it)
+        },
+        sample.powerW?.let {
+            R.string.dynamic_island_charging_power to String.format(locale, "%.1f W", it)
+        },
+        sample.voltageV?.let {
+            R.string.dynamic_island_charging_voltage to String.format(locale, "%.2f V", it)
+        },
+        sample.temperatureC?.let {
+            R.string.dynamic_island_charging_temperature to String.format(locale, "%.1f °C", it)
+        },
+    )
+    stats.chunked(2).forEach { row ->
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(SpaceSm)) {
+            row.forEach { (label, value) ->
+                Column(
+                    modifier = Modifier.weight(1f)
+                        .background(tint.copy(alpha = AlphaIconBg), ShapeCompact)
+                        .semantics(mergeDescendants = true) {}
+                        .padding(SpaceMd),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        stringResource(label),
+                        color = SubtleGray,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    Text(value, color = OnCardText, style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
+    }
 }
 
 @Composable

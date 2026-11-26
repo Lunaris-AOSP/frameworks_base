@@ -1,7 +1,9 @@
 package com.android.systemui.axdynamicbar.shared
 
 import android.net.Uri
+import com.android.systemui.axdynamicbar.model.ChargerReadings
 import com.android.systemui.islandevents.model.IslandEvent
+import kotlinx.coroutines.flow.StateFlow
 
 val EVENT_TYPE_IDS: Map<Class<out IslandEvent>, String> =
     mapOf(
@@ -27,6 +29,7 @@ val EVENT_TYPE_IDS: Map<Class<out IslandEvent>, String> =
     )
 
 interface IslandActions {
+    val chargerReadings: StateFlow<ChargerReadings?>
     val onFocusableRequested: ((Boolean) -> Unit)?
         get() = null
     fun collapseIsland()

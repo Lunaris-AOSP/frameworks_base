@@ -88,12 +88,15 @@ fun ExpandedIslandContent(
             }
         }
 
-    val notifIds = remember(filteredEvents) {
-        filteredEvents.filterIsInstance<IslandEvent.Notification>().map { it.id }.distinct()
+    val heldIds = remember(filteredEvents) {
+        filteredEvents
+            .filter { it is IslandEvent.Notification || it is IslandEvent.Charging }
+            .map { it.id }
+            .distinct()
     }
-    DisposableEffect(interactor, notifIds) {
-        notifIds.forEach(interactor::onNotificationInteraction)
-        onDispose { notifIds.forEach(interactor::onNotificationInteractionEnd) }
+    DisposableEffect(interactor, heldIds) {
+        heldIds.forEach(interactor::onNotificationInteraction)
+        onDispose { heldIds.forEach(interactor::onNotificationInteractionEnd) }
     }
 
     val shouldCollapse = filteredEvents.isEmpty()
@@ -212,7 +215,7 @@ internal fun ExpandedEventContent(
         is IslandEvent.Media -> MediaExpanded(event, interactor)
         is IslandEvent.Bluetooth -> BluetoothExpanded(event, interactor)
         is IslandEvent.Hotspot -> HotspotExpanded(event)
-        is IslandEvent.Charging -> ChargingExpanded(event)
+        is IslandEvent.Charging -> ChargingExpanded(event, interactor)
         is IslandEvent.Alarm -> AlarmExpanded(event, interactor)
         is IslandEvent.Timer -> TimerExpanded(event, interactor)
         is IslandEvent.Stopwatch -> StopwatchExpanded(event, interactor)

@@ -64,6 +64,7 @@ constructor(
 ) : IslandActions {
     private val _uiState = MutableStateFlow(IslandUiState())
     val uiState: StateFlow<IslandUiState> = _uiState.asStateFlow()
+    override val chargerReadings = repository.system.chargerReadings
 
     private val _lockscreenPrivacyTick = MutableStateFlow(0)
 
@@ -98,10 +99,11 @@ constructor(
     private val _dozeAmount = MutableStateFlow(0f)
     
     val dozeAmount: StateFlow<Float> = _dozeAmount.asStateFlow()
-    @Volatile private var isDreaming = false
+    private val _isDreaming = MutableStateFlow(statusBarStateController.isDreaming)
+    val isDreaming: StateFlow<Boolean> = _isDreaming.asStateFlow()
 
     private val statusBlocking: Boolean
-        get() = _isDozing.value || isDreaming
+        get() = _isDozing.value || _isDreaming.value
 
     companion object {
         private const val TAG = "AxDynamicBarInteractor"
@@ -229,7 +231,7 @@ constructor(
                 }
 
                 override fun onDreamingChanged(dreaming: Boolean) {
-                    isDreaming = dreaming
+                    _isDreaming.value = dreaming
                     updateChipVisibility()
                 }
             }
@@ -482,7 +484,10 @@ constructor(
     }
 
     override fun onNotificationInteractionEnd(eventId: String) {
-        val event = _uiState.value.events.find { it.id == eventId } ?: return
+        // Keyguard can filter out charging before the status bar panel finishes closing.
+        val event = _uiState.value.events.find { it.id == eventId }
+            ?: repository.system.chargingEvent.value?.takeIf { it.id == eventId }
+            ?: return
         scheduleAutoDismiss(event)
     }
 
