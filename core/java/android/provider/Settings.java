@@ -20105,6 +20105,15 @@ public final class Settings {
         @Readable
         public static final String ANGLE_DEBUG_PACKAGE = "angle_debug_package";
 
+        /** @hide */
+        public static final String HYBRID_RENDERING = "hybrid_rendering";
+        /** @hide */
+        public static final String HYBRID_RENDERING_SYSTEMUI = "hybrid_rendering_systemui";
+        /** @hide */
+        public static final String HYBRID_RENDERING_LAUNCHER = "hybrid_rendering_launcher";
+        /** @hide */
+        public static final String HYBRID_RENDERING_APPS = "hybrid_rendering_apps";
+
         /**
          * Force all PKGs to use ANGLE, regardless of any other settings
          * The value is a boolean (1 or 0).

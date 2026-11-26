@@ -287,8 +287,7 @@ public final class SurfaceControl implements Parcelable {
 
     private static native void nativeSetGlobalShadowSettings(@Size(4) float[] ambientColor,
             @Size(4) float[] spotColor, float lightPosY, float lightPosZ, float lightRadius);
-    private static native DisplayDecorationSupport nativeGetDisplayDecorationSupport(
-            IBinder displayToken);
+    private static native boolean nativeUsesVulkan();
 
     private static native void nativeSetFrameRate(long transactionObj, long nativeObject,
             float frameRate, int compatibility, int changeFrameRateStrategy);
@@ -2923,7 +2922,28 @@ public final class SurfaceControl implements Parcelable {
      * @hide
      */
     public static DisplayDecorationSupport getDisplayDecorationSupport(IBinder displayToken) {
-        return nativeGetDisplayDecorationSupport(displayToken);
+        return filterDisplayDecorationSupport(getHardwareDisplayDecorationSupport(displayToken));
+    }
+
+    /**
+     * Returns the hardware capability before checking the consumer's renderer.
+     * @hide
+     */
+    @Nullable
+    public static native DisplayDecorationSupport getHardwareDisplayDecorationSupport(
+            IBinder displayToken);
+
+    /**
+     * Returns the display decoration support usable by this process.
+     * @hide
+     */
+    @Nullable
+    public static DisplayDecorationSupport filterDisplayDecorationSupport(
+            @Nullable DisplayDecorationSupport support) {
+        if (support != null && support.format == PixelFormat.R_8 && !nativeUsesVulkan()) {
+            return null;
+        }
+        return support;
     }
 
     /**

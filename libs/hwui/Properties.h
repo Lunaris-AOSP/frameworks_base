@@ -19,6 +19,8 @@
 
 #include <cutils/compiler.h>
 
+#include <atomic>
+
 /**
  * This file contains the list of system properties used to configure libhwui.
  */
@@ -307,6 +309,8 @@ public:
     static int overrideSpotShadowStrength;
 
     static ProfileType getProfileType();
+    static void setProcessRenderer(bool requestVulkan);
+    static bool hasProcessRenderer();
     static RenderPipelineType peekRenderPipelineType();
     static RenderPipelineType getRenderPipelineType();
 
@@ -404,7 +408,7 @@ private:
     static StretchEffectBehavior stretchEffectBehavior;
     static ProfileType sProfileType;
     static bool sDisableProfileBars;
-    static RenderPipelineType sRenderPipelineType;
+    static std::atomic<RenderPipelineType> sRenderPipelineType;
 };  // class Caches
 
 }  // namespace uirenderer

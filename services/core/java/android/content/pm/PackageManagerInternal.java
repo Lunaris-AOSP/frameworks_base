@@ -410,6 +410,13 @@ public abstract class PackageManagerInternal {
      */
     public abstract ComponentName getDefaultHomeActivity(int userId);
 
+    /** Returns the default home package for this user, if one can be resolved. */
+    @Nullable
+    public String getDefaultHomePackage(int userId) {
+        ComponentName home = getDefaultHomeActivity(userId);
+        return home == null ? null : home.getPackageName();
+    }
+
     /**
      * @return The SystemUI service component name.
      */

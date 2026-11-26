@@ -88,6 +88,7 @@ class RenderThread : private ThreadBase {
 
 public:
     static RenderThread& getInstance();
+    static bool hasInstance();
 
     // Sets a callback that fires before any RenderThread setup has occurred.
     static void setOnStartHook(JVMAttachHook onStartHook);
@@ -163,8 +164,6 @@ private:
 
     RenderThread();
     virtual ~RenderThread();
-
-    static bool hasInstance();
 
     void initThreadLocals();
     void initializeChoreographer();

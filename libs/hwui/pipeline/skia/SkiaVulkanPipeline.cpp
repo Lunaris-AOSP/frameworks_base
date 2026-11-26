@@ -125,7 +125,10 @@ IRenderPipeline::DrawResult SkiaVulkanPipeline::draw(
         dumpResourceCacheUsage();
     }
 
-    return {true, drawResult.submissionTime, std::move(drawResult.presentFence)};
+    if (!drawResult.success && !mHardwareBuffer) {
+        mVkSurface->cancelCurrentBuffer();
+    }
+    return {drawResult.success, drawResult.submissionTime, std::move(drawResult.presentFence)};
 }
 
 bool SkiaVulkanPipeline::swapBuffers(const Frame& frame, IRenderPipeline::DrawResult& drawResult,

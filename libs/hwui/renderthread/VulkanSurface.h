@@ -46,6 +46,7 @@ public:
     }
     const SkMatrix& getCurrentPreTransform() { return mWindowInfo.preTransform; }
 
+    void cancelCurrentBuffer();
     void setColorSpace(sk_sp<SkColorSpace> colorSpace);
     const SkM44& getPixelSnapMatrix() const { return mWindowInfo.pixelSnapMatrix; }
     static SkM44 GetPixelSnapMatrix(SkISize windowSize, int transform);

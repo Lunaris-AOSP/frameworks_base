@@ -24,6 +24,12 @@
 #include <cstdlib>
 #include <optional>
 
+#ifdef __ANDROID__
+#include <unistd.h>
+
+#include "renderthread/VulkanManager.h"
+#endif
+
 #include "Debug.h"
 #include "HWUIProperties.sysprop.h"
 #include "src/core/SkTraceEventCommon.h"
@@ -78,7 +84,11 @@ int Properties::overrideSpotShadowStrength = -1;
 
 ProfileType Properties::sProfileType = ProfileType::None;
 bool Properties::sDisableProfileBars = false;
-RenderPipelineType Properties::sRenderPipelineType = RenderPipelineType::NotInitialized;
+std::atomic<RenderPipelineType> Properties::sRenderPipelineType{RenderPipelineType::NotInitialized};
+static std::atomic<RenderPipelineType> sProcessRenderer{RenderPipelineType::NotInitialized};
+#ifdef __ANDROID__
+static std::atomic<pid_t> sPipelineOwner{0};
+#endif
 bool Properties::enableHighContrastText = false;
 
 bool Properties::waitForGpuCompletion = false;
@@ -236,22 +246,53 @@ ProfileType Properties::getProfileType() {
     return sProfileType;
 }
 
+void Properties::setProcessRenderer(bool requestVulkan) {
+    auto unset = RenderPipelineType::NotInitialized;
+    const auto requested = requestVulkan ? RenderPipelineType::SkiaVulkan : RenderPipelineType::SkiaGL;
+    if (!sProcessRenderer.compare_exchange_strong(unset, requested)) return;
+#ifdef __ANDROID__
+    /* A child zygote can query the default pipeline while preloading its package. */
+    const pid_t owner = sPipelineOwner.load();
+    if (owner != 0 && owner != getpid()) {
+        sRenderPipelineType.store(RenderPipelineType::NotInitialized);
+    }
+#endif
+}
+
+bool Properties::hasProcessRenderer() {
+    return sProcessRenderer.load(std::memory_order_acquire) != RenderPipelineType::NotInitialized;
+}
+
 RenderPipelineType Properties::peekRenderPipelineType() {
     // If sRenderPipelineType has been locked, just return the locked type immediately.
-    if (sRenderPipelineType != RenderPipelineType::NotInitialized) {
-        return sRenderPipelineType;
+    const auto locked = sRenderPipelineType.load(std::memory_order_acquire);
+    if (locked != RenderPipelineType::NotInitialized) {
+        return locked;
     }
-    bool useVulkan = use_vulkan().value_or(false);
-    std::string rendererProperty = base::GetProperty("persist.sys.ax_hwui_renderer", useVulkan ? "skiavk" : "skiagl");
-    if (rendererProperty == "skiavk") {
-        return RenderPipelineType::SkiaVulkan;
+    const auto requested = sProcessRenderer.load(std::memory_order_acquire);
+    if (requested != RenderPipelineType::NotInitialized) {
+#ifdef __ANDROID__
+        if (requested == RenderPipelineType::SkiaVulkan) {
+            static const auto supported = renderthread::VulkanManager::prepareForHybridRendering();
+            return supported ? RenderPipelineType::SkiaVulkan : RenderPipelineType::SkiaGL;
+        }
+#endif
+        return RenderPipelineType::SkiaGL;
     }
-    return RenderPipelineType::SkiaGL;
+    return use_vulkan().value_or(false) ? RenderPipelineType::SkiaVulkan
+                                        : RenderPipelineType::SkiaGL;
 }
 
 RenderPipelineType Properties::getRenderPipelineType() {
-    sRenderPipelineType = peekRenderPipelineType();
-    return sRenderPipelineType;
+    auto locked = sRenderPipelineType.load(std::memory_order_acquire);
+    if (locked == RenderPipelineType::NotInitialized) {
+        const auto selected = peekRenderPipelineType();
+#ifdef __ANDROID__
+        sPipelineOwner.store(getpid());
+#endif
+        if (sRenderPipelineType.compare_exchange_strong(locked, selected)) return selected;
+    }
+    return locked;
 }
 
 void Properties::overrideRenderPipelineType(RenderPipelineType type) {

@@ -62,6 +62,7 @@ import android.view.Display;
 import android.view.DisplayAdjustments;
 import android.view.DisplayInfo;
 import android.view.Surface;
+import android.view.SurfaceControl;
 import android.window.DesktopExperienceFlags;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -1130,7 +1131,8 @@ public final class DisplayManagerGlobal {
      */
     public DisplayDecorationSupport getDisplayDecorationSupport(int displayId) {
         try {
-            return mDm.getDisplayDecorationSupport(displayId);
+            return SurfaceControl.filterDisplayDecorationSupport(
+                    mDm.getDisplayDecorationSupport(displayId));
         } catch (RemoteException ex) {
             throw ex.rethrowFromSystemServer();
         }

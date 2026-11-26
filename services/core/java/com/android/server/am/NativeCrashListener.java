@@ -247,6 +247,10 @@ final class NativeCrashListener extends Thread {
                 return;
             }
 
+            if (!gwpAsanRecoverableCrash) {
+                HybridRenderingPolicy.noteStartupFailure(pr);
+            }
+
             // Don't attempt crash reporting for persistent apps
             if (pr.isPersistent()) {
                 if (DEBUG) {

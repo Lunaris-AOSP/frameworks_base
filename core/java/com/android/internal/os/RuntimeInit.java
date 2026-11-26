@@ -22,6 +22,7 @@ import android.app.ApplicationErrorReport;
 import android.app.IActivityManager;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.type.DefaultMimeMapFactory;
+import android.graphics.HardwareRenderer;
 import android.net.TrafficStats;
 import android.os.Build;
 import android.os.DeadObjectException;
@@ -384,6 +385,15 @@ public class RuntimeInit {
         VMRuntime.getRuntime().setDisabledCompatChanges(disabledCompatChanges);
 
         final Arguments args = new Arguments(argv);
+        if ("android.app.ActivityThread".equals(args.startClass)) {
+            for (String arg : args.startArgs) {
+                if (ActivityThread.HWUI_OPENGL_ARG.equals(arg)
+                        || ActivityThread.HWUI_VULKAN_ARG.equals(arg)) {
+                    HardwareRenderer.setProcessRenderer(ActivityThread.HWUI_VULKAN_ARG.equals(arg));
+                    break;
+                }
+            }
+        }
 
         // The end of of the RuntimeInit event (see #zygoteInit).
         Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);

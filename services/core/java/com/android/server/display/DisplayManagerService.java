@@ -3230,7 +3230,7 @@ public final class DisplayManagerService extends SystemService {
         if (null == displayToken) {
             return null;
         }
-        return SurfaceControl.getDisplayDecorationSupport(displayToken);
+        return SurfaceControl.getHardwareDisplayDecorationSupport(displayToken);
     }
 
     private void setBrightnessConfigurationForDisplayInternal(

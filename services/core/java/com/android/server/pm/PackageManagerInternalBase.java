@@ -361,6 +361,12 @@ abstract class PackageManagerInternalBase extends PackageManagerInternal {
     }
 
     @Override
+    public final String getDefaultHomePackage(int userId) {
+        String home = snapshot().getDefaultHome(userId);
+        return home != null ? home : super.getDefaultHomePackage(userId);
+    }
+
+    @Override
     @Deprecated
     public final ComponentName getDefaultHomeActivity(int userId) {
         return snapshot().getDefaultHomeActivity(userId);

@@ -17,7 +17,6 @@
 #define LOG_TAG "SurfaceControl"
 #define LOG_NDEBUG 0
 
-#include <aidl/android/hardware/graphics/common/PixelFormat.h>
 #include <android-base/chrono_utils.h>
 #include <android/graphics/properties.h>
 #include <android/graphics/region.h>
@@ -2215,19 +2214,18 @@ static void nativeSetGlobalShadowSettings(JNIEnv* env, jclass clazz, jfloatArray
     client->setGlobalShadowSettings(ambientColor, spotColor, lightPosY, lightPosZ, lightRadius);
 }
 
-static jobject nativeGetDisplayDecorationSupport(JNIEnv* env, jclass clazz,
-                                                 jobject displayTokenObject) {
+static jboolean nativeUsesVulkan(JNIEnv*, jclass) {
+    return hwui_uses_vulkan();
+}
+
+static jobject getHardwareDisplayDecorationSupport(JNIEnv* env, jclass clazz,
+                                                   jobject displayTokenObject) {
     sp<IBinder> displayToken(ibinderForJavaObject(env, displayTokenObject));
     if (displayToken == nullptr) {
         return nullptr;
     }
     const auto support = SurfaceComposerClient::getDisplayDecorationSupport(displayToken);
     if (!support) {
-        return nullptr;
-    }
-
-    using aidl::android::hardware::graphics::common::PixelFormat;
-    if (support.value().format == PixelFormat::R_8 && !hwui_uses_vulkan()) {
         return nullptr;
     }
 
@@ -2832,9 +2830,10 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeMirrorSurface },
     {"nativeSetGlobalShadowSettings", "([F[FFFF)V",
             (void*)nativeSetGlobalShadowSettings },
-    {"nativeGetDisplayDecorationSupport",
+    {"nativeUsesVulkan", "()Z", (void*)nativeUsesVulkan},
+    {"getHardwareDisplayDecorationSupport",
             "(Landroid/os/IBinder;)Landroid/hardware/graphics/common/DisplayDecorationSupport;",
-            (void*)nativeGetDisplayDecorationSupport},
+            (void*)getHardwareDisplayDecorationSupport},
     {"nativeGetHandle", "(J)J",
             (void*)nativeGetHandle },
     {"nativeSetFixedTransformHint", "(JJI)V",

@@ -81,9 +81,14 @@ static bool shouldEnableExtension(const std::string_view& extension) {
 // cache a weakptr to the context to enable a second thread to share the same vulkan state
 static wp<VulkanManager> sWeakInstance = nullptr;
 static std::mutex sLock;
+static sp<VulkanManager> sPreparedInstance;
 
 sp<VulkanManager> VulkanManager::getInstance() {
     std::lock_guard _lock{sLock};
+    if (sPreparedInstance) {
+        sWeakInstance = sPreparedInstance;
+        return std::move(sPreparedInstance);
+    }
     sp<VulkanManager> vulkanManager = sWeakInstance.promote();
     if (!vulkanManager.get()) {
         vulkanManager = new VulkanManager();
@@ -122,7 +127,42 @@ VulkanManager::~VulkanManager() {
     mGlobalPriorityQueryFeatures = {};
 }
 
-void VulkanManager::setupDevice() {
+VkResult VulkanManager::querySurfaceFormat(VkFormat format,
+                                           VkImageFormatProperties2* properties) const {
+    VkPhysicalDeviceExternalImageFormatInfo external{};
+    external.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO;
+    external.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID;
+
+    VkPhysicalDeviceImageFormatInfo2 image{};
+    image.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2;
+    image.pNext = &external;
+    image.format = format;
+    image.type = VK_IMAGE_TYPE_2D;
+    image.tiling = VK_IMAGE_TILING_OPTIMAL;
+    image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+                  VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    return mGetPhysicalDeviceImageFormatProperties2(mPhysicalDevice, &image, properties);
+}
+
+bool VulkanManager::prepareForHybridRendering() {
+    sp<VulkanManager> candidate = new VulkanManager();
+    if (const char* error = candidate->setupDevice(true)) {
+        ALOGW("Hybrid Rendering selected OpenGL: %s", error);
+        return false;
+    }
+    std::lock_guard lock{sLock};
+    sPreparedInstance = std::move(candidate);
+    return true;
+}
+
+const char* VulkanManager::setupDevice(bool hybrid) {
+    GET_PROC(EnumerateInstanceVersion);
+    uint32_t instanceVersion = 0;
+    if (!mEnumerateInstanceVersion || mEnumerateInstanceVersion(&instanceVersion) != VK_SUCCESS ||
+        instanceVersion < mAPIVersion) {
+        return "Vulkan 1.1 loader unavailable";
+    }
+
     VkResult err;
 
     constexpr VkApplicationInfo app_info = {
@@ -140,11 +180,11 @@ void VulkanManager::setupDevice() {
 
         uint32_t extensionCount = 0;
         err = mEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
-        LOG_ALWAYS_FATAL_IF(VK_SUCCESS != err);
+        if (err != VK_SUCCESS) return "cannot enumerate Vulkan extensions";
         mInstanceExtensionsOwner.resize(extensionCount);
         err = mEnumerateInstanceExtensionProperties(nullptr, &extensionCount,
                                                     mInstanceExtensionsOwner.data());
-        LOG_ALWAYS_FATAL_IF(VK_SUCCESS != err);
+        if (err != VK_SUCCESS) return "cannot enumerate Vulkan extensions";
         bool hasKHRSurfaceExtension = false;
         bool hasKHRAndroidSurfaceExtension = false;
         for (const VkExtensionProperties& extension : mInstanceExtensionsOwner) {
@@ -161,7 +201,9 @@ void VulkanManager::setupDevice() {
                 hasKHRAndroidSurfaceExtension = true;
             }
         }
-        LOG_ALWAYS_FATAL_IF(!hasKHRSurfaceExtension || !hasKHRAndroidSurfaceExtension);
+        if (!hasKHRSurfaceExtension || !hasKHRAndroidSurfaceExtension) {
+            return "missing Vulkan surface extensions";
+        }
     }
 
     // Let Skia enable instance extensions.
@@ -182,8 +224,10 @@ void VulkanManager::setupDevice() {
     };
 
     GET_PROC(CreateInstance);
-    err = mCreateInstance(&instance_create, nullptr, &mInstance);
-    LOG_ALWAYS_FATAL_IF(err < 0);
+    VkInstance instance;
+    err = mCreateInstance(&instance_create, nullptr, &instance);
+    if (err != VK_SUCCESS) return "vkCreateInstance failed";
+    mInstance = instance;
 
     GET_INST_PROC(CreateDevice);
     GET_INST_PROC(DestroyInstance);
@@ -193,26 +237,34 @@ void VulkanManager::setupDevice() {
     GET_INST_PROC(GetPhysicalDeviceImageFormatProperties2);
     GET_INST_PROC(GetPhysicalDeviceProperties);
     GET_INST_PROC(GetPhysicalDeviceQueueFamilyProperties2);
+    if (!mGetPhysicalDeviceFeatures2 || !mGetPhysicalDeviceImageFormatProperties2 ||
+        !mGetPhysicalDeviceQueueFamilyProperties2) {
+        return "missing Vulkan 1.1 device query entry points";
+    }
 
     uint32_t gpuCount;
-    LOG_ALWAYS_FATAL_IF(mEnumeratePhysicalDevices(mInstance, &gpuCount, nullptr));
-    LOG_ALWAYS_FATAL_IF(!gpuCount);
+    if (mEnumeratePhysicalDevices(mInstance, &gpuCount, nullptr) != VK_SUCCESS || !gpuCount) {
+        return "no Vulkan physical device";
+    }
     // Just returning the first physical device instead of getting the whole array. Since there
     // should only be one device on android.
     gpuCount = 1;
     err = mEnumeratePhysicalDevices(mInstance, &gpuCount, &mPhysicalDevice);
     // VK_INCOMPLETE is returned when the count we provide is less than the total device count.
-    LOG_ALWAYS_FATAL_IF(err && VK_INCOMPLETE != err);
+    if (err != VK_SUCCESS && err != VK_INCOMPLETE) return "cannot enumerate physical devices";
 
     VkPhysicalDeviceProperties physDeviceProperties;
     mGetPhysicalDeviceProperties(mPhysicalDevice, &physDeviceProperties);
-    LOG_ALWAYS_FATAL_IF(physDeviceProperties.apiVersion < VK_MAKE_VERSION(1, 1, 0));
+    if (physDeviceProperties.apiVersion < mAPIVersion) return "Vulkan 1.1 device required";
+    if (hybrid && physDeviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU) {
+        return "software Vulkan device";
+    }
     mDriverVersion = physDeviceProperties.driverVersion;
 
     // query to get the initial queue props size
     uint32_t queueCount = 0;
     mGetPhysicalDeviceQueueFamilyProperties2(mPhysicalDevice, &queueCount, nullptr);
-    LOG_ALWAYS_FATAL_IF(!queueCount);
+    if (!queueCount) return "no Vulkan queue families";
 
     // now get the actual queue props
     std::unique_ptr<VkQueueFamilyProperties2[]>
@@ -232,14 +284,14 @@ void VulkanManager::setupDevice() {
     // iterate to find the graphics queue
     mGraphicsQueueIndex = queueCount;
     for (uint32_t i = 0; i < queueCount; i++) {
-        if (queueProps[i].queueFamilyProperties.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+        const auto& family = queueProps[i].queueFamilyProperties;
+        if ((family.queueFlags & VK_QUEUE_GRAPHICS_BIT) &&
+            family.queueCount >= kRequestedQueueCount) {
             mGraphicsQueueIndex = i;
-            LOG_ALWAYS_FATAL_IF(
-                    queueProps[i].queueFamilyProperties.queueCount < kRequestedQueueCount);
             break;
         }
     }
-    LOG_ALWAYS_FATAL_IF(mGraphicsQueueIndex == queueCount);
+    if (mGraphicsQueueIndex == queueCount) return "HWUI requires a family with two graphics queues";
 
     mPhysicalDeviceFeatures2 = {};
     mPhysicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
@@ -249,11 +301,11 @@ void VulkanManager::setupDevice() {
         uint32_t extensionCount = 0;
         err = mEnumerateDeviceExtensionProperties(mPhysicalDevice, nullptr, &extensionCount,
                                                   nullptr);
-        LOG_ALWAYS_FATAL_IF(VK_SUCCESS != err);
+        if (err != VK_SUCCESS) return "cannot enumerate Vulkan extensions";
         mDeviceExtensionsOwner.resize(extensionCount);
         err = mEnumerateDeviceExtensionProperties(mPhysicalDevice, nullptr, &extensionCount,
                                                   mDeviceExtensionsOwner.data());
-        LOG_ALWAYS_FATAL_IF(VK_SUCCESS != err);
+        if (err != VK_SUCCESS) return "cannot enumerate Vulkan extensions";
         bool hasKHRSwapchainExtension = false;
         bool hasGlobalPriority = mAPIVersion >= VK_API_VERSION_1_4;
         for (const VkExtensionProperties& extension : mDeviceExtensionsOwner) {
@@ -278,7 +330,7 @@ void VulkanManager::setupDevice() {
                 hasGlobalPriority = true;
             }
         }
-        LOG_ALWAYS_FATAL_IF(!hasKHRSwapchainExtension);
+        if (!hasKHRSwapchainExtension) return "missing swapchain extension";
 
         if (hasGlobalPriority) {
             mGlobalPriorityQueryFeatures = {};
@@ -289,12 +341,20 @@ void VulkanManager::setupDevice() {
         }
     }
 
+    if (hybrid) {
+        mYcbcrFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES;
+        *tailPNext = &mYcbcrFeatures;
+    }
+
     // Let Skia add features to be queried.
     mVulkanFeatures.addFeaturesToQuery(mDeviceExtensionsOwner.data(),
                                        mDeviceExtensionsOwner.size(), mPhysicalDeviceFeatures2);
 
     // Query to get the physical device features
     mGetPhysicalDeviceFeatures2(mPhysicalDevice, &mPhysicalDeviceFeatures2);
+    if (hybrid && !mYcbcrFeatures.samplerYcbcrConversion) {
+        return "cannot sample YCbCr media buffers";
+    }
     // Robust buffer access can reduce performance on some platforms. It is not needed by
     // HWUI.
     mPhysicalDeviceFeatures2.features.robustBufferAccess = VK_FALSE;
@@ -313,9 +373,37 @@ void VulkanManager::setupDevice() {
                       mInstanceExtensions.data(), mDeviceExtensions.size(),
                       mDeviceExtensions.data());
 
-    LOG_ALWAYS_FATAL_IF(!mExtensions.hasExtension(VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME, 1));
-
-
+    if (!mExtensions.hasExtension(VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME, 1)) {
+        return "missing external semaphore FD extension";
+    }
+    if (hybrid) {
+        if (!mExtensions.hasExtension(
+                    VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME, 2)) {
+            return "Skia requires Android hardware buffer extension revision 2";
+        }
+        VkExternalImageFormatProperties external{};
+        external.sType = VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES;
+        VkImageFormatProperties2 format{};
+        format.sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2;
+        format.pNext = &external;
+        if (querySurfaceFormat(VK_FORMAT_R8G8B8A8_UNORM, &format) != VK_SUCCESS ||
+            !(external.externalMemoryProperties.externalMemoryFeatures &
+              VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT)) {
+            return "cannot import RGBA window buffers";
+        }
+        VkPhysicalDeviceExternalSemaphoreInfo info{};
+        info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_SEMAPHORE_INFO;
+        info.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT;
+        VkExternalSemaphoreProperties props{};
+        props.sType = VK_STRUCTURE_TYPE_EXTERNAL_SEMAPHORE_PROPERTIES;
+        vkGetPhysicalDeviceExternalSemaphoreProperties(mPhysicalDevice, &info, &props);
+        constexpr auto required = VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT |
+                                  VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT;
+        if (!(props.compatibleHandleTypes & info.handleType) ||
+            (props.externalSemaphoreFeatures & required) != required) {
+            return "cannot import and export sync FD fences";
+        }
+    }
 
     float queuePriorities[kRequestedQueueCount] = {0.0};
 
@@ -379,7 +467,7 @@ void VulkanManager::setupDevice() {
         }
     }
 
-    const VkDeviceQueueCreateInfo queueInfo = {
+    VkDeviceQueueCreateInfo queueInfo = {
             VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,  // sType
             queueNextPtr,                                // pNext
             0,                                           // VkDeviceQueueCreateFlags
@@ -401,7 +489,15 @@ void VulkanManager::setupDevice() {
             nullptr,                               // ppEnabledFeatures
     };
 
-    LOG_ALWAYS_FATAL_IF(mCreateDevice(mPhysicalDevice, &deviceInfo, nullptr, &mDevice));
+    VkDevice device;
+    err = mCreateDevice(mPhysicalDevice, &deviceInfo, nullptr, &device);
+    if (hybrid && err == VK_ERROR_NOT_PERMITTED_KHR && queueInfo.pNext != nullptr) {
+        ALOGW("Vulkan queue priority denied, retrying at default priority");
+        queueInfo.pNext = nullptr;
+        err = mCreateDevice(mPhysicalDevice, &deviceInfo, nullptr, &device);
+    }
+    if (err != VK_SUCCESS) return "vkCreateDevice failed";
+    mDevice = device;
 
     GET_DEV_PROC(AllocateCommandBuffers);
     GET_DEV_PROC(BeginCommandBuffer);
@@ -425,16 +521,20 @@ void VulkanManager::setupDevice() {
     GET_DEV_PROC(ResetFences);
     GET_DEV_PROC(WaitForFences);
     GET_DEV_PROC(FrameBoundaryANDROID);
+    if (hybrid && (!mGetSemaphoreFdKHR || !mImportSemaphoreFdKHR ||
+                   !vkGetDeviceProcAddr(mDevice, "vkGetAndroidHardwareBufferPropertiesANDROID") ||
+                   !vkGetDeviceProcAddr(mDevice, "vkGetMemoryAndroidHardwareBufferANDROID"))) {
+        return "missing Vulkan Android interop entry points";
+    }
+    return nullptr;
 }
 
 void VulkanManager::initialize() {
     std::call_once(mInitFlag, [&] {
-        GET_PROC(EnumerateInstanceVersion);
-        uint32_t instanceVersion;
-        LOG_ALWAYS_FATAL_IF(mEnumerateInstanceVersion(&instanceVersion));
-        LOG_ALWAYS_FATAL_IF(instanceVersion < VK_MAKE_VERSION(1, 1, 0));
-
-        this->setupDevice();
+        if (mDevice == VK_NULL_HANDLE) {
+            const char* error = setupDevice(Properties::hasProcessRenderer());
+            LOG_ALWAYS_FATAL_IF(error, "Failed to initialize HWUI Vulkan: %s", error);
+        }
 
         mGetDeviceQueue(mDevice, mGraphicsQueueIndex, 0, &mGraphicsQueue);
         mGetDeviceQueue(mDevice, mGraphicsQueueIndex, 1, &mAHBUploadQueue);
@@ -588,17 +688,17 @@ Frame VulkanManager::dequeueNextBuffer(VulkanSurface* surface) {
 
     if (bufferInfo->dequeue_fence != -1) {
         struct sync_file_info* finfo = sync_file_info(bufferInfo->dequeue_fence);
-        bool isSignalPending = false;
+        bool isSignalPending = true;
         if (finfo != NULL) {
             isSignalPending = finfo->status != 1;
             sync_file_info_free(finfo);
         }
         if (isSignalPending) {
+            bool waitOnCpu = true;
             int fence_clone = dup(bufferInfo->dequeue_fence);
             if (fence_clone == -1) {
                 ALOGE("dup(fence) failed, stalling until signalled: %s (%d)", strerror(errno),
                       errno);
-                sync_wait(bufferInfo->dequeue_fence, -1 /* forever */);
             } else {
                 VkSemaphoreCreateInfo semaphoreInfo;
                 semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -609,7 +709,6 @@ Frame VulkanManager::dequeueNextBuffer(VulkanSurface* surface) {
                 if (err != VK_SUCCESS) {
                     ALOGE("Failed to create import semaphore, err: %d", err);
                     close(fence_clone);
-                    sync_wait(bufferInfo->dequeue_fence, -1 /* forever */);
                 } else {
                     VkImportSemaphoreFdInfoKHR importInfo;
                     importInfo.sType = VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_FD_INFO_KHR;
@@ -624,19 +723,25 @@ Frame VulkanManager::dequeueNextBuffer(VulkanSurface* surface) {
                         ALOGE("Failed to import semaphore, err: %d", err);
                         mDestroySemaphore(mDevice, semaphore, nullptr);
                         close(fence_clone);
-                        sync_wait(bufferInfo->dequeue_fence, -1 /* forever */);
                     } else {
                         GrBackendSemaphore beSemaphore = GrBackendSemaphores::MakeVk(semaphore);
                         // Skia will take ownership of the VkSemaphore and delete it once the wait
                         // has finished. The VkSemaphore also owns the imported fd, so it will
                         // close the fd when it is deleted.
-                        bufferInfo->skSurface->wait(1, &beSemaphore);
+                        waitOnCpu = !bufferInfo->skSurface->wait(1, &beSemaphore);
+                        if (waitOnCpu) {
+                            mDestroySemaphore(mDevice, semaphore, nullptr);
+                        }
                         // The following flush blocks the GPU immediately instead of waiting for
                         // other drawing ops. It seems dequeue_fence is not respected otherwise.
                         // TODO: remove the flush after finding why beSemaphore is not working.
                         skgpu::ganesh::FlushAndSubmit(bufferInfo->skSurface.get());
                     }
                 }
+            }
+            if (waitOnCpu && sync_wait(bufferInfo->dequeue_fence, -1) < 0) {
+                surface->cancelCurrentBuffer();
+                return Frame(-1, -1, 0);
             }
         }
     }
@@ -715,12 +820,15 @@ VulkanManager::VkDrawResult VulkanManager::finishFrame(SkSurface* surface) {
         submitInfo.fMarkBoundary = GrMarkFrameBoundary::kYes;
         submitInfo.fFrameID = currentFrameID++;
     }
-    context->submit(submitInfo);
+    const bool workSubmitted = context->submit(submitInfo);
     VkDrawResult drawResult{
+            .success = workSubmitted,
             .submissionTime = systemTime(),
     };
-    if (sharedSemaphore) {
-        if (submitted == GrSemaphoresSubmitted::kYes && mFrameBoundaryANDROID) {
+    VkSemaphore signal = VK_NULL_HANDLE;
+    if (workSubmitted && sharedSemaphore && submitted == GrSemaphoresSubmitted::kYes) {
+        signal = sharedSemaphore->semaphore();
+        if (mFrameBoundaryANDROID) {
             // retrieve VkImage used as render target
             VkImage image = VK_NULL_HANDLE;
             GrBackendRenderTarget backendRenderTarget = SkSurfaces::GetBackendRenderTarget(
@@ -737,22 +845,13 @@ VulkanManager::VkDrawResult VulkanManager::finishFrame(SkSurface* surface) {
             }
             // frameBoundaryANDROID needs to know about mSwapSemaphore, but
             // it won't wait on it.
-            mFrameBoundaryANDROID(mDevice, sharedSemaphore->semaphore(), image);
+            mFrameBoundaryANDROID(mDevice, signal, image);
         }
-        VkSemaphoreGetFdInfoKHR getFdInfo;
-        getFdInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR;
-        getFdInfo.pNext = nullptr;
-        getFdInfo.semaphore = sharedSemaphore->semaphore();
-        getFdInfo.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT;
-
-        int fenceFd = -1;
-        VkResult err = mGetSemaphoreFdKHR(mDevice, &getFdInfo, &fenceFd);
-        ALOGE_IF(VK_SUCCESS != err, "VulkanManager::finishFrame(): Failed to get semaphore Fd");
-        drawResult.presentFence.reset(fenceFd);
-    } else {
-        ALOGE("VulkanManager::finishFrame(): Semaphore submission failed");
-        mQueueWaitIdle(mGraphicsQueue);
     }
+    int fenceFd;
+    LOG_ALWAYS_FATAL_IF(exportFenceOrWait(signal, &fenceFd) != OK,
+                        "Unable to synchronize the Vulkan frame for presentation");
+    drawResult.presentFence.reset(fenceFd);
 
     skiapipeline::PersistentGraphicsCache::get().onVkFrameFlushed(context);
 
@@ -803,7 +902,7 @@ status_t VulkanManager::fenceWait(int fence, GrDirectContext* grContext) {
     int fenceFd = ::dup(fence);
     if (fenceFd == -1) {
         ALOGE("VulkanManager::fenceWait: error dup'ing fence fd: %d", errno);
-        return -errno;
+        return sync_wait(fence, -1) < 0 ? -errno : OK;
     }
 
     VkSemaphoreCreateInfo semaphoreInfo;
@@ -815,7 +914,7 @@ status_t VulkanManager::fenceWait(int fence, GrDirectContext* grContext) {
     if (VK_SUCCESS != err) {
         close(fenceFd);
         ALOGE("Failed to create import semaphore, err: %d", err);
-        return UNKNOWN_ERROR;
+        return sync_wait(fence, -1) < 0 ? -errno : OK;
     }
     VkImportSemaphoreFdInfoKHR importInfo;
     importInfo.sType = VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_FD_INFO_KHR;
@@ -830,14 +929,17 @@ status_t VulkanManager::fenceWait(int fence, GrDirectContext* grContext) {
         mDestroySemaphore(mDevice, semaphore, nullptr);
         close(fenceFd);
         ALOGE("Failed to import semaphore, err: %d", err);
-        return UNKNOWN_ERROR;
+        return sync_wait(fence, -1) < 0 ? -errno : OK;
     }
 
     GrBackendSemaphore beSemaphore = GrBackendSemaphores::MakeVk(semaphore);
 
     // Skia will take ownership of the VkSemaphore and delete it once the wait has finished. The
     // VkSemaphore also owns the imported fd, so it will close the fd when it is deleted.
-    grContext->wait(1, &beSemaphore);
+    if (!grContext->wait(1, &beSemaphore)) {
+        mDestroySemaphore(mDevice, semaphore, nullptr);
+        return sync_wait(fence, -1) < 0 ? -errno : OK;
+    }
     grContext->flushAndSubmit();
 
     return OK;
@@ -863,7 +965,8 @@ status_t VulkanManager::createReleaseFence(int* nativeFence, GrDirectContext* gr
     VkResult err = mCreateSemaphore(mDevice, &semaphoreInfo, nullptr, &semaphore);
     if (VK_SUCCESS != err) {
         ALOGE("VulkanManager::createReleaseFence: Failed to create semaphore");
-        return INVALID_OPERATION;
+        grContext->flush();
+        return grContext->submit(GrSyncCpu::kYes) ? OK : INVALID_OPERATION;
     }
 
     auto sharedSemaphore = sp<SharedSemaphoreInfo>::make(mDestroySemaphore, mDevice, semaphore);
@@ -876,29 +979,26 @@ status_t VulkanManager::createReleaseFence(int* nativeFence, GrDirectContext* gr
     sharedSemaphore->incStrong(0);
     flushInfo.fFinishedContext = sharedSemaphore.get();
     GrSemaphoresSubmitted submitted = grContext->flush(flushInfo);
-    grContext->submit();
+    if (!grContext->submit()) return INVALID_OPERATION;
+    return exportFenceOrWait(submitted == GrSemaphoresSubmitted::kYes ? semaphore : VK_NULL_HANDLE,
+                             nativeFence);
+}
 
-    if (submitted == GrSemaphoresSubmitted::kNo) {
-        ALOGE("VulkanManager::createReleaseFence: Failed to submit semaphore");
-        return INVALID_OPERATION;
+status_t VulkanManager::exportFenceOrWait(VkSemaphore semaphore, int* fenceFd) {
+    *fenceFd = -1;
+    if (semaphore != VK_NULL_HANDLE) {
+        VkSemaphoreGetFdInfoKHR info{};
+        info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR;
+        info.semaphore = semaphore;
+        info.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT;
+        int fd;
+        if (mGetSemaphoreFdKHR(mDevice, &info, &fd) == VK_SUCCESS) {
+            *fenceFd = fd;
+            return OK;
+        }
     }
-
-    VkSemaphoreGetFdInfoKHR getFdInfo;
-    getFdInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR;
-    getFdInfo.pNext = nullptr;
-    getFdInfo.semaphore = semaphore;
-    getFdInfo.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT;
-
-    int fenceFd = 0;
-
-    err = mGetSemaphoreFdKHR(mDevice, &getFdInfo, &fenceFd);
-    if (VK_SUCCESS != err) {
-        ALOGE("VulkanManager::createReleaseFence: Failed to get semaphore Fd");
-        return INVALID_OPERATION;
-    }
-    *nativeFence = fenceFd;
-
-    return OK;
+    ALOGW("Vulkan release fence unavailable, waiting for the graphics queue");
+    return mQueueWaitIdle(mGraphicsQueue) == VK_SUCCESS ? OK : INVALID_OPERATION;
 }
 
 } /* namespace renderthread */

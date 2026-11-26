@@ -244,27 +244,6 @@ bool VulkanSurface::InitializeWindowInfoStruct(ANativeWindow* window, ColorMode 
             LOG_ALWAYS_FATAL("Unsupported colorType: %d", (int)colorType);
     }
 
-    LOG_ALWAYS_FATAL_IF(nullptr == vkManager.mGetPhysicalDeviceImageFormatProperties2,
-                        "vkGetPhysicalDeviceImageFormatProperties2 is missing");
-    VkPhysicalDeviceExternalImageFormatInfo externalImageFormatInfo;
-    externalImageFormatInfo.sType =
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO;
-    externalImageFormatInfo.pNext = nullptr;
-    externalImageFormatInfo.handleType =
-            VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID;
-
-    VkPhysicalDeviceImageFormatInfo2 imageFormatInfo;
-    imageFormatInfo.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2;
-    imageFormatInfo.pNext = &externalImageFormatInfo;
-    imageFormatInfo.format = vkPixelFormat;
-    imageFormatInfo.type = VK_IMAGE_TYPE_2D;
-    imageFormatInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    // Currently Skia requires the images to be color attachments and support all transfer
-    // operations.
-    imageFormatInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
-                            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    imageFormatInfo.flags = 0;
-
     VkAndroidHardwareBufferUsageANDROID hwbUsage;
     hwbUsage.sType = VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_USAGE_ANDROID;
     hwbUsage.pNext = nullptr;
@@ -273,8 +252,7 @@ bool VulkanSurface::InitializeWindowInfoStruct(ANativeWindow* window, ColorMode 
     imgFormProps.sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2;
     imgFormProps.pNext = &hwbUsage;
 
-    VkResult res = vkManager.mGetPhysicalDeviceImageFormatProperties2(
-            vkManager.mPhysicalDevice, &imageFormatInfo, &imgFormProps);
+    VkResult res = vkManager.querySurfaceFormat(vkPixelFormat, &imgFormProps);
     if (VK_SUCCESS != res) {
         ALOGE("Failed to query GetPhysicalDeviceImageFormatProperties2");
         return false;
@@ -491,6 +469,16 @@ VulkanSurface::NativeBufferInfo* VulkanSurface::dequeueNativeBuffer() {
 
     mCurrentBufferInfo = bufferInfo;
     return bufferInfo;
+}
+
+void VulkanSurface::cancelCurrentBuffer() {
+    auto& buffer = *mCurrentBufferInfo;
+    int err = mNativeWindow->cancelBuffer(mNativeWindow.get(), buffer.buffer.get(),
+                                          buffer.dequeue_fence.release());
+    ALOGE_IF(err, "cancelBuffer failed: %s (%d)", strerror(-err), err);
+    buffer.dequeued = false;
+    buffer.hasValidContents = false;
+    mCurrentBufferInfo = nullptr;
 }
 
 bool VulkanSurface::presentCurrentBuffer(const SkRect& dirtyRect, int semaphoreFd) {

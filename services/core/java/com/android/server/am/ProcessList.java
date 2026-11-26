@@ -533,6 +533,8 @@ public final class ProcessList implements ProcessStateController.ProcessLruUpdat
     @GuardedBy("mAppExitInfoTracker")
     final AppExitInfoTracker mAppExitInfoTracker = new AppExitInfoTracker();
 
+    volatile HybridRenderingPolicy mHybridRendering;
+
     /**
      * The processes that are forked off an application zygote.
      */
@@ -2612,6 +2614,11 @@ public final class ProcessList implements ProcessStateController.ProcessLruUpdat
             boolean regularZygote = false;
             app.mProcessGroupCreated = false;
             app.mSkipProcessGroupCreation = false;
+            final String seq = PROC_START_SEQ_IDENT + app.getStartSeq();
+            final HybridRenderingPolicy policy = mHybridRendering;
+            final String renderer = policy == null ? null : policy.rendererForStart(app, pmInt);
+            final String[] startArgs = renderer == null ? new String[]{seq}
+                    : new String[]{seq, renderer};
             long forkTimeNs = SystemClock.uptimeNanos();
             if (hostingRecord.usesWebviewZygote()) {
                 startResult = startWebView(entryPoint,
@@ -2619,7 +2626,7 @@ public final class ProcessList implements ProcessStateController.ProcessLruUpdat
                         app.info.targetSdkVersion, seInfo, requiredAbi, instructionSet,
                         app.info.dataDir, null, app.info.packageName,
                         app.getDisabledCompatChanges(), app.getStartSeq(),
-                        new String[]{PROC_START_SEQ_IDENT + app.getStartSeq()});
+                        startArgs);
             } else if (hostingRecord.usesAppZygote()) {
                 final AppZygote appZygote = createAppZygoteForProcessIfNeeded(app);
 
@@ -2630,7 +2637,7 @@ public final class ProcessList implements ProcessStateController.ProcessLruUpdat
                         app.info.dataDir, app.info.packageName, isTopApp,
                         app.getDisabledCompatChanges(), pkgDataInfoMap,
                         allowlistedAppDataInfoMap, app.getStartSeq(),
-                        new String[]{PROC_START_SEQ_IDENT + app.getStartSeq()});
+                        startArgs);
             } else {
                 regularZygote = true;
                 startResult = Process.start(entryPoint,
@@ -2641,7 +2648,7 @@ public final class ProcessList implements ProcessStateController.ProcessLruUpdat
                         allowlistedAppDataInfoMap, bindMountAppsData, bindMountAppStorageDirs,
                         bindOverrideSysprops,
                         app.getStartSeq(),
-                        new String[]{PROC_START_SEQ_IDENT + app.getStartSeq()});
+                        startArgs);
                 // By now the process group should have been created by zygote.
                 app.mProcessGroupCreated = true;
             }
@@ -5735,6 +5742,10 @@ public final class ProcessList implements ProcessStateController.ProcessLruUpdat
     @GuardedBy("mService")
     void noteAppKill(final ProcessRecord app, final @Reason int reason,
             final @SubReason int subReason, final String msg) {
+        if (reason == ApplicationExitInfo.REASON_CRASH || reason == ApplicationExitInfo.REASON_ANR
+                || reason == ApplicationExitInfo.REASON_INITIALIZATION_FAILURE) {
+            HybridRenderingPolicy.noteStartupFailure(app);
+        }
         if (DEBUG_PROCESSES) {
             Slog.i(TAG, "note: " + app + " is being killed, reason: "
                     + ApplicationExitInfo.reasonCodeToString(reason) + ", sub-reason: "

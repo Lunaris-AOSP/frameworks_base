@@ -1207,6 +1207,12 @@ public class HardwareRenderer {
         nSetDebuggingEnabled(enable);
     }
 
+    /**
+     * Selects HWUI for a newly forked application process.
+     * @hide
+     */
+    public static native void setProcessRenderer(boolean requestVulkan);
+
     /** @hide */
     public abstract static class CopyRequest {
         protected Bitmap mDestinationBitmap;

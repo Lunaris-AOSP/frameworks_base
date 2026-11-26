@@ -206,7 +206,6 @@ void RenderThread::initThreadLocals() {
     initializeChoreographer();
     mEglManager = new EglManager();
     mRenderState = new RenderState(*this);
-    mVkManager = VulkanManager::getInstance();
     mCacheManager = new CacheManager(*this);
 }
 

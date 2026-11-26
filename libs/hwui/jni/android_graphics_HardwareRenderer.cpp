@@ -828,6 +828,10 @@ static void android_view_ThreadedRenderer_setHighContrastText(JNIEnv*, jclass, j
     Properties::enableHighContrastText = enable;
 }
 
+static void android_view_ThreadedRenderer_setProcessRenderer(JNIEnv*, jclass, jboolean vulkan) {
+    if (!RenderThread::hasInstance()) Properties::setProcessRenderer(vulkan);
+}
+
 static void android_view_ThreadedRenderer_setDebuggingEnabled(JNIEnv*, jclass, jboolean enable) {
     Properties::debuggingEnabled = enable;
 }
@@ -1076,6 +1080,7 @@ static const JNINativeMethod gMethods[] = {
          (void*)android_view_ThreadedRenderer_createHardwareBitmapFromRenderNode},
         {"disableVsync", "()V", (void*)android_view_ThreadedRenderer_disableVsync},
         {"nSetHighContrastText", "(Z)V", (void*)android_view_ThreadedRenderer_setHighContrastText},
+        {"setProcessRenderer", "(Z)V", (void*)android_view_ThreadedRenderer_setProcessRenderer},
         {"nSetDebuggingEnabled", "(Z)V", (void*)android_view_ThreadedRenderer_setDebuggingEnabled},
         {"nSetIsolatedProcess", "(Z)V", (void*)android_view_ThreadedRenderer_setIsolatedProcess},
         {"nSetContextPriority", "(I)V", (void*)android_view_ThreadedRenderer_setContextPriority},

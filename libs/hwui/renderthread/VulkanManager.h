@@ -60,6 +60,7 @@ class VulkanManager final : public RefBase {
 public:
     static sp<VulkanManager> getInstance();
     static sp<VulkanManager> peekInstance();
+    static bool prepareForHybridRendering();
 
     // Sets up the vulkan context that is shared amonst all clients of the VulkanManager. This must
     // be call once before use of the VulkanManager. Multiple calls after the first will simiply
@@ -81,6 +82,7 @@ public:
     Frame dequeueNextBuffer(VulkanSurface* surface);
 
     struct VkDrawResult {
+        bool success;
         // The estimated start time for intiating GPU work, -1 if unknown.
         nsecs_t submissionTime;
         android::base::unique_fd presentFence;
@@ -123,7 +125,9 @@ private:
 
     // Sets up the VkInstance and VkDevice objects. Fills out mPhysicalDeviceFeatures2 and
     // other feature structs.
-    void setupDevice();
+    const char* setupDevice(bool hybrid);
+    VkResult querySurfaceFormat(VkFormat format, VkImageFormatProperties2* properties) const;
+    status_t exportFenceOrWait(VkSemaphore semaphore, int* fenceFd);
 
     // simple wrapper class that exists only to initialize a pointer to NULL
     template <typename FNPTR_TYPE>
@@ -196,6 +200,7 @@ private:
     std::vector<VkExtensionProperties> mDeviceExtensionsOwner;
     std::vector<const char*> mDeviceExtensions;
     VkPhysicalDeviceFeatures2 mPhysicalDeviceFeatures2{};
+    VkPhysicalDeviceSamplerYcbcrConversionFeatures mYcbcrFeatures{};
     VkPhysicalDeviceFaultFeaturesEXT mDeviceFaultFeatures{};
     VkPhysicalDeviceGlobalPriorityQueryFeatures mGlobalPriorityQueryFeatures{};
 

@@ -93,6 +93,7 @@ class ProcessRecord extends ProcessRecordInternal implements WindowProcessListen
     // the lifecycle of the process
     // =========================================================
     volatile ApplicationInfo info; // all about the first app in the process
+    volatile HybridRenderingPolicy.CrashGuard mHybridRenderingTrial;
     final ProcessInfo processInfo; // if non-null, process-specific manifest info
     final boolean appZygote;    // true if this is forked from the app zygote
     final String sdkSandboxClientAppPackage; // if this is an sdk sandbox process, name of the

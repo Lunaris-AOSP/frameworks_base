@@ -384,6 +384,8 @@ public final class ActivityThread extends ClientTransactionHandler
      * as one of the arguments when the process starts.
      */
     public static final String PROC_START_SEQ_IDENT = "seq=";
+    public static final String HWUI_OPENGL_ARG = "hwui=skiagl";
+    public static final String HWUI_VULKAN_ARG = "hwui=skiavk";
 
     private final Object mNetworkPolicyLock = new Object();
 
@@ -9291,6 +9293,16 @@ public final class ActivityThread extends ClientTransactionHandler
     public static void main(String[] args) {
         Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "ActivityThreadMain");
 
+        long startSeq = 0;
+        if (args != null) {
+            for (int i = args.length - 1; i >= 0; --i) {
+                if (args[i] != null && args[i].startsWith(PROC_START_SEQ_IDENT)) {
+                    startSeq = Long.parseLong(
+                            args[i].substring(PROC_START_SEQ_IDENT.length()));
+                }
+            }
+        }
+
         // Install selective syscall interception
         AndroidForwardingOs.install();
 
@@ -9312,17 +9324,6 @@ public final class ActivityThread extends ClientTransactionHandler
 
         Process.setArgV0("<pre-initialized>");
 
-        // Find the value for {@link #PROC_START_SEQ_IDENT} if provided on the command line.
-        // It will be in the format "seq=114"
-        long startSeq = 0;
-        if (args != null) {
-            for (int i = args.length - 1; i >= 0; --i) {
-                if (args[i] != null && args[i].startsWith(PROC_START_SEQ_IDENT)) {
-                    startSeq = Long.parseLong(
-                            args[i].substring(PROC_START_SEQ_IDENT.length()));
-                }
-            }
-        }
         ActivityThread thread = new ActivityThread();
         thread.attach(false, startSeq);
 

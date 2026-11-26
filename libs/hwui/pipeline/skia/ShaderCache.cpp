@@ -89,7 +89,12 @@ void ShaderCache::initShaderDiskCache(const void* identity, ssize_t size) {
     // or snapshot migration. Also, program binaries may not work well on some
     // desktop / laptop GPUs. Thus, disable the shader disk cache for emulator builds.
     if (!Properties::runningInEmulator && mFilename.length() > 0) {
-        mBlobCache.reset(new FileBlobCache(maxKeySize, maxValueSize, maxTotalSize, mFilename));
+        std::string path = mFilename;
+        if (Properties::hasProcessRenderer()) {
+            path += Properties::getRenderPipelineType() == RenderPipelineType::SkiaVulkan
+                    ? ".vk" : ".gl";
+        }
+        mBlobCache.reset(new FileBlobCache(maxKeySize, maxValueSize, maxTotalSize, path));
         validateCache(identity, size);
         mInitialized = true;
         if (identity != nullptr && size > 0 && mIDHash.size()) {
