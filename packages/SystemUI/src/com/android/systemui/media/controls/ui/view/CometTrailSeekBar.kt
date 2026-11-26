@@ -102,9 +102,12 @@ constructor(
         if (artwork === drawable) return
         artwork = drawable
         artworkGeneration++
-        artworkColor = null
-        updateColors()
-        if (isAttachedToWindow) loadArtworkColor()
+        if (drawable == null) {
+            artworkColor = null
+            updateColors()
+        } else if (isAttachedToWindow) {
+            loadArtworkColor()
+        }
     }
 
     private fun loadArtworkColor() {

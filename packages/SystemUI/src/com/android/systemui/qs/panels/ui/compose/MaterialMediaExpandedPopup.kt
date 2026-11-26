@@ -228,12 +228,7 @@ internal fun MaterialMediaExpandedPopup(
         Box(
             modifier =
                 Modifier.fillMaxSize()
-                    .axBlurBackground(
-                        enabled = true,
-                        fallbackColor = Color.Black.copy(alpha = 0.55f),
-                        tintColor = Color.Black.copy(alpha = 0.25f),
-                        cornerRadius = 0.dp,
-                    )
+                    .background(Color.Black.copy(alpha = 0.25f))
                     .pointerInput(Unit) { detectTapGestures(onTap = { onDismiss() }) },
             contentAlignment = Alignment.Center,
         ) {
