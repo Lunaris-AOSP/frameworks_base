@@ -8086,6 +8086,7 @@ public final class Settings {
          * 3 = Iris (ElectronBeam)
          * 4 = Desaturate (ElectronBeam)
          * 5 = Shutter (ElectronBeam)
+         * 6 = Blackhole (ElectronBeam)
          * @hide
          */
         public static final String SCREEN_OFF_ANIMATION = "screen_off_animation";
