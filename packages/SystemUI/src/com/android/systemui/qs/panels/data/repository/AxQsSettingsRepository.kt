@@ -273,6 +273,7 @@ constructor(
     val mediaTileStatusGlow: StateFlow<Boolean> = boolSetting(MEDIA_TILE_STATUS_GLOW, false)
     val showSliderPercentage: StateFlow<Boolean> = boolSetting(SHOW_SLIDER_PERCENTAGE, false)
     val smoothVolumeSlider: StateFlow<Boolean> = boolSetting(SMOOTH_VOLUME_SLIDER, false)
+    val fluidSliderAnimation: StateFlow<Boolean> = boolSetting(FLUID_SLIDER_ANIMATION, false)
     val tileStrokeStyle: StateFlow<Boolean> = strokeStyleSetting(TILE_STROKE_STYLE)
     val tileStrokeWidth: StateFlow<Int> =
         strokeWidthSetting(TILE_STROKE_WIDTH, LunarisQsStrokeWidths.DEFAULT_TILE)
@@ -607,6 +608,8 @@ constructor(
 
     fun setShowSliderPercentage(show: Boolean) = putInt(SHOW_SLIDER_PERCENTAGE, show.toSetting())
     fun setSmoothVolumeSlider(show: Boolean) = putInt(SMOOTH_VOLUME_SLIDER, show.toSetting())
+    fun setFluidSliderAnimation(enabled: Boolean) =
+        putInt(FLUID_SLIDER_ANIMATION, enabled.toSetting())
 
     fun setTileStrokeStyle(enabled: Boolean) = putInt(TILE_STROKE_STYLE, enabled.toSetting())
 
@@ -1092,6 +1095,7 @@ constructor(
         private const val MEDIA_TILE_STATUS_GLOW = "ax_qs_media_tile_status_glow"
         const val SHOW_SLIDER_PERCENTAGE = "ax_qs_show_slider_percentage"
         const val SMOOTH_VOLUME_SLIDER = "ax_qs_smooth_volume_slider"
+        const val FLUID_SLIDER_ANIMATION = "lunaris_qs_fluid_slider_animation"
         private const val LEGACY_STROKE_STYLE = "ax_qs_stroke_style"
         private const val TILE_STROKE_STYLE = "ax_qs_tile_stroke_style"
         private const val TILE_STROKE_WIDTH = "ax_qs_tile_stroke_width"

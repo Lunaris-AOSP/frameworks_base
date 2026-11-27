@@ -529,6 +529,12 @@ constructor(
             initialValue = repository.smoothVolumeSlider.value,
             source = repository.smoothVolumeSlider,
         )
+    val fluidSliderAnimation by
+        hydrator.hydratedStateOf(
+            traceName = "fluidSliderAnimation",
+            initialValue = repository.fluidSliderAnimation.value,
+            source = repository.fluidSliderAnimation,
+        )
     val showDataUsage by
         hydrator.hydratedStateOf(
             traceName = "showDataUsage",
@@ -908,6 +914,7 @@ constructor(
 
     fun setShowSliderPercentage(show: Boolean) = repository.setShowSliderPercentage(show)
     fun setSmoothVolumeSlider(show: Boolean) = repository.setSmoothVolumeSlider(show)
+    fun setFluidSliderAnimation(enabled: Boolean) = repository.setFluidSliderAnimation(enabled)
 
     fun setTileStrokeStyle(enabled: Boolean) = repository.setTileStrokeStyle(enabled)
 

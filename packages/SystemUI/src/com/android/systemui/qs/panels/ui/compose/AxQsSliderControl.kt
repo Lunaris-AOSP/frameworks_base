@@ -80,9 +80,13 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -368,6 +372,9 @@ internal fun AxQsSlider(
             onLongPress = onLongPress.takeIf { enabled },
         )
     val sliderScale = sliderHeight / AxSliderTrackHeight
+    val fraction = axQsSliderPercentage(value, valueRange) / 100f
+    val fluidAnimation = LocalFluidSliderAnimation.current
+    val waveState = rememberFluidSliderWaveState(fraction = fraction, enabled = fluidAnimation)
     if (sliderStyle.usesPlatformSlider) {
         val strokeStyle = LocalLunarisQsSliderStrokeStyle.current
         val strokeWidth = LocalLunarisQsSliderStrokeWidth.current * sliderScale
@@ -420,7 +427,7 @@ internal fun AxQsSlider(
                 trackCornerRadius = if (roundedSquare) AxQsControlCornerRadius else null,
                 indicatorInset = if (strokeStyle) strokeWidth else 0.dp,
                 indicatorBackground =
-                    if (activeTrackBrush != null || strokeStyle || flatFill) {
+                    if (fluidAnimation || activeTrackBrush != null || strokeStyle || flatFill) {
                         { indicatorModifier, cornerRadius ->
                             val startCorner =
                                 if (roundedSquare) AxQsControlCornerRadius else trackHeight / 2
@@ -431,21 +438,31 @@ internal fun AxQsSlider(
                                 bottomEnd = if (flatFill) 0.dp else cornerRadius,
                             )
                             val gradientAlpha = if (!enabled) 0.38f else if (active) 1f else 0.7f
+                            val fillBrush = activeTrackBrush ?: SolidColor(indicatorColor)
+                            val fillAlpha = if (activeTrackBrush != null) gradientAlpha else 1f
                             Box(
-                                if (strokeStyle) {
-                                    indicatorModifier.lunarisQsInsetBackground(
-                                        brush = activeTrackBrush ?: SolidColor(indicatorColor),
-                                        shape = indicatorShape,
-                                        insetWidth = strokeWidth,
-                                        alpha = { if (activeTrackBrush != null) gradientAlpha else 1f },
-                                    )
-                                } else {
-                                    indicatorModifier
-                                        .alpha(if (activeTrackBrush != null) gradientAlpha else 1f)
-                                        .background(
-                                            activeTrackBrush ?: SolidColor(indicatorColor),
-                                            if (flatFill) RectangleShape else indicatorShape,
+                                when {
+                                    fluidAnimation ->
+                                        indicatorModifier.lunarisFluidSliderIndicator(
+                                            waveState = waveState,
+                                            brush = fillBrush,
+                                            insetWidth = if (strokeStyle) strokeWidth else 0.dp,
+                                            alpha = { fillAlpha },
                                         )
+                                    strokeStyle ->
+                                        indicatorModifier.lunarisQsInsetBackground(
+                                            brush = fillBrush,
+                                            shape = indicatorShape,
+                                            insetWidth = strokeWidth,
+                                            alpha = { fillAlpha },
+                                        )
+                                    else ->
+                                        indicatorModifier
+                                            .alpha(fillAlpha)
+                                            .background(
+                                                fillBrush,
+                                                if (flatFill) RectangleShape else indicatorShape,
+                                            )
                                 }
                             )
                         }
@@ -459,7 +476,7 @@ internal fun AxQsSlider(
                 percentage = percentageLabel,
                 vertical = vertical,
                 platform = true,
-                fraction = axQsSliderPercentage(value, valueRange) / 100f,
+                fraction = fraction,
                 sliderScale = sliderScale,
                 enabled = enabled,
                 activeColor = activeContentColor,
@@ -507,15 +524,26 @@ internal fun AxQsSlider(
                 )
             },
             track = { sliderState ->
+                val expressiveTrackColors =
+                    if (fluidAnimation) {
+                        colors.copy(
+                            activeTrackColor = Color.Transparent,
+                            disabledActiveTrackColor = Color.Transparent,
+                        )
+                    } else {
+                        colors
+                    }
+                val fluidClipPath = remember { Path() }
+                val fluidFillPath = remember { Path() }
                 SliderTrack(
                     sliderState = sliderState,
                     isEnabled = enabled,
-                    colors = colors,
+                    colors = expressiveTrackColors,
                     trackCornerSize = trackCornerSize,
                     trackInsideCornerSize = AxSliderTrackInsideCornerRadius,
                     thumbTrackGapSize = AxSliderThumbTrackGap,
                     trackSize = sliderHeight,
-                    activeTrackBrush = activeTrackBrush,
+                    activeTrackBrush = if (fluidAnimation) null else activeTrackBrush,
                     activeTrackAlpha = if (active) 1f else 0.7f,
                     modifier =
                         Modifier.background(trackBackgroundColor, ExpressiveSliderShape)
@@ -523,13 +551,91 @@ internal fun AxQsSlider(
                                 shape = RoundedCornerShape(trackCornerSize),
                                 verticalSlider = vertical,
                                 horizontalGap = {
-                                    val fraction = sliderState.coercedValueAsFraction
+                                    val coercedFraction = sliderState.coercedValueAsFraction
                                     val thumbCenter =
-                                        size.width * (if (isRtl) 1f - fraction else fraction)
+                                        size.width *
+                                            (if (isRtl) 1f - coercedFraction else coercedFraction)
                                     val gap =
                                         thumbSize.width.toPx() / 2f + AxSliderThumbTrackGap.toPx()
                                     (thumbCenter - gap)..(thumbCenter + gap)
                                 },
+                            )
+                            .then(
+                                if (fluidAnimation) {
+                                    Modifier.drawWithContent {
+                                        drawContent()
+                                        val coercedFraction = sliderState.coercedValueAsFraction
+                                        val thumbHalfPx = thumbSize.width.toPx() / 2f
+                                        val gapPx = AxSliderThumbTrackGap.toPx()
+                                        val thumbCenter =
+                                            size.width *
+                                                (if (isRtl) 1f - coercedFraction else coercedFraction)
+                                        val edgeX =
+                                            if (isRtl) {
+                                                (thumbCenter + thumbHalfPx + gapPx)
+                                                    .coerceIn(0f, size.width)
+                                            } else {
+                                                (thumbCenter - thumbHalfPx - gapPx)
+                                                    .coerceIn(0f, size.width)
+                                            }
+                                        val cornerPx =
+                                            trackCornerSize.toPx().coerceIn(0f, size.height / 2f)
+                                        fluidClipPath.rewind()
+                                        fluidClipPath.addRoundRect(
+                                            RoundRect(
+                                                left = 0f,
+                                                top = 0f,
+                                                right = size.width,
+                                                bottom = size.height,
+                                                cornerRadius = CornerRadius(cornerPx, cornerPx),
+                                            )
+                                        )
+                                        val thumbGuardLeft =
+                                            if (isRtl) {
+                                                (thumbCenter + thumbHalfPx + 1.dp.toPx())
+                                                    .coerceIn(0f, size.width)
+                                            } else {
+                                                0f
+                                            }
+                                        val thumbGuardRight =
+                                            if (isRtl) {
+                                                size.width
+                                            } else {
+                                                (thumbCenter - thumbHalfPx - 1.dp.toPx())
+                                                    .coerceIn(0f, size.width)
+                                            }
+                                        val fillBrush =
+                                            activeTrackBrush
+                                                ?: SolidColor(
+                                                    if (enabled) activeTrackColor
+                                                    else colors.disabledActiveTrackColor
+                                                )
+                                        val fillAlpha =
+                                            if (activeTrackBrush != null) {
+                                                if (!enabled) 0.38f else if (active) 1f else 0.7f
+                                            } else {
+                                                1f
+                                            }
+                                        clipPath(fluidClipPath) {
+                                            clipRect(left = thumbGuardLeft, right = thumbGuardRight) {
+                                                drawFluidSliderFill(
+                                                    path = fluidFillPath,
+                                                    brush = fillBrush,
+                                                    alpha = fillAlpha,
+                                                    startX = if (isRtl) size.width else 0f,
+                                                    edgeX = edgeX,
+                                                    top = 0f,
+                                                    bottom = size.height,
+                                                    isRtl = isRtl,
+                                                    bend = waveState.bend,
+                                                    slosh = waveState.slosh,
+                                                )
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    Modifier
+                                }
                             ),
                 )
             },
@@ -538,7 +644,7 @@ internal fun AxQsSlider(
             percentage = percentageLabel,
             vertical = vertical,
             platform = false,
-            fraction = axQsSliderPercentage(value, valueRange) / 100f,
+            fraction = fraction,
             sliderScale = sliderScale,
             enabled = enabled,
             activeColor = activeContentColor,

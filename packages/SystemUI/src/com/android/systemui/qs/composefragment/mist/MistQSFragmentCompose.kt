@@ -222,6 +222,7 @@ import com.android.systemui.qs.panels.ui.compose.rememberMiuiQsPanelMotion
 import com.android.systemui.qs.panels.ui.compose.LocalShowQsSliderPercentage
 import com.android.systemui.qs.panels.ui.compose.AxQsSliderDrag
 import com.android.systemui.qs.panels.ui.compose.LocalBrightnessDrag
+import com.android.systemui.qs.panels.ui.compose.LocalFluidSliderAnimation
 import com.android.systemui.qs.panels.ui.compose.LocalSmoothVolumeSlider
 import com.android.systemui.qs.panels.ui.compose.LocalVolumeDrag
 import com.android.systemui.qs.panels.domain.interactor.EditTilesResetInteractor
@@ -455,6 +456,7 @@ constructor(
                             axQsViewModel.iconOnlyActiveColor,
                         LocalShowQsSliderPercentage provides axQsViewModel.showSliderPercentage,
                         LocalSmoothVolumeSlider provides axQsViewModel.smoothVolumeSlider,
+                        LocalFluidSliderAnimation provides axQsViewModel.fluidSliderAnimation,
                         LocalBrightnessDrag provides remember { AxQsSliderDrag<Int>() },
                         LocalVolumeDrag provides remember { AxQsSliderDrag<Float>() },
                         LocalRingerSliderViewModel provides ringerSliderViewModel,

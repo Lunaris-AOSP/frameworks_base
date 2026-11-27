@@ -254,6 +254,17 @@ fun LunariQsPanelSettings(
                         onCheckedChange = { stepped -> viewModel.setSmoothVolumeSlider(!stepped) },
                     )
                 }
+                item("fluid_slider_animation") {
+                    SettingsSwitch(
+                        title = stringResource(R.string.lunaris_qs_settings_fluid_slider_animation),
+                        summary =
+                            stringResource(
+                                R.string.lunaris_qs_settings_fluid_slider_animation_summary
+                            ),
+                        checked = viewModel.fluidSliderAnimation,
+                        onCheckedChange = viewModel::setFluidSliderAnimation,
+                    )
+                }
                 item("auto_hide_tile_page_indicator") {
                     SettingsSwitch(
                         title =
