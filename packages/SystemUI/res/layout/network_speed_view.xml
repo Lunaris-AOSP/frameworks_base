@@ -12,8 +12,8 @@
         android:id="@+id/network_speed_text"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:gravity="center"
+        android:layout_gravity="end|center_vertical"
+        android:gravity="end|center_vertical"
         android:orientation="vertical">
 
         <TextView
@@ -22,7 +22,7 @@
             android:layout_height="wrap_content"
             android:textAppearance="@style/TextAppearance.StatusBar.Default"
             android:textSize="@dimen/network_speed_text_size"
-            android:gravity="center"
+            android:gravity="end|center_vertical"
             android:singleLine="true"
             android:includeFontPadding="false"
             android:importantForAccessibility="no" />
@@ -33,7 +33,7 @@
             android:layout_height="wrap_content"
             android:textAppearance="@style/TextAppearance.StatusBar.Default"
             android:textSize="@dimen/network_speed_unit_text_size"
-            android:gravity="center"
+            android:gravity="end|center_vertical"
             android:singleLine="true"
             android:includeFontPadding="false"
             android:importantForAccessibility="no" />

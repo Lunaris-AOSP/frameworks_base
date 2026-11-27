@@ -21,6 +21,7 @@ import android.graphics.Rect
 import android.util.AttributeSet
 import android.util.Log
 import android.util.TypedValue
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.FrameLayout
@@ -296,7 +297,17 @@ class NetworkSpeedView @JvmOverloads constructor(
     }
 
     private fun updateTextLayout(singleLine: Boolean) {
+        val textGravity = if (singleLine) Gravity.CENTER else Gravity.END or Gravity.CENTER_VERTICAL
         speedText.orientation = if (singleLine) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+        speedText.gravity = textGravity
+        (speedText.layoutParams as LayoutParams).let { params ->
+            if (params.gravity != textGravity) {
+                params.gravity = textGravity
+                speedText.layoutParams = params
+            }
+        }
+        speedNumber?.gravity = textGravity
+        speedUnit?.gravity = textGravity
         speedNumber?.setTextSize(TypedValue.COMPLEX_UNIT_PX, resources.getDimension(
             if (singleLine) R.dimen.network_speed_single_line_text_size
             else R.dimen.network_speed_text_size))
