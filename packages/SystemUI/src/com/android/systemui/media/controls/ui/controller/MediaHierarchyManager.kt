@@ -52,7 +52,6 @@ import com.android.systemui.media.controls.ui.view.MediaHost
 import com.android.systemui.media.dream.MediaDreamComplication
 import com.android.systemui.media.remedia.shared.flag.MediaControlsInComposeFlag
 import com.android.systemui.plugins.statusbar.StatusBarStateController
-import com.android.systemui.qs.flags.QSComposeFragment
 import com.android.systemui.res.R
 import com.android.systemui.shade.ShadeDisplayAware
 import com.android.systemui.shade.domain.interactor.ShadeInteractor
@@ -915,8 +914,7 @@ constructor(
         }
         if (
             skipQqsOnExpansion ||
-                (QSComposeFragment.isEnabled &&
-                    desiredLocation == LOCATION_QQS &&
+                (desiredLocation == LOCATION_QQS &&
                     previousLocation == LOCATION_QS &&
                     shadeExpandedFraction == 0.0f)
         ) {
@@ -958,10 +956,12 @@ constructor(
 
         if (
             statusbarState == StatusBarState.KEYGUARD &&
-                (currentLocation == LOCATION_LOCKSCREEN || previousLocation == LOCATION_LOCKSCREEN)
+                (currentLocation == LOCATION_LOCKSCREEN ||
+                    previousLocation == LOCATION_LOCKSCREEN ||
+                    (qsExpansion == 0.0f && !isTransitioningToFullShade))
         ) {
             // We're always fading from lockscreen to keyguard in situations where the player
-            // is already fully hidden
+            // is already fully hidden, and lockscreen media is hosted outside MediaHierarchyManager
             return false
         }
         return mediaFrame.isShownNotFaded || animator.isRunning || animationPending
@@ -1284,7 +1284,7 @@ constructor(
                 // Communal does not have its own StatusBarState so it should always have higher
                 // priority for the UMO over the lockscreen.
                 isCommunalShowing -> LOCATION_COMMUNAL_HUB
-                onLockscreen -> LOCATION_QS
+                onLockscreen && inSplitShade -> LOCATION_QS
                 else -> LOCATION_QQS
             }
         // When we're on lock screen and the player is not active, we should keep it in QS.
@@ -1297,7 +1297,7 @@ constructor(
             return LOCATION_QS
         }
         if (
-            location == LOCATION_LOCKSCREEN &&
+            (location == LOCATION_LOCKSCREEN || (onLockscreen && location == LOCATION_QQS)) &&
                 desiredLocation == LOCATION_QS &&
                 collapsingShadeFromQS
         ) {

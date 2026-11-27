@@ -48,7 +48,7 @@ fun LockscreenMedia(
     val style by lockscreenViewModel.lockscreenStyle.collectAsStateWithLifecycle()
     val selectedStyle = style
     val visibilityState = remember { MutableTransitionState(false) }
-    visibilityState.targetState = visible && allowed && active
+    visibilityState.targetState = visible && allowed
     val currentOnVisibilityChanged by rememberUpdatedState(onVisibilityChanged)
     LaunchedEffect(
         visibilityState.isIdle,
